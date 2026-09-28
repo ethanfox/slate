@@ -36,11 +36,6 @@ struct ConversationRow: View {
                 conversation.isArchived.toggle()
                 conversation.updatedAt = .now
             }
-            if !conversation.cursorURL.isEmpty, let url = URL(string: conversation.cursorURL), url.scheme == "https" {
-                Button("Open in Cursor") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
             if !conversation.cursorAgentId.isEmpty {
                 Button("Copy Agent ID") {
                     NSPasteboard.general.clearContents()
@@ -57,7 +52,7 @@ struct ConversationRow: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("It’s removed from this Mac. The Cursor cloud agent is left as it is.")
+            Text("It’s removed from this Mac. Decisions, notes, and tracks from it stay.")
         }
     }
 

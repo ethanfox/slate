@@ -22,19 +22,39 @@ struct RootView: View {
     var body: some View {
         HStack(spacing: 0) {
             SidebarView()
-                .frame(width: 232)
+                .frame(width: app.sidebarCollapsed ? 0 : 232, alignment: .leading)
+                .clipped()
+                .opacity(app.sidebarCollapsed ? 0 : 1)
+                .allowsHitTesting(!app.sidebarCollapsed)
+                .accessibilityHidden(app.sidebarCollapsed)
 
             VStack(spacing: 0) {
-                HStack {
+                HStack(spacing: 8) {
+                    Button(action: app.toggleSidebar) {
+                        Image(systemName: "sidebar.leading")
+                            .frame(width: 28, height: 28)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular, in: Circle())
+                    .help(app.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar")
+                    .accessibilityLabel(app.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar")
+                    Image(systemName: pageSymbol)
+                        .font(CraftFont.titleIcon)
+                        .frame(width: 22, height: 22)
                     Text(pageTitle)
                         .font(CraftFont.title)
                     Spacer()
                     paneAction
                 }
-                .padding(.horizontal, 16)
+                .padding(.leading, app.sidebarCollapsed ? 78 : 16)
+                .padding(.trailing, 16)
                 .frame(height: 52)
-                .contentShape(Rectangle())
-                .gesture(WindowDragGesture())
+                .background {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .gesture(WindowDragGesture())
+                }
 
                 detail
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -42,6 +62,7 @@ struct RootView: View {
                     .background(pane.fill(CraftColor.canvas).shadow(color: .black.opacity(0.18), radius: 10, y: 3))
                     .overlay(pane.strokeBorder(CraftColor.hairline))
             }
+            .padding(.leading, app.sidebarCollapsed ? 10 : 0)
             .padding(.trailing, 10)
             .padding(.bottom, 10)
         }
@@ -83,15 +104,34 @@ struct RootView: View {
     @ViewBuilder
     private var paneAction: some View {
         if case .projects = app.destination {
-            Button("New Project", systemImage: "plus") {
-                app.isPresentingNewProject = true
+            GlassEffectContainer {
+                HStack(spacing: 10) {
+                    ProjectsLayoutControl(selection: Bindable(app).projectsLayout)
+                    Button {
+                        app.isPresentingNewProject = true
+                    } label: {
+                        Label("New Project", systemImage: "plus")
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular, in: Capsule())
+                    .help("New Project (⌘N)")
+                }
             }
-            .help("New Project (⌘N)")
         } else if let project = openProject {
-            Button("New Chat", systemImage: "square.and.pencil") {
+            Button {
                 app.selectedConversation = nil
                 app.tabs[project.id] = .chat
+            } label: {
+                Label("New Chat", systemImage: "square.and.pencil")
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Capsule())
             }
+            .buttonStyle(.plain)
+            .glassEffect(.regular, in: Capsule())
             .help("New Chat")
         }
     }
@@ -108,6 +148,25 @@ struct RootView: View {
         case .quickAsk:
             "Quick Ask"
         }
+    }
+
+    private var pageSymbol: String {
+        switch app.destination {
+        case .home: "house"
+        case .projects: "square.stack"
+        case .tasks: "checklist"
+        case .calendar: "calendar"
+        case .settings: "gearshape"
+        case .project(let id):
+            projectSymbol(id)
+        case .quickAsk:
+            "bubble.left"
+        }
+    }
+
+    private func projectSymbol(_ id: UUID) -> String {
+        let symbol = projects.first { $0.id == id }?.symbol ?? ""
+        return symbol.isEmpty ? "folder" : symbol
     }
 
     private func projectTitle(_ id: UUID) -> String {
@@ -156,5 +215,31 @@ struct RootView: View {
         case .quickAsk(let id):
             QuickAskHost(id: id)
         }
+    }
+}
+
+private struct ProjectsLayoutControl: View {
+    @Binding var selection: ProjectsLayout
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(ProjectsLayout.allCases) { layout in
+                Button {
+                    selection = layout
+                } label: {
+                    Image(systemName: layout.symbol)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(layout.label)
+                .foregroundStyle(selection == layout ? .primary : .secondary)
+                .accessibilityLabel(layout.label)
+            }
+        }
+        .padding(2)
+        .glassEffect(.regular, in: Capsule())
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Project view")
     }
 }

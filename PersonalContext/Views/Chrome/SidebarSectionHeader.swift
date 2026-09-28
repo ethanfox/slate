@@ -16,11 +16,11 @@ struct SidebarSectionHeader<Trailing: View>: View {
                 .font(CraftFont.section)
                 .foregroundStyle(appearsActive ? .secondary : .tertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .allowsHitTesting(false)
             trailing()
         }
         .padding(.horizontal, 8)
         .padding(.top, 20)
         .padding(.bottom, 4)
-        .allowsHitTesting(false)
     }
 }

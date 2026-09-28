@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import SwiftUI
 
 enum ConnectionState: Equatable {
     case missing
@@ -11,7 +12,8 @@ enum ConnectionState: Equatable {
 @MainActor
 @Observable
 final class AppModel {
-    let container: ModelContainer
+    private(set) var container: ModelContainer
+    private var storeChangedElsewhere = false
     var destination: Destination = .home
     var tabs: [UUID: ProjectTab] = [:]
     var selectedThread: UUID?
@@ -23,7 +25,9 @@ final class AppModel {
     var pendingSend: PendingSend?
     var chatConversationID: UUID?
     var activeReply = ""
-    var chatGenerating = false
+    var chatGenerating = false {
+        didSet { if !chatGenerating { reloadIfIdle() } }
+    }
     var saveKind: SaveKind?
 
     var appearance: AppearancePreference {
@@ -34,6 +38,18 @@ final class AppModel {
     }
     var showAgentIDs: Bool {
         didSet { defaults.set(showAgentIDs, forKey: Keys.showAgentIDs) }
+    }
+    var projectsLayout: ProjectsLayout {
+        didSet { defaults.set(projectsLayout.rawValue, forKey: Keys.projectsLayout) }
+    }
+    var sidebarCollapsed: Bool {
+        didSet { defaults.set(sidebarCollapsed, forKey: Keys.sidebarCollapsed) }
+    }
+
+    func toggleSidebar() {
+        withAnimation(.easeInOut(duration: 0.22)) {
+            sidebarCollapsed.toggle()
+        }
     }
 
     private(set) var apiKey: String?
@@ -50,6 +66,8 @@ final class AppModel {
         appearance = AppearancePreference(rawValue: UserDefaults.standard.string(forKey: Keys.appearance) ?? "") ?? .system
         defaultModelID = UserDefaults.standard.string(forKey: Keys.defaultModel) ?? ""
         showAgentIDs = UserDefaults.standard.bool(forKey: Keys.showAgentIDs)
+        projectsLayout = ProjectsLayout(rawValue: UserDefaults.standard.string(forKey: Keys.projectsLayout) ?? "") ?? .list
+        sidebarCollapsed = UserDefaults.standard.bool(forKey: Keys.sidebarCollapsed)
         apiKey = KeychainStore.read()
 
         var opened: ModelContainer?
@@ -71,10 +89,41 @@ final class AppModel {
             storeError = nil
         }
         ChatTrace.event("app launch hasKey=\(hasAPIKey) storeError=\(storeError ?? "none")")
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            Unmanaged.passUnretained(self).toOpaque(),
+            { _, observer, _, _, _ in
+                guard let observer else { return }
+                let app = Unmanaged<AppModel>.fromOpaque(observer).takeUnretainedValue()
+                Task { @MainActor in app.storeDidChangeElsewhere() }
+            },
+            Store.changedNotification as CFString,
+            nil,
+            .deliverImmediately
+        )
         if hasAPIKey {
             refreshConnection()
         } else {
             connection = .missing
+        }
+    }
+
+    /// The MCP writes from its own process, so this context never sees those rows until the store is reopened.
+    /// A streaming chat still holds records from the current context, so the reopen waits until it has saved its reply.
+    private func storeDidChangeElsewhere() {
+        storeChangedElsewhere = true
+        reloadIfIdle()
+    }
+
+    private func reloadIfIdle() {
+        guard storeChangedElsewhere, !chatGenerating else { return }
+        storeChangedElsewhere = false
+        try? container.mainContext.save()
+        do {
+            container = try Store.open()
+            ChatTrace.event("store reopened after outside change")
+        } catch {
+            storeError = error.localizedDescription
         }
     }
 
@@ -192,4 +241,6 @@ private enum Keys {
     static let appearance = "appearance"
     static let defaultModel = "defaultModelID"
     static let showAgentIDs = "showAgentIDs"
+    static let projectsLayout = "projectsLayout"
+    static let sidebarCollapsed = "sidebarCollapsed"
 }

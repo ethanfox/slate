@@ -12,6 +12,11 @@ struct ProjectView: View {
             HStack(spacing: 0) {
                 ProjectColumn(project: project)
                     .frame(width: 250)
+                    .overlay(alignment: .trailing) {
+                        Rectangle()
+                            .fill(CraftColor.hairline)
+                            .frame(width: 1)
+                    }
                 center
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }

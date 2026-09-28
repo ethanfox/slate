@@ -43,7 +43,7 @@ struct ProjectColumn: View {
                     }
                 }
 
-                header("Threads", add: { createThread(parent: nil) })
+                header("Tracks", add: { createThread(parent: nil) })
                 ForEach(project.rootThreads) { thread in
                     ThreadBranch(
                         thread: thread,
@@ -103,7 +103,7 @@ struct ProjectColumn: View {
         }
         .scrollContentBackground(.hidden)
         .alert(
-            "Delete \(pendingThreadDelete?.title ?? "this thread")?",
+            "Delete \(pendingThreadDelete?.title ?? "this track")?",
             isPresented: Binding(get: { pendingThreadDelete != nil }, set: { if !$0 { pendingThreadDelete = nil } })
         ) {
             Button("Delete", role: .destructive) {
@@ -117,20 +117,13 @@ struct ProjectColumn: View {
             }
             Button("Cancel", role: .cancel) { pendingThreadDelete = nil }
         } message: {
-            Text("Child threads are removed too. Notes and decisions stay in the project.")
+            Text("Child tracks are removed too. Notes and decisions stay in the project.")
         }
     }
 
     private func header(_ title: String, add: @escaping () -> Void) -> some View {
         SidebarSectionHeader(title: title) {
-            Button(action: add) {
-                Label("New \(title.dropLast())", systemImage: "plus")
-                    .labelStyle(.iconOnly)
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.borderless)
-            .help("New \(title.dropLast())")
-            .accessibilityLabel("New \(title.dropLast())")
+            SectionAddButton(title: String(title.dropLast()), action: add)
         }
     }
 
@@ -169,5 +162,29 @@ struct ProjectColumn: View {
         try? context.save()
         app.selectedDecision = decision.id
         show(.decisions)
+    }
+}
+
+private struct SectionAddButton: View {
+    var title: String
+    var action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(CraftFont.sidebarIcon)
+                .foregroundStyle(hovering ? .primary : .secondary)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(hovering ? CraftColor.selection : Color.clear)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("New \(title)")
+        .accessibilityLabel("New \(title)")
     }
 }

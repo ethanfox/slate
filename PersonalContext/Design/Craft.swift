@@ -78,6 +78,7 @@ enum CraftFont {
     static let section = Font.system(size: 13, weight: .semibold)
     static let sectionNote = Font.system(size: 11)
     static let title = Font.system(size: 20, weight: .semibold)
+    static let titleIcon = Font.system(size: 16, weight: .semibold)
     static let body = Font.system(size: 13)
     static let chatBody = Font.system(size: 15)
     static let caption = Font.system(size: 11)
@@ -111,16 +112,24 @@ struct ComposerFieldRow: View {
                 .lineLimit(lineLimit)
                 .onSubmit(submitIfPossible)
             if isGenerating, let onStop {
-                Button("Stop", systemImage: "stop.fill", action: onStop)
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
+                Button(action: onStop) {
+                    Image(systemName: "stop.fill")
+                        .frame(width: 28, height: 28)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular, in: Circle())
+                .accessibilityLabel("Stop")
             } else {
-                Button("Send", systemImage: "arrow.up", action: onSend)
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.regular)
-                    .disabled(!canSend)
+                Button(action: onSend) {
+                    Image(systemName: "arrow.up")
+                        .frame(width: 28, height: 28)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular, in: Circle())
+                .disabled(!canSend)
+                .accessibilityLabel("Send")
             }
         }
     }

@@ -104,8 +104,8 @@ struct SaveSheet: View {
     private var heading: String {
         switch kind {
         case .note: "Save to Notes"
-        case .thread: "Create Thread"
-        case .addToThread: "Add to Thread"
+        case .thread: "Create Track"
+        case .addToThread: "Add to Track"
         case .decision: "Create Decision"
         }
     }
@@ -113,7 +113,7 @@ struct SaveSheet: View {
     private var confirmTitle: String {
         switch kind {
         case .note: "Save Note"
-        case .thread: "Create Thread"
+        case .thread: "Create Track"
         case .addToThread: "Add"
         case .decision: "Save Decision"
         }
@@ -137,8 +137,8 @@ struct SaveSheet: View {
     @ViewBuilder
     private var threadPicker: some View {
         if let targetProject, !targetProject.threads.isEmpty, kind != .thread || true {
-            Picker(kind == .thread ? "Parent" : "Thread", selection: $threadID) {
-                Text(kind == .thread ? "No parent" : "No thread").tag(UUID?.none)
+            Picker(kind == .thread ? "Parent" : "Track", selection: $threadID) {
+                Text(kind == .thread ? "No parent" : "No track").tag(UUID?.none)
                 ForEach(targetProject.threads.sorted { $0.title < $1.title }) { thread in
                     Text(thread.title.isEmpty ? "Untitled" : thread.title).tag(Optional(thread.id))
                 }
@@ -186,7 +186,7 @@ struct SaveSheet: View {
             created.body = bodyText
             context.insert(created)
             app.selectedThread = created.id
-            app.flash("Thread created")
+            app.flash("Track created")
         case .addToThread:
             guard let thread else { return }
             let stamp = Date.now.formatted(date: .abbreviated, time: .shortened)

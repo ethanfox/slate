@@ -1,0 +1,14 @@
+---
+description: Do not use Shell unless you must actually run a program
+alwaysApply: true
+---
+
+# No unnecessary shell
+
+Do not use the Shell tool by default. It is not for reading, searching, listing, or answering.
+
+Use Read, Grep, and Glob for the repo. If the user asked a question you can answer, answer it. Do not run a command first.
+
+Shell is allowed only when something must execute: a build, tests, git (when asked), the relaunch-after-build command, or an install the task requires.
+
+If a command would only prompt the user to approve a look-around, do not run it.

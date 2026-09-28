@@ -29,9 +29,9 @@ struct ThreadPage: View {
                         Button(kind.label, systemImage: kind.symbol) { thread.kind = kind; touch() }
                     }
                 }
-                PropertyPill(title: thread.status.label, systemImage: "circle.dashed") {
+                PropertyPill(title: thread.status.label, systemImage: thread.status.symbol) {
                     ForEach(ThreadStatus.allCases) { status in
-                        Button(status.label) { thread.status = status; touch() }
+                        Button(status.label, systemImage: status.symbol) { thread.status = status; touch() }
                     }
                 }
                 PropertyPill(title: thread.parent.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No parent", systemImage: "arrow.turn.left.up") {
@@ -54,7 +54,7 @@ struct ThreadPage: View {
                 .padding(.top, 16)
 
             if !thread.children.isEmpty {
-                DocumentSection("Sub-threads") {
+                DocumentSection("Sub-tracks") {
                     ForEach(thread.orderedChildren) { child in
                         RecordRow(
                             systemImage: child.kind.symbol,
@@ -77,7 +77,7 @@ struct ThreadPage: View {
     private var linked: some View {
         let count = thread.decisions.count + thread.notes.count + thread.conversations.count
         PropertyPill(title: count == 0 ? "Link" : "\(count) linked", systemImage: "link") {
-            Button("New Sub-thread", systemImage: "plus") { createChild() }
+            Button("New Sub-track", systemImage: "plus") { createChild() }
             if !thread.decisions.isEmpty {
                 Section("Decisions") {
                     ForEach(thread.decisions) { decision in

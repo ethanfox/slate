@@ -15,6 +15,14 @@ enum ProjectStatus: String, Codable, CaseIterable, Identifiable, Hashable {
         case .done: "Done"
         }
     }
+
+    var symbol: String {
+        switch self {
+        case .active: "play.circle"
+        case .paused: "pause.circle"
+        case .done: "checkmark.circle"
+        }
+    }
 }
 
 enum ThreadKind: String, Codable, CaseIterable, Identifiable, Hashable {
@@ -89,6 +97,10 @@ final class Project: Identifiable {
         threads
             .filter { $0.parent == nil }
             .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    var displayName: String {
+        name.isEmpty ? "Untitled" : name
     }
 
     var lastActivity: Date {
@@ -244,7 +256,6 @@ final class Decision {
 final class Conversation {
     var id: UUID
     var cursorAgentId: String
-    var cursorURL: String
     var title: String
     var model: String
     var contextSnapshot: String
@@ -264,7 +275,6 @@ final class Conversation {
     init(title: String = "New chat", model: String = "", project: Project? = nil) {
         self.id = UUID()
         self.cursorAgentId = ""
-        self.cursorURL = ""
         self.title = title
         self.model = model
         self.contextSnapshot = ""

@@ -4,6 +4,7 @@ import SwiftUI
 struct OverviewPage: View {
     @Bindable var project: Project
     @Environment(AppModel.self) private var app
+    @State private var overviewOpen = false
 
     private var openThreads: [ProjectThread] {
         project.threads
@@ -34,9 +35,12 @@ struct OverviewPage: View {
         VStack(spacing: 0) {
             DocumentPage {
                 HStack(spacing: 8) {
-                    PropertyPill(title: project.status.label, systemImage: "circle.dashed") {
+                    PropertyPill(title: project.status.label, systemImage: project.status.symbol) {
                         ForEach(ProjectStatus.allCases) { status in
-                            Button(status.label) { project.status = status; project.touch() }
+                            Button(status.label, systemImage: status.symbol) {
+                                project.status = status
+                                project.touch()
+                            }
                         }
                     }
                     Text("Updated \(project.lastActivity.relativeLabel)")
@@ -44,15 +48,40 @@ struct OverviewPage: View {
                         .foregroundStyle(.tertiary)
                 }
 
-                MarkdownEditor(text: $project.summary, placeholder: "What this project is")
-                    .padding(.top, 16)
+                Button {
+                    overviewOpen.toggle()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: overviewOpen ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 12)
+                        Text("Overview")
+                            .font(CraftFont.section)
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 24)
+
+                if overviewOpen {
+                    MarkdownEditor(text: $project.summary, placeholder: "What this project is")
+                        .padding(.top, 8)
+                }
 
                 DocumentSection("Current direction") {
                     MarkdownEditor(text: $project.currentDirection, placeholder: "What’s being pursued right now")
+                        .padding(12)
+                        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(CraftColor.hairline)
+                        )
                 }
 
                 if !openThreads.isEmpty {
-                    DocumentSection("Open threads") {
+                    DocumentSection("Open tracks") {
                         ForEach(openThreads.prefix(8)) { thread in
                             RecordRow(
                                 systemImage: thread.kind.symbol,

@@ -41,6 +41,17 @@ struct SettingsView: View {
                             .fixedSize()
                         }
                     }
+                    Hairline().padding(.horizontal, 16)
+                    row {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Cursor app")
+                            Text("Lets agents in Cursor read and update this knowledge base.")
+                                .font(CraftFont.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 16)
+                        Button("Connect to Cursor") { connectCursorApp() }
+                    }
                 }
 
                 group("Appearance") {
@@ -84,7 +95,6 @@ struct SettingsView: View {
                             Text(ContextBuilder.package(for: project))
                                 .font(.system(size: 11, design: .monospaced))
                                 .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 16)
                                 .padding(.bottom, 12)
@@ -149,5 +159,18 @@ struct SettingsView: View {
 
     private func removeKey() {
         try? app.removeAPIKey()
+    }
+
+    private func connectCursorApp() {
+        guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "personal-context-mcp"),
+              let config = try? JSONSerialization.data(withJSONObject: ["command": mcp.path], options: .withoutEscapingSlashes),
+              let encoded = config.base64EncodedString().addingPercentEncoding(withAllowedCharacters: .alphanumerics),
+              let url = URL(string: "cursor://anysphere.cursor-deeplink/mcp/install?name=personal-context&config=\(encoded)")
+        else { return }
+        guard NSWorkspace.shared.urlForApplication(toOpen: url) != nil else {
+            app.flash("Cursor isn’t installed on this Mac.")
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 }

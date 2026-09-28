@@ -69,7 +69,7 @@ struct HomeView: View {
     private var recentList: some View {
         let items = recentItems
         if items.isEmpty {
-            EmptyLine(text: "Conversations, threads, notes, and decisions will appear here.")
+            EmptyLine(text: "Conversations, tracks, notes, and decisions will appear here.")
         } else {
             ForEach(items) { item in
                 RecordRow(
@@ -122,7 +122,7 @@ struct HomeView: View {
                 id: "t-\(thread.id)",
                 title: thread.title,
                 subtitle: [thread.project?.name, thread.kind.label].compactMap { $0 }.joined(separator: " · "),
-                symbol: "point.3.connected.trianglepath.dotted",
+                symbol: TrackStyle.symbol,
                 date: thread.updatedAt,
                 kind: .thread(thread.id, thread.project?.id)
             ))

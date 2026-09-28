@@ -17,6 +17,7 @@
 		30B1DB553DC0EB0931DAC3EE /* PersonalContextApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9BF693E037581C46858B261 /* PersonalContextApp.swift */; };
 		3B1D4CE503CCAE5E82A5A16C /* QuickAskHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420D87C639AC3397CA1531FC /* QuickAskHost.swift */; };
 		4C28C10B14E56AA46AD05239 /* ConversationChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F537EBD24BAA7ACDCB5E193 /* ConversationChat.swift */; };
+		7A4E2C91B6D0481F9E3C5A10 /* SelectableText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B8D4F70C3A25E9D6F14B2C8 /* SelectableText.swift */; };
 		4C826F096841B03ECA5F8ABE /* EmptyLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CD7C7DFD28E72C0A9D4AA41 /* EmptyLine.swift */; };
 		4E2DA01EB53D623F3121BF60 /* TextFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EED727D15FC7D4FD4574F7 /* TextFormat.swift */; };
 		4E4575D43D714CD2473BFF9F /* SidebarSectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = F721FDC648EAE06103D02D53 /* SidebarSectionHeader.swift */; };
@@ -104,6 +105,7 @@
 		168EFE558B001E07EC27771C /* ProjectChatCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectChatCenter.swift; sourceTree = "<group>"; };
 		1CD7C7DFD28E72C0A9D4AA41 /* EmptyLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyLine.swift; sourceTree = "<group>"; };
 		2B480D4B60CF75203CF57B45 /* RecordRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordRow.swift; sourceTree = "<group>"; };
+		1B8D4F70C3A25E9D6F14B2C8 /* SelectableText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectableText.swift; sourceTree = "<group>"; };
 		2F537EBD24BAA7ACDCB5E193 /* ConversationChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationChat.swift; sourceTree = "<group>"; };
 		35658CC3CC77FE7EF9839CD9 /* Hairline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hairline.swift; sourceTree = "<group>"; };
 		36EED727D15FC7D4FD4574F7 /* TextFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextFormat.swift; sourceTree = "<group>"; };
@@ -217,6 +219,7 @@
 			children = (
 				A174CA3B685C41C4ABCF1D54 /* ChatScreen.swift */,
 				2F537EBD24BAA7ACDCB5E193 /* ConversationChat.swift */,
+				1B8D4F70C3A25E9D6F14B2C8 /* SelectableText.swift */,
 				48D2751AE227D1D7C67EBCF3 /* ConversationRow.swift */,
 				5CDE70B076840735BBD769FC /* PinnedComposer.swift */,
 				168EFE558B001E07EC27771C /* ProjectChatCenter.swift */,
@@ -450,7 +453,8 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/personal-context-runner",
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/personal-context-node",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/runner/runner.mjs",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -483,6 +487,7 @@
 				D0BE55C67A0150AAA2EF6656 /* ConnectCursorSheet.swift in Sources */,
 				A1A0A9B87ABC17645115475D /* ContextBuilder.swift in Sources */,
 				4C28C10B14E56AA46AD05239 /* ConversationChat.swift in Sources */,
+				7A4E2C91B6D0481F9E3C5A10 /* SelectableText.swift in Sources */,
 				D3871C283E178B0A26AD8953 /* ConversationRow.swift in Sources */,
 				99356301DEE9A913A536600F /* Craft.swift in Sources */,
 				AC10C7614F71D4616792DB13 /* CursorClient.swift in Sources */,

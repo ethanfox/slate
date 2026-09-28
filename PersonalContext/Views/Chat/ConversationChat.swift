@@ -9,12 +9,15 @@ struct ConversationChat: View {
     var project: Project?
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
+    @State private var bridge: CursorConversationBridge
     @StateObject private var session: ChatSession
 
     init(conversation: Conversation, project: Project?) {
         self.conversation = conversation
         self.project = project
-        _session = StateObject(wrappedValue: Self.makeSession(conversation: conversation, project: project ?? conversation.project))
+        let bridge = CursorConversationBridge(conversation: conversation, project: project ?? conversation.project)
+        _bridge = State(initialValue: bridge)
+        _session = StateObject(wrappedValue: Self.makeSession(bridge: bridge, conversation: conversation))
     }
 
     var body: some View {
@@ -23,8 +26,12 @@ struct ConversationChat: View {
             chatBox
         }
             .onChange(of: session.isGenerating) { _, generating in
-                publishChrome()
                 if !generating { persist() }
+                publishChrome()
+            }
+            .onChange(of: ObjectIdentifier(conversation)) { _, _ in
+                bridge.conversation = conversation
+                bridge.project = project ?? conversation.project
             }
             .onChange(of: session.entries.count) { _, _ in
                 publishChrome()
@@ -59,6 +66,11 @@ struct ConversationChat: View {
                     Spacer(minLength: 8)
                 }
                 ChatComposerField(session: session)
+                if !bridge.changes.isEmpty {
+                    Label(bridge.changes.joined(separator: " · "), systemImage: "checkmark.circle")
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let message = session.error?.localizedDescription {
                     Text(message)
                         .font(CraftFont.caption)
@@ -84,8 +96,7 @@ struct ConversationChat: View {
         return ""
     }
 
-    private static func makeSession(conversation: Conversation, project: Project?) -> ChatSession {
-        let bridge = CursorConversationBridge(conversation: conversation, project: project)
+    private static func makeSession(bridge: CursorConversationBridge, conversation: Conversation) -> ChatSession {
         let session = ChatSession(provider: CursorChatProvider(bridge: bridge), model: conversation.model)
         var entries: [ChatSession.Entry] = []
         var history: [AIChatCore.ChatMessage] = []
@@ -190,7 +201,6 @@ private struct ConversationTimeline: View {
                         Text(reasoning.text)
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
                     }
                 }
                 .padding(12)
@@ -211,7 +221,6 @@ private struct ConversationTimeline: View {
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .lineLimit(8)
-                        .textSelection(.enabled)
                 }
             }
             .padding(12)
@@ -228,7 +237,6 @@ private struct ConversationTimeline: View {
                         Text(knowledge.body)
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
                     }
                 }
                 .padding(12)
@@ -264,10 +272,7 @@ private struct UserMessageBubble: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 8) {
-            Text(message.text)
-                .font(CraftFont.chatBody)
-                .lineSpacing(7)
-                .textSelection(.enabled)
+            SelectableText(text: message.text, hugsWidth: true)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -313,8 +318,7 @@ private struct AssistantMessageBlock: View {
                 .frame(maxWidth: 680, alignment: .leading)
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                MarkdownMessageView(text: message.text)
-                    .textSelection(.enabled)
+                SelectableText(text: message.text, markdown: true)
                     .frame(maxWidth: 680, alignment: .leading)
                 if !message.text.isEmpty {
                     MessageActionRow {
@@ -324,10 +328,10 @@ private struct AssistantMessageBlock: View {
                         MessageActionButton(title: "Save to Notes", systemImage: "note.text") {
                             save(.note)
                         }
-                        MessageActionButton(title: "Create Thread", systemImage: "point.3.connected.trianglepath.dotted") {
+                        MessageActionButton(title: "Create Track", systemImage: TrackStyle.symbol) {
                             save(.thread)
                         }
-                        MessageActionButton(title: "Add to Thread", systemImage: "text.append") {
+                        MessageActionButton(title: "Add to Track", systemImage: "text.append") {
                             save(.addToThread)
                         }
                         MessageActionButton(title: "Create Decision", systemImage: "checkmark.seal") {

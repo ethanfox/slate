@@ -1,53 +1,165 @@
 import AIChatCore
 import Foundation
+import Observation
+
+struct RunnerRequest: Encodable, Sendable {
+    var apiKey: String
+    var env: [String: String]
+    var agentId: String?
+    var name: String
+    var text: String
+    var model: String
+    var cwd: String
+    var mcpCommand: String
+}
+
+struct RunnerEvent: Decodable, Sendable {
+    var type: String
+    var agentId: String?
+    var text: String?
+    var name: String?
+    var status: String?
+    var error: String?
+    var message: String?
+}
 
 @MainActor
+@Observable
 final class CursorConversationBridge {
-    let conversation: Conversation
-    let project: Project?
-    private(set) var currentRunID = ""
+    var conversation: Conversation
+    var project: Project?
+    private(set) var changes: [String] = []
+    @ObservationIgnored private var process: Process?
 
     init(conversation: Conversation, project: Project?) {
         self.conversation = conversation
         self.project = project
     }
 
-    func prepare(userText: String) -> (agentID: String, prompt: String, name: String, model: String) {
+    func prepare(userText: String, apiKey: String) throws -> RunnerRequest {
+        guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "personal-context-mcp") else {
+            throw CursorAPIError(status: 0, message: "The Personal Context MCP is missing from the app.")
+        }
+        guard let store = conversation.modelContext?.container.configurations.first?.url else {
+            throw CursorAPIError(status: 0, message: "Couldn’t find the knowledge base on disk.")
+        }
+        let folder = store.deletingLastPathComponent().appendingPathComponent("Agent", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
         let opening = conversation.cursorAgentId.isEmpty
         ChatTrace.event("prepare conversation=\(conversation.id) opening=\(opening) agent=\(conversation.cursorAgentId) model=\(conversation.model) project=\(project?.name ?? "none") textChars=\(userText.count)")
+        changes = []
         if conversation.title == "New chat" || conversation.title.isEmpty {
             conversation.title = conversationTitle(from: userText)
         }
-        var context = ""
-        if opening, let project {
-            context = ContextBuilder.package(for: project)
+        let context = project.map(ContextBuilder.package(for:)) ?? ""
+        if opening {
             conversation.contextSnapshot = context
         }
         conversation.updatedAt = .now
         project?.touch()
-        return (
-            conversation.cursorAgentId,
-            ContextBuilder.prompt(userText: userText, context: context, opening: opening),
-            conversation.title,
-            conversation.model
+        try? conversation.modelContext?.save()
+        return RunnerRequest(
+            apiKey: apiKey,
+            env: ProcessInfo.processInfo.environment,
+            agentId: opening ? nil : conversation.cursorAgentId,
+            name: conversation.title,
+            text: ContextBuilder.prompt(userText: userText, context: context, opening: opening),
+            model: conversation.model,
+            cwd: folder.path,
+            mcpCommand: mcp.path
         )
     }
 
-    func agentCreated(id: String, url: String?) {
-        ChatTrace.event("agentCreated id=\(id) url=\(url ?? "")")
+    func run(_ request: RunnerRequest) throws -> AsyncThrowingStream<RunnerEvent, Error> {
+        guard let node = Bundle.main.url(forAuxiliaryExecutable: "personal-context-node"),
+              let runner = Bundle.main.url(forResource: "runner", withExtension: "mjs", subdirectory: "runner") else {
+            throw CursorAPIError(status: 0, message: "The agent runner is missing from the app.")
+        }
+        let process = Process()
+        process.executableURL = node
+        process.arguments = [runner.path]
+        let input = Pipe()
+        let output = Pipe()
+        let errors = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        process.standardError = errors
+        errors.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+            ChatTrace.event("runner stderr: \(ChatTrace.clip(String(decoding: data, as: UTF8.self), 8000))")
+        }
+        let exits = AsyncStream<Int32> { continuation in
+            process.terminationHandler = { finished in
+                continuation.yield(finished.terminationStatus)
+                continuation.finish()
+            }
+        }
+        try process.run()
+        self.process = process
+        ChatTrace.event("runner started pid=\(process.processIdentifier) resume=\(request.agentId != nil)")
+        try input.fileHandleForWriting.write(contentsOf: JSONEncoder().encode(request))
+        try input.fileHandleForWriting.close()
+
+        let reader = output.fileHandleForReading
+        return AsyncThrowingStream { continuation in
+            let task = Task.detached {
+                do {
+                    var sawEnd = false
+                    for try await line in reader.bytes.lines {
+                        guard let event = try? JSONDecoder().decode(RunnerEvent.self, from: Data(line.utf8)) else { continue }
+                        if event.type == "result" || event.type == "error" { sawEnd = true }
+                        continuation.yield(event)
+                    }
+                    var status: Int32 = 0
+                    for await code in exits { status = code }
+                    ChatTrace.event("runner exited status=\(status)")
+                    if !sawEnd, status != 0, status != 130 {
+                        throw CursorAPIError(status: 0, message: "The agent stopped unexpectedly (exit \(status)).")
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    func agentStarted(_ id: String) {
+        guard conversation.cursorAgentId != id else { return }
+        ChatTrace.event("agent id=\(id)")
         conversation.cursorAgentId = id
-        conversation.cursorURL = url ?? ""
         try? conversation.modelContext?.save()
     }
 
-    func runStarted(_ id: String) {
-        ChatTrace.event("runStarted id=\(id)")
-        currentRunID = id
+    func toolFinished(name: String, status: String) {
+        ChatTrace.event("tool \(name) status=\(status)")
+        guard let label = Self.label(tool: name, failed: status == "error") else { return }
+        changes.append(label)
     }
 
-    func runFinished() {
-        ChatTrace.event("runFinished id=\(currentRunID)")
-        currentRunID = ""
+    func stop() {
+        guard let process, process.isRunning else { return }
+        ChatTrace.event("runner stop pid=\(process.processIdentifier)")
+        process.terminate()
+    }
+
+    func finished() {
+        process = nil
+    }
+
+    private static func label(tool: String, failed: Bool) -> String? {
+        for (prefix, done, attempt) in [("create_", "Added", "add"), ("update_", "Updated", "update")] {
+            guard let range = tool.range(of: prefix) else { continue }
+            let noun = tool[range.upperBound...].replacingOccurrences(of: "_", with: " ")
+            return failed ? "Couldn’t \(attempt) \(noun)" : "\(done) \(noun)"
+        }
+        return nil
     }
 }
 
@@ -71,87 +183,55 @@ struct CursorChatProvider: ChatProvider {
 
         ChatTrace.event("provider.stream model=\(model) messages=\(messages.count) userChars=\(userText.count)")
         return AsyncThrowingStream { continuation in
-            let task = Task {
-                guard let apiKey = KeychainStore.read() else {
-                    ChatTrace.event("provider.stream abort: no API key")
-                    continuation.finish(throwing: CursorAPIError(status: 0, message: "Add a Cursor API key in Settings."))
-                    return
-                }
-                ChatTrace.event("provider.stream keyPresent=true")
-                let client = CursorClient(apiKey: apiKey)
-                let plan = await bridge.prepare(userText: userText)
-                var agentID = plan.agentID
-                var runID = ""
+            let task = Task { @MainActor in
+                defer { bridge.finished() }
                 do {
-                    if agentID.isEmpty {
-                        let created = try await client.createAgent(name: plan.name, prompt: plan.prompt, modelID: plan.model)
-                        agentID = created.agent.id
-                        runID = created.run.id
-                        await bridge.agentCreated(id: agentID, url: created.agent.url)
-                    } else {
-                        runID = try await client.createRun(agentID: agentID, prompt: plan.prompt).id
+                    guard let apiKey = KeychainStore.read() else {
+                        throw CursorAPIError(status: 0, message: "Add a Cursor API key in Settings.")
                     }
-                    await bridge.runStarted(runID)
-
+                    let request = try bridge.prepare(userText: userText, apiKey: apiKey)
                     var emitted = false
-                    streamLoop: for try await event in client.stream(agentID: agentID, runID: runID) {
-                        switch event {
-                        case .assistant(let text):
-                            emitted = true
-                            continuation.yield(.text(text))
-                        case .thinking(let text):
-                            continuation.yield(.reasoning(text))
-                        case .result(let status, let text):
-                            if !emitted, let text, !text.isEmpty {
+                    var agentID: String?
+                    for try await event in try bridge.run(request) {
+                        switch event.type {
+                        case "agent":
+                            agentID = event.agentId
+                        case "text":
+                            if let text = event.text, !text.isEmpty {
                                 emitted = true
                                 continuation.yield(.text(text))
                             }
-                            if status == "ERROR" {
-                                throw CursorAPIError(status: 0, message: "The run failed.")
+                        case "thinking":
+                            if let text = event.text { continuation.yield(.reasoning(text)) }
+                        case "tool":
+                            bridge.toolFinished(name: event.name ?? "", status: event.status ?? "")
+                        case "result":
+                            if !emitted, let text = event.text, !text.isEmpty {
+                                emitted = true
+                                continuation.yield(.text(text))
                             }
-                            break streamLoop
-                        case .error(let message):
-                            if Self.isTransientStreamError(message) {
-                                ChatTrace.event("transient stream drop: \(message)")
-                                break streamLoop
+                            if event.status?.lowercased() == "error" {
+                                throw CursorAPIError(status: 0, message: event.error ?? "The run failed.")
                             }
-                            throw CursorAPIError(status: 0, message: message)
-                        case .done:
-                            break streamLoop
-                        case .status, .tool:
+                            if let agentID { bridge.agentStarted(agentID) }
+                        case "error":
+                            throw CursorAPIError(status: 0, message: event.message ?? "The run failed.")
+                        default:
                             break
                         }
                     }
-                    if !emitted {
-                        let finished = try await client.waitForRun(agentID: agentID, runID: runID)
-                        if let text = finished.result, !text.isEmpty {
-                            ChatTrace.event("provider.stream polled result chars=\(text.count) status=\(finished.status)")
-                            continuation.yield(.text(text))
-                            emitted = true
-                        } else if finished.status.uppercased() == "ERROR" {
-                            throw CursorAPIError(status: 0, message: "The run failed.")
-                        }
-                    }
                     ChatTrace.event("provider.stream complete emitted=\(emitted)")
-                    await bridge.runFinished()
                     continuation.yield(.done)
                     continuation.finish()
                 } catch {
                     ChatTrace.event("provider.stream error: \(error.localizedDescription)")
-                    await bridge.runFinished()
                     continuation.finish(throwing: error)
                 }
             }
             continuation.onTermination = { termination in
                 guard case .cancelled = termination else { return }
                 task.cancel()
-                Task { @MainActor in
-                    let agentID = bridge.conversation.cursorAgentId
-                    let runID = bridge.currentRunID
-                    bridge.runFinished()
-                    guard !agentID.isEmpty, !runID.isEmpty, let apiKey = KeychainStore.read() else { return }
-                    try? await CursorClient(apiKey: apiKey).cancel(agentID: agentID, runID: runID)
-                }
+                Task { @MainActor in bridge.stop() }
             }
         }
     }
@@ -162,12 +242,5 @@ struct CursorChatProvider: ChatProvider {
         options: ChatRequestOptions
     ) async throws -> ChatCompletionResult {
         throw CursorAPIError(status: 0, message: "Cursor conversations stream only.")
-    }
-
-    private static func isTransientStreamError(_ message: String) -> Bool {
-        let lower = message.lowercased()
-        return lower.contains("stream_unavailable")
-            || lower.contains("no longer available")
-            || lower.contains("stream_expired")
     }
 }

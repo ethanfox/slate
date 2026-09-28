@@ -63,7 +63,7 @@ struct SidebarView: View {
         .alert(item: $pendingDelete) { project in
             Alert(
                 title: Text("Delete \(project.name)?"),
-                message: Text("Threads, notes, decisions, and conversations in this project will be removed from this Mac."),
+                message: Text("Tracks, notes, decisions, and conversations in this project will be removed from this Mac."),
                 primaryButton: .destructive(Text("Delete")) {
                     if case .project(let id) = app.destination, id == project.id {
                         app.destination = .projects

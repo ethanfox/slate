@@ -12,7 +12,7 @@ struct ProjectChatCenter: View {
                 .id(conversation.id)
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                EmptyLine(text: "Start a chat. It gets this project’s summary, direction, threads, and decisions as context.")
+                EmptyLine(text: "Start a chat. It gets this project’s summary, direction, tracks, and decisions as context.")
                     .frame(maxWidth: 680, alignment: .leading)
                     .padding(.horizontal, 32)
                     .padding(.top, 28)

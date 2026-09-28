@@ -66,7 +66,7 @@ struct ThreadBranch: View {
             .buttonStyle(.plain)
             .onHover { hovering = $0 }
             .contextMenu {
-                Button("New Sub-thread") { onCreateChild(thread) }
+                Button("New Sub-track") { onCreateChild(thread) }
                 Button("Delete", role: .destructive) { onDelete(thread) }
             }
         }

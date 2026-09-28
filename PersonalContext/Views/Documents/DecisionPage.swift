@@ -26,8 +26,8 @@ struct DecisionPage: View {
                         }
                     }
                 }
-                PropertyPill(title: decision.thread.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No thread", systemImage: "point.3.connected.trianglepath.dotted") {
-                    Button("No thread") { decision.thread = nil; project.touch() }
+                PropertyPill(title: decision.thread.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No track", systemImage: TrackStyle.symbol) {
+                    Button("No track") { decision.thread = nil; project.touch() }
                     ForEach(project.threads.sorted { $0.title < $1.title }) { thread in
                         Button(thread.title.isEmpty ? "Untitled" : thread.title) { decision.thread = thread; project.touch() }
                     }

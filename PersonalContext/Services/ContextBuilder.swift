@@ -24,7 +24,7 @@ enum ContextBuilder {
                     lines.append("  Rationale: \(clip(decision.rationale, 400))")
                 }
                 if let thread = decision.thread {
-                    lines.append("  Thread: \(thread.title)")
+                    lines.append("  Track: \(thread.title)")
                 }
             }
         }
@@ -45,7 +45,7 @@ enum ContextBuilder {
             .sorted { $0.createdAt < $1.createdAt }
         if !threads.isEmpty {
             lines.append("")
-            lines.append("Active threads:")
+            lines.append("Active tracks:")
             for thread in threads.prefix(24) {
                 let indent = String(repeating: "  ", count: min(depth(of: thread), 4))
                 lines.append("\(indent)- [\(thread.kind.label)] \(thread.title) (\(thread.status.label), id \(thread.id.uuidString))")
@@ -68,29 +68,25 @@ enum ContextBuilder {
     }
 
     static func prompt(userText: String, context: String, opening: Bool) -> String {
-        guard !context.isEmpty else { return userText }
+        var parts: [String] = []
         if opening {
-            return """
-            You are the project assistant inside Personal Context, a local workspace for long-term project knowledge.
+            parts.append("""
+            You are the assistant inside Personal Context, the user's knowledge base for their projects. You have the Personal Context MCP tools, which read and change that knowledge base.
 
-            Use the project context below as the source of truth. Weight active decisions above threads and notes. Do not invent project facts that are not in the context or the conversation. When something should become durable knowledge, say so plainly so the user can save it as a decision, thread, or note. Do not modify a repository unless the user explicitly asks for code or a repo change.
+            When the user tells you something that should last (a fact, a decision, a change of direction, a new line of work), save it yourself with those tools right away, then say in one short line what you saved. Never ask the user to save anything. Update an existing decision, track, note, or project when it covers the same thing instead of adding a duplicate. When a new decision replaces an old one, pass supersedes_id. Use the ids shown in the project context.
 
+            Treat the project context as the source of truth and weight active decisions above tracks and notes. Do not invent project facts. Do not create or edit files unless the user explicitly asks.
+            """)
+        }
+        if !context.isEmpty {
+            parts.append("""
             <project-context>
             \(context)
             </project-context>
-
-            \(userText)
-            """
+            """)
         }
-        return """
-        Updated project context from Personal Context. Weight active decisions above threads and notes.
-
-        <project-context>
-        \(context)
-        </project-context>
-
-        \(userText)
-        """
+        parts.append(userText)
+        return parts.joined(separator: "\n\n")
     }
 
     private static func depth(of thread: ProjectThread) -> Int {

@@ -12,7 +12,7 @@ enum FocusDismissal {
             let point = content.superview?.convert(event.locationInWindow, from: nil) ?? event.locationInWindow
             var hit = content.hitTest(point)
             while let view = hit {
-                if view is NSText || view is NSTextField { return event }
+                if view is NSText || view is NSTextView || view is NSTextField { return event }
                 hit = view.superview
             }
             window.makeFirstResponder(nil)

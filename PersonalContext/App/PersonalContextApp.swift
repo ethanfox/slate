@@ -22,6 +22,12 @@ struct PersonalContextApp: App {
                 }
                 .keyboardShortcut("n")
             }
+            CommandGroup(after: .sidebar) {
+                Button(app.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar") {
+                    app.toggleSidebar()
+                }
+                .keyboardShortcut("s", modifiers: [.control, .command])
+            }
         }
 
         Settings {
@@ -30,6 +36,7 @@ struct PersonalContextApp: App {
                 .environment(app)
                 .preferredColorScheme(app.appearance.colorScheme)
                 .modelContainer(app.container)
+                .textSelection(.enabled)
                 .frame(width: 560, height: 640)
         }
     }
