@@ -45,6 +45,7 @@ final class AppModel {
     var sidebarCollapsed: Bool {
         didSet { defaults.set(sidebarCollapsed, forKey: Keys.sidebarCollapsed) }
     }
+    var trackChatOpen = false
 
     func toggleSidebar() {
         withAnimation(.easeInOut(duration: 0.22)) {
@@ -161,6 +162,22 @@ final class AppModel {
         } else {
             destination = .quickAsk(conversation.id)
         }
+        return conversation
+    }
+
+    func makeTrackConversation(for thread: ProjectThread, in project: Project, context: ModelContext) -> Conversation {
+        if let existing = thread.conversations
+            .filter({ !$0.isArchived })
+            .sorted(by: { $0.updatedAt > $1.updatedAt })
+            .first {
+            return existing
+        }
+        let conversation = Conversation(model: defaultModelID, project: project)
+        conversation.thread = thread
+        conversation.title = thread.title.isEmpty ? "Track chat" : thread.title
+        context.insert(conversation)
+        project.touch()
+        try? context.save()
         return conversation
     }
 

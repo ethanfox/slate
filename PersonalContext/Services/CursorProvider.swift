@@ -52,7 +52,8 @@ final class CursorConversationBridge {
         if conversation.title == "New chat" || conversation.title.isEmpty {
             conversation.title = conversationTitle(from: userText)
         }
-        let context = project.map(ContextBuilder.package(for:)) ?? ""
+        let focused = conversation.thread
+        let context = project.map { ContextBuilder.package(for: $0, focusedThread: focused) } ?? ""
         if opening {
             conversation.contextSnapshot = context
         }
@@ -64,7 +65,7 @@ final class CursorConversationBridge {
             env: ProcessInfo.processInfo.environment,
             agentId: opening ? nil : conversation.cursorAgentId,
             name: conversation.title,
-            text: ContextBuilder.prompt(userText: userText, context: context, opening: opening),
+            text: ContextBuilder.prompt(userText: userText, context: context, opening: opening, focusedThread: focused),
             model: conversation.model,
             cwd: folder.path,
             mcpCommand: mcp.path

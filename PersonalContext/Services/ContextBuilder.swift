@@ -1,7 +1,7 @@
 import Foundation
 
 enum ContextBuilder {
-    static func package(for project: Project) -> String {
+    static func package(for project: Project, focusedThread: ProjectThread? = nil) -> String {
         var lines: [String] = []
         lines.append("Project: \(project.name) (id \(project.id.uuidString))")
         lines.append("Status: \(project.status.label)")
@@ -64,10 +64,23 @@ enum ContextBuilder {
             }
         }
 
+        if let thread = focusedThread {
+            lines.append("")
+            lines.append("Focused track (this side chat is on this track):")
+            lines.append("- [\(thread.kind.label)] \(thread.title.isEmpty ? "Untitled" : thread.title) (\(thread.status.label), id \(thread.id.uuidString))")
+            if !thread.summary.isEmpty {
+                lines.append("  Summary: \(clip(thread.summary, 600))")
+            }
+            if !thread.body.isEmpty {
+                lines.append("  Body:")
+                lines.append(Self.bodyExcerpt(thread.body))
+            }
+        }
+
         return lines.joined(separator: "\n")
     }
 
-    static func prompt(userText: String, context: String, opening: Bool) -> String {
+    static func prompt(userText: String, context: String, opening: Bool, focusedThread: ProjectThread? = nil) -> String {
         var parts: [String] = []
         if opening {
             parts.append("""
@@ -76,6 +89,12 @@ enum ContextBuilder {
             When the user tells you something that should last (a fact, a decision, a change of direction, a new line of work), save it yourself with those tools right away, then say in one short line what you saved. Never ask the user to save anything. Update an existing decision, track, note, or project when it covers the same thing instead of adding a duplicate. When a new decision replaces an old one, pass supersedes_id. Use the ids shown in the project context.
 
             Treat the project context as the source of truth and weight active decisions above tracks and notes. Do not invent project facts. Do not create or edit files unless the user explicitly asks.
+            """)
+        }
+        if let thread = focusedThread {
+            let title = thread.title.isEmpty ? "Untitled" : thread.title
+            parts.append("""
+            You are in the side chat on track "\(title)" (id \(thread.id.uuidString)). When the user asks you to write, draft, rewrite, or add to this track, call update_thread on that id immediately (body or append_to_body). Answer questions and look up other project records with the tools. Do not create a new track for work that belongs here.
             """)
         }
         if !context.isEmpty {
@@ -87,6 +106,11 @@ enum ContextBuilder {
         }
         parts.append(userText)
         return parts.joined(separator: "\n\n")
+    }
+
+    private static func bodyExcerpt(_ text: String) -> String {
+        guard text.count > 6000 else { return text }
+        return String(text.prefix(6000)) + "…"
     }
 
     private static func depth(of thread: ProjectThread) -> Int {

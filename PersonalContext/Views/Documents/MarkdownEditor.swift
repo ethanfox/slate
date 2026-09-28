@@ -5,6 +5,7 @@ struct MarkdownEditor: NSViewRepresentable {
     @Binding var text: String
     var placeholder = "Start writing…"
     var fontSize: CGFloat = 15
+    var minHeight: CGFloat = 0
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -28,7 +29,9 @@ struct MarkdownEditor: NSViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: MarkdownTextView, context: Context) -> CGSize? {
         let width = proposal.width ?? 480
-        return CGSize(width: width, height: nsView.height(forWidth: width))
+        let content = nsView.height(forWidth: width)
+        let proposed = proposal.height ?? 0
+        return CGSize(width: width, height: max(content, proposed, minHeight))
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate, NSTextStorageDelegate {

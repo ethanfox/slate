@@ -23,6 +23,14 @@ struct ThreadPage: View {
 
             DocumentTitle(text: $thread.title)
 
+            TextField("One-line summary", text: $thread.summary, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+                .lineLimit(1...4)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+
             HStack(spacing: 6) {
                 PropertyPill(title: thread.kind.label, systemImage: thread.kind.symbol) {
                     ForEach(ThreadKind.allCases) { kind in
@@ -44,13 +52,7 @@ struct ThreadPage: View {
             }
             .padding(.top, 8)
 
-            TextField("One-line summary", text: $thread.summary, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 15))
-                .foregroundStyle(.secondary)
-                .padding(.top, 12)
-
-            MarkdownEditor(text: $thread.body)
+            MarkdownEditor(text: $thread.body, minHeight: 360)
                 .padding(.top, 16)
 
             if !thread.children.isEmpty {

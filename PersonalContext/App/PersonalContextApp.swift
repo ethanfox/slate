@@ -14,6 +14,7 @@ struct SlateApp: App {
                 .onAppear { FocusDismissal.install() }
         }
         .defaultSize(width: 1180, height: 760)
+        .windowResizability(.contentMinSize)
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {

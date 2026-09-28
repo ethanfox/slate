@@ -7,14 +7,16 @@ import SwiftUI
 struct ConversationChat: View {
     @Bindable var conversation: Conversation
     var project: Project?
+    var compact = false
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @State private var bridge: CursorConversationBridge
     @StateObject private var session: ChatSession
 
-    init(conversation: Conversation, project: Project?) {
+    init(conversation: Conversation, project: Project?, compact: Bool = false) {
         self.conversation = conversation
         self.project = project
+        self.compact = compact
         let bridge = CursorConversationBridge(conversation: conversation, project: project ?? conversation.project)
         _bridge = State(initialValue: bridge)
         _session = StateObject(wrappedValue: Self.makeSession(bridge: bridge, conversation: conversation))
@@ -25,37 +27,38 @@ struct ConversationChat: View {
             ConversationTimeline(session: session)
             chatBox
         }
-            .onChange(of: session.isGenerating) { _, generating in
-                if !generating { persist() }
-                publishChrome()
+        .environment(\.chatLayout, compact ? .compact : .regular)
+        .onChange(of: session.isGenerating) { _, generating in
+            if !generating { persist() }
+            publishChrome()
+        }
+        .onChange(of: ObjectIdentifier(conversation)) { _, _ in
+            bridge.conversation = conversation
+            bridge.project = project ?? conversation.project
+        }
+        .onChange(of: session.entries.count) { _, _ in
+            publishChrome()
+        }
+        .onChange(of: lastReply) { _, _ in
+            publishChrome()
+        }
+        .onAppear {
+            ChatTrace.event("chat appear conversation=\(conversation.id) messages=\(conversation.messages.count) model=\(conversation.model) hasKey=\(app.hasAPIKey) connection=\(String(describing: app.connection)) pending=\(app.pendingSend != nil)")
+            publishChrome()
+            consumePending()
+            if app.hasAPIKey, app.models.isEmpty, app.connection != .checking {
+                app.refreshConnection()
             }
-            .onChange(of: ObjectIdentifier(conversation)) { _, _ in
-                bridge.conversation = conversation
-                bridge.project = project ?? conversation.project
+        }
+        .onDisappear {
+            if app.chatConversationID == conversation.id {
+                app.chatConversationID = nil
+                app.activeReply = ""
+                app.chatGenerating = false
             }
-            .onChange(of: session.entries.count) { _, _ in
-                publishChrome()
-            }
-            .onChange(of: lastReply) { _, _ in
-                publishChrome()
-            }
-            .onAppear {
-                ChatTrace.event("chat appear conversation=\(conversation.id) messages=\(conversation.messages.count) model=\(conversation.model) hasKey=\(app.hasAPIKey) connection=\(String(describing: app.connection)) pending=\(app.pendingSend != nil)")
-                publishChrome()
-                consumePending()
-                if app.hasAPIKey, app.models.isEmpty, app.connection != .checking {
-                    app.refreshConnection()
-                }
-            }
-            .onDisappear {
-                if app.chatConversationID == conversation.id {
-                    app.chatConversationID = nil
-                    app.activeReply = ""
-                    app.chatGenerating = false
-                }
-            }
-            .onChange(of: app.pendingSend) { _, _ in consumePending() }
-            .onChange(of: conversation.model) { _, newValue in session.model = newValue }
+        }
+        .onChange(of: app.pendingSend) { _, _ in consumePending() }
+        .onChange(of: conversation.model) { _, newValue in session.model = newValue }
     }
 
     private var chatBox: some View {
@@ -79,7 +82,7 @@ struct ConversationChat: View {
                 }
             }
         }
-        .padding(.horizontal, 32)
+        .padding(.horizontal, compact ? 16 : 32)
         .padding(.vertical, 14)
     }
 
@@ -149,8 +152,30 @@ struct ConversationChat: View {
     }
 }
 
+private struct ChatLayout {
+    var pagePadding: CGFloat
+    var pageMaxWidth: CGFloat
+    var bubbleMaxWidth: CGFloat
+    var userMaxWidth: CGFloat
+
+    static let regular = ChatLayout(pagePadding: 32, pageMaxWidth: 744, bubbleMaxWidth: 680, userMaxWidth: 480)
+    static let compact = ChatLayout(pagePadding: 16, pageMaxWidth: .infinity, bubbleMaxWidth: .infinity, userMaxWidth: .infinity)
+}
+
+private enum ChatLayoutKey: EnvironmentKey {
+    static let defaultValue = ChatLayout.regular
+}
+
+extension EnvironmentValues {
+    fileprivate var chatLayout: ChatLayout {
+        get { self[ChatLayoutKey.self] }
+        set { self[ChatLayoutKey.self] = newValue }
+    }
+}
+
 private struct ConversationTimeline: View {
     @ObservedObject var session: ChatSession
+    @Environment(\.chatLayout) private var layout
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -162,9 +187,9 @@ private struct ConversationTimeline: View {
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .padding(.horizontal, 32)
-                .padding(.vertical, 28)
-                .frame(maxWidth: 744)
+                .padding(.horizontal, layout.pagePadding)
+                .padding(.vertical, layout.pagePadding)
+                .frame(maxWidth: layout.pageMaxWidth)
                 .frame(maxWidth: .infinity)
             }
             .scrollContentBackground(.hidden)
@@ -204,7 +229,7 @@ private struct ConversationTimeline: View {
                     }
                 }
                 .padding(12)
-                .frame(maxWidth: 680, alignment: .leading)
+                .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
                 .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -224,7 +249,7 @@ private struct ConversationTimeline: View {
                 }
             }
             .padding(12)
-            .frame(maxWidth: 680, alignment: .leading)
+            .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
             .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         case .knowledgeRetrieval(let knowledge):
             Button {
@@ -240,7 +265,7 @@ private struct ConversationTimeline: View {
                     }
                 }
                 .padding(12)
-                .frame(maxWidth: 680, alignment: .leading)
+                .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
                 .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -269,6 +294,7 @@ private struct ConversationTimeline: View {
 
 private struct UserMessageBubble: View {
     let message: ChatSession.UserEntry
+    @Environment(\.chatLayout) private var layout
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 8) {
@@ -280,7 +306,7 @@ private struct UserMessageBubble: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(CraftColor.hairline)
                 )
-                .frame(maxWidth: 480, alignment: .trailing)
+                .frame(maxWidth: layout.userMaxWidth, alignment: .trailing)
                 .opacity(message.isCancelled || message.isFailed ? 0.55 : 1)
             if message.isCancelled || message.isFailed {
                 Text(message.isCancelled ? "Cancelled" : "Not answered")
@@ -310,16 +336,17 @@ private struct UserMessageBubble: View {
 private struct AssistantMessageBlock: View {
     let message: ChatSession.AIEntry
     @Environment(AppModel.self) private var app
+    @Environment(\.chatLayout) private var layout
 
     var body: some View {
         if message.text.isEmpty, message.isStreaming {
             ProgressView()
                 .controlSize(.small)
-                .frame(maxWidth: 680, alignment: .leading)
+                .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 SelectableText(text: message.text, markdown: true)
-                    .frame(maxWidth: 680, alignment: .leading)
+                    .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
                 if !message.text.isEmpty {
                     MessageActionRow {
                         MessageActionButton(title: "Copy", systemImage: "doc.on.doc", confirms: true) {
@@ -340,7 +367,7 @@ private struct AssistantMessageBlock: View {
                     }
                 }
             }
-            .frame(maxWidth: 680, alignment: .leading)
+            .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
         }
     }
 

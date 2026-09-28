@@ -16,8 +16,10 @@ struct ProjectView: View {
                             .fill(CraftColor.hairline)
                             .frame(width: 1)
                     }
+                    .zIndex(1)
                 center
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
         }
     }
 
