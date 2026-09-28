@@ -9,14 +9,14 @@ struct ProjectHost: View {
         if let project = projects.first(where: { $0.id == id }) {
             ProjectView(project: project)
         } else {
-            PageBody {
-                ScrollView {
+            ScrollView {
+                PageBody {
                     EmptyLine(text: "This project is no longer here.")
                         .padding(28)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .scrollContentBackground(.hidden)
             }
+            .scrollContentBackground(.hidden)
         }
     }
 }

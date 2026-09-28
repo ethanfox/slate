@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "personal-context-runner",
+      "name": "slate-runner",
       "dependencies": {
         "@cursor/sdk": "1.0.32",
       },

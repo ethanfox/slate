@@ -15,7 +15,7 @@ Two surfaces. Nothing else.
 | Chrome | System Liquid Glass | Sidebar, toolbar, menus, popovers, sheets, the toast |
 | Content | Opaque solid | Home, projects, tasks, calendar, settings, notes, threads, decisions, chat |
 
-Chrome uses the system material. Do not set a custom fill on `NavigationSplitView`, the sidebar, or the toolbar. Do not hide the toolbar background. Do not use `.ultraThinMaterial`, `.regularMaterial`, or a hand-rolled blur as a stand-in. Those are the old materials.
+Chrome uses the system material. The sidebar has no custom fill; the window glass shows through. Do not use `.ultraThinMaterial`, `.regularMaterial`, or a hand-rolled blur as a stand-in. Those are the old materials.
 
 Content uses one solid color for the whole column, edge to edge of that column. A grouped container may sit one step lighter (dark) or one step toward white (light) so the group reads as a plate on the page. That plate is opaque. It is not glass, not a gradient, and not a shadow pretending to be depth.
 
@@ -29,41 +29,43 @@ Glass rules:
 
 ## Window
 
-Standard macOS window. Hidden custom chrome is what makes this app look like a fake website.
+**Locked.** Do not replace this with `NavigationSplitView`, a system toolbar, or a standard title bar.
 
-- `NavigationSplitView`, balanced. The sidebar column is the system sidebar: edge to edge, top to bottom, no inset, no floating card, no rounded island.
-- Uniform toolbar across the top. Title, back, and the one primary action live here. Traffic lights stay in the system title area.
-- Let the system own the window corner radius. Do not override it.
-- Default size stays about 1180×760. The layout has to hold down to a narrow detail column without inventing a second arrangement.
-- When the window is inactive, sidebar icons and custom chrome dim with `@Environment(\.appearsActive)`. Selected rows stay readable. Do not leave a full-color sidebar on an inactive window.
-
-The sidebar and the content column meet at the system split. No 1px line drawn by us down that edge.
+- Hidden title bar. Window background is `WindowGlass` (`NSVisualEffectView`, material `.sidebar`, blending `.behindWindow`).
+- `HStack` spacing 0: `SidebarView` | content column.
+- Sidebar width is 232, or 0 when collapsed. Animate width. Do not use `NavigationSplitViewVisibility`.
+- Content column: 52pt custom bar (sidebar toggle, page icon, page title, page actions), then the solid page card (radius 12, canvas fill, hairline, shadow). Inset 10 trailing and bottom. Leading inset 10 only when the sidebar is collapsed (78pt on the bar so traffic lights stay clear).
+- Default size 1180×760.
+- Inactive window: sidebar icons dim with `@Environment(\.appearsActive)`. Selected rows stay readable.
 
 ## Sidebar
 
-Source list. Not a branded panel.
+**Locked.** This is the sidebar. Do not rewrite it. Do not swap it for a `List`, a `NavigationSplitView` column, or a system source list. `SidebarView` + `SidebarRow` are the implementation. If a change is not a bug in that file, it is not allowed.
 
-Width 232 ideal, 212 minimum, 300 maximum.
+Structure (`SidebarView`):
 
-Rows:
+- Custom `VStack`, not a system sidebar.
+- Top: 52pt clear drag strip (`WindowDragGesture`) so the traffic lights sit on glass.
+- Middle: `ScrollView`, no scroll background. Content padded 8 / 8 / 12 (horizontal / top / bottom). Row stack spacing 1.
+- Bottom, outside the scroll: Settings, padded 8 horizontal and 12 bottom. Space separates it from the list, not a hairline.
+- No custom fill. Glass shows through.
 
-- Height 28.
-- Selection and hover are a continuous rounded rect, inset 8 from the sidebar edges, corner radius 8.
-- Icon column is 18 wide. Gap to the label is 8. Label is 13 regular, one line, tail truncated.
-- SF Symbols at regular weight. Color when the window is active, monochrome when it is not. No filled tile behind the icon.
-- Selected row: label primary, icon primary. Unselected: label primary, icon secondary. The selection shape carries the state. Do not also recolor the text.
+Order, top to bottom:
 
-Sections:
+1. Home (`house`)
+2. Workspace label, then Projects (`square.stack`), Tasks (`checklist`), Calendar (`calendar`)
+3. Projects label, then pinned projects first, then the rest by name. Omit the whole Projects block when there are none.
+4. Settings (`gearshape`), footer
 
-- Label is 13 semibold, secondary.
-- 20 above a section label, 4 below it, then the rows.
-- Rows inside a section are 1 apart. That 1 is air, not a rule.
+Rows (`SidebarRow`):
 
-Order, top to bottom: Home, then Workspace (Projects, Tasks, Calendar), then Projects, then a footer row for Settings separated by space, not a hairline.
+- Height 28. Horizontal padding 8. Icon 18×18, 14pt. Gap 8. Label 13 regular, primary, one line.
+- Selection / hover: continuous rounded rect, radius 8, `CraftColor.selection` or `CraftColor.hover`.
+- Icon: primary when selected, secondary when the window is active, tertiary when it is not. No tile behind the icon.
+- Pin: `pin.fill`, 9pt, tertiary, trailing edge. Not a badge.
+- Plain buttons. Section labels are 13 semibold, secondary, 20 above / 4 below / 8 inset, no hit testing.
 
-Pinned projects sort first. A pin is a 9pt tertiary symbol at the trailing edge, not a badge.
-
-Empty sections do not render a header. “Star docs to keep them close” style hints are allowed only when the section is a real feature with zero items. One line, 11 secondary, inset with the rows.
+Do not add hover to section labels. Do not move Settings into the scroll. Do not add a divider. Do not change the width, the 52pt drag strip, or the row metrics.
 
 ## Toolbar
 

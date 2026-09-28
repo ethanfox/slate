@@ -39,7 +39,7 @@
 		99356301DEE9A913A536600F /* Craft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6954DDFB7640212B41E6025E /* Craft.swift */; };
 		A0C059E2D2C3DD3EBD2AF605 /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AC834A2D97E8747A0E41C2F /* TasksView.swift */; };
 		A1A0A9B87ABC17645115475D /* ContextBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55C705E6D771B0D57F792CD5 /* ContextBuilder.swift */; };
-		A2AE14BEB7353A0D4CC630BE /* PersonalContextMCP in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = 07F37A051B9234E5ABC850C5 /* PersonalContextMCP */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A2AE14BEB7353A0D4CC630BE /* slate-mcp in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = 07F37A051B9234E5ABC850C5 /* slate-mcp */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A4A4522BFB4968D289F08B89 /* MarkdownEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF0BEA4CDC6DFF8DC0FE081A /* MarkdownEditor.swift */; };
 		A5A73498891F3755C5AEFD81 /* RecordRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B480D4B60CF75203CF57B45 /* RecordRow.swift */; };
 		AC10C7614F71D4616792DB13 /* CursorClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC770F3F4A6E9C65A13777F6 /* CursorClient.swift */; };
@@ -89,7 +89,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 6;
 			files = (
-				A2AE14BEB7353A0D4CC630BE /* PersonalContextMCP in Embed Dependencies */,
+				A2AE14BEB7353A0D4CC630BE /* slate-mcp in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -99,7 +99,7 @@
 /* Begin PBXFileReference section */
 		00DB08B2B0C6ACC8AEA864AE /* FocusDismissal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusDismissal.swift; sourceTree = "<group>"; };
 		06566D4B5F0858C10300294C /* MarkdownPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownPreview.swift; sourceTree = "<group>"; };
-		07F37A051B9234E5ABC850C5 /* PersonalContextMCP */ = {isa = PBXFileReference; includeInIndex = 0; path = PersonalContextMCP; sourceTree = BUILT_PRODUCTS_DIR; };
+		07F37A051B9234E5ABC850C5 /* slate-mcp */ = {isa = PBXFileReference; includeInIndex = 0; path = slate-mcp; sourceTree = BUILT_PRODUCTS_DIR; };
 		1129E66453242DE81FC7B81C /* ThreadBranch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadBranch.swift; sourceTree = "<group>"; };
 		1217433213208694A4C64DB4 /* ThreadPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadPage.swift; sourceTree = "<group>"; };
 		168EFE558B001E07EC27771C /* ProjectChatCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectChatCenter.swift; sourceTree = "<group>"; };
@@ -127,7 +127,7 @@
 		718061204D90BCFCD66D501C /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		75926FA04CD11DF7C22B424B /* Tools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tools.swift; sourceTree = "<group>"; };
 		77F4B6484C6BED0CADABAF2B /* ProjectLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectLine.swift; sourceTree = "<group>"; };
-		7CB763C78357F21BD7C53F4E /* PersonalContext.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PersonalContext.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7CB763C78357F21BD7C53F4E /* Slate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Slate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7D08ADD9A59836BBFCCEDA98 /* DecisionPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionPage.swift; sourceTree = "<group>"; };
 		83E0D6B8AACD8209B166936F /* Canvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Canvas.swift; sourceTree = "<group>"; };
 		85B462CAB65E38C9331F5F12 /* PropertyPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropertyPill.swift; sourceTree = "<group>"; };
@@ -299,8 +299,8 @@
 		A6F0F78B1FF320F0D90320EB /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				7CB763C78357F21BD7C53F4E /* PersonalContext.app */,
-				07F37A051B9234E5ABC850C5 /* PersonalContextMCP */,
+				7CB763C78357F21BD7C53F4E /* Slate.app */,
+				07F37A051B9234E5ABC850C5 /* slate-mcp */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -372,8 +372,8 @@
 				3BC9985912C64507AF5DEFEC /* AIChatCore */,
 				ECE030EB4BE08FF29BB743A8 /* AIChatUI */,
 			);
-			productName = PersonalContext;
-			productReference = 7CB763C78357F21BD7C53F4E /* PersonalContext.app */;
+			productName = Slate;
+			productReference = 7CB763C78357F21BD7C53F4E /* Slate.app */;
 			productType = "com.apple.product-type.application";
 		};
 		F5986EA1BE0334BB6C6D8FB5 /* PersonalContextMCP */ = {
@@ -389,8 +389,8 @@
 			name = PersonalContextMCP;
 			packageProductDependencies = (
 			);
-			productName = PersonalContextMCP;
-			productReference = 07F37A051B9234E5ABC850C5 /* PersonalContextMCP */;
+			productName = "slate-mcp";
+			productReference = 07F37A051B9234E5ABC850C5 /* slate-mcp */;
 			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
@@ -453,7 +453,7 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/personal-context-node",
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/slate-node",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/runner/runner.mjs",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -560,7 +560,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContext.mcp;
-				PRODUCT_NAME = "personal-context-mcp";
+				PRODUCT_NAME = "slate-mcp";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 			};
@@ -639,7 +639,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContext.mcp;
-				PRODUCT_NAME = "personal-context-mcp";
+				PRODUCT_NAME = "slate-mcp";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 			};
@@ -655,8 +655,8 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Personal Context";
-				INFOPLIST_KEY_CFBundleName = "Personal Context";
+				INFOPLIST_KEY_CFBundleDisplayName = Slate;
+				INFOPLIST_KEY_CFBundleName = Slate;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -664,8 +664,8 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContext;
-				PRODUCT_MODULE_NAME = PersonalContext;
-				PRODUCT_NAME = PersonalContext;
+				PRODUCT_MODULE_NAME = Slate;
+				PRODUCT_NAME = Slate;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -680,8 +680,8 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Personal Context";
-				INFOPLIST_KEY_CFBundleName = "Personal Context";
+				INFOPLIST_KEY_CFBundleDisplayName = Slate;
+				INFOPLIST_KEY_CFBundleName = Slate;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -689,8 +689,8 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContext;
-				PRODUCT_MODULE_NAME = PersonalContext;
-				PRODUCT_NAME = PersonalContext;
+				PRODUCT_MODULE_NAME = Slate;
+				PRODUCT_NAME = Slate;
 				SDKROOT = macosx;
 			};
 			name = Debug;

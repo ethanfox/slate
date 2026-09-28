@@ -4,7 +4,7 @@ import SwiftData
 let supportedVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
 
 let instructions = """
-Personal Context is the user's knowledge base of projects. Each project has decisions (what was decided and why), \
+Slate is the user's knowledge base of projects. Each project has decisions (what was decided and why), \
 threads (directions, features, problems, experiments, topics, which can nest), and notes. \
 Active decisions are the source of truth. When the user states a fact, choice, or plan, record it here instead of \
 asking them to save it. Read before you write so you update an existing record rather than duplicating it. \
@@ -29,7 +29,7 @@ let container: ModelContainer
 do {
     container = try Store.open()
 } catch {
-    FileHandle.standardError.write(Data("Personal Context store could not be opened: \(error.localizedDescription)\n".utf8))
+    FileHandle.standardError.write(Data("Slate store could not be opened: \(error.localizedDescription)\n".utf8))
     exit(1)
 }
 
@@ -49,7 +49,7 @@ while let line = readLine(strippingNewline: true) {
         respond(id, result: [
             "protocolVersion": supportedVersions.contains(requested) ? requested : supportedVersions[0],
             "capabilities": ["tools": ["listChanged": false]],
-            "serverInfo": ["name": "personal-context", "version": "1.0"],
+            "serverInfo": ["name": "slate", "version": "1.0"],
             "instructions": instructions
         ])
     case "ping":

@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 @main
-struct PersonalContextApp: App {
+struct SlateApp: App {
     @State private var app = AppModel()
 
     var body: some Scene {

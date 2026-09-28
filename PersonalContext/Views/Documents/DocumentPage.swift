@@ -4,8 +4,8 @@ struct DocumentPage<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        PageBody {
-            ScrollView {
+        ScrollView {
+            PageBody {
                 VStack(alignment: .leading, spacing: 0) {
                     content()
                 }
@@ -14,7 +14,7 @@ struct DocumentPage<Content: View>: View {
                 .frame(maxWidth: 744, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
-            .scrollContentBackground(.hidden)
         }
+        .scrollContentBackground(.hidden)
     }
 }

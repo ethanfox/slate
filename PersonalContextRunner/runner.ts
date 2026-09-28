@@ -53,8 +53,8 @@ function toolName(name: string, args: unknown): string {
 
 type McpTool = { name: string; description?: string; inputSchema?: SDKCustomTool["inputSchema"]; annotations?: SDKCustomTool["annotations"] };
 
-/** Runs the Personal Context MCP as a child and exposes its tools in-process, since MCP server calls need an approval a headless run can't give. */
-async function personalContextTools(command: string): Promise<Record<string, SDKCustomTool>> {
+/** Runs the Slate MCP as a child and exposes its tools in-process, since MCP server calls need an approval a headless run can't give. */
+async function slateTools(command: string): Promise<Record<string, SDKCustomTool>> {
   const child = spawn(command, [], { stdio: ["pipe", "pipe", "inherit"] });
   const pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
   let nextId = 1;
@@ -67,7 +67,7 @@ async function personalContextTools(command: string): Promise<Record<string, SDK
     else waiter.resolve(message.result);
   });
   child.on("exit", (code) => {
-    for (const waiter of pending.values()) waiter.reject(new Error(`Personal Context MCP exited (${code}).`));
+    for (const waiter of pending.values()) waiter.reject(new Error(`Slate MCP exited (${code}).`));
     pending.clear();
   });
   const call = (method: string, params: unknown): Promise<any> =>
@@ -77,7 +77,7 @@ async function personalContextTools(command: string): Promise<Record<string, SDK
       child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
     });
 
-  await call("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "personal-context-runner", version: "1.0" } });
+  await call("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "slate-runner", version: "1.0" } });
   const { tools } = (await call("tools/list", {})) as { tools: McpTool[] };
   return Object.fromEntries(
     tools.map((tool) => [
@@ -107,7 +107,7 @@ async function main() {
   const options = {
     apiKey,
     model: { id: request.model || "auto" },
-    local: { cwd: request.cwd, settingSources: [], customTools: await personalContextTools(request.mcpCommand) },
+    local: { cwd: request.cwd, settingSources: [], customTools: await slateTools(request.mcpCommand) },
     tools: ["mcp", "webSearch", "webFetch"],
   };
 

@@ -8,11 +8,9 @@ struct ChatScreen: View {
     @Environment(\.modelContext) private var context
 
     var body: some View {
-        PageBody {
-            ConversationChat(conversation: conversation, project: project)
-                .onAppear {
-                    app.selectedConversation = conversation.id
-                }
-        }
+        ConversationChat(conversation: conversation, project: project)
+            .onAppear {
+                app.selectedConversation = conversation.id
+            }
     }
 }

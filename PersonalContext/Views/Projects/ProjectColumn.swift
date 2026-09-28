@@ -27,6 +27,7 @@ struct ProjectColumn: View {
 
     var body: some View {
         ScrollView {
+            PageBody {
             VStack(alignment: .leading, spacing: 1) {
                 Button { show(.overview) } label: {
                     SidebarRow(title: "Overview", systemImage: "doc.text", isSelected: tab == .overview)
@@ -100,6 +101,7 @@ struct ProjectColumn: View {
             .padding(.horizontal, 8)
             .padding(.top, 8)
             .padding(.bottom, 16)
+            }
         }
         .scrollContentBackground(.hidden)
         .alert(

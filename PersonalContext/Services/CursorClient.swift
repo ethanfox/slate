@@ -8,7 +8,7 @@ enum ChatTrace {
     private static let iso = ISO8601DateFormatter()
     private static let fileURL: URL = {
         let dir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Logs/PersonalContext", isDirectory: true)
+            .appendingPathComponent("Logs/Slate", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("chat.log")
     }()

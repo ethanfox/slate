@@ -17,8 +17,8 @@ struct ProjectsView: View {
     }
 
     var body: some View {
-        PageBody {
-            ScrollView {
+        ScrollView {
+            PageBody {
                 VStack(alignment: .leading, spacing: 0) {
                     if ordered.isEmpty {
                         EmptyLine(text: "Create a project with a name, an icon, and a short description.")
@@ -40,8 +40,8 @@ struct ProjectsView: View {
                 .padding(.vertical, 28)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .scrollContentBackground(.hidden)
         }
+        .scrollContentBackground(.hidden)
         .alert(
             "Delete \(pendingDelete?.name ?? "this project")?",
             isPresented: Binding(

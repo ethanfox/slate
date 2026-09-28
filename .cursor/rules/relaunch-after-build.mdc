@@ -5,10 +5,10 @@ alwaysApply: true
 
 # Relaunch after building
 
-After every successful build of Personal Context, quit the running app and launch the new build right away:
+After every successful build of Slate, quit the running app and launch the new build right away:
 
 ```sh
-osascript -e 'quit app id "com.ethanfox.PersonalContext"'; sleep 2; open build/Build/Products/Debug/PersonalContext.app
+osascript -e 'quit app id "com.ethanfox.PersonalContext"'; sleep 2; open build/Build/Products/Debug/Slate.app
 ```
 
 Do not ask the user to relaunch it.

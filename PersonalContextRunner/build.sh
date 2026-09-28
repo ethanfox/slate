@@ -18,7 +18,7 @@ bun install --frozen-lockfile
 MACOS="$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH"
 RESOURCES="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
 RUNNER="$RESOURCES/runner"
-rm -f "$MACOS/personal-context-runner" "$RESOURCES/runner.mjs"
+rm -f "$MACOS/slate-runner" "$MACOS/personal-context-runner" "$MACOS/personal-context-node" "$RESOURCES/runner.mjs"
 rm -rf "$RUNNER"
 mkdir -p "$RUNNER"
 
@@ -26,7 +26,7 @@ mkdir -p "$RUNNER"
 bun build runner.ts --target=node --format=esm --packages=external --outfile "$RUNNER/runner.mjs"
 rsync -a --delete --exclude ".bin" --exclude "@types" --exclude "bun-types" --exclude "typescript" node_modules/ "$RUNNER/node_modules/"
 
-cp "$NODE" "$MACOS/personal-context-node"
-chmod 755 "$MACOS/personal-context-node"
+cp "$NODE" "$MACOS/slate-node"
+chmod 755 "$MACOS/slate-node"
 codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" --options runtime --timestamp=none \
-  --entitlements runner.entitlements "$MACOS/personal-context-node"
+  --entitlements runner.entitlements "$MACOS/slate-node"

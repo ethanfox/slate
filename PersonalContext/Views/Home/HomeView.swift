@@ -18,9 +18,9 @@ struct HomeView: View {
     }
 
     var body: some View {
-        PageBody {
-            VStack(spacing: 0) {
-                ScrollView {
+        VStack(spacing: 0) {
+            ScrollView {
+                PageBody {
                     VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 0) {
                         Text("Projects")
@@ -54,14 +54,14 @@ struct HomeView: View {
                     .padding(.vertical, 28)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .scrollContentBackground(.hidden)
-
-                Hairline()
-                quickAsk
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollContentBackground(.hidden)
+
+            Hairline()
+            quickAsk
+                .padding(.horizontal, 32)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

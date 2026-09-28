@@ -16,6 +16,12 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Color.clear
+                .frame(height: 52)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .gesture(WindowDragGesture())
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 1) {
                     row("Home", "house", destination: .home)
@@ -52,9 +58,10 @@ struct SidebarView: View {
                     }
                 }
                 .padding(.horizontal, 8)
-                .padding(.top, 44)
+                .padding(.top, 8)
                 .padding(.bottom, 12)
             }
+            .scrollContentBackground(.hidden)
 
             row("Settings", "gearshape", destination: .settings)
                 .padding(.horizontal, 8)
@@ -83,6 +90,7 @@ struct SidebarView: View {
             .padding(.top, 20)
             .padding(.bottom, 4)
             .padding(.horizontal, 8)
+            .allowsHitTesting(false)
     }
 
     private func row(_ title: String, _ symbol: String, destination: Destination) -> some View {

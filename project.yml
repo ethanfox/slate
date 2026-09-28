@@ -43,16 +43,16 @@ targets:
           - $(SRCROOT)/PersonalContextRunner/bun.lock
           - $(SRCROOT)/PersonalContextRunner/runner.entitlements
         outputFiles:
-          - $(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/personal-context-node
+          - $(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/slate-node
           - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/runner/runner.mjs
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ethanfox.PersonalContext
-        PRODUCT_NAME: PersonalContext
-        PRODUCT_MODULE_NAME: PersonalContext
+        PRODUCT_NAME: Slate
+        PRODUCT_MODULE_NAME: Slate
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Personal Context
-        INFOPLIST_KEY_CFBundleName: Personal Context
+        INFOPLIST_KEY_CFBundleDisplayName: Slate
+        INFOPLIST_KEY_CFBundleName: Slate
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
@@ -79,7 +79,7 @@ targets:
       - path: PersonalContext/App/TextFormat.swift
     settings:
       base:
-        PRODUCT_NAME: personal-context-mcp
+        PRODUCT_NAME: slate-mcp
         PRODUCT_BUNDLE_IDENTIFIER: com.ethanfox.PersonalContext.mcp
         GENERATE_INFOPLIST_FILE: YES
         CREATE_INFOPLIST_SECTION_IN_BINARY: YES

@@ -1,5 +1,5 @@
 {
-  "name": "personal-context-runner",
+  "name": "slate-runner",
   "private": true,
   "type": "module",
   "dependencies": {

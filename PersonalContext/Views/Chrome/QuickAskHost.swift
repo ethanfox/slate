@@ -9,14 +9,14 @@ struct QuickAskHost: View {
         if let conversation = conversations.first(where: { $0.id == id }) {
             ChatScreen(conversation: conversation, project: nil)
         } else {
-            PageBody {
-                ScrollView {
+            ScrollView {
+                PageBody {
                     EmptyLine(text: "This conversation is no longer here.")
                         .padding(28)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .scrollContentBackground(.hidden)
             }
+            .scrollContentBackground(.hidden)
         }
     }
 }

@@ -37,8 +37,8 @@ final class CursorConversationBridge {
     }
 
     func prepare(userText: String, apiKey: String) throws -> RunnerRequest {
-        guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "personal-context-mcp") else {
-            throw CursorAPIError(status: 0, message: "The Personal Context MCP is missing from the app.")
+        guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "slate-mcp") else {
+            throw CursorAPIError(status: 0, message: "The Slate MCP is missing from the app.")
         }
         guard let store = conversation.modelContext?.container.configurations.first?.url else {
             throw CursorAPIError(status: 0, message: "Couldn’t find the knowledge base on disk.")
@@ -72,7 +72,7 @@ final class CursorConversationBridge {
     }
 
     func run(_ request: RunnerRequest) throws -> AsyncThrowingStream<RunnerEvent, Error> {
-        guard let node = Bundle.main.url(forAuxiliaryExecutable: "personal-context-node"),
+        guard let node = Bundle.main.url(forAuxiliaryExecutable: "slate-node"),
               let runner = Bundle.main.url(forResource: "runner", withExtension: "mjs", subdirectory: "runner") else {
             throw CursorAPIError(status: 0, message: "The agent runner is missing from the app.")
         }

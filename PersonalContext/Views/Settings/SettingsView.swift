@@ -11,8 +11,8 @@ struct SettingsView: View {
 
     var body: some View {
         @Bindable var app = app
-        PageBody {
-            ScrollView {
+        ScrollView {
+            PageBody {
                 VStack(alignment: .leading, spacing: 24) {
                 group("Cursor") {
                     row {
@@ -106,8 +106,8 @@ struct SettingsView: View {
                 .padding(.vertical, 28)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .scrollContentBackground(.hidden)
         }
+        .scrollContentBackground(.hidden)
         .onAppear {
             if previewProjectID == nil {
                 previewProjectID = projects.first?.id
@@ -162,10 +162,10 @@ struct SettingsView: View {
     }
 
     private func connectCursorApp() {
-        guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "personal-context-mcp"),
+        guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "slate-mcp"),
               let config = try? JSONSerialization.data(withJSONObject: ["command": mcp.path], options: .withoutEscapingSlashes),
               let encoded = config.base64EncodedString().addingPercentEncoding(withAllowedCharacters: .alphanumerics),
-              let url = URL(string: "cursor://anysphere.cursor-deeplink/mcp/install?name=personal-context&config=\(encoded)")
+              let url = URL(string: "cursor://anysphere.cursor-deeplink/mcp/install?name=slate&config=\(encoded)")
         else { return }
         guard NSWorkspace.shared.urlForApplication(toOpen: url) != nil else {
             app.flash("Cursor isn’t installed on this Mac.")

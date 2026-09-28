@@ -8,8 +8,7 @@ struct ProjectView: View {
     private var tab: ProjectTab { app.tab(for: project.id) }
 
     var body: some View {
-        PageBody {
-            HStack(spacing: 0) {
+        HStack(spacing: 0) {
                 ProjectColumn(project: project)
                     .frame(width: 250)
                     .overlay(alignment: .trailing) {
@@ -19,7 +18,6 @@ struct ProjectView: View {
                     }
                 center
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
         }
     }
 
