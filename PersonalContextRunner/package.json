@@ -1,0 +1,11 @@
+{
+  "name": "personal-context-runner",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@cursor/sdk": "1.0.32"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

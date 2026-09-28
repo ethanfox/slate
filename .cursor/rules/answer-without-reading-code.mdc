@@ -1,0 +1,10 @@
+---
+description: Answer questions without reading the codebase unless the answer depends on it
+alwaysApply: true
+---
+
+# Answer first
+
+If a question can be answered without this codebase, answer it. Do not open, search, or read project files.
+
+Read the code only when the answer depends on this repo.

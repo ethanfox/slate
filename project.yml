@@ -1,0 +1,90 @@
+name: PersonalContext
+options:
+  bundleIdPrefix: com.ethanfox
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: NUF99UVUKB
+    ENABLE_HARDENED_RUNTIME: YES
+    COMBINE_HIDPI_IMAGES: YES
+packages:
+  AIChatKit:
+    url: https://github.com/NerdSnipe-Inc/AIChatKit
+    from: 2.0.0
+targets:
+  PersonalContext:
+    type: application
+    platform: macOS
+    sources:
+      - path: PersonalContext
+    dependencies:
+      - package: AIChatKit
+        product: AIChatCore
+      - package: AIChatKit
+        product: AIChatUI
+      - target: PersonalContextMCP
+        embed: true
+        codeSign: true
+        copy:
+          destination: executables
+    postBuildScripts:
+      - name: Build agent runner
+        script: sh "$SRCROOT/PersonalContextRunner/build.sh"
+        inputFiles:
+          - $(SRCROOT)/PersonalContextRunner/runner.ts
+          - $(SRCROOT)/PersonalContextRunner/package.json
+          - $(SRCROOT)/PersonalContextRunner/bun.lock
+          - $(SRCROOT)/PersonalContextRunner/runner.entitlements
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/personal-context-runner
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethanfox.PersonalContext
+        PRODUCT_NAME: PersonalContext
+        PRODUCT_MODULE_NAME: PersonalContext
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Personal Context
+        INFOPLIST_KEY_CFBundleName: Personal Context
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ENABLE_PREVIEWS: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    entitlements:
+      path: PersonalContext/PersonalContext.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)com.ethanfox.PersonalContext
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.ethanfox.PersonalContext
+
+  PersonalContextMCP:
+    type: tool
+    platform: macOS
+    sources:
+      - path: PersonalContextMCP
+      - path: PersonalContext/Models/Records.swift
+      - path: PersonalContext/Models/Store.swift
+      - path: PersonalContext/Services/ContextBuilder.swift
+      - path: PersonalContext/App/TextFormat.swift
+    settings:
+      base:
+        PRODUCT_NAME: personal-context-mcp
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethanfox.PersonalContext.mcp
+        GENERATE_INFOPLIST_FILE: YES
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        SKIP_INSTALL: YES
+    entitlements:
+      path: PersonalContextMCP/PersonalContextMCP.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)com.ethanfox.PersonalContext

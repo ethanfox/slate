@@ -1,0 +1,299 @@
+import Foundation
+import SwiftData
+
+enum ProjectStatus: String, Codable, CaseIterable, Identifiable, Hashable {
+    case active
+    case paused
+    case done
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .active: "Active"
+        case .paused: "Paused"
+        case .done: "Done"
+        }
+    }
+}
+
+enum ThreadKind: String, Codable, CaseIterable, Identifiable, Hashable {
+    case direction
+    case feature
+    case problem
+    case experiment
+    case topic
+
+    var id: String { rawValue }
+    var label: String { rawValue.capitalized }
+}
+
+enum ThreadStatus: String, Codable, CaseIterable, Identifiable, Hashable {
+    case exploring
+    case active
+    case paused
+    case completed
+    case rejected
+
+    var id: String { rawValue }
+    var label: String { rawValue.capitalized }
+
+    var isCurrent: Bool {
+        self == .exploring || self == .active
+    }
+}
+
+enum DecisionStatus: String, Codable, CaseIterable, Identifiable, Hashable {
+    case active
+    case superseded
+
+    var id: String { rawValue }
+    var label: String { rawValue.capitalized }
+}
+
+enum MessageRole: String, Codable, Hashable {
+    case user
+    case assistant
+}
+
+@Model
+final class Project: Identifiable {
+    var id: UUID
+    var name: String
+    var symbol: String
+    var summary: String
+    var currentDirection: String
+    var statusRaw: String
+    var isPinned: Bool
+    var createdAt: Date
+    var updatedAt: Date
+
+    @Relationship(deleteRule: .cascade, inverse: \ProjectThread.project)
+    var threads: [ProjectThread] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \Note.project)
+    var notes: [Note] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \Decision.project)
+    var decisions: [Decision] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \Conversation.project)
+    var conversations: [Conversation] = []
+
+    var status: ProjectStatus {
+        get { ProjectStatus(rawValue: statusRaw) ?? .active }
+        set { statusRaw = newValue.rawValue }
+    }
+
+    var rootThreads: [ProjectThread] {
+        threads
+            .filter { $0.parent == nil }
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    var lastActivity: Date {
+        let dates = [updatedAt]
+            + notes.map(\.updatedAt)
+            + decisions.map(\.createdAt)
+            + threads.map(\.updatedAt)
+            + conversations.map(\.updatedAt)
+        return dates.max() ?? updatedAt
+    }
+
+    init(name: String, symbol: String, summary: String) {
+        self.id = UUID()
+        self.name = name
+        self.symbol = symbol
+        self.summary = summary
+        self.currentDirection = ""
+        self.statusRaw = ProjectStatus.active.rawValue
+        self.isPinned = false
+        self.createdAt = .now
+        self.updatedAt = .now
+    }
+
+    func touch() {
+        updatedAt = .now
+    }
+}
+
+@Model
+final class ProjectThread {
+    var id: UUID
+    var kindRaw: String
+    var title: String
+    var summary: String
+    var body: String
+    var statusRaw: String
+    var createdAt: Date
+    var updatedAt: Date
+    var project: Project?
+    var parent: ProjectThread?
+
+    @Relationship(deleteRule: .cascade, inverse: \ProjectThread.parent)
+    var children: [ProjectThread] = []
+
+    @Relationship(deleteRule: .nullify, inverse: \Note.thread)
+    var notes: [Note] = []
+
+    @Relationship(deleteRule: .nullify, inverse: \Decision.thread)
+    var decisions: [Decision] = []
+
+    @Relationship(deleteRule: .nullify, inverse: \Conversation.thread)
+    var conversations: [Conversation] = []
+
+    var kind: ThreadKind {
+        get { ThreadKind(rawValue: kindRaw) ?? .topic }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    var status: ThreadStatus {
+        get { ThreadStatus(rawValue: statusRaw) ?? .exploring }
+        set { statusRaw = newValue.rawValue }
+    }
+
+    var orderedChildren: [ProjectThread] {
+        children.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    init(title: String, kind: ThreadKind, project: Project, parent: ProjectThread? = nil) {
+        self.id = UUID()
+        self.kindRaw = kind.rawValue
+        self.title = title
+        self.summary = ""
+        self.body = ""
+        self.statusRaw = ThreadStatus.exploring.rawValue
+        self.createdAt = .now
+        self.updatedAt = .now
+        self.project = project
+        self.parent = parent
+    }
+
+    func contains(_ other: ProjectThread) -> Bool {
+        if id == other.id { return true }
+        var cursor: ProjectThread? = other.parent
+        var guardrail = 0
+        while let current = cursor, guardrail < 32 {
+            if current.id == id { return true }
+            cursor = current.parent
+            guardrail += 1
+        }
+        return false
+    }
+}
+
+@Model
+final class Note {
+    var id: UUID
+    var title: String
+    var content: String
+    var source: String
+    var createdAt: Date
+    var updatedAt: Date
+    var project: Project?
+    var thread: ProjectThread?
+
+    var displayTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled" : trimmed
+    }
+
+    init(content: String, project: Project, title: String = "", source: String = "", thread: ProjectThread? = nil) {
+        self.id = UUID()
+        self.title = title
+        self.content = content
+        self.source = source
+        self.createdAt = .now
+        self.updatedAt = .now
+        self.project = project
+        self.thread = thread
+    }
+}
+
+@Model
+final class Decision {
+    var id: UUID
+    var title: String
+    var decision: String
+    var rationale: String
+    var statusRaw: String
+    var supersededByID: UUID?
+    var createdAt: Date
+    var project: Project?
+    var thread: ProjectThread?
+
+    var status: DecisionStatus {
+        get { DecisionStatus(rawValue: statusRaw) ?? .active }
+        set { statusRaw = newValue.rawValue }
+    }
+
+    init(title: String, decision: String, project: Project, rationale: String = "", thread: ProjectThread? = nil) {
+        self.id = UUID()
+        self.title = title
+        self.decision = decision
+        self.rationale = rationale
+        self.statusRaw = DecisionStatus.active.rawValue
+        self.supersededByID = nil
+        self.createdAt = .now
+        self.project = project
+        self.thread = thread
+    }
+}
+
+@Model
+final class Conversation {
+    var id: UUID
+    var cursorAgentId: String
+    var cursorURL: String
+    var title: String
+    var model: String
+    var contextSnapshot: String
+    var isArchived: Bool
+    var createdAt: Date
+    var updatedAt: Date
+    var project: Project?
+    var thread: ProjectThread?
+
+    @Relationship(deleteRule: .cascade, inverse: \ChatMessage.conversation)
+    var messages: [ChatMessage] = []
+
+    var orderedMessages: [ChatMessage] {
+        messages.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    init(title: String = "New chat", model: String = "", project: Project? = nil) {
+        self.id = UUID()
+        self.cursorAgentId = ""
+        self.cursorURL = ""
+        self.title = title
+        self.model = model
+        self.contextSnapshot = ""
+        self.isArchived = false
+        self.createdAt = .now
+        self.updatedAt = .now
+        self.project = project
+    }
+}
+
+@Model
+final class ChatMessage {
+    var id: UUID
+    var roleRaw: String
+    var content: String
+    var cursorRunId: String
+    var createdAt: Date
+    var conversation: Conversation?
+
+    var role: MessageRole {
+        get { MessageRole(rawValue: roleRaw) ?? .user }
+        set { roleRaw = newValue.rawValue }
+    }
+
+    init(id: UUID = UUID(), role: MessageRole, content: String) {
+        self.id = id
+        self.roleRaw = role.rawValue
+        self.content = content
+        self.cursorRunId = ""
+        self.createdAt = .now
+    }
+}

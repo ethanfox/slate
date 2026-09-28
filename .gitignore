@@ -1,0 +1,9 @@
+build/
+DerivedData/
+.DS_Store
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+.swiftpm/
+node_modules/
+slate/
