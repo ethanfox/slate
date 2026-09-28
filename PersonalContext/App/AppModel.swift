@@ -66,7 +66,8 @@ final class AppModel {
         appearance = AppearancePreference(rawValue: UserDefaults.standard.string(forKey: Keys.appearance) ?? "") ?? .system
         defaultModelID = UserDefaults.standard.string(forKey: Keys.defaultModel) ?? ""
         showAgentIDs = UserDefaults.standard.bool(forKey: Keys.showAgentIDs)
-        projectsLayout = ProjectsLayout(rawValue: UserDefaults.standard.string(forKey: Keys.projectsLayout) ?? "") ?? .list
+        let storedLayout = UserDefaults.standard.string(forKey: Keys.projectsLayout) ?? ""
+        projectsLayout = storedLayout == "list" ? .card : (ProjectsLayout(rawValue: storedLayout) ?? .table)
         sidebarCollapsed = UserDefaults.standard.bool(forKey: Keys.sidebarCollapsed)
         apiKey = KeychainStore.read()
 

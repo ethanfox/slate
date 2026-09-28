@@ -29,22 +29,22 @@ enum ProjectTab: String, CaseIterable, Identifiable, Hashable {
     }
 }
 enum ProjectsLayout: String, CaseIterable, Identifiable, Hashable {
-    case list
     case table
+    case card
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .list: "List"
         case .table: "Table"
+        case .card: "Cards"
         }
     }
 
     var symbol: String {
         switch self {
-        case .list: "list.bullet"
         case .table: "tablecells"
+        case .card: "square.grid.2x2"
         }
     }
 }

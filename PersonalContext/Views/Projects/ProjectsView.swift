@@ -33,7 +33,7 @@ struct ProjectsView: View {
                             onDelete: { pendingDelete = $0 }
                         )
                     } else {
-                        projectList
+                        projectCards
                     }
                 }
                 .padding(.horizontal, 32)
@@ -62,19 +62,18 @@ struct ProjectsView: View {
         }
     }
 
-    private var projectList: some View {
-        ForEach(ordered) { project in
-            Button {
-                app.open(project)
-            } label: {
-                ProjectLine(project: project)
-            }
-            .buttonStyle(.plain)
-            .contextMenu {
-                projectMenu(project)
-            }
-            if project.id != ordered.last?.id {
-                Hairline(leading: 30)
+    private var projectCards: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 16)], alignment: .leading, spacing: 16) {
+            ForEach(ordered) { project in
+                Button {
+                    app.open(project)
+                } label: {
+                    ProjectCard(project: project)
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    projectMenu(project)
+                }
             }
         }
     }
@@ -225,6 +224,49 @@ private struct ProjectTableRow: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .padding(.horizontal, -8)
+        .onHover { hovering = $0 }
+    }
+}
+
+private struct ProjectCard: View {
+    var project: Project
+    @State private var hovering = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: project.symbol)
+                    .font(.system(size: 18))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                Spacer(minLength: 0)
+                if project.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Text(project.displayName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+            Text("\(project.status.label) · \(project.lastActivity.relativeLabel)")
+                .font(CraftFont.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(hovering ? CraftColor.selection : CraftColor.elevated)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(CraftColor.hairline)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .onHover { hovering = $0 }
     }
 }
