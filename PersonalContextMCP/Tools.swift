@@ -83,7 +83,11 @@ enum Tools {
             let value = try tool.handler(Args(raw: arguments), context)
             if !tool.readOnly {
                 try context.save()
-                notify_post(Store.changedNotification)
+                CFNotificationCenterPostNotification(
+                    CFNotificationCenterGetDarwinNotifyCenter(),
+                    CFNotificationName(Store.changedNotification as CFString),
+                    nil, nil, true
+                )
             }
             let data = try JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
             return ["content": [["type": "text", "text": String(decoding: data, as: UTF8.self)]]]
