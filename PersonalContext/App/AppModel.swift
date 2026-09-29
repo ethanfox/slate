@@ -21,6 +21,10 @@ final class AppModel {
     var selectedDecision: UUID?
     var selectedConversation: UUID?
     var isPresentingNewProject = false
+    var isPresentingNewEvent = false
+    var isPresentingNewReminder = false
+    var editingEvent: CalendarEvent?
+    var editingReminder: ReminderItem?
     var toast: String?
     var pendingSend: PendingSend?
     var chatConversationID: UUID?
@@ -58,6 +62,7 @@ final class AppModel {
     private(set) var models: [CursorModel] = []
     private(set) var modelsError: String?
     var storeError: String?
+    let eventKit = EventKitService()
 
     var hasAPIKey: Bool { apiKey?.isEmpty == false }
 

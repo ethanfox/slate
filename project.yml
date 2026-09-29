@@ -54,6 +54,8 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: Slate
         INFOPLIST_KEY_CFBundleName: Slate
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription: Slate reads your Calendar and Reminders so it can show and add events and tasks on this Mac.
+        INFOPLIST_KEY_NSRemindersFullAccessUsageDescription: Slate reads your Calendar and Reminders so it can show and add events and tasks on this Mac.
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         ENABLE_PREVIEWS: YES
@@ -63,6 +65,7 @@ targets:
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
+        com.apple.security.personal-information.calendars: true
         com.apple.security.application-groups:
           - $(TeamIdentifierPrefix)com.ethanfox.PersonalContext
         keychain-access-groups:

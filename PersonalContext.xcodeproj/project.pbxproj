@@ -65,6 +65,10 @@
 		E176833741EC72F36BEB0491 /* ThreadBranch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1129E66453242DE81FC7B81C /* ThreadBranch.swift */; };
 		E334A4EAED75959EBDE10905 /* CursorProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C2027BAADC2942F395A23C9 /* CursorProvider.swift */; };
 		E58F683FB365775A078F780B /* NewProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F19BF6A1920870A4A75C9063 /* NewProjectSheet.swift */; };
+		A11E7E01C4A1E7D15E001101 /* EventKitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11E7E01C4A1E7D15E001001 /* EventKitService.swift */; };
+		A11E7E01C4A1E7D15E001102 /* EventKitAccessLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11E7E01C4A1E7D15E001002 /* EventKitAccessLine.swift */; };
+		A11E7E01C4A1E7D15E001103 /* NewEventSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11E7E01C4A1E7D15E001003 /* NewEventSheet.swift */; };
+		A11E7E01C4A1E7D15E001104 /* NewReminderSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11E7E01C4A1E7D15E001004 /* NewReminderSheet.swift */; };
 		E99D818600469381A816BAE0 /* Canvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E0D6B8AACD8209B166936F /* Canvas.swift */; };
 		ECA9510B1F0988FD5FAF6269 /* AIChatCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3BC9985912C64507AF5DEFEC /* AIChatCore */; };
 		F046BF352BB1E7D19B30BFC8 /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8E5D3661B12BD18C62A9BCC /* CalendarView.swift */; };
@@ -156,6 +160,10 @@
 		E3D0C1F706C485B4A9186664 /* ThreadKindStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadKindStyle.swift; sourceTree = "<group>"; };
 		EC016D22E36FCD26459AE8C5 /* ConnectCursorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectCursorSheet.swift; sourceTree = "<group>"; };
 		EC770F3F4A6E9C65A13777F6 /* CursorClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorClient.swift; sourceTree = "<group>"; };
+		A11E7E01C4A1E7D15E001001 /* EventKitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitService.swift; sourceTree = "<group>"; };
+		A11E7E01C4A1E7D15E001002 /* EventKitAccessLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitAccessLine.swift; sourceTree = "<group>"; };
+		A11E7E01C4A1E7D15E001003 /* NewEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewEventSheet.swift; sourceTree = "<group>"; };
+		A11E7E01C4A1E7D15E001004 /* NewReminderSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewReminderSheet.swift; sourceTree = "<group>"; };
 		F19BF6A1920870A4A75C9063 /* NewProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewProjectSheet.swift; sourceTree = "<group>"; };
 		F3A2E39623063207485C60C1 /* SidebarRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarRow.swift; sourceTree = "<group>"; };
 		F721FDC648EAE06103D02D53 /* SidebarSectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarSectionHeader.swift; sourceTree = "<group>"; };
@@ -236,7 +244,10 @@
 			isa = PBXGroup;
 			children = (
 				B8E5D3661B12BD18C62A9BCC /* CalendarView.swift */,
+				A11E7E01C4A1E7D15E001002 /* EventKitAccessLine.swift */,
 				4A5537B9B75008C51A4CCB08 /* HomeView.swift */,
+				A11E7E01C4A1E7D15E001003 /* NewEventSheet.swift */,
+				A11E7E01C4A1E7D15E001004 /* NewReminderSheet.swift */,
 				6AC834A2D97E8747A0E41C2F /* TasksView.swift */,
 			);
 			path = Home;
@@ -248,6 +259,7 @@
 				55C705E6D771B0D57F792CD5 /* ContextBuilder.swift */,
 				EC770F3F4A6E9C65A13777F6 /* CursorClient.swift */,
 				8C2027BAADC2942F395A23C9 /* CursorProvider.swift */,
+				A11E7E01C4A1E7D15E001001 /* EventKitService.swift */,
 				718061204D90BCFCD66D501C /* KeychainStore.swift */,
 			);
 			path = Services;
@@ -501,6 +513,8 @@
 				06A4B5A5812EFA0E120BAFC9 /* DocumentSection.swift in Sources */,
 				D88C1383F18E8D13DC515A15 /* DocumentTitle.swift in Sources */,
 				4C826F096841B03ECA5F8ABE /* EmptyLine.swift in Sources */,
+				A11E7E01C4A1E7D15E001102 /* EventKitAccessLine.swift in Sources */,
+				A11E7E01C4A1E7D15E001101 /* EventKitService.swift in Sources */,
 				BC90A33899359007E8F65EC1 /* FocusDismissal.swift in Sources */,
 				08E6C08EE6ADDD3911650B76 /* Hairline.swift in Sources */,
 				B82FC40282ED31CF898CD9B1 /* HomeView.swift in Sources */,
@@ -509,7 +523,9 @@
 				C15E03F01C75AD79C5786145 /* MarkdownPreview.swift in Sources */,
 				CD57244DA64E916E273B1CDA /* ModelToolbarPicker.swift in Sources */,
 				50BF73C0F06B82FBE379A46A /* Navigation.swift in Sources */,
+				A11E7E01C4A1E7D15E001103 /* NewEventSheet.swift in Sources */,
 				E58F683FB365775A078F780B /* NewProjectSheet.swift in Sources */,
+				A11E7E01C4A1E7D15E001104 /* NewReminderSheet.swift in Sources */,
 				AD8746C5C6F6267B6E861E22 /* NotePage.swift in Sources */,
 				727A13054357C732319E171D /* OverviewPage.swift in Sources */,
 				30B1DB553DC0EB0931DAC3EE /* PersonalContextApp.swift in Sources */,
@@ -662,6 +678,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Slate;
 				INFOPLIST_KEY_CFBundleName = Slate;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Slate reads your Calendar and Reminders so it can show and add events and tasks on this Mac.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Slate reads your Calendar and Reminders so it can show and add events and tasks on this Mac.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -687,6 +705,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Slate;
 				INFOPLIST_KEY_CFBundleName = Slate;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Slate reads your Calendar and Reminders so it can show and add events and tasks on this Mac.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Slate reads your Calendar and Reminders so it can show and add events and tasks on this Mac.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

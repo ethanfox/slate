@@ -1,4 +1,5 @@
 import AppKit
+import EventKit
 import SwiftData
 import SwiftUI
 
@@ -182,6 +183,18 @@ struct RootView: View {
         .sheet(isPresented: Bindable(app).isPresentingNewProject) {
             NewProjectSheet()
         }
+        .sheet(isPresented: Bindable(app).isPresentingNewEvent) {
+            NewEventSheet()
+        }
+        .sheet(item: Bindable(app).editingEvent) { event in
+            NewEventSheet(event: event)
+        }
+        .sheet(isPresented: Bindable(app).isPresentingNewReminder) {
+            NewReminderSheet()
+        }
+        .sheet(item: Bindable(app).editingReminder) { reminder in
+            NewReminderSheet(reminder: reminder)
+        }
         .sheet(item: Bindable(app).saveKind) { kind in
             if let conversation = activeConversation {
                 SaveSheet(
@@ -225,6 +238,30 @@ struct RootView: View {
                     .help("New Project (⌘N)")
                 }
             }
+        } else if case .calendar = app.destination {
+            Button {
+                Task { await presentNewEvent() }
+            } label: {
+                Label("New Event", systemImage: "plus")
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular, in: Capsule())
+            .help("New Event")
+        } else if case .tasks = app.destination {
+            Button {
+                Task { await presentNewReminder() }
+            } label: {
+                Label("New Reminder", systemImage: "plus")
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular, in: Capsule())
+            .help("New Reminder")
         } else if focusedThread != nil {
             Button {
                 app.trackChatOpen.toggle()
@@ -310,6 +347,28 @@ struct RootView: View {
     /// The window can shrink to the panes' minimums with the sidebar hidden. Chat counts once it has finished opening.
     private var windowMinimum: CGFloat {
         LayoutMetrics.windowMin(sidebar: false, chat: chatSettled)
+    }
+
+    private func presentNewEvent() async {
+        if !app.eventKit.canWriteEvents {
+            await app.eventKit.requestEventsAccess()
+        }
+        if app.eventKit.canWriteEvents {
+            app.isPresentingNewEvent = true
+        } else {
+            app.eventKit.openSettings(for: .event)
+        }
+    }
+
+    private func presentNewReminder() async {
+        if !app.eventKit.canWriteReminders {
+            await app.eventKit.requestRemindersAccess()
+        }
+        if app.eventKit.canWriteReminders {
+            app.isPresentingNewReminder = true
+        } else {
+            app.eventKit.openSettings(for: .reminder)
+        }
     }
 
     private func toggleSidebar() {
