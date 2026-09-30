@@ -1,10 +1,18 @@
-# Design
+# Design (v2)
 
-The window is glass. The page is solid.
+The window is glass. The page is solid. The app is native, a little more sophisticated.
 
-Craft is the layout reference: one sidebar, a quiet toolbar, grouped rows, and a content column that does not try to be chrome. The materials are macOS 27 (Golden Gate) Liquid Glass. Do not repaint Craft’s flat dark slabs, and do not invent a second visual system on top of the system one.
+Craft is the layout reference: one sidebar, a quiet toolbar, grouped rows, and a content column that does not try to be chrome. The materials are macOS 27 (Golden Gate) Liquid Glass. Apple’s Human Interface Guidelines are the backbone: when a system control, gesture, or behavior exists, use it. Do not repaint Craft’s flat dark slabs, and do not invent a second visual system on top of the system one.
 
-Liquid Glass is the navigation layer. It belongs on the sidebar, the toolbar, menus, popovers, and sheets. It does not belong on lists, notes, chat, settings rows, or the page behind them. The system already draws the glass, responds to the Liquid Glass slider (clear through tinted), and falls back when Reduce Transparency is on. Custom backgrounds on those surfaces fight that and are the current failure.
+Liquid Glass is the navigation layer. It belongs on the sidebar, the toolbar, menus, popovers, and modals. It does not belong on lists, notes, chat, settings rows, or the page behind them. The system already draws the glass, responds to the Liquid Glass slider (clear through tinted), and falls back when Reduce Transparency is on. Custom backgrounds on those surfaces fight that.
+
+## Principles
+
+1. **One job per view.** Each page answers one question first (what is next, where is this project going, what did we decide). Put the answer at the top, large and plain. Controls come after the answer, not before it.
+2. **Rich, not busy.** A richer interface shows more meaning, not more chrome. Prefer one well-made summary (a next-up card, a timeline, a single number with its trend) over a stack of buttons, pills, and toggles the user has to sort through.
+3. **Native first.** System controls, system menus, system focus, and system keyboard behavior. A custom draw is allowed only when no system control does the job, and then it follows the same metrics.
+4. **Motion explains.** Things move to show where they came from and where they went. Nothing moves for decoration.
+5. **Consistent over clever.** The same object is edited, deleted, and pinned the same way everywhere it appears.
 
 ## Materials
 
@@ -12,7 +20,7 @@ Two surfaces. Nothing else.
 
 | Surface | Material | What lives there |
 | --- | --- | --- |
-| Chrome | System Liquid Glass | Sidebar, toolbar, menus, popovers, sheets, the toast |
+| Chrome | System Liquid Glass | Sidebar, toolbar, menus, popovers, modals, the toast |
 | Content | Opaque solid | Home, projects, tasks, calendar, settings, notes, threads, decisions, chat |
 
 Chrome uses the system material. The sidebar has no custom fill; the window glass shows through. Do not use `.ultraThinMaterial`, `.regularMaterial`, or a hand-rolled blur as a stand-in. Those are the old materials.
@@ -23,7 +31,7 @@ Glass rules:
 
 - One glass layer. Glass does not sample other glass, so do not stack it.
 - Do not clip, mask, or put glass inside a scroll view. Clipping kills the effect and leaves a flat puddle.
-- Custom glass (`.glassEffect`, `NSGlassEffectView`) is for a control that floats over the page: the toast, a floating compose button if one exists. One of those per screen.
+- Custom glass (`.glassEffect`, `NSGlassEffectView`) is for a control or panel that floats over the page: the toast, the modal panel, toolbar buttons. One floating group per screen.
 - Group floating glass controls in one `GlassEffectContainer`.
 - The user’s Liquid Glass slider and Reduce Transparency must keep working. If a color is hardcoded to look good only on clear glass, it is wrong.
 
@@ -40,7 +48,7 @@ Glass rules:
 
 ## Sidebar
 
-**Locked.** This is the sidebar. Do not rewrite it. Do not swap it for a `List`, a `NavigationSplitView` column, or a system source list. `SidebarView` + `SidebarRow` are the implementation. If a change is not a bug in that file, it is not allowed.
+**Locked.** This is the sidebar. Do not rewrite it. Do not swap it for a `List`, a `NavigationSplitView` column, or a system source list. `SidebarView` + `SidebarRow` are the implementation. If a change is not a bug in that file, or a change this document calls for (hover fade, context menu order), it is not allowed.
 
 Structure (`SidebarView`):
 
@@ -73,7 +81,7 @@ One row. It names the page and holds the actions for that page.
 
 - Leading: back, when there is somewhere to go back to, then the page title at 20 semibold.
 - Trailing: at most one primary button, then view switches (grid, list) if the page has them.
-- Primary button is a system bordered or glass button. A circled plus drawn with a hairline stroke is not a button.
+- Primary button is a glass capsule (`.glassEffect(.regular, in: Capsule())`), label 13, padding 10 / 6. A circled plus drawn with a hairline stroke is not a button.
 - View switches are a system segmented control or a single glass group. Three loose icons with no grouping are not a control.
 - Search, if a page needs it, is the system toolbar search field. It is not a custom rounded rectangle in the scroll view.
 
@@ -147,28 +155,53 @@ Threads, notes, and decisions are a source list on the solid page, not a second 
 - Same row metrics as the sidebar (28 tall, 8 inset, radius 8) so it feels like a list and not a new component.
 - The document to the right keeps the 32 inset and the 680 measure.
 
+## Hero views
+
+A page whose job is “what is happening now” may open with one display header. Today that is Calendar. Home may adopt it later. Lists, settings, and documents never do.
+
+- The header is the answer, not decoration: the day, the number, the state.
+- Leading: the primary word in `CraftFont.display` (34 semibold), followed by a 7pt circle in the system accent, baseline-aligned to the word, 4 after it. Example: “Wed.” then the dot.
+- Trailing: the supporting figure in 34 regular, tertiary, monospaced digits. Example: “30”.
+- 4 below it: a caption line, 13 secondary (“September 2026”).
+- 24 below the header, the page’s first control or section.
+- At most one hero per page. No gradient, image, or glow behind it. The solid page is the background.
+
+## Summary cards
+
+When one fact matters most on a page (the next event, the current direction), it gets one summary card.
+
+- Elevated solid plate, radius 14, padding 16.
+- Leading 3pt bar in the fact’s data color (see Color), full card height minus 16, radius 1.5.
+- Line 1: meta, 11 secondary (“Next up · in 45 min”).
+- Line 2: title, 15 medium, primary, one line.
+- Line 3: detail, 12 secondary (time range, location).
+- The whole card is the hit target. Hover lifts the fill to `CraftColor.selection` with the hover fade.
+- One summary card per page.
+
 ## Type
 
 San Francisco. One family. System text styles, these sizes only:
 
 | Role | Size | Weight |
 | --- | --- | --- |
+| Hero header (`CraftFont.display`) | 34 | semibold (word) / regular (figure) |
 | Page title | 20 | semibold |
+| Summary card title, document body | 15 | medium / regular |
+| Week-strip day number (`CraftFont.dayNumber`) | 15 | medium, monospaced digits |
 | Section | 13 | semibold |
 | Body, row, sidebar | 13 | regular |
 | Row title when it needs emphasis | 13 | medium |
-| Document body | 15 | regular |
 | Subtitle | 12 | regular |
 | Caption, section hint, meta | 11 | regular |
 | Sidebar icon | 14 | regular |
 
-No other sizes. No light weights. No monospaced face except the developer context preview, which is 11 monospaced and clearly a debug surface.
+No other sizes. No light weights. The display size is for hero headers only. Use `.monospacedDigit()` wherever numbers sit in a row or tick (times, day numbers, counts). No monospaced face otherwise, except the developer context preview, which is 11 monospaced and clearly a debug surface.
 
 Primary text is label primary. Supporting text is secondary. Hints and meta are tertiary. Do not invent gray hexes for text.
 
 ## Color
 
-Semantic colors only. The accent is the system accent (the user’s), used for the primary action, keyboard focus, and a selected control that is not a list row. List selection is a neutral fill, not the accent. A settings row, a sidebar row, and a document do not each get their own color.
+Semantic colors only. The accent is the system accent (the user’s), used for the primary action, keyboard focus, a selected control that is not a list row, the hero dot, today’s number, and the calendar now-line. List selection is a neutral fill, not the accent. A settings row, a sidebar row, and a document do not each get their own color.
 
 Neutrals, sRGB:
 
@@ -180,6 +213,15 @@ Neutrals, sRGB:
 | Hover | white 5% | black 4% | Hover on a row with no fill |
 | Hairline | white 8% | black 8% | Rules inside a plate, field borders |
 | Field | white 4% | white | Text fields on canvas |
+| Scrim | black 25% | black 12% | Behind a modal, over the page |
+
+### Data color
+
+Data color is color that carries information the user already assigned elsewhere. Today the only data color is the calendar tint (`CalendarTint.color`, from EventKit).
+
+- Allowed as: a 3pt leading bar, a 12% fill behind an event block, a 5pt dot in the week strip.
+- Text on a tinted fill stays primary / secondary. Do not color text with the tint.
+- Nothing else in the app gets decorative color.
 
 Appearance is System, Light, or Dark, and it is the only theme switch. No custom theme previews, no accent-dot row, until those settings actually change something.
 
@@ -191,19 +233,121 @@ Use the system control. A custom draw is allowed only when no system control exi
 - Toggles: system switch.
 - Pickers: system menu.
 - Segmented appearance control: system picker, inset in the plate.
-- Text fields: plain field inside the elevated fill, radius 8, padding 10, hairline border. Placeholder is tertiary.
+- Text fields: plain field inside the elevated fill, radius 8, padding 10, hairline border. Placeholder is tertiary. The focused field shows the system focus ring in the accent.
 - Press feedback is the system highlight. Do not scale the window’s contents.
 
 Hit targets are at least 28 on a side. Sidebar rows already are. Icon-only toolbar buttons use the system toolbar item size, not a 16pt glyph with no padding.
 
-## Sheets and toasts
+## Context menus
 
-- Sheets are system sheets. They pick up glass from the system. The form inside the sheet is solid content with the same group rules, padding 20, width 440 for a short form.
+Every object that can be edited has the same menu, in the same order, everywhere it appears (sidebar, project column, projects grid, projects list).
+
+1. `Edit…` (`pencil`): opens the Edit modal for that object.
+2. Object actions, in this order when present: Pin / Unpin (`pin` / `pin.slash`), New Sub-track (`plus`), Archive / Unarchive (`archivebox`), Copy Agent ID (`doc.on.doc`).
+3. `Divider()`
+4. `Delete` (`trash`), destructive role, followed by a confirmation alert.
+
+Rules:
+
+- Every item has an SF Symbol, using `Label(title, systemImage:)`.
+- No inline rename. A row never turns into a text field. Titles are changed in the Edit modal.
+- Menu titles use title case and the ellipsis character (`…`) when the item opens a modal.
+
+## Modals
+
+There is one modal presenter for the whole app (`SlateModal`), and every modal goes through it: new project, new event, edit event, new reminder, edit reminder, save from chat, connect Cursor, and every Edit modal. Do not use `.sheet` for these.
+
+Why: on macOS the system sheet drops out of the title bar. With the hidden title bar in this window it reads as a pop. The modal instead rises in place over the page.
+
+Structure:
+
+- The presenter lives once, as an overlay on `RootView`, above the panes and below the toast.
+- Scrim: the Scrim token, full window, fades with the panel. Clicking it cancels.
+- Panel: Liquid Glass, `.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))`. Width 440 for a short form (520 for an event). Padding 20. Centered horizontally, and placed at 40% of the window height, not dead center, so it sits in the eye line.
+- Shadow: black 20%, radius 30, y 12. This is the only floating shadow in the app.
+
+Layout inside the panel:
+
+- Title, 20 semibold, one line (“Edit Project”, “New Event”).
+- 16 below the title, the fields. Each field is a label (13 semibold) and 8 below it the control. 16 between fields.
+- Fields use the elevated solid fill, radius 8, padding 10, hairline border, per Controls. The glass shows only around the fields, never through them.
+- Pickers and toggles in a modal sit on a row: label leading, system control trailing, 28 tall.
+- Footer, 20 below the last field: Cancel (plain, leading) and the primary action (system `.borderedProminent`, trailing). The one exception to “no destructive in a modal”: editing an existing event or reminder may show Delete after Cancel, because EventKit items have no context menu. It still confirms.
+
+Behavior:
+
+- Esc cancels (`.keyboardShortcut(.cancelAction)`). Return saves (`.keyboardShortcut(.defaultAction)`). The primary is disabled until the form is valid.
+- The first field gets focus when the modal appears (`@FocusState`, set on appear).
+- Only one modal at a time. Presenting another replaces the first.
+- Contents dismiss through `@Environment(\.modalDismiss)`, not `@Environment(\.dismiss)`, which does nothing outside a system sheet.
+- Edits apply to a draft. Nothing is written to the model until the user saves. Cancel discards.
+
+Motion: see Motion. Entry is scale from 0.96 plus opacity. Exit is scale to 0.98 plus opacity.
+
+### Edit modal fields
+
+| Object | Fields |
+| --- | --- |
+| Project | Name, Icon (`SymbolPicker`), Description, Status (menu picker), Pinned (switch) |
+| Chat | Title, Archived (switch) |
+| Track | Title, Kind (menu picker), Status (menu picker), Summary |
+| Decision | Title, Status (menu picker), Decision, Rationale |
+| Note | Title |
+
+Multi-line fields (description, summary, decision, rationale) are `TextField(axis: .vertical)` with `lineLimit(3...6)`. Save trims whitespace and calls the object’s `touch()` (or sets `updatedAt`) when it has one.
+
+## Toasts
+
 - A toast is one line, 12 medium, horizontal padding 12, vertical 7, capsule, one glass effect, 18 from the bottom of the window. It does not stack.
+- It enters with opacity plus a 6pt rise using `Motion.snappy`, and leaves with opacity using `Motion.quick`.
 
 ## Motion
 
-System motion only. Row highlight and destination changes are instant. A toast may fade in 150ms ease-out. Nothing springs, nothing staggers, nothing moves on hover. Respect Reduce Motion by using the system components that already do.
+Motion is system springs, short, and purposeful. Define the tokens once in `PersonalContext/Design/Motion.swift` and use only these:
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `Motion.snappy` | `.snappy(duration: 0.28)` | Presenting: modals, toast, selection pill, popovers |
+| `Motion.quick` | `.easeOut(duration: 0.16)` | Dismissing: modal and toast exit |
+| `Motion.smooth` | `.smooth(duration: 0.35)` | Layout: paging, expanding, panes |
+| `Motion.hover` | `.easeOut(duration: 0.12)` | Hover fill in and out |
+
+Rules:
+
+- **Hover:** a row’s hover fill fades in and out with `Motion.hover`. It does not move, scale, or change size.
+- **Selection:** a selection indicator that moves between siblings (the calendar week strip, a segmented control you draw) slides with `matchedGeometryEffect` and `Motion.snappy`. List selection in the sidebar and project column stays instant.
+- **Paging:** content that pages (next week, previous week) uses `.transition(.push(from: .trailing))` or `.leading`, matching the direction, with `Motion.smooth`.
+- **Modals:** entry `.scale(0.96).combined(with: .opacity)` with `Motion.snappy`; exit `.scale(0.98).combined(with: .opacity)` with `Motion.quick`. Use an asymmetric transition.
+- **Destination changes** (sidebar navigation) are instant. Do not animate the page swap.
+- No stagger. No hover scale. No looping or ambient animation (the chat orb is the one exception and lives in its own spec). No bounce above the `.snappy` default.
+- **Reduce Motion:** read `@Environment(\.accessibilityReduceMotion)`. When it is on, every transition becomes `.opacity`, and every animation that moves or scales becomes `Motion.quick` opacity only. Nothing slides, scales, or pushes.
+
+## Calendar
+
+The calendar is a hero view. Its job: show what today (or the chosen day) looks like, and what is next.
+
+Top to bottom, inside the page inset:
+
+1. **Hero header.** “Wed.” plus the accent dot, with “30” trailing, and the caption “September 2026”. This describes the selected day, not always today.
+2. **Week strip**, 24 below. One row, seven days, full inset width.
+   - Leading: chevron-left, chevron-right (28×28 plain buttons, secondary). Trailing: a “Today” glass capsule, shown only when the selected day is not today.
+   - Each day cell is equal width, 56 tall: the weekday (11 secondary, “Wed”), then the day number (`CraftFont.dayNumber`), then a row of up to 3 tint dots (5pt, 3 apart), one per distinct calendar with an event that day.
+   - Today’s number is the accent color. The selected day sits on a `CraftColor.selection` pill, radius 10, which slides between cells (`matchedGeometryEffect`, `Motion.snappy`). Hover on an unselected cell uses the hover fill with `Motion.hover`.
+   - The chevrons page by week. The strip content pushes in from the matching edge (`Motion.smooth`). Paging keeps the same weekday selected.
+3. **Next up card**, 24 below, only when the selected day is today and an event is still upcoming or in progress. It follows Summary cards. The meta is “Next up · in 45 min”, or “Now · ends in 20 min” when in progress. Clicking it opens the edit event modal.
+4. **All-day and reminders**, 24 below, only when present. Label “All day” (section style). All-day events are rows with the tint bar. Reminders keep their completion toggle and open the edit reminder modal on click.
+5. **Timeline**, 24 below.
+   - Hours from 8 to 20 by default. It widens to include the earliest start and the latest end of the day’s timed events.
+   - Each hour is 48 tall. The hour label (11 tertiary, monospaced digits, “9 AM”) is 44 wide, leading, top-aligned to its hour line. The hour line is a hairline running from the label’s trailing edge plus 8 to the inset edge.
+   - Event blocks sit to the right of the labels, positioned by start and end (minimum height 22). Overlapping events split the width into equal columns with a 4 gap.
+   - A block: radius 8, the tint at 12% fill, a 3pt tint leading bar, padding 6 / 8. Title 12 medium primary, one line. Time range 11 secondary when the block is 40 tall or more. Hover lifts the fill to 18% with `Motion.hover`. Click opens the edit event modal.
+   - When the selected day is today, a now-line: 1pt accent line across the event area, with an 7pt accent dot at its leading edge. It updates every minute (`TimelineView(.everyMinute)`).
+   - On first appear for today, scroll so the now-line sits about a third of the way down.
+6. **Empty day:** one line, tertiary, “Nothing scheduled.” in place of the timeline.
+
+Keyboard: ← and → move the selected day by one (paging the strip when crossing a week edge), ⌘T returns to today.
+
+Access states (not determined, denied) keep `EventKitAccessLine`.
 
 ## Do not
 
@@ -218,5 +362,8 @@ These are the specific ways this screen turns into slop. They are out of spec ev
 - More than one typeface, or a size outside the table.
 - All-caps section labels, letter-spacing on labels, and icon tiles (rounded square behind every symbol).
 - Empty states with an illustration and a paragraph. One sentence, tertiary, inset with the list.
-- Decorative color. If it is not the system accent on the primary action, it is neutral.
+- Decorative color. If it is not the system accent or data color, it is neutral.
+- A system `.sheet` for an app modal, or a modal that appears without its transition.
+- Inline rename in a row.
+- Hover that moves or scales something.
 - Copying Craft’s upgrade card, assistant pill, or tab strip. This app does not have those.

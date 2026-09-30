@@ -20,20 +20,19 @@ final class AppModel {
     var selectedNote: UUID?
     var selectedDecision: UUID?
     var selectedConversation: UUID?
-    var isPresentingNewProject = false
-    var isPresentingNewEvent = false
-    var isPresentingNewReminder = false
-    var editingEvent: CalendarEvent?
-    var editingReminder: ReminderItem?
+    var modal: AppModal?
+    var modalHost = ModalHost.main
     var toast: String?
     var pendingSend: PendingSend?
     var chatConversationID: UUID?
     var activeReply = ""
     var chatGenerating = false {
-        didSet { if !chatGenerating { reloadIfIdle() } }
+        didSet {
+            guard !chatGenerating else { return }
+            reloadIfIdle()
+            if oldValue { refreshUsage(force: true) }
+        }
     }
-    var saveKind: SaveKind?
-
     var appearance: AppearancePreference {
         didSet { defaults.set(appearance.rawValue, forKey: Keys.appearance) }
     }
@@ -49,6 +48,16 @@ final class AppModel {
     var sidebarCollapsed: Bool {
         didSet { defaults.set(sidebarCollapsed, forKey: Keys.sidebarCollapsed) }
     }
+    var settingsSection: SettingsSection {
+        didSet { defaults.set(settingsSection.rawValue, forKey: Keys.settingsSection) }
+    }
+    var orbPalette: OrbPalette {
+        didSet {
+            if let data = try? JSONEncoder().encode(orbPalette) {
+                defaults.set(data, forKey: Keys.orbPalette)
+            }
+        }
+    }
     var trackChatOpen = false
 
     func toggleSidebar() {
@@ -57,10 +66,30 @@ final class AppModel {
         }
     }
 
+    func present(_ modal: AppModal, in host: ModalHost = .main) {
+        withAnimation(Motion.snappy) {
+            modalHost = host
+            self.modal = modal
+        }
+    }
+
+    func modal(in host: ModalHost) -> AppModal? {
+        modalHost == host ? modal : nil
+    }
+
+    func dismissModal() {
+        withAnimation(Motion.quick) {
+            modal = nil
+        }
+    }
+
     private(set) var apiKey: String?
     private(set) var connection: ConnectionState = .missing
     private(set) var models: [CursorModel] = []
     private(set) var modelsError: String?
+    private(set) var usage: CursorUsage?
+    private(set) var usageNote: String?
+    @ObservationIgnored private var usageCheckedAt: Date?
     var storeError: String?
     let eventKit = EventKitService()
 
@@ -75,6 +104,14 @@ final class AppModel {
         let storedLayout = UserDefaults.standard.string(forKey: Keys.projectsLayout) ?? ""
         projectsLayout = storedLayout == "list" ? .card : (ProjectsLayout(rawValue: storedLayout) ?? .table)
         sidebarCollapsed = UserDefaults.standard.bool(forKey: Keys.sidebarCollapsed)
+        settingsSection = SettingsSection(rawValue: UserDefaults.standard.string(forKey: Keys.settingsSection) ?? "") ?? .cursor
+        if let data = UserDefaults.standard.data(forKey: Keys.orbPalette),
+           let stored = try? JSONDecoder().decode(OrbPalette.self, from: data),
+           stored != .legacySlate {
+            orbPalette = stored
+        } else {
+            orbPalette = .slate
+        }
         apiKey = KeychainStore.read()
 
         var opened: ModelContainer?
@@ -112,6 +149,26 @@ final class AppModel {
             refreshConnection()
         } else {
             connection = .missing
+        }
+        refreshUsage()
+    }
+
+    func refreshUsage(force: Bool = false) {
+        if !force, let usageCheckedAt, Date.now.timeIntervalSince(usageCheckedAt) < 60 { return }
+        usageCheckedAt = .now
+        Task {
+            do {
+                if let fetched = try await CursorUsageClient.fetch() {
+                    usage = fetched
+                    usageNote = nil
+                } else {
+                    usage = nil
+                    usageNote = "Sign in to the Cursor app on this Mac to see usage."
+                }
+            } catch {
+                usageNote = error.localizedDescription
+                ChatTrace.event("usage failed: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -237,10 +294,16 @@ final class AppModel {
     }
 
     func flash(_ message: String) {
-        toast = message
+        withAnimation(Motion.snappy) {
+            toast = message
+        }
         Task {
             try? await Task.sleep(for: .seconds(2.2))
-            if toast == message { toast = nil }
+            if toast == message {
+                withAnimation(Motion.quick) {
+                    toast = nil
+                }
+            }
         }
     }
 
@@ -266,4 +329,6 @@ private enum Keys {
     static let showAgentIDs = "showAgentIDs"
     static let projectsLayout = "projectsLayout"
     static let sidebarCollapsed = "sidebarCollapsed"
+    static let settingsSection = "settingsSection"
+    static let orbPalette = "orbPalette"
 }

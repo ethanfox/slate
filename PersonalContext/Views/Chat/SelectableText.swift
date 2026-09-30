@@ -140,31 +140,77 @@ final class ChatSelectableTextView: NSTextView {
         let font = NSFont.systemFont(ofSize: fontSize)
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = lineSpacing
+        paragraph.paragraphSpacing = 8
         let fallback = NSAttributedString(string: text, attributes: [
             .font: font,
             .foregroundColor: color,
             .paragraphStyle: paragraph
         ])
         guard markdown else { return fallback }
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .full)
+        var options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .full)
+        options.failurePolicy = .returnPartiallyParsedIfPossible
         guard let parsed = try? AttributedString(markdown: text, options: options) else {
             return fallback
         }
         let result = NSMutableAttributedString(parsed)
         let full = NSRange(location: 0, length: result.length)
-        result.enumerateAttributes(in: full) { attrs, range, _ in
+        result.enumerateAttributes(in: full, options: [.reverse]) { attrs, range, _ in
+            var nextFont = (attrs[.font] as? NSFont) ?? font
+            var intentKeys: [NSAttributedString.Key] = []
+            for (key, value) in attrs {
+                if let intent = value as? InlinePresentationIntent {
+                    intentKeys.append(key)
+                    if intent.contains(.code) {
+                        nextFont = NSFont.monospacedSystemFont(ofSize: fontSize - 1, weight: .regular)
+                    } else {
+                        var traits = nextFont.fontDescriptor.symbolicTraits
+                        if intent.contains(.stronglyEmphasized) { traits.insert(.bold) }
+                        if intent.contains(.emphasized) { traits.insert(.italic) }
+                        let descriptor = nextFont.fontDescriptor.withSymbolicTraits(traits)
+                        nextFont = NSFont(descriptor: descriptor, size: nextFont.pointSize) ?? nextFont
+                    }
+                    if intent.contains(.strikethrough) {
+                        result.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                    }
+                } else if let intent = value as? PresentationIntent {
+                    intentKeys.append(key)
+                    for component in intent.components {
+                        switch component.kind {
+                        case .header(let level):
+                            let size = fontSize + CGFloat(max(0, 5 - level)) * 2
+                            nextFont = NSFont.systemFont(ofSize: size, weight: .semibold)
+                            let header = paragraph.mutableCopy() as! NSMutableParagraphStyle
+                            header.paragraphSpacingBefore = level == 1 ? 18 : 14
+                            header.paragraphSpacing = 8
+                            result.addAttribute(.paragraphStyle, value: header, range: range)
+                        case .codeBlock:
+                            nextFont = NSFont.monospacedSystemFont(ofSize: fontSize - 1, weight: .regular)
+                        case .listItem:
+                            let list = (attrs[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle
+                                ?? paragraph.mutableCopy() as! NSMutableParagraphStyle
+                            list.headIndent = 22
+                            list.firstLineHeadIndent = 8
+                            list.paragraphSpacing = 4
+                            result.addAttribute(.paragraphStyle, value: list, range: range)
+                        default:
+                            break
+                        }
+                    }
+                }
+            }
+            result.addAttribute(.font, value: nextFont, range: range)
             if attrs[.foregroundColor] == nil {
-                result.addAttribute(.foregroundColor, value: color, range: range)
+                result.addAttribute(.foregroundColor, value: attrs[.link] == nil ? color : NSColor.linkColor, range: range)
             }
-            if attrs[.font] == nil {
-                result.addAttribute(.font, value: font, range: range)
-            }
-            if let existing = attrs[.paragraphStyle] as? NSParagraphStyle {
-                let mutable = existing.mutableCopy() as! NSMutableParagraphStyle
-                if mutable.lineSpacing < lineSpacing { mutable.lineSpacing = lineSpacing }
-                result.addAttribute(.paragraphStyle, value: mutable, range: range)
-            } else {
+            if attrs[.paragraphStyle] == nil {
                 result.addAttribute(.paragraphStyle, value: paragraph, range: range)
+            } else if let existing = attrs[.paragraphStyle] as? NSParagraphStyle, existing.lineSpacing < lineSpacing {
+                let mutable = existing.mutableCopy() as! NSMutableParagraphStyle
+                mutable.lineSpacing = lineSpacing
+                result.addAttribute(.paragraphStyle, value: mutable, range: range)
+            }
+            for key in intentKeys {
+                result.removeAttribute(key, range: range)
             }
         }
         return result

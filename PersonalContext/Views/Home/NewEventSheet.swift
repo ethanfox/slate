@@ -2,10 +2,11 @@ import SwiftUI
 
 struct NewEventSheet: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modalDismiss) private var modalDismiss
 
     var event: CalendarEvent?
 
+    @FocusState private var focusTitle: Bool
     @State private var title = ""
     @State private var start = Date.now
     @State private var end = Date.now.addingTimeInterval(3600)
@@ -34,14 +35,13 @@ struct NewEventSheet: View {
             Text(isEditing ? "Event" : "New Event")
                 .font(CraftFont.title)
 
-            field("Title") {
+            ModalField("Title") {
                 TextField("Event", text: $title)
                     .textFieldStyle(.plain)
+                    .focused($focusTitle)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Starts")
-                    .font(CraftFont.section)
+            ModalField("Starts", boxed: false) {
                 DatePicker(
                     "Starts",
                     selection: $start,
@@ -51,9 +51,7 @@ struct NewEventSheet: View {
                 .datePickerStyle(.field)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Ends")
-                    .font(CraftFont.section)
+            ModalField("Ends", boxed: false) {
                 DatePicker(
                     "Ends",
                     selection: $end,
@@ -63,57 +61,47 @@ struct NewEventSheet: View {
                 .datePickerStyle(.field)
             }
 
-            HStack {
-                Text("All day")
-                    .font(CraftFont.body)
-                Spacer()
+            ModalControlRow("All day") {
                 Toggle("All day", isOn: $allDay)
                     .labelsHidden()
                     .toggleStyle(.switch)
             }
 
-            field("Location") {
+            ModalField("Location") {
                 TextField("Optional", text: $location)
                     .textFieldStyle(.plain)
             }
 
             if !calendars.isEmpty {
-                HStack {
-                    Text("Calendar")
-                        .font(CraftFont.body)
-                    Spacer(minLength: 16)
+                ModalControlRow("Calendar") {
                     Picker("Calendar", selection: $calendarID) {
                         ForEach(calendars) { calendar in
                             Text(calendar.title).tag(calendar.id)
                         }
                     }
+                    .pickerStyle(.menu)
                     .labelsHidden()
                     .fixedSize()
                     .disabled(!(event?.allowsEditing ?? true))
                 }
             }
 
-            field("Notes") {
+            ModalField("Notes") {
                 TextField("Optional", text: $notes, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .lineLimit(3...)
+                    .lineLimit(3...6)
             }
 
-            HStack {
+            ModalFooter(actionTitle: isEditing ? "Save" : "Create", actionEnabled: canSave, action: save) {
                 if isEditing, event?.allowsEditing == true {
                     Button("Delete", role: .destructive) { confirmDelete = true }
                 }
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button(isEditing ? "Save" : "Create") { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!canSave)
             }
         }
-        .padding(20)
-        .frame(width: 440)
-        .onAppear { load() }
+        .onAppear {
+            load()
+            focusTitle = true
+        }
         .onChange(of: start) { _, newStart in
             if end < newStart {
                 end = allDay ? newStart : newStart.addingTimeInterval(3600)
@@ -121,17 +109,6 @@ struct NewEventSheet: View {
         }
         .confirmationDialog("Delete this event?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete Event", role: .destructive) { deleteEvent() }
-        }
-    }
-
-    private func field<Content: View>(_ name: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(name)
-                .font(CraftFont.section)
-            content()
-                .padding(10)
-                .background(CraftColor.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(CraftColor.hairline))
         }
     }
 
@@ -179,7 +156,7 @@ struct NewEventSheet: View {
                     notes: note
                 )
             }
-            dismiss()
+            modalDismiss()
         } catch {
             app.flash(error.localizedDescription)
         }
@@ -189,7 +166,7 @@ struct NewEventSheet: View {
         guard let event else { return }
         do {
             try app.eventKit.deleteEvent(event)
-            dismiss()
+            modalDismiss()
         } catch {
             app.flash(error.localizedDescription)
         }

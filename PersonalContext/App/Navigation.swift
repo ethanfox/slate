@@ -67,6 +67,36 @@ enum ProjectSort: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
+    case cursor
+    case calendar
+    case appearance
+    case orb
+    case developer
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .cursor: "Cursor"
+        case .calendar: "Calendar"
+        case .appearance: "Appearance"
+        case .orb: "Orb"
+        case .developer: "Developer"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .cursor: "sparkle"
+        case .calendar: "calendar"
+        case .appearance: "circle.lefthalf.filled"
+        case .orb: "circle.circle"
+        case .developer: "hammer"
+        }
+    }
+}
+
 enum AppearancePreference: String, CaseIterable, Identifiable, Hashable {
     case system
     case light

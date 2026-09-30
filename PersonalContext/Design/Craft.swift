@@ -26,6 +26,10 @@ enum CraftColor {
         dark: NSColor(white: 1, alpha: 0.04),
         light: NSColor(white: 1, alpha: 1)
     )
+    static let scrim = dynamic(
+        dark: NSColor(white: 0, alpha: 0.25),
+        light: NSColor(white: 0, alpha: 0.12)
+    )
 
     private static func dynamic(dark: NSColor, light: NSColor) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
@@ -73,6 +77,8 @@ private struct HoverTooltip: ViewModifier {
 }
 
 enum CraftFont {
+    static let display = Font.system(size: 34, weight: .semibold)
+    static let dayNumber = Font.system(size: 15, weight: .medium).monospacedDigit()
     static let sidebar = Font.system(size: 13)
     static let sidebarIcon = Font.system(size: 14)
     static let section = Font.system(size: 13, weight: .semibold)

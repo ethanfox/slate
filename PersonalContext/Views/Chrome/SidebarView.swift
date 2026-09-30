@@ -46,12 +46,22 @@ struct SidebarView: View {
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
-                                Button(project.isPinned ? "Unpin" : "Pin") {
+                                Button {
+                                    app.present(.editProject(project))
+                                } label: {
+                                    Label("Edit…", systemImage: "pencil")
+                                }
+                                Button {
                                     project.isPinned.toggle()
                                     project.touch()
+                                } label: {
+                                    Label(project.isPinned ? "Unpin" : "Pin", systemImage: project.isPinned ? "pin.slash" : "pin")
                                 }
-                                Button("Delete", role: .destructive) {
+                                Divider()
+                                Button(role: .destructive) {
                                     pendingDelete = project
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
                                 }
                             }
                         }

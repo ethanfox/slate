@@ -1,4 +1,3 @@
-import AppKit
 import SwiftData
 import SwiftUI
 
@@ -8,42 +7,39 @@ struct ConversationRow: View {
     var onSelect: () -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @State private var renaming = false
-    @State private var draftTitle = ""
     @State private var confirmDelete = false
 
     var body: some View {
         Button(action: onSelect) {
-            if renaming {
-                TextField("Title", text: $draftTitle)
-                    .textFieldStyle(.plain)
-                    .font(CraftFont.sidebar)
-                    .onSubmit { commitRename() }
-                    .padding(.horizontal, 8)
-                    .frame(height: 28)
-            } else {
-                SidebarRow(title: conversation.title, systemImage: "bubble.left", isSelected: isSelected)
-                    .help(subtitle)
-            }
+            SidebarRow(title: conversation.title, systemImage: "bubble.left", isSelected: isSelected)
+                .help(subtitle)
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("Rename") {
-                draftTitle = conversation.title
-                renaming = true
+            Button {
+                app.present(.editConversation(conversation))
+            } label: {
+                Label("Edit…", systemImage: "pencil")
             }
-            Button(conversation.isArchived ? "Unarchive" : "Archive") {
+            Button {
                 conversation.isArchived.toggle()
                 conversation.updatedAt = .now
+            } label: {
+                Label(conversation.isArchived ? "Unarchive" : "Archive", systemImage: "archivebox")
             }
             if !conversation.cursorAgentId.isEmpty {
-                Button("Copy Agent ID") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(conversation.cursorAgentId, forType: .string)
+                Button {
+                    CraftClipboard.copy(conversation.cursorAgentId)
+                } label: {
+                    Label("Copy Agent ID", systemImage: "doc.on.doc")
                 }
             }
             Divider()
-            Button("Delete", role: .destructive) { confirmDelete = true }
+            Button(role: .destructive) {
+                confirmDelete = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
         }
         .alert("Delete this conversation?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) {
@@ -62,11 +58,5 @@ struct ConversationRow: View {
             parts.append(conversation.cursorAgentId)
         }
         return parts.joined(separator: " · ")
-    }
-
-    private func commitRename() {
-        let trimmed = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty { conversation.title = trimmed }
-        renaming = false
     }
 }

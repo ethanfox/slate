@@ -2,10 +2,11 @@ import SwiftUI
 
 struct NewReminderSheet: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modalDismiss) private var modalDismiss
 
     var reminder: ReminderItem?
 
+    @FocusState private var focusTitle: Bool
     @State private var title = ""
     @State private var listID = ""
     @State private var hasDueDate = false
@@ -31,74 +32,52 @@ struct NewReminderSheet: View {
             Text(isEditing ? "Reminder" : "New Reminder")
                 .font(CraftFont.title)
 
-            field("Title") {
+            ModalField("Title") {
                 TextField("Reminder", text: $title)
                     .textFieldStyle(.plain)
+                    .focused($focusTitle)
             }
 
             if !lists.isEmpty {
-                HStack {
-                    Text("List")
-                        .font(CraftFont.body)
-                    Spacer(minLength: 16)
+                ModalControlRow("List") {
                     Picker("List", selection: $listID) {
                         ForEach(lists) { list in
                             Text(list.title).tag(list.id)
                         }
                     }
+                    .pickerStyle(.menu)
                     .labelsHidden()
                     .fixedSize()
                     .disabled(!(reminder?.allowsEditing ?? true))
                 }
             }
 
-            HStack {
-                Text("Due date")
-                    .font(CraftFont.body)
-                Spacer()
+            ModalControlRow("Due date") {
                 Toggle("Due date", isOn: $hasDueDate)
                     .labelsHidden()
                     .toggleStyle(.switch)
             }
 
             if hasDueDate {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Due")
-                        .font(CraftFont.section)
+                ModalField("Due", boxed: false) {
                     DatePicker("Due", selection: $due, displayedComponents: [.date, .hourAndMinute])
                         .labelsHidden()
                         .datePickerStyle(.field)
                 }
             }
 
-            HStack {
+            ModalFooter(actionTitle: isEditing ? "Save" : "Create", actionEnabled: canSave, action: save) {
                 if isEditing, reminder?.allowsEditing == true {
                     Button("Delete", role: .destructive) { confirmDelete = true }
                 }
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button(isEditing ? "Save" : "Create") { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!canSave)
             }
         }
-        .padding(20)
-        .frame(width: 440)
-        .onAppear { load() }
+        .onAppear {
+            load()
+            focusTitle = true
+        }
         .confirmationDialog("Delete this reminder?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete Reminder", role: .destructive) { deleteReminder() }
-        }
-    }
-
-    private func field<Content: View>(_ name: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(name)
-                .font(CraftFont.section)
-            content()
-                .padding(10)
-                .background(CraftColor.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(CraftColor.hairline))
         }
     }
 
@@ -124,7 +103,7 @@ struct NewReminderSheet: View {
             } else {
                 try app.eventKit.createReminder(title: trimmed, listID: listID, due: hasDueDate ? due : nil)
             }
-            dismiss()
+            modalDismiss()
         } catch {
             app.flash(error.localizedDescription)
         }
@@ -134,7 +113,7 @@ struct NewReminderSheet: View {
         guard let reminder else { return }
         do {
             try app.eventKit.deleteReminder(reminder)
-            dismiss()
+            modalDismiss()
         } catch {
             app.flash(error.localizedDescription)
         }

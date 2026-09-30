@@ -34,10 +34,13 @@ struct SidebarRow: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 28)
-        .background(
+        .background {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isSelected ? CraftColor.selection : (hovering ? CraftColor.hover : Color.clear))
-        )
+                .fill(isSelected ? CraftColor.selection : Color.clear)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(!isSelected && hovering ? CraftColor.hover : Color.clear)
+                .animation(Motion.hover, value: hovering)
+        }
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { hovering = $0 }
     }

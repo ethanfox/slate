@@ -29,6 +29,7 @@ struct ProjectsView: View {
                             sortAscending: sortAscending,
                             onSort: sortBy,
                             onOpen: { app.open($0) },
+                            onEdit: { app.present(.editProject($0)) },
                             onPin: pin,
                             onDelete: { pendingDelete = $0 }
                         )
@@ -80,11 +81,21 @@ struct ProjectsView: View {
 
     @ViewBuilder
     private func projectMenu(_ project: Project) -> some View {
-        Button(project.isPinned ? "Unpin" : "Pin") {
-            pin(project)
+        Button {
+            app.present(.editProject(project))
+        } label: {
+            Label("Edit…", systemImage: "pencil")
         }
-        Button("Delete", role: .destructive) {
+        Button {
+            pin(project)
+        } label: {
+            Label(project.isPinned ? "Unpin" : "Pin", systemImage: project.isPinned ? "pin.slash" : "pin")
+        }
+        Divider()
+        Button(role: .destructive) {
             pendingDelete = project
+        } label: {
+            Label("Delete", systemImage: "trash")
         }
     }
 
@@ -122,6 +133,7 @@ private struct ProjectsTable: View {
     var sortAscending: Bool
     var onSort: (ProjectSort) -> Void
     var onOpen: (Project) -> Void
+    var onEdit: (Project) -> Void
     var onPin: (Project) -> Void
     var onDelete: (Project) -> Void
 
@@ -149,11 +161,21 @@ private struct ProjectsTable: View {
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
-                    Button(project.isPinned ? "Unpin" : "Pin") {
-                        onPin(project)
+                    Button {
+                        onEdit(project)
+                    } label: {
+                        Label("Edit…", systemImage: "pencil")
                     }
-                    Button("Delete", role: .destructive) {
+                    Button {
+                        onPin(project)
+                    } label: {
+                        Label(project.isPinned ? "Unpin" : "Pin", systemImage: project.isPinned ? "pin.slash" : "pin")
+                    }
+                    Divider()
+                    Button(role: .destructive) {
                         onDelete(project)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
                     }
                 }
             }

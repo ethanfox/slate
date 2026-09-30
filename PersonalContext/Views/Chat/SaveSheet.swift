@@ -7,11 +7,12 @@ struct SaveSheet: View {
     var project: Project?
     var conversation: Conversation
 
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modalDismiss) private var modalDismiss
     @Environment(\.modelContext) private var context
     @Environment(AppModel.self) private var app
     @Query(sort: \Project.name) private var projects: [Project]
 
+    @FocusState private var focusTitle: Bool
     @State private var title = ""
     @State private var bodyText = ""
     @State private var rationale = ""
@@ -21,7 +22,7 @@ struct SaveSheet: View {
     @State private var projectID: UUID?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             Text(heading)
                 .font(CraftFont.title)
 
@@ -38,6 +39,7 @@ struct SaveSheet: View {
             case .note:
                 TextField("Title", text: $title)
                     .textFieldStyle(.roundedBorder)
+                    .focused($focusTitle)
                 TextEditor(text: $bodyText)
                     .font(CraftFont.body)
                     .frame(minHeight: 160)
@@ -50,6 +52,7 @@ struct SaveSheet: View {
             case .thread:
                 TextField("Title", text: $title)
                     .textFieldStyle(.roundedBorder)
+                    .focused($focusTitle)
                 Picker("Type", selection: $kindChoice) {
                     ForEach(ThreadKind.allCases) { item in
                         Text(item.label).tag(item)
@@ -73,6 +76,7 @@ struct SaveSheet: View {
             case .decision:
                 TextField("Title", text: $title)
                     .textFieldStyle(.roundedBorder)
+                    .focused($focusTitle)
                 Text("Decision")
                     .font(CraftFont.caption)
                     .foregroundStyle(.secondary)
@@ -87,18 +91,12 @@ struct SaveSheet: View {
                 threadPicker
             }
 
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button(confirmTitle) { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!canSave)
-            }
+            ModalFooter(actionTitle: confirmTitle, actionEnabled: canSave, action: save)
         }
-        .padding(20)
-        .frame(width: 480)
-        .onAppear(perform: prefill)
+        .onAppear {
+            prefill()
+            focusTitle = true
+        }
     }
 
     private var heading: String {
@@ -211,6 +209,6 @@ struct SaveSheet: View {
         }
         target.touch()
         try? context.save()
-        dismiss()
+        modalDismiss()
     }
 }

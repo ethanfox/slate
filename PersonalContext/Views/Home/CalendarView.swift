@@ -187,7 +187,7 @@ struct CalendarView: View {
 
     private func eventLine(_ event: CalendarEvent) -> some View {
         Button {
-            app.editingEvent = event
+            app.present(.editEvent(event))
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(weekEventTitle(event))
@@ -224,7 +224,7 @@ struct CalendarView: View {
             .help(item.isCompleted ? "Mark incomplete" : "Mark complete")
 
             Button {
-                app.editingReminder = item
+                app.present(.editReminder(item))
             } label: {
                 HStack(spacing: 8) {
                     Text(item.title.isEmpty ? "Untitled" : item.title)
@@ -251,9 +251,9 @@ struct CalendarView: View {
         Button {
             switch item.kind {
             case .event(let event):
-                app.editingEvent = event
+                app.present(.editEvent(event))
             case .reminder(let reminder):
-                app.editingReminder = reminder
+                app.present(.editReminder(reminder))
             }
         } label: {
             Text("\(item.day.formatted(.dateTime.day(.twoDigits))) · \(item.title)")

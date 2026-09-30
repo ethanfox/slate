@@ -7,6 +7,8 @@ struct ProjectColumn: View {
     @Environment(\.modelContext) private var context
     @State private var collapsed: Set<UUID> = []
     @State private var pendingThreadDelete: ProjectThread?
+    @State private var pendingNoteDelete: Note?
+    @State private var pendingDecisionDelete: Decision?
 
     private var tab: ProjectTab { app.tab(for: project.id) }
 
@@ -67,10 +69,16 @@ struct ProjectColumn: View {
                     }
                     .buttonStyle(.plain)
                     .contextMenu {
-                        Button("Delete", role: .destructive) {
-                            if app.selectedNote == note.id { app.selectedNote = nil }
-                            context.delete(note)
-                            project.touch()
+                        Button {
+                            app.present(.editNote(note))
+                        } label: {
+                            Label("Edit…", systemImage: "pencil")
+                        }
+                        Divider()
+                        Button(role: .destructive) {
+                            pendingNoteDelete = note
+                        } label: {
+                            Label("Delete", systemImage: "trash")
                         }
                     }
                 }
@@ -90,10 +98,16 @@ struct ProjectColumn: View {
                     }
                     .buttonStyle(.plain)
                     .contextMenu {
-                        Button("Delete", role: .destructive) {
-                            if app.selectedDecision == decision.id { app.selectedDecision = nil }
-                            context.delete(decision)
-                            project.touch()
+                        Button {
+                            app.present(.editDecision(decision))
+                        } label: {
+                            Label("Edit…", systemImage: "pencil")
+                        }
+                        Divider()
+                        Button(role: .destructive) {
+                            pendingDecisionDelete = decision
+                        } label: {
+                            Label("Delete", systemImage: "trash")
                         }
                     }
                 }
@@ -120,6 +134,36 @@ struct ProjectColumn: View {
             Button("Cancel", role: .cancel) { pendingThreadDelete = nil }
         } message: {
             Text("Child tracks are removed too. Notes and decisions stay in the project.")
+        }
+        .alert(
+            "Delete this note?",
+            isPresented: Binding(get: { pendingNoteDelete != nil }, set: { if !$0 { pendingNoteDelete = nil } })
+        ) {
+            Button("Delete", role: .destructive) {
+                if let note = pendingNoteDelete {
+                    if app.selectedNote == note.id { app.selectedNote = nil }
+                    context.delete(note)
+                    project.touch()
+                    try? context.save()
+                }
+                pendingNoteDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingNoteDelete = nil }
+        }
+        .alert(
+            "Delete this decision?",
+            isPresented: Binding(get: { pendingDecisionDelete != nil }, set: { if !$0 { pendingDecisionDelete = nil } })
+        ) {
+            Button("Delete", role: .destructive) {
+                if let decision = pendingDecisionDelete {
+                    if app.selectedDecision == decision.id { app.selectedDecision = nil }
+                    context.delete(decision)
+                    project.touch()
+                    try? context.save()
+                }
+                pendingDecisionDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDecisionDelete = nil }
         }
     }
 
@@ -181,6 +225,7 @@ private struct SectionAddButton: View {
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(hovering ? CraftColor.selection : Color.clear)
+                        .animation(Motion.hover, value: hovering)
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }

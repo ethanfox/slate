@@ -152,7 +152,7 @@ private struct ReminderRow: View {
             .accessibilityLabel(item.isCompleted ? "Mark \(title) incomplete" : "Mark \(title) complete")
 
             Button {
-                app.editingReminder = item
+                app.present(.editReminder(item))
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)

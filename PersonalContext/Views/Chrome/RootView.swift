@@ -180,42 +180,26 @@ struct RootView: View {
         .containerBackground(for: .window) {
             WindowGlass()
         }
-        .sheet(isPresented: Bindable(app).isPresentingNewProject) {
-            NewProjectSheet()
-        }
-        .sheet(isPresented: Bindable(app).isPresentingNewEvent) {
-            NewEventSheet()
-        }
-        .sheet(item: Bindable(app).editingEvent) { event in
-            NewEventSheet(event: event)
-        }
-        .sheet(isPresented: Bindable(app).isPresentingNewReminder) {
-            NewReminderSheet()
-        }
-        .sheet(item: Bindable(app).editingReminder) { reminder in
-            NewReminderSheet(reminder: reminder)
-        }
-        .sheet(item: Bindable(app).saveKind) { kind in
-            if let conversation = activeConversation {
-                SaveSheet(
-                    kind: kind,
-                    text: app.activeReply,
-                    project: conversation.project ?? openProject,
-                    conversation: conversation
-                )
+        .overlay {
+            SlateModalPresenter(modal: app.modal(in: .main), onDismiss: app.dismissModal) { modal in
+                modalContent(modal)
             }
         }
         .overlay(alignment: .bottom) {
-            if let toast = app.toast {
-                GlassEffectContainer {
-                    Text(toast)
-                        .font(.system(size: 12, weight: .medium))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .glassEffect(.regular, in: Capsule())
+            ZStack {
+                if let toast = app.toast {
+                    GlassEffectContainer {
+                        Text(toast)
+                            .font(.system(size: 12, weight: .medium))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .glassEffect(.regular, in: Capsule())
+                    }
+                    .padding(.bottom, 18)
+                    .transition(toastTransition)
                 }
-                .padding(.bottom, 18)
             }
+            .animation(toastAnimation, value: app.toast)
         }
     }
 
@@ -226,7 +210,7 @@ struct RootView: View {
                 HStack(spacing: 10) {
                     ProjectsLayoutControl(selection: Bindable(app).projectsLayout)
                     Button {
-                        app.isPresentingNewProject = true
+                        app.present(.newProject)
                     } label: {
                         Label("New Project", systemImage: "plus")
                             .padding(.horizontal, 10)
@@ -354,7 +338,7 @@ struct RootView: View {
             await app.eventKit.requestEventsAccess()
         }
         if app.eventKit.canWriteEvents {
-            app.isPresentingNewEvent = true
+            app.present(.newEvent)
         } else {
             app.eventKit.openSettings(for: .event)
         }
@@ -365,7 +349,7 @@ struct RootView: View {
             await app.eventKit.requestRemindersAccess()
         }
         if app.eventKit.canWriteReminders {
-            app.isPresentingNewReminder = true
+            app.present(.newReminder)
         } else {
             app.eventKit.openSettings(for: .reminder)
         }
@@ -428,6 +412,56 @@ struct RootView: View {
     private var activeConversation: Conversation? {
         guard let id = app.chatConversationID else { return nil }
         return conversations.first { $0.id == id }
+    }
+
+    private var toastAnimation: Animation {
+        if reduceMotion { return Motion.quick }
+        return app.toast == nil ? Motion.quick : Motion.snappy
+    }
+
+    private var toastTransition: AnyTransition {
+        if reduceMotion { return .opacity }
+        return .asymmetric(
+            insertion: .opacity.combined(with: .offset(y: 6)),
+            removal: .opacity
+        )
+    }
+
+    @ViewBuilder
+    private func modalContent(_ modal: AppModal) -> some View {
+        switch modal {
+        case .newProject:
+            NewProjectSheet()
+        case .newEvent:
+            NewEventSheet()
+        case .editEvent(let event):
+            NewEventSheet(event: event)
+        case .newReminder:
+            NewReminderSheet()
+        case .editReminder(let reminder):
+            NewReminderSheet(reminder: reminder)
+        case .save(let kind):
+            if let conversation = activeConversation {
+                SaveSheet(
+                    kind: kind,
+                    text: app.activeReply,
+                    project: conversation.project ?? openProject,
+                    conversation: conversation
+                )
+            }
+        case .connectCursor:
+            ConnectCursorSheet()
+        case .editProject(let project):
+            EditProjectModal(project: project)
+        case .editConversation(let conversation):
+            EditConversationModal(conversation: conversation)
+        case .editThread(let thread):
+            EditThreadModal(thread: thread)
+        case .editDecision(let decision):
+            EditDecisionModal(decision: decision)
+        case .editNote(let note):
+            EditNoteModal(note: note)
+        }
     }
 
     @ViewBuilder

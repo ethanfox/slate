@@ -19,7 +19,7 @@ struct SlateApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Project") {
-                    app.isPresentingNewProject = true
+                    app.present(.newProject)
                 }
                 .keyboardShortcut("n")
             }
@@ -38,7 +38,17 @@ struct SlateApp: App {
                 .preferredColorScheme(app.appearance.colorScheme)
                 .modelContainer(app.container)
                 .textSelection(.enabled)
-                .frame(width: 560, height: 640)
+                .frame(minWidth: 820, minHeight: 680)
+                .environment(\.modalHost, .settings)
+                .overlay {
+                    SlateModalPresenter(modal: app.modal(in: .settings), onDismiss: app.dismissModal) { modal in
+                        if case .connectCursor = modal {
+                            ConnectCursorSheet()
+                        }
+                    }
+                    .environment(app)
+                }
         }
+        .defaultSize(width: 860, height: 720)
     }
 }

@@ -9,6 +9,7 @@ struct ThreadBranch: View {
     var onSelect: (UUID) -> Void
     var onCreateChild: (ProjectThread) -> Void
     var onDelete: (ProjectThread) -> Void
+    @Environment(AppModel.self) private var app
     @Environment(\.appearsActive) private var appearsActive
     @State private var hovering = false
 
@@ -57,17 +58,34 @@ struct ThreadBranch: View {
                     Spacer(minLength: 0)
                 }
                 .frame(height: 28)
-                .background(
+                .background {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isSelected ? CraftColor.selection : (hovering ? CraftColor.hover : Color.clear))
-                )
+                        .fill(isSelected ? CraftColor.selection : Color.clear)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(!isSelected && hovering ? CraftColor.hover : Color.clear)
+                        .animation(Motion.hover, value: hovering)
+                }
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
             .onHover { hovering = $0 }
             .contextMenu {
-                Button("New Sub-track") { onCreateChild(thread) }
-                Button("Delete", role: .destructive) { onDelete(thread) }
+                Button {
+                    app.present(.editThread(thread))
+                } label: {
+                    Label("Edit…", systemImage: "pencil")
+                }
+                Button {
+                    onCreateChild(thread)
+                } label: {
+                    Label("New Sub-track", systemImage: "plus")
+                }
+                Divider()
+                Button(role: .destructive) {
+                    onDelete(thread)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
             }
         }
         .padding(.leading, CGFloat(depth) * 14 + 2)

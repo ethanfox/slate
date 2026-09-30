@@ -3,13 +3,14 @@ import SwiftUI
 
 struct ConnectCursorSheet: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modalDismiss) private var modalDismiss
+    @FocusState private var focusKey: Bool
 
     @State private var key = ""
     @State private var error: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Connect to Cursor")
                 .font(CraftFont.title)
             Text("Create an API key in the Cursor dashboard, then paste it here. It’s stored in your keychain.")
@@ -19,31 +20,25 @@ struct ConnectCursorSheet: View {
             Button("Open Cursor Dashboard") {
                 NSWorkspace.shared.open(URL(string: "https://cursor.com/dashboard/integrations")!)
             }
-            SecureField("API key", text: $key)
-                .textFieldStyle(.plain)
-                .font(CraftFont.body)
-                .padding(10)
-                .background(CraftColor.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(CraftColor.hairline))
-                .onSubmit(addKey)
+            ModalField("API key") {
+                SecureField("API key", text: $key)
+                    .textFieldStyle(.plain)
+                    .focused($focusKey)
+                    .onSubmit(addKey)
+            }
             if let error {
                 Text(error)
                     .font(.system(size: 12))
                     .foregroundStyle(.red)
             }
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Add Key", action: addKey)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding(.top, 8)
+            ModalFooter(actionTitle: "Add Key", actionEnabled: canAdd, action: addKey)
         }
         .textSelection(.enabled)
-        .padding(20)
-        .frame(width: 440)
+        .onAppear { focusKey = true }
+    }
+
+    private var canAdd: Bool {
+        !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func addKey() {
@@ -51,7 +46,7 @@ struct ConnectCursorSheet: View {
         guard !trimmed.isEmpty else { return }
         do {
             try app.saveAPIKey(trimmed)
-            dismiss()
+            modalDismiss()
         } catch {
             self.error = error.localizedDescription
         }

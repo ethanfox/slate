@@ -49,6 +49,7 @@ struct ConversationChat: View {
             if app.hasAPIKey, app.models.isEmpty, app.connection != .checking {
                 app.refreshConnection()
             }
+            app.refreshUsage()
         }
         .onDisappear {
             if app.chatConversationID == conversation.id {
@@ -67,6 +68,9 @@ struct ConversationChat: View {
                 HStack {
                     ModelPicker(selection: Bindable(conversation).model)
                     Spacer(minLength: 8)
+                    if let usage = app.usage {
+                        UsageLine(usage: usage)
+                    }
                 }
                 ChatComposerField(session: session)
                 if !bridge.changes.isEmpty {
@@ -152,6 +156,27 @@ struct ConversationChat: View {
     }
 }
 
+private struct UsageLine: View {
+    var usage: CursorUsage
+
+    var body: some View {
+        Label {
+            Text(text)
+        } icon: {
+            Image(systemName: "gauge.with.dots.needle.33percent")
+        }
+        .font(CraftFont.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .truncationMode(.tail)
+    }
+
+    private var text: String {
+        if usage.isUnlimited { return "Unlimited usage" }
+        return "Cursor Models: \(CursorUsage.percent(usage.cursorModels)) used · Other Models: \(CursorUsage.percent(usage.otherModels)) used"
+    }
+}
+
 private struct ChatLayout {
     var pagePadding: CGFloat
     var pageMaxWidth: CGFloat
@@ -176,6 +201,7 @@ extension EnvironmentValues {
 private struct ConversationTimeline: View {
     @ObservedObject var session: ChatSession
     @Environment(\.chatLayout) private var layout
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -184,6 +210,22 @@ private struct ConversationTimeline: View {
                     ForEach(session.entries, id: \.id) { entry in
                         row(entry)
                             .id(entry.id)
+                    }
+                    if let live = liveOrb {
+                        HStack(spacing: 10) {
+                            ChatOrb(
+                                state: live.state,
+                                palette: app.orbPalette,
+                                status: live.status,
+                                size: 28,
+                                showsStatus: false
+                            )
+                            Text(live.status)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        .id("orb")
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
@@ -199,6 +241,9 @@ private struct ConversationTimeline: View {
             .onChange(of: lastReply) { _, _ in
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
+            .onChange(of: session.isGenerating) { _, generating in
+                if generating { proxy.scrollTo("bottom", anchor: .bottom) }
+            }
         }
     }
 
@@ -208,32 +253,34 @@ private struct ConversationTimeline: View {
         case .userMessage(let message):
             UserMessageBubble(message: message)
         case .aiMessage(let message):
-            AssistantMessageBlock(message: message)
-        case .reasoning(let reasoning):
-            Button {
-                if !reasoning.isThinking {
-                    session.toggleThinking(id: reasoning.id)
-                }
-            } label: {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(
-                        reasoning.isThinking ? "Thinking…" : "Reasoning",
-                        systemImage: reasoning.isThinking ? "ellipsis" : "brain"
-                    )
-                    .font(CraftFont.body)
-                    .foregroundStyle(.secondary)
-                    if reasoning.isExpanded, !reasoning.text.isEmpty {
-                        Text(reasoning.text)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(12)
-                .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
-                .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            if message.text.isEmpty, message.isStreaming {
+                EmptyView()
+            } else {
+                AssistantMessageBlock(message: message)
             }
-            .buttonStyle(.plain)
-            .disabled(reasoning.isThinking)
+        case .reasoning(let reasoning):
+            if reasoning.isThinking {
+                EmptyView()
+            } else {
+                Button {
+                    session.toggleThinking(id: reasoning.id)
+                } label: {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Reasoning", systemImage: "brain")
+                            .font(CraftFont.body)
+                            .foregroundStyle(.secondary)
+                        if reasoning.isExpanded, !reasoning.text.isEmpty {
+                            Text(reasoning.text)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(12)
+                    .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
+                    .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
         case .toolCall(let tool):
             VStack(alignment: .leading, spacing: 4) {
                 Text(tool.name)
@@ -270,9 +317,13 @@ private struct ConversationTimeline: View {
             }
             .buttonStyle(.plain)
         case .activity(let activity):
-            Text(activity.text)
-                .font(.system(size: 12))
-                .foregroundStyle(activity.isError ? Color.primary : Color.secondary)
+            if activity.isError {
+                Text(activity.text)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.primary)
+            } else {
+                EmptyView()
+            }
         }
     }
 
@@ -281,6 +332,28 @@ private struct ConversationTimeline: View {
             if case .aiMessage(let reply) = entry { return reply.text }
         }
         return ""
+    }
+
+    private var liveOrb: (state: OrbState, status: String)? {
+        guard session.isGenerating else { return nil }
+        for entry in session.entries.reversed() {
+            switch entry {
+            case .reasoning(let reasoning) where reasoning.isThinking:
+                return (.thinking, OrbState.thinking.status)
+            case .toolCall(let tool) where tool.status == .running:
+                return (.working, tool.name.isEmpty ? OrbState.working.status : tool.name)
+            case .activity(let activity) where !activity.isError:
+                return (.working, activity.text.isEmpty ? OrbState.working.status : activity.text)
+            case .aiMessage(let message) where message.isStreaming:
+                if message.text.isEmpty {
+                    return (.thinking, OrbState.thinking.status)
+                }
+                return (.streaming, OrbState.streaming.status)
+            default:
+                continue
+            }
+        }
+        return (.thinking, OrbState.thinking.status)
     }
 
     private func toolStatus(_ status: ChatSession.ToolCallEntry.Status) -> String {
@@ -345,7 +418,7 @@ private struct AssistantMessageBlock: View {
                 .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                SelectableText(text: message.text, markdown: true)
+                AssistantMarkdown(text: message.text)
                     .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
                 if !message.text.isEmpty {
                     MessageActionRow {
@@ -373,7 +446,7 @@ private struct AssistantMessageBlock: View {
 
     private func save(_ kind: SaveKind) {
         app.activeReply = message.text
-        app.saveKind = kind
+        app.present(.save(kind))
     }
 }
 

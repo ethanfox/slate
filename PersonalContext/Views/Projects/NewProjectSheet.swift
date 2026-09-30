@@ -4,7 +4,8 @@ import SwiftUI
 struct NewProjectSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modalDismiss) private var modalDismiss
+    @FocusState private var focusName: Bool
 
     @State private var name = ""
     @State private var symbol = "folder"
@@ -15,45 +16,29 @@ struct NewProjectSheet: View {
             Text("New Project")
                 .font(CraftFont.title)
 
-            field("Name") {
+            ModalField("Name") {
                 TextField("Article One", text: $name)
                     .textFieldStyle(.plain)
+                    .focused($focusName)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Icon")
-                    .font(CraftFont.section)
+            ModalField("Icon", boxed: false) {
                 SymbolPicker(selection: $symbol)
             }
 
-            field("Description") {
+            ModalField("Description") {
                 TextField("What this project is", text: $summary, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .lineLimit(3...)
+                    .lineLimit(3...6)
             }
 
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create") { create() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
+            ModalFooter(actionTitle: "Create", actionEnabled: canCreate, action: create)
         }
-        .padding(20)
-        .frame(width: 440)
+        .onAppear { focusName = true }
     }
 
-    private func field<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(CraftFont.section)
-            content()
-                .padding(10)
-                .background(CraftColor.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(CraftColor.hairline))
-        }
+    private var canCreate: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func create() {
@@ -63,6 +48,6 @@ struct NewProjectSheet: View {
         context.insert(project)
         try? context.save()
         app.open(project, tab: .overview)
-        dismiss()
+        modalDismiss()
     }
 }
