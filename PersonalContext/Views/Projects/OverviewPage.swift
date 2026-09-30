@@ -128,6 +128,8 @@ struct OverviewPage: View {
                     }
                 }
 
+                AgendaLinkedSection(items: AgendaStore.items(in: project))
+
                 if !recentChats.isEmpty {
                     DocumentSection("Recent chats") {
                         ForEach(recentChats) { conversation in

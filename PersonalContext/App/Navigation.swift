@@ -70,6 +70,7 @@ enum ProjectSort: String, CaseIterable, Identifiable, Hashable {
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     case cursor
     case calendar
+    case tags
     case appearance
     case orb
     case developer
@@ -80,6 +81,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .cursor: "Cursor"
         case .calendar: "Calendar"
+        case .tags: "Tags"
         case .appearance: "Appearance"
         case .orb: "Orb"
         case .developer: "Developer"
@@ -90,6 +92,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .cursor: "sparkle"
         case .calendar: "calendar"
+        case .tags: "tag"
         case .appearance: "circle.lefthalf.filled"
         case .orb: "circle.circle"
         case .developer: "hammer"
@@ -117,6 +120,72 @@ enum AppearancePreference: String, CaseIterable, Identifiable, Hashable {
         case .system: nil
         case .light: .light
         case .dark: .dark
+        }
+    }
+}
+
+enum AccentPreference: String, CaseIterable, Identifiable, Hashable {
+    case system
+    case blue
+    case purple
+    case pink
+    case red
+    case orange
+    case yellow
+    case green
+    case graphite
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: "System"
+        case .blue: "Blue"
+        case .purple: "Purple"
+        case .pink: "Pink"
+        case .red: "Red"
+        case .orange: "Orange"
+        case .yellow: "Yellow"
+        case .green: "Green"
+        case .graphite: "Graphite"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .system: Color(nsColor: .controlAccentColor)
+        case .blue: Color(red: 0, green: 0.478, blue: 1)
+        case .purple: Color(red: 0.686, green: 0.322, blue: 0.871)
+        case .pink: Color(red: 1, green: 0.176, blue: 0.333)
+        case .red: Color(red: 1, green: 0.231, blue: 0.188)
+        case .orange: Color(red: 1, green: 0.584, blue: 0)
+        case .yellow: Color(red: 1, green: 0.8, blue: 0)
+        case .green: Color(red: 0.157, green: 0.804, blue: 0.255)
+        case .graphite: Color(red: 0.557, green: 0.557, blue: 0.576)
+        }
+    }
+}
+
+enum AccentedView: String, CaseIterable, Identifiable, Hashable {
+    case calendar
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .calendar: "Calendar"
+        }
+    }
+
+    var defaultLabel: String {
+        switch self {
+        case .calendar: "Off keeps the header and today marker red"
+        }
+    }
+
+    var defaultColor: Color {
+        switch self {
+        case .calendar: AccentPreference.red.color
         }
     }
 }

@@ -160,7 +160,7 @@ Threads, notes, and decisions are a source list on the solid page, not a second 
 A page whose job is “what is happening now” may open with one display header. Today that is Calendar. Home may adopt it later. Lists, settings, and documents never do.
 
 - The header is the answer, not decoration: the day, the number, the state.
-- Leading: the primary word in `CraftFont.display` (34 semibold), followed by a 7pt circle in the system accent, baseline-aligned to the word, 4 after it. Example: “Wed.” then the dot.
+- Leading: the primary word in `CraftFont.display` (34 bold), followed by a 7pt circle, baseline-aligned to the word, 4 after it. The dot is the period. Example: “Wed” then the dot. Calendar uses red unless Settings → Appearance → Use accent → Calendar is on.
 - Trailing: the supporting figure in 34 regular, tertiary, monospaced digits. Example: “30”.
 - 4 below it: a caption line, 13 secondary (“September 2026”).
 - 24 below the header, the page’s first control or section.
@@ -184,7 +184,7 @@ San Francisco. One family. System text styles, these sizes only:
 
 | Role | Size | Weight |
 | --- | --- | --- |
-| Hero header (`CraftFont.display`) | 34 | semibold (word) / regular (figure) |
+| Hero header (`CraftFont.display`) | 34 | bold (word) / regular (figure) |
 | Page title | 20 | semibold |
 | Summary card title, document body | 15 | medium / regular |
 | Week-strip day number (`CraftFont.dayNumber`) | 15 | medium, monospaced digits |
@@ -192,6 +192,7 @@ San Francisco. One family. System text styles, these sizes only:
 | Body, row, sidebar | 13 | regular |
 | Row title when it needs emphasis | 13 | medium |
 | Subtitle | 12 | regular |
+| Calendar event block title | 12 | medium |
 | Caption, section hint, meta | 11 | regular |
 | Sidebar icon | 14 | regular |
 
@@ -201,7 +202,7 @@ Primary text is label primary. Supporting text is secondary. Hints and meta are 
 
 ## Color
 
-Semantic colors only. The accent is the system accent (the user’s), used for the primary action, keyboard focus, a selected control that is not a list row, the hero dot, today’s number, and the calendar now-line. List selection is a neutral fill, not the accent. A settings row, a sidebar row, and a document do not each get their own color.
+Semantic colors only. The accent is the user’s choice in Settings → Appearance (System follows the Mac, or a standard Apple accent). It is used for the primary action, keyboard focus, a selected control that is not a list row, the hero dot, today’s number, and the calendar now-line. List selection is a neutral fill, not the accent. A settings row, a sidebar row, and a document do not each get their own color.
 
 Neutrals, sRGB:
 
@@ -217,13 +218,13 @@ Neutrals, sRGB:
 
 ### Data color
 
-Data color is color that carries information the user already assigned elsewhere. Today the only data color is the calendar tint (`CalendarTint.color`, from EventKit).
+Data color is color that carries information the user already assigned elsewhere. Today the only data color is the calendar tint (`CalendarTint.color`, from EventKit, overridable in Settings → Calendar).
 
 - Allowed as: a 3pt leading bar, a 12% fill behind an event block, a 5pt dot in the week strip.
 - Text on a tinted fill stays primary / secondary. Do not color text with the tint.
 - Nothing else in the app gets decorative color.
 
-Appearance is System, Light, or Dark, and it is the only theme switch. No custom theme previews, no accent-dot row, until those settings actually change something.
+Appearance is System, Light, or Dark. Accent is System (the Mac’s control accent) or one of the standard Apple accents, set in Settings → Appearance. The accent drives the primary action, keyboard focus, the hero dot, today’s number, and the calendar now-line.
 
 ## Controls
 
@@ -272,7 +273,8 @@ Layout inside the panel:
 - 16 below the title, the fields. Each field is a label (13 semibold) and 8 below it the control. 16 between fields.
 - Fields use the elevated solid fill, radius 8, padding 10, hairline border, per Controls. The glass shows only around the fields, never through them.
 - Pickers and toggles in a modal sit on a row: label leading, system control trailing, 28 tall.
-- Footer, 20 below the last field: Cancel (plain, leading) and the primary action (system `.borderedProminent`, trailing). The one exception to “no destructive in a modal”: editing an existing event or reminder may show Delete after Cancel, because EventKit items have no context menu. It still confirms.
+- Footer, 20 below the last field: a full-width capsule primary (40 tall, 15 medium, accent fill), then Cancel as a 40-tall elevated capsule. The one exception to “no destructive in a modal”: editing an existing event or reminder may show Delete beside Cancel, because EventKit items have no context menu. It still confirms.
+- Event and reminder modals surface parsed actions above the footer: Join meeting (from the item URL, notes, or location) and Open location (Maps, when the location is a place). Each action is a 40-tall row with a trailing arrow.
 
 Behavior:
 
@@ -328,9 +330,9 @@ The calendar is a hero view. Its job: show what today (or the chosen day) looks 
 
 Top to bottom, inside the page inset:
 
-1. **Hero header.** “Wed.” plus the accent dot, with “30” trailing, and the caption “September 2026”. This describes the selected day, not always today.
+1. **Hero header.** “Wed” plus the accent dot (the period), with “30” trailing, and the caption “September 2026”. This describes the selected day, not always today.
 2. **Week strip**, 24 below. One row, seven days, full inset width.
-   - Leading: chevron-left, chevron-right (28×28 plain buttons, secondary). Trailing: a “Today” glass capsule, shown only when the selected day is not today.
+   - Leading: chevron-left, chevron-right (28×28 plain buttons, secondary). Trailing: a “Today” capsule (elevated fill, hairline, padding 10 / 6, label 13; not glass, because it sits in the scroll view), visible only when the selected day is not today. Its space is reserved so the strip does not shift.
    - Each day cell is equal width, 56 tall: the weekday (11 secondary, “Wed”), then the day number (`CraftFont.dayNumber`), then a row of up to 3 tint dots (5pt, 3 apart), one per distinct calendar with an event that day.
    - Today’s number is the accent color. The selected day sits on a `CraftColor.selection` pill, radius 10, which slides between cells (`matchedGeometryEffect`, `Motion.snappy`). Hover on an unselected cell uses the hover fill with `Motion.hover`.
    - The chevrons page by week. The strip content pushes in from the matching edge (`Motion.smooth`). Paging keeps the same weekday selected.

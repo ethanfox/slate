@@ -77,7 +77,7 @@ private struct HoverTooltip: ViewModifier {
 }
 
 enum CraftFont {
-    static let display = Font.system(size: 34, weight: .semibold)
+    static let display = Font.system(size: 34, weight: .bold)
     static let dayNumber = Font.system(size: 15, weight: .medium).monospacedDigit()
     static let sidebar = Font.system(size: 13)
     static let sidebarIcon = Font.system(size: 14)

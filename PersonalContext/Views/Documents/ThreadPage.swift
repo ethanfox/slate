@@ -48,12 +48,17 @@ struct ThreadPage: View {
                         Button(candidate.title.isEmpty ? "Untitled" : candidate.title) { thread.parent = candidate; touch() }
                     }
                 }
+                TagField(tags: thread.tags) { thread.tags = $0; touch() }
                 linked
             }
             .padding(.top, 8)
 
             MarkdownEditor(text: $thread.body, minHeight: 360)
                 .padding(.top, 16)
+
+            AgendaLinkedSection(items: AgendaStore.items(on: thread, includingChildren: true)) { item in
+                item.liveTracks.first { $0.id != thread.id }?.title
+            }
 
             if !thread.children.isEmpty {
                 DocumentSection("Sub-tracks") {

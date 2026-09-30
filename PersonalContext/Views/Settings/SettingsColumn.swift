@@ -11,6 +11,7 @@ struct SettingsColumn: View {
                     row(.cursor)
                     section("Workspace")
                     row(.calendar)
+                    row(.tags)
                     row(.appearance)
                     section("Chat")
                     row(.orb)

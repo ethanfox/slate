@@ -12,7 +12,11 @@ enum Store {
         Note.self,
         Decision.self,
         Conversation.self,
-        ChatMessage.self
+        ChatMessage.self,
+        Tag.self,
+        AgendaItem.self,
+        AgendaTrackLink.self,
+        AgendaNoteLink.self
     ])
 
     static var configuration: ModelConfiguration {

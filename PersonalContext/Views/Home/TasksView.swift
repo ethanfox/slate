@@ -160,6 +160,12 @@ private struct ReminderRow: View {
                         .strikethrough(item.isCompleted)
                         .foregroundStyle(item.isCompleted ? .tertiary : .primary)
                         .lineLimit(1)
+                    if !item.notes.isEmpty {
+                        Text(item.notes)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
                     if let due = item.due {
                         Text(dueLabel(due))
                             .font(.system(size: 12))

@@ -32,6 +32,7 @@ struct DecisionPage: View {
                         Button(thread.title.isEmpty ? "Untitled" : thread.title) { decision.thread = thread; project.touch() }
                     }
                 }
+                TagField(tags: decision.tags) { decision.tags = $0; project.touch() }
                 Spacer()
                 Text(decision.createdAt.formatted(date: .abbreviated, time: .omitted))
                     .font(CraftFont.caption)

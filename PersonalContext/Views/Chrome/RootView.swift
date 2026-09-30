@@ -438,6 +438,8 @@ struct RootView: View {
             NewEventSheet(event: event)
         case .newReminder:
             NewReminderSheet()
+        case .newReminderFromNote(let note):
+            NewReminderSheet(sourceNote: note)
         case .editReminder(let reminder):
             NewReminderSheet(reminder: reminder)
         case .save(let kind):

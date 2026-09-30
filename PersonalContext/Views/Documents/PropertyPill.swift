@@ -24,6 +24,7 @@ struct PropertyPill<Content: View>: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
+        .tint(.secondary)
         .fixedSize()
         .onHover { hovering = $0 }
     }

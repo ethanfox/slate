@@ -36,6 +36,12 @@ final class AppModel {
     var appearance: AppearancePreference {
         didSet { defaults.set(appearance.rawValue, forKey: Keys.appearance) }
     }
+    var accent: AccentPreference {
+        didSet { defaults.set(accent.rawValue, forKey: Keys.accent) }
+    }
+    var accentedViews: Set<String> {
+        didSet { defaults.set(Array(accentedViews), forKey: Keys.accentedViews) }
+    }
     var defaultModelID: String {
         didSet { defaults.set(defaultModelID, forKey: Keys.defaultModel) }
     }
@@ -83,6 +89,22 @@ final class AppModel {
         }
     }
 
+    func usesAccent(_ view: AccentedView) -> Bool {
+        accentedViews.contains(view.rawValue)
+    }
+
+    func setUsesAccent(_ view: AccentedView, enabled: Bool) {
+        if enabled {
+            accentedViews.insert(view.rawValue)
+        } else {
+            accentedViews.remove(view.rawValue)
+        }
+    }
+
+    func accent(for view: AccentedView) -> Color {
+        usesAccent(view) ? accent.color : view.defaultColor
+    }
+
     private(set) var apiKey: String?
     private(set) var connection: ConnectionState = .missing
     private(set) var models: [CursorModel] = []
@@ -99,6 +121,8 @@ final class AppModel {
 
     init() {
         appearance = AppearancePreference(rawValue: UserDefaults.standard.string(forKey: Keys.appearance) ?? "") ?? .system
+        accent = AccentPreference(rawValue: UserDefaults.standard.string(forKey: Keys.accent) ?? "") ?? .system
+        accentedViews = Set(UserDefaults.standard.stringArray(forKey: Keys.accentedViews) ?? [])
         defaultModelID = UserDefaults.standard.string(forKey: Keys.defaultModel) ?? ""
         showAgentIDs = UserDefaults.standard.bool(forKey: Keys.showAgentIDs)
         let storedLayout = UserDefaults.standard.string(forKey: Keys.projectsLayout) ?? ""
@@ -325,6 +349,8 @@ enum SaveKind: String, Identifiable {
 
 private enum Keys {
     static let appearance = "appearance"
+    static let accent = "accent"
+    static let accentedViews = "accentedViews"
     static let defaultModel = "defaultModelID"
     static let showAgentIDs = "showAgentIDs"
     static let projectsLayout = "projectsLayout"

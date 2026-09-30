@@ -26,6 +26,8 @@ struct SettingsView: View {
             SettingsCursorPage()
         case .calendar:
             SettingsCalendarPage()
+        case .tags:
+            SettingsTagsPage()
         case .appearance:
             SettingsAppearancePage()
         case .orb:

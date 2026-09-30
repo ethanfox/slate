@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1B2C3D4E5F60718293A0002 /* AssociationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0001 /* AssociationService.swift */; };
+		A1B2C3D4E5F60718293A0004 /* TagField.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0003 /* TagField.swift */; };
+		A1B2C3D4E5F60718293A0006 /* AssociationFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0005 /* AssociationFields.swift */; };
+		A1B2C3D4E5F60718293A0008 /* AgendaLinkedSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0007 /* AgendaLinkedSection.swift */; };
+		A1B2C3D4E5F60718293A000A /* SettingsTagsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0009 /* SettingsTagsPage.swift */; };
 		05BA026B4AF137407DFFBB70 /* ColorHex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A843C76D621958EDA8D94D61 /* ColorHex.swift */; };
 		06A4B5A5812EFA0E120BAFC9 /* DocumentSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591D54A725FC8665EAB3A680 /* DocumentSection.swift */; };
 		08E6C08EE6ADDD3911650B76 /* Hairline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35658CC3CC77FE7EF9839CD9 /* Hairline.swift */; };
@@ -48,6 +53,7 @@
 		79975CBF26B1098293BC82C0 /* EditRecordModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3FA7A23D2010D975AB8C6D /* EditRecordModal.swift */; };
 		7D9F8C63712BBB12934A5FDE /* Records.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0C540C9CE3A784CC7E9EBD1 /* Records.swift */; };
 		83B3538C787ACDDD267EF567 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = D287C789B72E1A5CE8DC14AA /* Store.swift */; };
+		88D51B6E75045B1424C83192 /* CalendarParts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 336663AE5AC294B2BA0386CC /* CalendarParts.swift */; };
 		8E104282BF89B60E38AB01B8 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 855CC522E2C68F2262E913DC /* MarkdownUI */; };
 		8EF3176206A8C89215961D73 /* LiquidOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B1DE9ED0526412EC9393D2 /* LiquidOrb.swift */; };
 		8F74E8CF9CC8040D5B9F908F /* SaveSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ECF851614787529168C56C0 /* SaveSheet.swift */; };
@@ -66,6 +72,7 @@
 		AC10C7614F71D4616792DB13 /* CursorClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC770F3F4A6E9C65A13777F6 /* CursorClient.swift */; };
 		AD8746C5C6F6267B6E861E22 /* NotePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB3545DC169370BDB82CFAEB /* NotePage.swift */; };
 		B0D7C8F6F5979088E5D54CC8 /* ThreadChatPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6150FF3E36C1B80F324ADC3 /* ThreadChatPane.swift */; };
+		B2DC30A188D80F7277CE30E1 /* ModalDatePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5FFBDB290AFF05316BF8B75 /* ModalDatePicker.swift */; };
 		B80064D74D797D90F7831E9F /* SettingsCalendarPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B53F847FAC96205C323B63B7 /* SettingsCalendarPage.swift */; };
 		B82FC40282ED31CF898CD9B1 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A5537B9B75008C51A4CCB08 /* HomeView.swift */; };
 		B9385874EAADC357F8D54E22 /* SidebarRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A2E39623063207485C60C1 /* SidebarRow.swift */; };
@@ -126,6 +133,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A1B2C3D4E5F60718293A0001 /* AssociationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssociationService.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0003 /* TagField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagField.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0005 /* AssociationFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssociationFields.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0007 /* AgendaLinkedSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaLinkedSection.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0009 /* SettingsTagsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTagsPage.swift; sourceTree = "<group>"; };
 		00DB08B2B0C6ACC8AEA864AE /* FocusDismissal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusDismissal.swift; sourceTree = "<group>"; };
 		022EAD2D997C0A29F21400CA /* SettingsChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsChrome.swift; sourceTree = "<group>"; };
 		06566D4B5F0858C10300294C /* MarkdownPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownPreview.swift; sourceTree = "<group>"; };
@@ -140,6 +152,7 @@
 		2B4F19BD6D45E8CB70440A62 /* SettingsAppearancePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsAppearancePage.swift; sourceTree = "<group>"; };
 		2F537EBD24BAA7ACDCB5E193 /* ConversationChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationChat.swift; sourceTree = "<group>"; };
 		321A7F2216EB9AE585A3B8E3 /* SelectableText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectableText.swift; sourceTree = "<group>"; };
+		336663AE5AC294B2BA0386CC /* CalendarParts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarParts.swift; sourceTree = "<group>"; };
 		35658CC3CC77FE7EF9839CD9 /* Hairline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hairline.swift; sourceTree = "<group>"; };
 		36EED727D15FC7D4FD4574F7 /* TextFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextFormat.swift; sourceTree = "<group>"; };
 		375909AB0149768B4CB292E2 /* LiquidOrbMetalB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidOrbMetalB.swift; sourceTree = "<group>"; };
@@ -187,6 +200,7 @@
 		B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectColumn.swift; sourceTree = "<group>"; };
 		B530330434B899D87B7F9D1D /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 		B53F847FAC96205C323B63B7 /* SettingsCalendarPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCalendarPage.swift; sourceTree = "<group>"; };
+		B5FFBDB290AFF05316BF8B75 /* ModalDatePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalDatePicker.swift; sourceTree = "<group>"; };
 		B8E5D3661B12BD18C62A9BCC /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
 		B9A9F7069A0AFF20858380A3 /* ProjectComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectComposer.swift; sourceTree = "<group>"; };
 		C15F7AD6019E54818996ACF5 /* ProjectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectView.swift; sourceTree = "<group>"; };
@@ -300,6 +314,7 @@
 		4B3B8F5DA586B19BDF2D85A6 /* Home */ = {
 			isa = PBXGroup;
 			children = (
+				336663AE5AC294B2BA0386CC /* CalendarParts.swift */,
 				B8E5D3661B12BD18C62A9BCC /* CalendarView.swift */,
 				1E58979D71F21F89355E97C7 /* EventKitAccessLine.swift */,
 				4A5537B9B75008C51A4CCB08 /* HomeView.swift */,
@@ -318,6 +333,7 @@
 				8C2027BAADC2942F395A23C9 /* CursorProvider.swift */,
 				82F6A6B950DCC61E7FC6A7CA /* CursorUsage.swift */,
 				A3145311DCFABD2A63DBE1A2 /* EventKitService.swift */,
+				A1B2C3D4E5F60718293A0001 /* AssociationService.swift */,
 				718061204D90BCFCD66D501C /* KeychainStore.swift */,
 			);
 			path = Services;
@@ -356,6 +372,9 @@
 				06566D4B5F0858C10300294C /* MarkdownPreview.swift */,
 				AB3545DC169370BDB82CFAEB /* NotePage.swift */,
 				85B462CAB65E38C9331F5F12 /* PropertyPill.swift */,
+				A1B2C3D4E5F60718293A0003 /* TagField.swift */,
+				A1B2C3D4E5F60718293A0005 /* AssociationFields.swift */,
+				A1B2C3D4E5F60718293A0007 /* AgendaLinkedSection.swift */,
 				1129E66453242DE81FC7B81C /* ThreadBranch.swift */,
 				E3D0C1F706C485B4A9186664 /* ThreadKindStyle.swift */,
 				1217433213208694A4C64DB4 /* ThreadPage.swift */,
@@ -370,6 +389,7 @@
 				AD3FA7A23D2010D975AB8C6D /* EditRecordModal.swift */,
 				1CD7C7DFD28E72C0A9D4AA41 /* EmptyLine.swift */,
 				35658CC3CC77FE7EF9839CD9 /* Hairline.swift */,
+				B5FFBDB290AFF05316BF8B75 /* ModalDatePicker.swift */,
 				37724CB7BB30F472C170A449 /* ModelToolbarPicker.swift */,
 				D53518E43DC2D88BE7C55855 /* ProjectHost.swift */,
 				420D87C639AC3397CA1531FC /* QuickAskHost.swift */,
@@ -425,6 +445,7 @@
 				F95931057DAA72031D16DD3F /* SettingsColumn.swift */,
 				3F3CB7A7C440980D6F3F0544 /* SettingsCursorPage.swift */,
 				4A07E5F475297DE983C9EAB1 /* SettingsDeveloperPage.swift */,
+				A1B2C3D4E5F60718293A0009 /* SettingsTagsPage.swift */,
 				D2F383ABB4798F3AF6233DD5 /* SettingsOrbPage.swift */,
 				981A8176BD67C17EDF603DF6 /* SettingsView.swift */,
 			);
@@ -599,8 +620,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B2C3D4E5F60718293A0002 /* AssociationService.swift in Sources */,
+				A1B2C3D4E5F60718293A0008 /* AgendaLinkedSection.swift in Sources */,
+				A1B2C3D4E5F60718293A0006 /* AssociationFields.swift in Sources */,
+				A1B2C3D4E5F60718293A000A /* SettingsTagsPage.swift in Sources */,
+				A1B2C3D4E5F60718293A0004 /* TagField.swift in Sources */,
 				C56C26ED6A7BBE605258380B /* AppModel.swift in Sources */,
 				5607183847AB410FD65F258B /* AssistantMarkdown.swift in Sources */,
+				88D51B6E75045B1424C83192 /* CalendarParts.swift in Sources */,
 				F046BF352BB1E7D19B30BFC8 /* CalendarView.swift in Sources */,
 				E99D818600469381A816BAE0 /* Canvas.swift in Sources */,
 				DFC9713CB6427F745B10E2ED /* ChatOrb.swift in Sources */,
@@ -631,6 +658,7 @@
 				A92F38125025957D0400CA53 /* LiquidOrbMetalB.swift in Sources */,
 				A4A4522BFB4968D289F08B89 /* MarkdownEditor.swift in Sources */,
 				C15E03F01C75AD79C5786145 /* MarkdownPreview.swift in Sources */,
+				B2DC30A188D80F7277CE30E1 /* ModalDatePicker.swift in Sources */,
 				CD57244DA64E916E273B1CDA /* ModelToolbarPicker.swift in Sources */,
 				37A3BBF0CF466D3A7765732D /* Motion.swift in Sources */,
 				50BF73C0F06B82FBE379A46A /* Navigation.swift in Sources */,

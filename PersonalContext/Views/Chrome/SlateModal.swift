@@ -6,6 +6,7 @@ enum AppModal: Identifiable {
     case newEvent
     case editEvent(CalendarEvent)
     case newReminder
+    case newReminderFromNote(Note)
     case editReminder(ReminderItem)
     case save(SaveKind)
     case connectCursor
@@ -21,6 +22,7 @@ enum AppModal: Identifiable {
         case .newEvent: "new-event"
         case .editEvent(let event): "edit-event-\(event.id)"
         case .newReminder: "new-reminder"
+        case .newReminderFromNote(let note): "new-reminder-note-\(note.id.uuidString)"
         case .editReminder(let reminder): "edit-reminder-\(reminder.id)"
         case .save(let kind): "save-\(kind.id)"
         case .connectCursor: "connect-cursor"
@@ -34,8 +36,15 @@ enum AppModal: Identifiable {
 
     var panelWidth: CGFloat {
         switch self {
-        case .newEvent, .editEvent: 520
+        case .newEvent, .editEvent, .newReminder, .newReminderFromNote, .editReminder: 520
         default: 440
+        }
+    }
+
+    var panelHeight: CGFloat? {
+        switch self {
+        case .newEvent, .editEvent: 640
+        default: nil
         }
     }
 }
@@ -161,20 +170,61 @@ struct ModalFooter<Leading: View>: View {
     @ViewBuilder var leading: () -> Leading
 
     @Environment(\.modalDismiss) private var modalDismiss
+    @Environment(AppModel.self) private var app
 
     var body: some View {
-        HStack {
-            Button("Cancel") { modalDismiss() }
-                .keyboardShortcut(.cancelAction)
-            leading()
-            Spacer()
+        VStack(spacing: 10) {
             Button(actionTitle, action: action)
                 .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 40)
+                .background(app.accent.color.opacity(actionEnabled ? 1 : 0.4), in: Capsule())
                 .disabled(!actionEnabled)
+
+            HStack(spacing: 10) {
+                Button("Cancel") { modalDismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .buttonStyle(.plain)
+                    .font(CraftFont.body)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                    .background(CraftColor.elevated, in: Capsule())
+                leading()
+            }
         }
-        // VStack spacing is 16; this makes the footer 20 below the last field.
         .padding(.top, 4)
+    }
+}
+
+struct ModalActionRow: View {
+    var title: String
+    var systemImage: String
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(CraftFont.body)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22)
+                Text(title)
+                    .font(CraftFont.body)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.up.right")
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 40)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

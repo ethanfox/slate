@@ -88,6 +88,9 @@ final class Project: Identifiable {
     @Relationship(deleteRule: .cascade, inverse: \Conversation.project)
     var conversations: [Conversation] = []
 
+    @Relationship(deleteRule: .nullify, inverse: \AgendaItem.project)
+    var agendaItems: [AgendaItem] = []
+
     var status: ProjectStatus {
         get { ProjectStatus(rawValue: statusRaw) ?? .active }
         set { statusRaw = newValue.rawValue }
@@ -154,6 +157,12 @@ final class ProjectThread {
     @Relationship(deleteRule: .nullify, inverse: \Conversation.thread)
     var conversations: [Conversation] = []
 
+    @Relationship(inverse: \Tag.threads)
+    var tags: [Tag] = []
+
+    @Relationship(deleteRule: .nullify, inverse: \AgendaTrackLink.thread)
+    var agendaTrackLinks: [AgendaTrackLink] = []
+
     var kind: ThreadKind {
         get { ThreadKind(rawValue: kindRaw) ?? .topic }
         set { kindRaw = newValue.rawValue }
@@ -205,6 +214,12 @@ final class Note {
     var project: Project?
     var thread: ProjectThread?
 
+    @Relationship(inverse: \Tag.notes)
+    var tags: [Tag] = []
+
+    @Relationship(deleteRule: .nullify, inverse: \AgendaNoteLink.note)
+    var agendaNoteLinks: [AgendaNoteLink] = []
+
     var displayTitle: String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Untitled" : trimmed
@@ -233,6 +248,9 @@ final class Decision {
     var createdAt: Date
     var project: Project?
     var thread: ProjectThread?
+
+    @Relationship(inverse: \Tag.decisions)
+    var tags: [Tag] = []
 
     var status: DecisionStatus {
         get { DecisionStatus(rawValue: statusRaw) ?? .active }
@@ -267,6 +285,9 @@ final class Conversation {
 
     @Relationship(deleteRule: .cascade, inverse: \ChatMessage.conversation)
     var messages: [ChatMessage] = []
+
+    @Relationship(inverse: \Tag.conversations)
+    var tags: [Tag] = []
 
     var orderedMessages: [ChatMessage] {
         messages.sorted { $0.createdAt < $1.createdAt }
@@ -305,5 +326,132 @@ final class ChatMessage {
         self.content = content
         self.cursorRunId = ""
         self.createdAt = .now
+    }
+}
+
+enum AgendaKind: String, Codable, CaseIterable, Identifiable, Hashable {
+    case reminder
+    case event
+    case task
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .reminder: "Reminder"
+        case .event: "Event"
+        case .task: "Task"
+        }
+    }
+}
+
+@Model
+final class Tag {
+    var id: UUID
+    var name: String
+    var symbol: String
+    var createdAt: Date
+
+    var threads: [ProjectThread] = []
+    var notes: [Note] = []
+    var decisions: [Decision] = []
+    var conversations: [Conversation] = []
+    var agendaItems: [AgendaItem] = []
+
+    var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled" : trimmed
+    }
+
+    init(name: String, symbol: String = "tag") {
+        self.id = UUID()
+        self.name = name
+        self.symbol = symbol
+        self.createdAt = .now
+    }
+}
+
+@Model
+final class AgendaItem {
+    var id: UUID
+    var kindRaw: String
+    var eventKitID: String
+    var title: String
+    var projectIsInherited: Bool
+    var createdAt: Date
+    var updatedAt: Date
+    var project: Project?
+
+    @Relationship(inverse: \Tag.agendaItems)
+    var tags: [Tag] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \AgendaTrackLink.item)
+    var trackLinks: [AgendaTrackLink] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \AgendaNoteLink.item)
+    var noteLinks: [AgendaNoteLink] = []
+
+    var kind: AgendaKind {
+        get { AgendaKind(rawValue: kindRaw) ?? .reminder }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    var displayTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled" : trimmed
+    }
+
+    var liveNotes: [Note] {
+        noteLinks.compactMap(\.note)
+    }
+
+    var liveTracks: [ProjectThread] {
+        trackLinks.compactMap(\.thread)
+    }
+
+    init(kind: AgendaKind, eventKitID: String, title: String) {
+        self.id = UUID()
+        self.kindRaw = kind.rawValue
+        self.eventKitID = eventKitID
+        self.title = title
+        self.projectIsInherited = false
+        self.createdAt = .now
+        self.updatedAt = .now
+    }
+
+    func touch() {
+        updatedAt = .now
+    }
+}
+
+@Model
+final class AgendaTrackLink {
+    var id: UUID
+    var threadID: UUID
+    var isInherited: Bool
+    var inheritedFromNoteID: UUID?
+    var thread: ProjectThread?
+    var item: AgendaItem?
+
+    init(thread: ProjectThread, inherited: Bool, fromNoteID: UUID? = nil) {
+        self.id = UUID()
+        self.threadID = thread.id
+        self.isInherited = inherited
+        self.inheritedFromNoteID = fromNoteID
+        self.thread = thread
+    }
+}
+
+@Model
+final class AgendaNoteLink {
+    var id: UUID
+    var noteID: UUID
+    var note: Note?
+    var item: AgendaItem?
+
+    init(note: Note) {
+        self.id = UUID()
+        self.noteID = note.id
+        self.note = note
     }
 }

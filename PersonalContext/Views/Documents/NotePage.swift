@@ -15,6 +15,7 @@ struct NotePage: View {
                         Button(thread.title.isEmpty ? "Untitled" : thread.title) { note.thread = thread; touch() }
                     }
                 }
+                TagField(tags: note.tags) { note.tags = $0; touch() }
                 if !note.source.isEmpty {
                     Text(note.source)
                         .font(CraftFont.caption)
@@ -30,6 +31,8 @@ struct NotePage: View {
             .padding(.top, 8)
             MarkdownEditor(text: $note.content)
                 .padding(.top, 16)
+
+            AgendaLinkedSection(items: note.agendaNoteLinks.compactMap(\.item))
         }
         .onChange(of: note.title) { _, _ in touch() }
         .onChange(of: note.content) { _, _ in touch() }

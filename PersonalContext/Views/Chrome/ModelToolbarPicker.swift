@@ -14,12 +14,17 @@ struct ModelPicker: View {
                 Button(model.displayName) { selection = model.id }
             }
         } label: {
-            Text(app.modelName(for: selection))
-                .font(CraftFont.caption)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Text(app.modelName(for: selection))
+                    .font(CraftFont.caption)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .foregroundStyle(.secondary)
         }
         .menuStyle(.button)
         .buttonStyle(.borderless)
+        .menuIndicator(.hidden)
         .fixedSize()
     }
 }

@@ -3,20 +3,38 @@ import SwiftUI
 
 struct CalendarView: View {
     @Environment(AppModel.self) private var app
-    @State private var showPreviousDays = false
-    @State private var showNextMonths = false
-    @State private var expandedMonths: Set<Date> = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var selectedDay = Calendar.current.startOfDay(for: .now)
+    @State private var weekStart = CalendarView.startOfWeek(containing: .now)
+    @State private var pageDirection = Edge.trailing
+    @State private var didScrollToNow = false
+    @FocusState private var keysFocused: Bool
 
     var body: some View {
-        ScrollView {
-            PageBody {
-                content
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 28)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        ScrollViewReader { proxy in
+            ScrollView {
+                PageBody {
+                    content(proxy: proxy)
+                        .padding(.horizontal, 32)
+                        .padding(.vertical, 28)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .focusable()
+            .focusEffectDisabled()
+            .focused($keysFocused)
+            .onKeyPress(.leftArrow) { handleArrow(-1) }
+            .onKeyPress(.rightArrow) { handleArrow(1) }
+            .onAppear { keysFocused = true }
+            .background {
+                Button("Today", action: goToToday)
+                    .keyboardShortcut("t", modifiers: .command)
+                    .opacity(0)
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
             }
         }
-        .scrollContentBackground(.hidden)
         .task {
             await app.eventKit.prepareEvents()
             await app.eventKit.prepareReminders()
@@ -24,10 +42,10 @@ struct CalendarView: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private func content(proxy: ScrollViewProxy) -> some View {
         switch app.eventKit.eventsAccess {
         case .fullAccess:
-            agenda
+            agenda(proxy: proxy)
         case .notDetermined, .writeOnly:
             EventKitAccessLine(
                 text: "Slate needs Calendar access to show your events.",
@@ -52,283 +70,112 @@ struct CalendarView: View {
         }
     }
 
-    private var agenda: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            if !previousDays.isEmpty {
-                revealButton(
-                    showPreviousDays ? "Hide previous days" : "Show previous days",
-                    symbol: "clock"
-                ) {
-                    showPreviousDays.toggle()
+    private func agenda(proxy: ScrollViewProxy) -> some View {
+        VStack(alignment: .leading, spacing: 24) {
+            CalendarHero(day: selectedDay)
+            CalendarWeekStrip(
+                weekStart: weekStart,
+                selectedDay: selectedDay,
+                days: weekDays,
+                tints: tintsByDay,
+                pageDirection: pageDirection,
+                onSelect: selectDay,
+                onPage: pageWeek,
+                onToday: goToToday
+            )
+            if calendar.isDateInToday(selectedDay) {
+                TimelineView(.everyMinute) { context in
+                    dayBody(now: context.date, proxy: proxy)
                 }
-
-                if showPreviousDays {
-                    VStack(alignment: .leading, spacing: 28) {
-                        ForEach(previousDays, id: \.self) { day in
-                            sideDay(day)
-                        }
-                    }
-                }
-            }
-
-            ForEach(weekDays, id: \.self) { day in
-                if calendar.isDateInToday(day) {
-                    todayCard
-                } else {
-                    sideDay(day)
-                }
-            }
-
-            if !monthGroups.isEmpty {
-                revealButton(
-                    showNextMonths ? "Hide next months" : "Show next months",
-                    symbol: "calendar"
-                ) {
-                    showNextMonths.toggle()
-                }
-
-                if showNextMonths {
-                    VStack(alignment: .leading, spacing: 28) {
-                        ForEach(monthGroups) { month in
-                            monthRow(month)
-                        }
-                    }
-                }
+            } else {
+                dayBody(now: .now, proxy: proxy)
             }
         }
-    }
-
-    private var todayCard: some View {
-        let day = today
-        let entries = items(on: day)
-        return HStack(alignment: .top, spacing: 24) {
-            DayLabel(day: day)
-                .frame(width: 88, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 2) {
-                if entries.isEmpty {
-                    EmptyLine(text: "Nothing today.")
-                } else {
-                    ForEach(entries) { entry in
-                        dayEntry(entry)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func sideDay(_ day: Date) -> some View {
-        let entries = items(on: day)
-        return HStack(alignment: .top, spacing: 16) {
-            DatePlate {
-                DayLabel(day: day)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(entries) { entry in
-                    dayEntry(entry)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 10)
-        }
-    }
-
-    private func monthRow(_ month: MonthGroup) -> some View {
-        let visible = expandedMonths.contains(month.id) ? month.items : Array(month.items.prefix(8))
-        let hidden = month.items.count - visible.count
-        return HStack(alignment: .top, spacing: 16) {
-            DatePlate {
-                if let first = month.rangeFirst, let last = month.rangeLast, first != last {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(first.formatted(.dateTime.month(.abbreviated).day()))
-                        Text(last.formatted(.dateTime.month(.abbreviated).day()))
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(CraftFont.section)
-                } else {
-                    Text(month.title)
-                        .font(CraftFont.section)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(visible) { item in
-                    monthLine(item)
-                }
-                if hidden > 0 {
-                    Button("Show \(hidden) more") {
-                        expandedMonths.insert(month.id)
-                    }
-                    .buttonStyle(.plain)
-                    .font(CraftFont.body)
-                    .foregroundStyle(.tertiary)
-                    .padding(.vertical, 6)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 10)
-        }
     }
 
     @ViewBuilder
-    private func dayEntry(_ entry: DayItem) -> some View {
-        switch entry {
-        case .event(let event):
-            eventLine(event)
-        case .reminder(let reminder):
-            reminderLine(reminder)
-        }
-    }
-
-    private func eventLine(_ event: CalendarEvent) -> some View {
-        Button {
-            app.present(.editEvent(event))
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(weekEventTitle(event))
-                    .font(CraftFont.body)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                if !event.location.isEmpty {
-                    Text(event.location)
-                        .font(CraftFont.caption)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
+    private func dayBody(now: Date, proxy: ScrollViewProxy) -> some View {
+        VStack(alignment: .leading, spacing: 24) {
+            if let event = nextUp(now: now) {
+                CalendarNextUpCard(event: event, now: now) {
+                    app.present(.editEvent(event))
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("Edit event")
-    }
-
-    private func reminderLine(_ item: ReminderItem) -> some View {
-        HStack(alignment: .center, spacing: 8) {
-            Button {
-                toggle(item)
-            } label: {
-                Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
+            if !selectedAllDay.isEmpty || !selectedReminders.isEmpty {
+                CalendarAllDaySection(
+                    events: selectedAllDay,
+                    reminders: selectedReminders,
+                    onOpenEvent: { app.present(.editEvent($0)) },
+                    onOpenReminder: { app.present(.editReminder($0)) },
+                    onToggle: toggle
+                )
             }
-            .buttonStyle(.plain)
-            .help(item.isCompleted ? "Mark incomplete" : "Mark complete")
-
-            Button {
-                app.present(.editReminder(item))
-            } label: {
-                HStack(spacing: 8) {
-                    Text(item.title.isEmpty ? "Untitled" : item.title)
-                        .font(CraftFont.body)
-                        .strikethrough(item.isCompleted)
-                        .foregroundStyle(item.isCompleted ? .tertiary : .primary)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    Text(item.listName)
-                        .font(CraftFont.caption)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+            if !selectedTimed.isEmpty {
+                CalendarTimeline(
+                    day: selectedDay,
+                    events: selectedTimed,
+                    now: now,
+                    isToday: calendar.isDateInToday(selectedDay),
+                    scrollProxy: proxy,
+                    shouldScrollToNow: !didScrollToNow && calendar.isDateInToday(selectedDay),
+                    onScrolledToNow: { didScrollToNow = true },
+                    onOpen: { app.present(.editEvent($0)) }
+                )
+            } else if selectedAllDay.isEmpty && selectedReminders.isEmpty {
+                EmptyLine(text: "Nothing scheduled.")
             }
-            .buttonStyle(.plain)
-            .help("Edit reminder")
         }
-        .padding(.vertical, 5)
-    }
-
-    private func monthLine(_ item: MonthItem) -> some View {
-        Button {
-            switch item.kind {
-            case .event(let event):
-                app.present(.editEvent(event))
-            case .reminder(let reminder):
-                app.present(.editReminder(reminder))
-            }
-        } label: {
-            Text("\(item.day.formatted(.dateTime.day(.twoDigits))) · \(item.title)")
-                .font(CraftFont.body)
-                .foregroundStyle(item.tint.color)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 4)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func revealButton(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: symbol)
-                .font(CraftFont.body)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(CraftColor.elevated, in: Capsule())
-        }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .transaction { $0.animation = Motion.quick }
     }
 
     private var calendar: Calendar { .current }
 
-    private var today: Date {
-        calendar.startOfDay(for: .now)
-    }
-
-    private var weekEnd: Date {
-        let weekday = calendar.component(.weekday, from: today)
-        let daysToEnd = (calendar.firstWeekday + 6 - weekday + 7) % 7
-        return calendar.date(byAdding: .day, value: daysToEnd, to: today) ?? today
-    }
-
-    private var previousDays: [Date] {
-        days(from: calendar.date(byAdding: .day, value: -7, to: today) ?? today, through: calendar.date(byAdding: .day, value: -1, to: today) ?? today)
-    }
-
     private var weekDays: [Date] {
-        days(from: today, through: weekEnd)
+        guard let end = calendar.date(byAdding: .day, value: 6, to: weekStart) else { return [weekStart] }
+        return days(from: weekStart, through: end)
     }
 
-    private var monthGroups: [MonthGroup] {
-        guard let afterWeek = calendar.date(byAdding: .day, value: 1, to: weekEnd),
-              let horizon = calendar.date(byAdding: .month, value: 4, to: today)
-        else { return [] }
-        let items = days(from: afterWeek, through: horizon).flatMap { day -> [MonthItem] in
-            items(on: day, includeUndated: false).map { entry in
-                switch entry {
-                case .event(let event):
-                    MonthItem(id: "e-\(event.id)-\(day.timeIntervalSince1970)", day: day, title: event.title.isEmpty ? "Untitled" : event.title, tint: event.tint, kind: .event(event))
-                case .reminder(let reminder):
-                    MonthItem(id: "r-\(reminder.id)-\(day.timeIntervalSince1970)", day: day, title: reminder.title.isEmpty ? "Untitled" : reminder.title, tint: reminder.tint, kind: .reminder(reminder))
+    private var selectedItems: [DayItem] {
+        items(on: selectedDay)
+    }
+
+    private var selectedReminders: [ReminderItem] {
+        selectedItems.compactMap {
+            if case .reminder(let item) = $0 { return item }
+            return nil
+        }
+    }
+
+    private var selectedAllDay: [CalendarEvent] {
+        selectedItems.compactMap {
+            if case .event(let event) = $0, event.isAllDay { return event }
+            return nil
+        }
+    }
+
+    private var selectedTimed: [CalendarEvent] {
+        selectedItems.compactMap {
+            if case .event(let event) = $0, !event.isAllDay { return event }
+            return nil
+        }
+    }
+
+    private var tintsByDay: [Date: [CalendarTint]] {
+        var result: [Date: [CalendarTint]] = [:]
+        for day in weekDays {
+            var seen = Set<String>()
+            var tints: [CalendarTint] = []
+            for event in app.eventKit.events where eventFalls(event, on: day) {
+                if seen.insert(event.calendarID).inserted {
+                    tints.append(event.tint)
+                    if tints.count == 3 { break }
                 }
             }
+            result[day] = tints
         }
-        let grouped = Dictionary(grouping: items) { calendar.dateInterval(of: .month, for: $0.day)?.start ?? $0.day }
-        return grouped.keys.sorted().compactMap { start -> MonthGroup? in
-            guard let monthItems = grouped[start], !monthItems.isEmpty else { return nil }
-            let sorted = monthItems.sorted { lhs, rhs in
-                if lhs.day != rhs.day { return lhs.day < rhs.day }
-                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
-            }
-            let isCurrentMonth = calendar.isDate(start, equalTo: today, toGranularity: .month)
-            return MonthGroup(
-                id: start,
-                title: start.formatted(.dateTime.month(.wide)),
-                items: sorted,
-                rangeFirst: isCurrentMonth ? sorted.first?.day : nil,
-                rangeLast: isCurrentMonth ? sorted.last?.day : nil
-            )
-        }
+        return result
     }
 
     private func items(on day: Date, includeUndated: Bool? = nil) -> [DayItem] {
@@ -368,10 +215,61 @@ struct CalendarView: View {
         return dates
     }
 
-    private func weekEventTitle(_ event: CalendarEvent) -> String {
-        let name = event.title.isEmpty ? "Untitled" : event.title
-        if event.isAllDay { return name }
-        return "\(event.start.formatted(date: .omitted, time: .shortened)) · \(name)"
+    private func nextUp(now: Date) -> CalendarEvent? {
+        guard calendar.isDateInToday(selectedDay) else { return nil }
+        let inProgress = selectedTimed
+            .filter { $0.start <= now && $0.end > now }
+            .sorted { $0.start < $1.start }
+        if let current = inProgress.first { return current }
+        return selectedTimed
+            .filter { $0.start > now }
+            .sorted { $0.start < $1.start }
+            .first
+    }
+
+    private func handleArrow(_ delta: Int) -> KeyPress.Result {
+        if app.modal != nil { return .ignored }
+        guard let day = calendar.date(byAdding: .day, value: delta, to: selectedDay) else { return .handled }
+        move(to: day)
+        return .handled
+    }
+
+    private func goToToday() {
+        if app.modal != nil { return }
+        move(to: calendar.startOfDay(for: .now))
+    }
+
+    private func selectDay(_ day: Date) {
+        move(to: day)
+    }
+
+    private func pageWeek(_ weeks: Int) {
+        guard let day = calendar.date(byAdding: .day, value: weeks * 7, to: selectedDay) else { return }
+        pageDirection = weeks > 0 ? .trailing : .leading
+        let start = Self.startOfWeek(containing: day)
+        withAnimation(reduceMotion ? Motion.quick : Motion.smooth) {
+            weekStart = start
+            selectedDay = calendar.startOfDay(for: day)
+        }
+        keysFocused = true
+    }
+
+    private func move(to day: Date) {
+        let day = calendar.startOfDay(for: day)
+        guard day != selectedDay else { return }
+        let start = Self.startOfWeek(containing: day)
+        if start != weekStart {
+            pageDirection = day > selectedDay ? .trailing : .leading
+            withAnimation(reduceMotion ? Motion.quick : Motion.smooth) {
+                weekStart = start
+                selectedDay = day
+            }
+        } else {
+            withAnimation(reduceMotion ? Motion.quick : Motion.snappy) {
+                selectedDay = day
+            }
+        }
+        keysFocused = true
     }
 
     private func toggle(_ item: ReminderItem) {
@@ -381,40 +279,12 @@ struct CalendarView: View {
             app.flash(error.localizedDescription)
         }
     }
-}
 
-private struct DatePlate<Content: View>: View {
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        content()
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(width: 100, alignment: .topLeading)
-            .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-}
-
-private struct DayLabel: View {
-    var day: Date
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(day.formatted(.dateTime.month(.abbreviated).day()))
-                .font(CraftFont.section)
-            if Calendar.current.isDateInToday(day) {
-                Text("Today")
-                    .font(CraftFont.body)
-                    .foregroundStyle(.secondary)
-            } else if Calendar.current.isDateInTomorrow(day) {
-                Text("Tomorrow")
-                    .font(CraftFont.body)
-                    .foregroundStyle(.secondary)
-            }
-            Text(day.formatted(.dateTime.weekday(.wide)))
-                .font(CraftFont.body)
-                .foregroundStyle(.tertiary)
-        }
+    static func startOfWeek(containing date: Date, calendar: Calendar = .current) -> Date {
+        let day = calendar.startOfDay(for: date)
+        let weekday = calendar.component(.weekday, from: day)
+        let delta = (weekday - calendar.firstWeekday + 7) % 7
+        return calendar.date(byAdding: .day, value: -delta, to: day) ?? day
     }
 }
 
@@ -427,26 +297,5 @@ private enum DayItem: Identifiable {
         case .event(let event): "e-\(event.id)"
         case .reminder(let reminder): "r-\(reminder.id)"
         }
-    }
-}
-
-private struct MonthGroup: Identifiable {
-    var id: Date
-    var title: String
-    var items: [MonthItem]
-    var rangeFirst: Date?
-    var rangeLast: Date?
-}
-
-private struct MonthItem: Identifiable {
-    var id: String
-    var day: Date
-    var title: String
-    var tint: CalendarTint
-    var kind: Kind
-
-    enum Kind {
-        case event(CalendarEvent)
-        case reminder(ReminderItem)
     }
 }
