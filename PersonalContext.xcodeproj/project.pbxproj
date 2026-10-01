@@ -12,6 +12,9 @@
 		A1B2C3D4E5F60718293A0006 /* AssociationFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0005 /* AssociationFields.swift */; };
 		A1B2C3D4E5F60718293A0008 /* AgendaLinkedSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0007 /* AgendaLinkedSection.swift */; };
 		A1B2C3D4E5F60718293A000A /* SettingsTagsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0009 /* SettingsTagsPage.swift */; };
+		A1B2C3D4E5F60718293A0011 /* OverviewGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0010 /* OverviewGrid.swift */; };
+		A1B2C3D4E5F60718293A0013 /* Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0012 /* Inspector.swift */; };
+		A1B2C3D4E5F60718293A0015 /* OverviewInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0014 /* OverviewInspector.swift */; };
 		05BA026B4AF137407DFFBB70 /* ColorHex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A843C76D621958EDA8D94D61 /* ColorHex.swift */; };
 		06A4B5A5812EFA0E120BAFC9 /* DocumentSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591D54A725FC8665EAB3A680 /* DocumentSection.swift */; };
 		08E6C08EE6ADDD3911650B76 /* Hairline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35658CC3CC77FE7EF9839CD9 /* Hairline.swift */; };
@@ -138,6 +141,9 @@
 		A1B2C3D4E5F60718293A0005 /* AssociationFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssociationFields.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A0007 /* AgendaLinkedSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaLinkedSection.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A0009 /* SettingsTagsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTagsPage.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0010 /* OverviewGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewGrid.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0012 /* Inspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Inspector.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0014 /* OverviewInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewInspector.swift; sourceTree = "<group>"; };
 		00DB08B2B0C6ACC8AEA864AE /* FocusDismissal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusDismissal.swift; sourceTree = "<group>"; };
 		022EAD2D997C0A29F21400CA /* SettingsChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsChrome.swift; sourceTree = "<group>"; };
 		06566D4B5F0858C10300294C /* MarkdownPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownPreview.swift; sourceTree = "<group>"; };
@@ -389,6 +395,7 @@
 				AD3FA7A23D2010D975AB8C6D /* EditRecordModal.swift */,
 				1CD7C7DFD28E72C0A9D4AA41 /* EmptyLine.swift */,
 				35658CC3CC77FE7EF9839CD9 /* Hairline.swift */,
+				A1B2C3D4E5F60718293A0012 /* Inspector.swift */,
 				B5FFBDB290AFF05316BF8B75 /* ModalDatePicker.swift */,
 				37724CB7BB30F472C170A449 /* ModelToolbarPicker.swift */,
 				D53518E43DC2D88BE7C55855 /* ProjectHost.swift */,
@@ -456,6 +463,8 @@
 			isa = PBXGroup;
 			children = (
 				F19BF6A1920870A4A75C9063 /* NewProjectSheet.swift */,
+				A1B2C3D4E5F60718293A0010 /* OverviewGrid.swift */,
+				A1B2C3D4E5F60718293A0014 /* OverviewInspector.swift */,
 				690265881D471474DCC2ECDF /* OverviewPage.swift */,
 				B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */,
 				77F4B6484C6BED0CADABAF2B /* ProjectLine.swift */,
@@ -651,6 +660,7 @@
 				53A1D30AAD680BBD5A435EB2 /* EventKitService.swift in Sources */,
 				BC90A33899359007E8F65EC1 /* FocusDismissal.swift in Sources */,
 				08E6C08EE6ADDD3911650B76 /* Hairline.swift in Sources */,
+				A1B2C3D4E5F60718293A0013 /* Inspector.swift in Sources */,
 				B82FC40282ED31CF898CD9B1 /* HomeView.swift in Sources */,
 				6271F4DD4DF1EF931FFE51BD /* KeychainStore.swift in Sources */,
 				8EF3176206A8C89215961D73 /* LiquidOrb.swift in Sources */,
@@ -668,6 +678,8 @@
 				AD8746C5C6F6267B6E861E22 /* NotePage.swift in Sources */,
 				463C9AC124371E05CBFFECCC /* OrbPalette.swift in Sources */,
 				50EFEC7E7918114CAE89E3F4 /* OrbState.swift in Sources */,
+				A1B2C3D4E5F60718293A0011 /* OverviewGrid.swift in Sources */,
+				A1B2C3D4E5F60718293A0015 /* OverviewInspector.swift in Sources */,
 				727A13054357C732319E171D /* OverviewPage.swift in Sources */,
 				30B1DB553DC0EB0931DAC3EE /* PersonalContextApp.swift in Sources */,
 				1F48BD11B051B8BAFF91C95B /* PinnedComposer.swift in Sources */,

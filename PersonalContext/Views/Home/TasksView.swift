@@ -155,11 +155,15 @@ private struct ReminderRow: View {
                 app.present(.editReminder(item))
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 13, weight: .medium))
-                        .strikethrough(item.isCompleted)
-                        .foregroundStyle(item.isCompleted ? .tertiary : .primary)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(title)
+                            .font(.system(size: 13, weight: .medium))
+                            .strikethrough(item.isCompleted)
+                            .foregroundStyle(item.isCompleted ? .tertiary : .primary)
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                        EventAgendaMarks(kind: .reminder, eventKitID: item.id)
+                    }
                     if !item.notes.isEmpty {
                         Text(item.notes)
                             .font(.system(size: 12))

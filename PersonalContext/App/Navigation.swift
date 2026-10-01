@@ -28,6 +28,38 @@ enum ProjectTab: String, CaseIterable, Identifiable, Hashable {
         }
     }
 }
+enum OverviewWidth: String, CaseIterable, Identifiable, Hashable {
+    case oneThird
+    case twoThirds
+    case full
+
+    var id: String { rawValue }
+
+    var fraction: CGFloat {
+        switch self {
+        case .oneThird: 1.0 / 3.0
+        case .twoThirds: 2.0 / 3.0
+        case .full: 1
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .oneThird: "One Third"
+        case .twoThirds: "Two Thirds"
+        case .full: "Full"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .oneThird: "rectangle.portrait"
+        case .twoThirds: "rectangle.lefthalf.inset.filled"
+        case .full: "rectangle"
+        }
+    }
+}
+
 enum ProjectsLayout: String, CaseIterable, Identifiable, Hashable {
     case table
     case card

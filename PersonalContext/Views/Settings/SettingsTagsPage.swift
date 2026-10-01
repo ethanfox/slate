@@ -91,26 +91,26 @@ struct SettingsTagsPage: View {
             Menu("Resolve") {
                 if let link = row.noteLink {
                     Button("Drop link") {
-                        AssociationService.dropLink(link, from: row.item)
+                        AssociationService.dropLink(link, from: row.item, in: context)
                         try? context.save()
                     }
                     Menu("Replace with…") {
                         ForEach(notes) { note in
                             Button(note.displayTitle) {
-                                _ = AssociationService.replaceNote(link, with: note, on: row.item)
+                                _ = AssociationService.replaceNote(link, with: note, on: row.item, in: context)
                                 try? context.save()
                             }
                         }
                     }
                 } else if let link = row.trackLink {
                     Button("Drop link") {
-                        AssociationService.dropLink(link, from: row.item)
+                        AssociationService.dropLink(link, from: row.item, in: context)
                         try? context.save()
                     }
                     Menu("Replace with…") {
                         ForEach(tracks) { thread in
                             Button(thread.title.isEmpty ? "Untitled" : thread.title) {
-                                _ = AssociationService.replaceTrack(link, with: thread, on: row.item)
+                                _ = AssociationService.replaceTrack(link, with: thread, on: row.item, in: context)
                                 try? context.save()
                             }
                         }

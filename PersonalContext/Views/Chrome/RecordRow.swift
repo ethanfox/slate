@@ -1,12 +1,29 @@
 import SwiftUI
 
-struct RecordRow: View {
+struct RecordRow<Marks: View>: View {
     var systemImage: String
     var title: String
     var subtitle = ""
     var meta = ""
+    var marks: Marks
     var action: () -> Void
     @State private var hovering = false
+
+    init(
+        systemImage: String,
+        title: String,
+        subtitle: String = "",
+        meta: String = "",
+        @ViewBuilder marks: () -> Marks,
+        action: @escaping () -> Void
+    ) {
+        self.systemImage = systemImage
+        self.title = title
+        self.subtitle = subtitle
+        self.meta = meta
+        self.marks = marks()
+        self.action = action
+    }
 
     var body: some View {
         Button(action: action) {
@@ -16,9 +33,13 @@ struct RecordRow: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 22, height: 17)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 13, weight: .medium))
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(title)
+                            .font(.system(size: 13, weight: .medium))
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                        marks
+                    }
                     if !subtitle.isEmpty {
                         Text(subtitle)
                             .font(.system(size: 12))
@@ -44,5 +65,17 @@ struct RecordRow: View {
         .buttonStyle(.plain)
         .padding(.horizontal, -8)
         .onHover { hovering = $0 }
+    }
+}
+
+extension RecordRow where Marks == EmptyView {
+    init(
+        systemImage: String,
+        title: String,
+        subtitle: String = "",
+        meta: String = "",
+        action: @escaping () -> Void
+    ) {
+        self.init(systemImage: systemImage, title: title, subtitle: subtitle, meta: meta, marks: { EmptyView() }, action: action)
     }
 }

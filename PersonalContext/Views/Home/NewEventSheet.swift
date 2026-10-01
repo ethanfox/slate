@@ -70,28 +70,81 @@ struct NewEventSheet: View {
 
     var body: some View {
         form
-            .overlay {
-                ModalCalendarOverlay(isPresented: picking != nil, onDismiss: { picking = nil }) {
-                    ModalCalendarPanel(
-                        date: picking == .end ? $end : $start,
-                        includesTime: !allDay,
-                        onDismiss: { picking = nil }
-                    )
-                }
-            }
     }
 
     private var form: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(isEditing ? "Event" : "New Event")
+            TextField(isEditing ? "Event" : "New Event", text: $title)
+                .textFieldStyle(.plain)
                 .font(CraftFont.title)
+                .focused($focusTitle)
+                .disabled(!(event?.allowsEditing ?? true))
 
-            ModalField("Title") {
-                TextField("Event", text: $title)
-                    .textFieldStyle(.plain)
-                    .focused($focusTitle)
+            ViewThatFits(in: .vertical) {
+                fields
+                ModalScroll { fields }
             }
 
+            if hasActions {
+                VStack(spacing: 0) {
+                    if let meeting = meetingURL {
+                        ModalActionRow(title: meetingTitle(meeting), systemImage: "video") {
+                            openURL(meeting)
+                        }
+                    }
+                    if meetingURL != nil, mapsURL != nil {
+                        Hairline()
+                    }
+                    if let maps = mapsURL {
+                        ModalActionRow(title: locationTitle, systemImage: "mappin.and.ellipse") {
+                            openURL(maps)
+                        }
+                    }
+                }
+                .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+
+            ModalFooter(actionTitle: isEditing ? "Save" : "Create", actionEnabled: canSave, action: save) {
+                if isEditing, event?.allowsEditing == true {
+                    ModalFooterButton(title: "Delete", role: .destructive) { confirmDelete = true }
+                }
+            }
+        }
+        .onAppear {
+            load()
+            prepareAgenda()
+            focusTitle = true
+        }
+        .onDisappear { discardIfNeeded() }
+        .onChange(of: start) { _, newStart in
+            if end < newStart {
+                end = allDay ? newStart : newStart.addingTimeInterval(3600)
+            }
+        }
+        .confirmationDialog("Delete this event?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete Event", role: .destructive) { deleteEvent() }
+        }
+        .confirmationDialog(
+            conflict.map { "Switch to \($0.incoming.displayName)?" } ?? "Switch project?",
+            isPresented: Binding(get: { conflict != nil }, set: { if !$0 { conflict = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Switch Project") {
+                resolveConflict?()
+                conflict = nil
+                resolveConflict = nil
+            }
+            Button("Keep \(conflict?.current.displayName ?? "Project")", role: .cancel) {
+                conflict = nil
+                resolveConflict = nil
+            }
+        } message: {
+            Text("This belongs to a different project. Switching moves this event and drops links that don’t belong.")
+        }
+    }
+
+    private var fields: some View {
+        VStack(alignment: .leading, spacing: 16) {
             ModalField("Starts", boxed: false) {
                 ModalDateField(date: $start, includesTime: !allDay, isPresented: pickingBinding(.start))
             }
@@ -126,9 +179,19 @@ struct NewEventSheet: View {
             }
 
             ModalField("Notes") {
-                TextField("Optional", text: $notes, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .lineLimit(3...6)
+                ZStack(alignment: .topLeading) {
+                    if notes.isEmpty {
+                        Text("Optional")
+                            .font(CraftFont.body)
+                            .foregroundStyle(.tertiary)
+                            .allowsHitTesting(false)
+                    }
+                    TextEditor(text: $notes)
+                        .font(CraftFont.body)
+                        .scrollContentBackground(.hidden)
+                        .disabled(!(event?.allowsEditing ?? true))
+                }
+                .frame(minHeight: 112, maxHeight: 112)
             }
 
             if let agenda {
@@ -137,64 +200,6 @@ struct NewEventSheet: View {
                     resolveConflict = apply
                 }
             }
-
-            if hasActions {
-                VStack(spacing: 0) {
-                    if let meeting = meetingURL {
-                        ModalActionRow(title: meetingTitle(meeting), systemImage: "video") {
-                            openURL(meeting)
-                        }
-                    }
-                    if meetingURL != nil, mapsURL != nil {
-                        Hairline()
-                    }
-                    if let maps = mapsURL {
-                        ModalActionRow(title: locationTitle, systemImage: "mappin.and.ellipse") {
-                            openURL(maps)
-                        }
-                    }
-                }
-                .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-
-            ModalFooter(actionTitle: isEditing ? "Save" : "Create", actionEnabled: canSave, action: save) {
-                if isEditing, event?.allowsEditing == true {
-                    Button("Delete", role: .destructive) { confirmDelete = true }
-                        .buttonStyle(.plain)
-                        .frame(height: 40)
-                }
-            }
-        }
-        .onAppear {
-            load()
-            prepareAgenda()
-            focusTitle = true
-        }
-        .onDisappear { discardIfNeeded() }
-        .onChange(of: start) { _, newStart in
-            if end < newStart {
-                end = allDay ? newStart : newStart.addingTimeInterval(3600)
-            }
-        }
-        .confirmationDialog("Delete this event?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Delete Event", role: .destructive) { deleteEvent() }
-        }
-        .confirmationDialog(
-            conflict.map { "Switch to \($0.incoming.displayName)?" } ?? "Switch project?",
-            isPresented: Binding(get: { conflict != nil }, set: { if !$0 { conflict = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Switch Project") {
-                resolveConflict?()
-                conflict = nil
-                resolveConflict = nil
-            }
-            Button("Keep \(conflict?.current.displayName ?? "Project")", role: .cancel) {
-                conflict = nil
-                resolveConflict = nil
-            }
-        } message: {
-            Text("This belongs to a different project. Switching moves this event and drops links that don’t belong.")
         }
     }
 

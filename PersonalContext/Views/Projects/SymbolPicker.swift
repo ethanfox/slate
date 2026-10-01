@@ -2,11 +2,14 @@ import SwiftUI
 
 struct SymbolPicker: View {
     @Binding var selection: String
+    var columns = 8
 
-    private let columns = Array(repeating: GridItem(.fixed(32), spacing: 6), count: 8)
+    private var grid: [GridItem] {
+        Array(repeating: GridItem(.fixed(32), spacing: 6), count: columns)
+    }
 
     var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+        LazyVGrid(columns: grid, alignment: .leading, spacing: 6) {
             ForEach(ProjectSymbols.all, id: \.self) { symbol in
                 Button {
                     selection = symbol

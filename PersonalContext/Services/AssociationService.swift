@@ -136,10 +136,21 @@ enum AssociationService {
         item.touch()
     }
 
-    static func unlink(noteID: UUID, from item: AgendaItem) {
-        item.noteLinks.removeAll { $0.noteID == noteID }
-        item.trackLinks.removeAll { link in
-            link.isInherited && link.inheritedFromNoteID == noteID && !stillJustified(link, on: item)
+    static func unlink(noteID: UUID, from item: AgendaItem, in context: ModelContext) {
+        for link in item.noteLinks.filter({ $0.noteID == noteID }) {
+            context.delete(link)
+        }
+        for link in item.trackLinks.filter({ $0.isInherited && $0.inheritedFromNoteID == noteID && !stillJustified($0, on: item) }) {
+            context.delete(link)
+        }
+        clearInheritedProjectIfNeeded(on: item)
+        item.touch()
+    }
+
+    static func clearNotes(from item: AgendaItem, in context: ModelContext) {
+        for link in item.noteLinks { context.delete(link) }
+        for link in item.trackLinks where link.isInherited {
+            context.delete(link)
         }
         clearInheritedProjectIfNeeded(on: item)
         item.touch()
@@ -158,10 +169,22 @@ enum AssociationService {
         item.touch()
     }
 
-    static func unlink(threadID: UUID, from item: AgendaItem) {
-        item.trackLinks.removeAll { $0.threadID == threadID }
+    static func unlink(threadID: UUID, from item: AgendaItem, in context: ModelContext) {
+        for link in item.trackLinks.filter({ $0.threadID == threadID }) {
+            context.delete(link)
+        }
         clearInheritedProjectIfNeeded(on: item)
         item.touch()
+    }
+
+    static func clearTracks(from item: AgendaItem, in context: ModelContext) {
+        for link in item.trackLinks { context.delete(link) }
+        clearInheritedProjectIfNeeded(on: item)
+        item.touch()
+    }
+
+    static func clearProject(from item: AgendaItem) {
+        setProject(nil, on: item, userSet: true)
     }
 
     static func apply(tags: [Tag], to item: AgendaItem) {
@@ -169,21 +192,21 @@ enum AssociationService {
         item.touch()
     }
 
-    static func dropLink(_ link: AgendaNoteLink, from item: AgendaItem) {
-        unlink(noteID: link.noteID, from: item)
+    static func dropLink(_ link: AgendaNoteLink, from item: AgendaItem, in context: ModelContext) {
+        unlink(noteID: link.noteID, from: item, in: context)
     }
 
-    static func dropLink(_ link: AgendaTrackLink, from item: AgendaItem) {
-        unlink(threadID: link.threadID, from: item)
+    static func dropLink(_ link: AgendaTrackLink, from item: AgendaItem, in context: ModelContext) {
+        unlink(threadID: link.threadID, from: item, in: context)
     }
 
-    static func replaceNote(_ existing: AgendaNoteLink, with note: Note, on item: AgendaItem) -> AssociationConflict? {
-        unlink(noteID: existing.noteID, from: item)
+    static func replaceNote(_ existing: AgendaNoteLink, with note: Note, on item: AgendaItem, in context: ModelContext) -> AssociationConflict? {
+        unlink(noteID: existing.noteID, from: item, in: context)
         return link(note: note, onto: item)
     }
 
-    static func replaceTrack(_ existing: AgendaTrackLink, with thread: ProjectThread, on item: AgendaItem) -> AssociationConflict? {
-        unlink(threadID: existing.threadID, from: item)
+    static func replaceTrack(_ existing: AgendaTrackLink, with thread: ProjectThread, on item: AgendaItem, in context: ModelContext) -> AssociationConflict? {
+        unlink(threadID: existing.threadID, from: item, in: context)
         return link(thread: thread, onto: item)
     }
 

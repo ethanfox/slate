@@ -40,11 +40,6 @@ struct NewReminderSheet: View {
 
     var body: some View {
         form
-            .overlay {
-                ModalCalendarOverlay(isPresented: pickingDue, onDismiss: { pickingDue = false }) {
-                    ModalCalendarPanel(date: $due, includesTime: true, onDismiss: { pickingDue = false })
-                }
-            }
     }
 
     private var form: some View {
@@ -52,6 +47,54 @@ struct NewReminderSheet: View {
             Text(isEditing ? "Reminder" : "New Reminder")
                 .font(CraftFont.title)
 
+            ViewThatFits(in: .vertical) {
+                fields
+                ModalScroll { fields }
+            }
+
+            if let meeting = meetingURL {
+                ModalActionRow(title: meetingTitle(meeting), systemImage: "video") {
+                    openURL(meeting)
+                }
+                .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+
+            ModalFooter(actionTitle: isEditing ? "Save" : "Create", actionEnabled: canSave, action: save) {
+                if isEditing, reminder?.allowsEditing == true {
+                    ModalFooterButton(title: "Delete", role: .destructive) { confirmDelete = true }
+                }
+            }
+        }
+        .onAppear {
+            load()
+            prepareAgenda()
+            focusTitle = true
+        }
+        .onDisappear { discardIfNeeded() }
+        .confirmationDialog("Delete this reminder?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete Reminder", role: .destructive) { deleteReminder() }
+        }
+        .confirmationDialog(
+            conflict.map { "Switch to \($0.incoming.displayName)?" } ?? "Switch project?",
+            isPresented: Binding(get: { conflict != nil }, set: { if !$0 { conflict = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Switch Project") {
+                resolveConflict?()
+                conflict = nil
+                resolveConflict = nil
+            }
+            Button("Keep \(conflict?.current.displayName ?? "Project")", role: .cancel) {
+                conflict = nil
+                resolveConflict = nil
+            }
+        } message: {
+            Text("This belongs to a different project. Switching moves this reminder and drops links that don’t belong.")
+        }
+    }
+
+    private var fields: some View {
+        VStack(alignment: .leading, spacing: 16) {
             ModalField("Title") {
                 TextField("Reminder", text: $title)
                     .textFieldStyle(.plain)
@@ -96,47 +139,6 @@ struct NewReminderSheet: View {
                     resolveConflict = apply
                 }
             }
-
-            if let meeting = meetingURL {
-                ModalActionRow(title: meetingTitle(meeting), systemImage: "video") {
-                    openURL(meeting)
-                }
-                .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-
-            ModalFooter(actionTitle: isEditing ? "Save" : "Create", actionEnabled: canSave, action: save) {
-                if isEditing, reminder?.allowsEditing == true {
-                    Button("Delete", role: .destructive) { confirmDelete = true }
-                        .buttonStyle(.plain)
-                        .frame(height: 40)
-                }
-            }
-        }
-        .onAppear {
-            load()
-            prepareAgenda()
-            focusTitle = true
-        }
-        .onDisappear { discardIfNeeded() }
-        .confirmationDialog("Delete this reminder?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Delete Reminder", role: .destructive) { deleteReminder() }
-        }
-        .confirmationDialog(
-            conflict.map { "Switch to \($0.incoming.displayName)?" } ?? "Switch project?",
-            isPresented: Binding(get: { conflict != nil }, set: { if !$0 { conflict = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Switch Project") {
-                resolveConflict?()
-                conflict = nil
-                resolveConflict = nil
-            }
-            Button("Keep \(conflict?.current.displayName ?? "Project")", role: .cancel) {
-                conflict = nil
-                resolveConflict = nil
-            }
-        } message: {
-            Text("This belongs to a different project. Switching moves this reminder and drops links that don’t belong.")
         }
     }
 

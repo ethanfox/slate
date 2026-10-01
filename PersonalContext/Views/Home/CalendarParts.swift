@@ -221,10 +221,14 @@ struct CalendarNextUpCard: View {
                     Text(meta)
                         .font(CraftFont.caption)
                         .foregroundStyle(.secondary)
-                    Text(title)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(title)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                        EventAgendaMarks(kind: .event, eventKitID: event.seriesID)
+                    }
                     Text(detail)
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
@@ -305,6 +309,8 @@ private struct CalendarAllDayRow: View {
                     .font(CraftFont.body)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
+                    .layoutPriority(1)
+                EventAgendaMarks(kind: .event, eventKitID: event.seriesID)
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 8)
@@ -348,6 +354,8 @@ private struct CalendarReminderRow: View {
                         .strikethrough(item.isCompleted)
                         .foregroundStyle(item.isCompleted ? .tertiary : .primary)
                         .lineLimit(1)
+                        .layoutPriority(1)
+                    EventAgendaMarks(kind: .reminder, eventKitID: item.id)
                     Spacer(minLength: 8)
                     Text(item.listName)
                         .font(CraftFont.caption)
@@ -459,10 +467,14 @@ private struct CalendarEventBlock: View {
     var body: some View {
         Button(action: onOpen) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(event.title.isEmpty ? "Untitled" : event.title)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(event.title.isEmpty ? "Untitled" : event.title)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                    EventAgendaMarks(kind: .event, eventKitID: event.seriesID)
+                }
                 if height >= CalendarLayout.timeLabelThreshold {
                     Text(event.timeLabel)
                         .font(CraftFont.caption)

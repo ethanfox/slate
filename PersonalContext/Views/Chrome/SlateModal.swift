@@ -1,3 +1,4 @@
+import AppKit
 import SwiftData
 import SwiftUI
 
@@ -40,13 +41,6 @@ enum AppModal: Identifiable {
         default: 440
         }
     }
-
-    var panelHeight: CGFloat? {
-        switch self {
-        case .newEvent, .editEvent: 640
-        default: nil
-        }
-    }
 }
 
 struct ModalDismissAction {
@@ -73,6 +67,8 @@ struct SlateModalPresenter<ModalContent: View>: View {
 
     var body: some View {
         GeometryReader { geo in
+            let margin: CGFloat = 40
+            let available = max(geo.size.height - margin * 2, 240)
             ZStack {
                 if let modal {
                     CraftColor.scrim
@@ -80,14 +76,16 @@ struct SlateModalPresenter<ModalContent: View>: View {
                         .onTapGesture(perform: onDismiss)
                         .transition(.opacity)
 
-                    modalContent(modal)
-                        .environment(\.modalDismiss, ModalDismissAction(action: onDismiss))
-                        .padding(20)
-                        .frame(width: modal.panelWidth)
-                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .shadow(color: .black.opacity(0.20), radius: 30, y: 12)
-                        .position(x: geo.size.width / 2, y: geo.size.height * 0.4)
-                        .transition(panelTransition)
+                    ModalHeightClamp(maxHeight: available) {
+                        modalContent(modal)
+                            .environment(\.modalDismiss, ModalDismissAction(action: onDismiss))
+                            .padding(20)
+                            .frame(width: modal.panelWidth)
+                    }
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .shadow(color: .black.opacity(0.20), radius: 30, y: 12)
+                    .clipped()
+                    .transition(panelTransition)
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
@@ -96,6 +94,21 @@ struct SlateModalPresenter<ModalContent: View>: View {
         .allowsHitTesting(modal != nil)
         .onExitCommand {
             if modal != nil { onDismiss() }
+        }
+    }
+
+    private struct ModalHeightClamp: Layout {
+        var maxHeight: CGFloat
+
+        func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
+            guard let child = subviews.first else { return .zero }
+            let size = child.sizeThatFits(.init(width: proposal.width, height: maxHeight))
+            return CGSize(width: size.width, height: min(size.height, maxHeight))
+        }
+
+        func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
+            guard let child = subviews.first else { return }
+            child.place(at: bounds.origin, proposal: .init(width: bounds.width, height: bounds.height))
         }
     }
 
@@ -110,6 +123,74 @@ struct SlateModalPresenter<ModalContent: View>: View {
             insertion: .scale(scale: 0.96).combined(with: .opacity),
             removal: .scale(scale: 0.98).combined(with: .opacity)
         )
+    }
+}
+
+struct ModalScroll<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        ScrollView(.vertical) {
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.trailing, 12)
+        }
+        .scrollIndicators(.visible, axes: .vertical)
+        .scrollIndicators(.hidden, axes: .horizontal)
+        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+        .clipped()
+        .background(ModalScrollLock())
+    }
+}
+
+private struct ModalScrollLock: NSViewRepresentable {
+    func makeNSView(context: Context) -> ModalScrollLockView {
+        ModalScrollLockView()
+    }
+
+    func updateNSView(_ nsView: ModalScrollLockView, context: Context) {
+        nsView.lock()
+    }
+}
+
+private final class ModalScrollLockView: NSView {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        lock()
+    }
+
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        lock()
+    }
+
+    override func layout() {
+        super.layout()
+        lock()
+    }
+
+    func lock() {
+        var cursor: NSView? = self
+        while let view = cursor {
+            apply(to: view)
+            cursor = view.superview
+        }
+        apply(in: enclosingScrollView ?? superview)
+    }
+
+    private func apply(in root: NSView?) {
+        guard let root else { return }
+        apply(to: root)
+        for child in root.subviews {
+            apply(in: child)
+        }
+    }
+
+    private func apply(to view: NSView) {
+        guard let scroll = view as? NSScrollView else { return }
+        scroll.hasHorizontalScroller = false
+        scroll.horizontalScrollElasticity = .none
+        scroll.usesPredominantAxisScrolling = true
     }
 }
 
@@ -170,32 +251,68 @@ struct ModalFooter<Leading: View>: View {
     @ViewBuilder var leading: () -> Leading
 
     @Environment(\.modalDismiss) private var modalDismiss
-    @Environment(AppModel.self) private var app
 
     var body: some View {
         VStack(spacing: 10) {
-            Button(actionTitle, action: action)
+            ModalFooterButton(title: actionTitle, role: .primary, enabled: actionEnabled, action: action)
                 .keyboardShortcut(.defaultAction)
-                .buttonStyle(.plain)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 40)
-                .background(app.accent.color.opacity(actionEnabled ? 1 : 0.4), in: Capsule())
-                .disabled(!actionEnabled)
 
             HStack(spacing: 10) {
-                Button("Cancel") { modalDismiss() }
+                ModalFooterButton(title: "Cancel", action: { modalDismiss() })
                     .keyboardShortcut(.cancelAction)
-                    .buttonStyle(.plain)
-                    .font(CraftFont.body)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 40)
-                    .background(CraftColor.elevated, in: Capsule())
                 leading()
             }
         }
         .padding(.top, 4)
+    }
+}
+
+struct ModalFooterButton: View {
+    enum Role {
+        case primary
+        case secondary
+        case destructive
+    }
+
+    var title: String
+    var role = Role.secondary
+    var enabled = true
+    var action: () -> Void
+
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(role == .primary ? .system(size: 15, weight: .medium) : CraftFont.body)
+                .foregroundStyle(foreground)
+                .frame(maxWidth: .infinity)
+                .frame(height: 40)
+                .background(fill, in: Capsule())
+                .overlay {
+                    if role != .primary {
+                        Capsule().stroke(CraftColor.hairline)
+                    }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+
+    private var foreground: Color {
+        switch role {
+        case .primary: .white
+        case .secondary: .primary
+        case .destructive: .red
+        }
+    }
+
+    private var fill: Color {
+        switch role {
+        case .primary: app.accent.color.opacity(enabled ? 1 : 0.4)
+        case .secondary, .destructive: CraftColor.elevated
+        }
     }
 }
 
@@ -221,6 +338,7 @@ struct ModalActionRow: View {
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity)
             .frame(height: 40)
             .contentShape(Rectangle())
         }

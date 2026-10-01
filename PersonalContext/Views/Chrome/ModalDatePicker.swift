@@ -15,6 +15,11 @@ struct ModalDateField: View {
                 .monospacedDigit()
         }
         .buttonStyle(.plain)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            ModalCalendarPanel(date: $date, includesTime: includesTime) {
+                isPresented = false
+            }
+        }
     }
 
     private var label: String {
@@ -46,8 +51,6 @@ struct ModalCalendarPanel: View {
         }
         .padding(16)
         .frame(width: 300)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .shadow(color: .black.opacity(0.20), radius: 30, y: 12)
         .onAppear {
             month = calendar.startOfMonth(for: date)
         }
@@ -142,6 +145,7 @@ struct ModalCalendarPanel: View {
                         Circle().fill(app.accent(for: .calendar))
                     }
                 }
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -202,36 +206,6 @@ struct ModalCalendarPanel: View {
         withAnimation(reduceMotion ? Motion.quick : Motion.smooth) {
             month = calendar.startOfMonth(for: .now)
         }
-    }
-}
-
-struct ModalCalendarOverlay<Content: View>: View {
-    var isPresented: Bool
-    var onDismiss: () -> Void
-    @ViewBuilder var panel: () -> Content
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        ZStack {
-            if isPresented {
-                Color.clear
-                    .onTapGesture(perform: onDismiss)
-                panel()
-                    .transition(panelTransition)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .allowsHitTesting(isPresented)
-        .animation(isPresented ? (reduceMotion ? Motion.quick : Motion.snappy) : Motion.quick, value: isPresented)
-    }
-
-    private var panelTransition: AnyTransition {
-        if reduceMotion { return .opacity }
-        return .asymmetric(
-            insertion: .scale(scale: 0.96).combined(with: .opacity),
-            removal: .scale(scale: 0.98).combined(with: .opacity)
-        )
     }
 }
 

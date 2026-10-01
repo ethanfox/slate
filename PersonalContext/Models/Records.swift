@@ -91,6 +91,9 @@ final class Project: Identifiable {
     @Relationship(deleteRule: .nullify, inverse: \AgendaItem.project)
     var agendaItems: [AgendaItem] = []
 
+    var overviewWidthRaw: String = "twoThirds"
+    var overviewLayoutJSON: String = ""
+
     var status: ProjectStatus {
         get { ProjectStatus(rawValue: statusRaw) ?? .active }
         set { statusRaw = newValue.rawValue }
@@ -125,6 +128,8 @@ final class Project: Identifiable {
         self.isPinned = false
         self.createdAt = .now
         self.updatedAt = .now
+        self.overviewWidthRaw = "twoThirds"
+        self.overviewLayoutJSON = ""
     }
 
     func touch() {

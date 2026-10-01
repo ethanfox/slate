@@ -22,13 +22,18 @@ private enum LayoutMetrics {
     static let detailMinWidth = columnWidth + documentMinWidth
     static let chatMin: CGFloat = 300
     static let chatMax: CGFloat = 450
+    static let inspectorWidth: CGFloat = 250
     static let gap: CGFloat = 8
     static let edgePad: CGFloat = 10
     static let chatMotionDuration = 0.3
     static let chatMotion = Animation.easeInOut(duration: chatMotionDuration)
 
-    static func windowMin(sidebar: Bool, chat: Bool) -> CGFloat {
-        (sidebar ? sidebarWidth : edgePad) + detailMinWidth + (chat ? gap + chatMin : 0) + edgePad
+    static func windowMin(sidebar: Bool, chat: Bool, inspector: Bool = false) -> CGFloat {
+        (sidebar ? sidebarWidth : edgePad)
+            + detailMinWidth
+            + (chat ? gap + chatMin : 0)
+            + (inspector ? gap + inspectorWidth : 0)
+            + edgePad
     }
 }
 
@@ -146,14 +151,23 @@ struct RootView: View {
                         .gesture(WindowDragGesture())
                 }
 
-                PaneRowLayout(progress: chatProgress) {
-                    detail
-                        .modifier(PaneChrome())
-
-                    if chatMounted, let project = openProject, let thread = focusedThread {
-                        ThreadChatPane(thread: thread, project: project)
+                HStack(spacing: showingInspector ? LayoutMetrics.gap : 0) {
+                    PaneRowLayout(progress: chatProgress) {
+                        detail
                             .modifier(PaneChrome())
-                            .allowsHitTesting(chatSettled)
+
+                        if chatMounted, let project = openProject, let thread = focusedThread {
+                            ThreadChatPane(thread: thread, project: project)
+                                .modifier(PaneChrome())
+                                .allowsHitTesting(chatSettled)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    SlideInspector(isOpen: showingInspector) {
+                        if let project = openProject {
+                            OverviewInspector(project: project)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -259,10 +273,22 @@ struct RootView: View {
             .glassEffect(.regular, in: Capsule())
             .help(app.trackChatOpen ? "Hide track chat" : "Ask Slate")
             .accessibilityLabel(app.trackChatOpen ? "Hide track chat" : "Ask Slate")
-        } else if let project = openProject {
+        } else if let project = openProject, app.tab(for: project.id) == .overview {
+            Button(action: toggleInspector) {
+                Image(systemName: "sidebar.trailing")
+                    .frame(width: 28, height: 28)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular, in: Circle())
+            .help(app.inspectorOpen ? "Hide Inspector" : "Show Inspector")
+            .accessibilityLabel(app.inspectorOpen ? "Hide Inspector" : "Show Inspector")
+        } else if openProject != nil {
             Button {
                 app.selectedConversation = nil
-                app.tabs[project.id] = .chat
+                if let project = openProject {
+                    app.tabs[project.id] = .chat
+                }
             } label: {
                 Label("New Chat", systemImage: "square.and.pencil")
                     .padding(.horizontal, 10)
@@ -322,15 +348,20 @@ struct RootView: View {
         app.trackChatOpen && focusedThread != nil
     }
 
+    private var showingInspector: Bool {
+        guard let project = openProject else { return false }
+        return app.inspectorOpen && app.tab(for: project.id) == .overview
+    }
+
     /// The sidebar hides when the user collapsed it or the window is too narrow to fit it beside the panes' minimums.
     private var sidebarHidden: Bool {
         app.sidebarCollapsed
-            || (windowWidth > 0 && windowWidth < LayoutMetrics.windowMin(sidebar: true, chat: showingTrackChat))
+            || (windowWidth > 0 && windowWidth < LayoutMetrics.windowMin(sidebar: true, chat: showingTrackChat, inspector: showingInspector))
     }
 
     /// The window can shrink to the panes' minimums with the sidebar hidden. Chat counts once it has finished opening.
     private var windowMinimum: CGFloat {
-        LayoutMetrics.windowMin(sidebar: false, chat: chatSettled)
+        LayoutMetrics.windowMin(sidebar: false, chat: chatSettled, inspector: showingInspector)
     }
 
     private func presentNewEvent() async {
@@ -355,10 +386,17 @@ struct RootView: View {
         }
     }
 
+    private func toggleInspector() {
+        if !app.inspectorOpen {
+            growWindow(to: LayoutMetrics.windowMin(sidebar: !sidebarHidden, chat: showingTrackChat, inspector: true))
+        }
+        app.toggleInspector()
+    }
+
     private func toggleSidebar() {
         if sidebarHidden {
             if app.sidebarCollapsed { app.toggleSidebar() }
-            growWindow(to: LayoutMetrics.windowMin(sidebar: true, chat: showingTrackChat))
+            growWindow(to: LayoutMetrics.windowMin(sidebar: true, chat: showingTrackChat, inspector: showingInspector))
         } else {
             app.toggleSidebar()
         }
@@ -366,7 +404,7 @@ struct RootView: View {
 
     private func openChat() {
         chatMounted = true
-        growWindow(to: LayoutMetrics.windowMin(sidebar: false, chat: true))
+        growWindow(to: LayoutMetrics.windowMin(sidebar: false, chat: true, inspector: showingInspector))
         withAnimation(reduceMotion ? nil : LayoutMetrics.chatMotion) {
             chatProgress = 1
         } completion: {

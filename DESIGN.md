@@ -237,7 +237,7 @@ Use the system control. A custom draw is allowed only when no system control exi
 - Text fields: plain field inside the elevated fill, radius 8, padding 10, hairline border. Placeholder is tertiary. The focused field shows the system focus ring in the accent.
 - Press feedback is the system highlight. Do not scale the window’s contents.
 
-Hit targets are at least 28 on a side. Sidebar rows already are. Icon-only toolbar buttons use the system toolbar item size, not a 16pt glyph with no padding.
+Hit targets are at least 28 on a side. Sidebar rows already are. Icon-only toolbar buttons use the system toolbar item size, not a 16pt glyph with no padding. When a control has a painted shape (capsule, row, card), that shape is the hit target, not the label.
 
 ## Context menus
 
@@ -264,17 +264,20 @@ Structure:
 
 - The presenter lives once, as an overlay on `RootView`, above the panes and below the toast.
 - Scrim: the Scrim token, full window, fades with the panel. Clicking it cancels.
-- Panel: Liquid Glass, `.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))`. Width 440 for a short form (520 for an event). Padding 20. Centered horizontally, and placed at 40% of the window height, not dead center, so it sits in the eye line.
+- Panel: Liquid Glass, `.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))`. Width 440 for a short form (520 for an event). Padding 20. Centered horizontally, with at least 40 above and below. The panel hugs its content. It never grows past the window minus those 40 insets; the fields scroll when they would.
+- On an event, the title and footer stay put. The fields in between scroll. Do not force extra height that leaves empty space above the title or below the footer.
 - Shadow: black 20%, radius 30, y 12. This is the only floating shadow in the app.
 
 Layout inside the panel:
 
-- Title, 20 semibold, one line (“Edit Project”, “New Event”).
+- Title, 20 semibold, one line (“Edit Project”, “New Event”). On an event, the title *is* the event name: an editable field in that type. New Event uses “New Event” as the placeholder. There is no second Title field.
 - 16 below the title, the fields. Each field is a label (13 semibold) and 8 below it the control. 16 between fields.
 - Fields use the elevated solid fill, radius 8, padding 10, hairline border, per Controls. The glass shows only around the fields, never through them.
 - Pickers and toggles in a modal sit on a row: label leading, system control trailing, 28 tall.
+- Event notes are a fixed-height field that scrolls. Do not let the notes field grow the panel.
 - Footer, 20 below the last field: a full-width capsule primary (40 tall, 15 medium, accent fill), then Cancel as a 40-tall elevated capsule. The one exception to “no destructive in a modal”: editing an existing event or reminder may show Delete beside Cancel, because EventKit items have no context menu. It still confirms.
 - Event and reminder modals surface parsed actions above the footer: Join meeting (from the item URL, notes, or location) and Open location (Maps, when the location is a place). Each action is a 40-tall row with a trailing arrow.
+- A modal button’s hit target is the painted shape, not the label. Put the frame, fill, and `contentShape` on the button’s label. Do not apply them after `Button` — on macOS that leaves only the text clickable.
 
 Behavior:
 

@@ -65,10 +65,17 @@ final class AppModel {
         }
     }
     var trackChatOpen = false
+    var inspectorOpen = false
 
     func toggleSidebar() {
         withAnimation(.easeInOut(duration: 0.22)) {
             sidebarCollapsed.toggle()
+        }
+    }
+
+    func toggleInspector() {
+        withAnimation(.easeInOut(duration: 0.22)) {
+            inspectorOpen.toggle()
         }
     }
 
@@ -223,6 +230,20 @@ final class AppModel {
         if let tab {
             tabs[project.id] = tab
         }
+        destination = .project(project.id)
+    }
+
+    func open(_ thread: ProjectThread) {
+        guard let project = thread.project else { return }
+        selectedThread = thread.id
+        tabs[project.id] = .threads
+        destination = .project(project.id)
+    }
+
+    func open(_ note: Note) {
+        guard let project = note.project else { return }
+        selectedNote = note.id
+        tabs[project.id] = .notes
         destination = .project(project.id)
     }
 
