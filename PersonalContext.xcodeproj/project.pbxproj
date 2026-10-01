@@ -15,6 +15,9 @@
 		A1B2C3D4E5F60718293A0011 /* OverviewGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0010 /* OverviewGrid.swift */; };
 		A1B2C3D4E5F60718293A0013 /* Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0012 /* Inspector.swift */; };
 		A1B2C3D4E5F60718293A0015 /* OverviewInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0014 /* OverviewInspector.swift */; };
+		A1B2C3D4E5F60718293A0017 /* OverviewWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0016 /* OverviewWidgets.swift */; };
+		A1B2C3D4E5F60718293A0019 /* FocusWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0018 /* FocusWidget.swift */; };
+		A1B2C3D4E5F60718293A001B /* OverviewWidgetEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A001A /* OverviewWidgetEditor.swift */; };
 		05BA026B4AF137407DFFBB70 /* ColorHex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A843C76D621958EDA8D94D61 /* ColorHex.swift */; };
 		06A4B5A5812EFA0E120BAFC9 /* DocumentSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591D54A725FC8665EAB3A680 /* DocumentSection.swift */; };
 		08E6C08EE6ADDD3911650B76 /* Hairline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35658CC3CC77FE7EF9839CD9 /* Hairline.swift */; };
@@ -144,6 +147,9 @@
 		A1B2C3D4E5F60718293A0010 /* OverviewGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewGrid.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A0012 /* Inspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Inspector.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A0014 /* OverviewInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewInspector.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0016 /* OverviewWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewWidgets.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0018 /* FocusWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusWidget.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A001A /* OverviewWidgetEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewWidgetEditor.swift; sourceTree = "<group>"; };
 		00DB08B2B0C6ACC8AEA864AE /* FocusDismissal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusDismissal.swift; sourceTree = "<group>"; };
 		022EAD2D997C0A29F21400CA /* SettingsChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsChrome.swift; sourceTree = "<group>"; };
 		06566D4B5F0858C10300294C /* MarkdownPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownPreview.swift; sourceTree = "<group>"; };
@@ -465,6 +471,9 @@
 				F19BF6A1920870A4A75C9063 /* NewProjectSheet.swift */,
 				A1B2C3D4E5F60718293A0010 /* OverviewGrid.swift */,
 				A1B2C3D4E5F60718293A0014 /* OverviewInspector.swift */,
+				A1B2C3D4E5F60718293A001A /* OverviewWidgetEditor.swift */,
+				A1B2C3D4E5F60718293A0016 /* OverviewWidgets.swift */,
+				A1B2C3D4E5F60718293A0018 /* FocusWidget.swift */,
 				690265881D471474DCC2ECDF /* OverviewPage.swift */,
 				B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */,
 				77F4B6484C6BED0CADABAF2B /* ProjectLine.swift */,
@@ -680,6 +689,9 @@
 				50EFEC7E7918114CAE89E3F4 /* OrbState.swift in Sources */,
 				A1B2C3D4E5F60718293A0011 /* OverviewGrid.swift in Sources */,
 				A1B2C3D4E5F60718293A0015 /* OverviewInspector.swift in Sources */,
+				A1B2C3D4E5F60718293A001B /* OverviewWidgetEditor.swift in Sources */,
+				A1B2C3D4E5F60718293A0017 /* OverviewWidgets.swift in Sources */,
+				A1B2C3D4E5F60718293A0019 /* FocusWidget.swift in Sources */,
 				727A13054357C732319E171D /* OverviewPage.swift in Sources */,
 				30B1DB553DC0EB0931DAC3EE /* PersonalContextApp.swift in Sources */,
 				1F48BD11B051B8BAFF91C95B /* PinnedComposer.swift in Sources */,

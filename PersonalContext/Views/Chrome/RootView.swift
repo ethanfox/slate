@@ -501,6 +501,8 @@ struct RootView: View {
             EditDecisionModal(decision: decision)
         case .editNote(let note):
             EditNoteModal(note: note)
+        case .editOverviewWidget(let project, let plateID, let onScreen):
+            OverviewWidgetEditor(project: project, plateID: plateID, onScreen: onScreen)
         }
     }
 

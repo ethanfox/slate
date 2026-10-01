@@ -82,30 +82,47 @@ private struct OverviewInspectorSettings: View {
     }
 }
 
-private struct OverviewWidthControl: View {
-    @Bindable var project: Project
+struct GlassCapsuleSwitcher<Value: Hashable & Identifiable>: View {
+    var items: [Value]
+    @Binding var selection: Value
+    var symbol: (Value) -> String
+    var label: (Value) -> String
+    var accessibilityLabel: String
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(OverviewWidth.allCases) { width in
+            ForEach(items) { item in
                 Button {
-                    project.overviewWidth = width
-                    project.touch()
+                    selection = item
                 } label: {
-                    Image(systemName: width.symbol)
+                    Image(systemName: symbol(item))
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(width.label)
-                .foregroundStyle(project.overviewWidth == width ? .primary : .secondary)
-                .accessibilityLabel(width.label)
+                .help(label(item))
+                .foregroundStyle(selection == item ? .primary : .secondary)
+                .accessibilityLabel(label(item))
             }
         }
         .padding(2)
         .glassEffect(.regular, in: Capsule())
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Overview width")
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct OverviewWidthControl: View {
+    @Bindable var project: Project
+
+    var body: some View {
+        GlassCapsuleSwitcher(
+            items: OverviewWidth.allCases,
+            selection: $project.overviewWidth,
+            symbol: \.symbol,
+            label: \.label,
+            accessibilityLabel: "Overview width"
+        )
     }
 }
 

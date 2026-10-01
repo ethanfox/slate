@@ -40,10 +40,39 @@ enum OverviewWidgetSize: String, Codable, CaseIterable, Identifiable, Hashable {
 struct OverviewPlate: Identifiable, Codable, Equatable, Hashable {
     var id: UUID
     var size: OverviewWidgetSize
+    var kind: OverviewWidgetKind
+    var settingsJSON: String
 
-    init(id: UUID = UUID(), size: OverviewWidgetSize) {
+    init(
+        id: UUID = UUID(),
+        size: OverviewWidgetSize,
+        kind: OverviewWidgetKind = .focus,
+        settingsJSON: String = ""
+    ) {
         self.id = id
         self.size = size
+        self.kind = kind
+        self.settingsJSON = settingsJSON
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, size, kind, settingsJSON
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        size = try container.decode(OverviewWidgetSize.self, forKey: .size)
+        kind = try container.decodeIfPresent(OverviewWidgetKind.self, forKey: .kind) ?? .focus
+        settingsJSON = try container.decodeIfPresent(String.self, forKey: .settingsJSON) ?? ""
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(size, forKey: .size)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(settingsJSON, forKey: .settingsJSON)
     }
 
     static let starter: [OverviewPlate] = [
@@ -232,9 +261,20 @@ extension Project {
     }
 
     func setOverviewPlate(_ id: UUID, size: OverviewWidgetSize) {
+        updateOverviewPlate(id, size: size)
+    }
+
+    func updateOverviewPlate(
+        _ id: UUID,
+        size: OverviewWidgetSize? = nil,
+        kind: OverviewWidgetKind? = nil,
+        settingsJSON: String? = nil
+    ) {
         var plates = overviewPlates
         guard let index = plates.firstIndex(where: { $0.id == id }) else { return }
-        plates[index].size = size
+        if let size { plates[index].size = size }
+        if let kind { plates[index].kind = kind }
+        if let settingsJSON { plates[index].settingsJSON = settingsJSON }
         overviewPlates = plates
         touch()
     }
@@ -279,10 +319,14 @@ struct OverviewCanvas: View {
                     OverviewPackLayout(columns: columns, width: measureWidth) {
                         ForEach(plates) { plate in
                             OverviewPlateView(
+                                project: project,
                                 plate: plate,
                                 editing: app.inspectorOpen,
                                 isGhost: draggingID == plate.id,
                                 onSize: { project.setOverviewPlate(plate.id, size: $0) },
+                                onEdit: {
+                                    app.present(.editOverviewWidget(project, plate.id, frames[plate.id]?.size ?? .zero))
+                                },
                                 onDelete: { pendingDelete = plate.id },
                                 onFrame: { frames[plate.id] = $0 },
                                 onDragChanged: { dragChanged(plate.id, $0) },
@@ -297,7 +341,7 @@ struct OverviewCanvas: View {
                     .animation(gridMotion, value: project.overviewLayoutJSON)
 
                     if let draggingID, let plate = project.overviewPlates.first(where: { $0.id == draggingID }) {
-                        OverviewPlateChrome(size: plate.size, editing: true)
+                        OverviewWidgetFace(project: project, plate: plate, editing: true, interactive: false)
                             .frame(width: max(liftFrame.width, 1), height: max(liftFrame.height, 1))
                             .offset(
                                 x: liftFrame.minX + dragTranslation.width,
@@ -391,35 +435,20 @@ struct OverviewCanvas: View {
     }
 }
 
-private struct OverviewPlateChrome: View {
-    var size: OverviewWidgetSize
-    var editing: Bool
-
-    var body: some View {
-        Text(size.label)
-            .font(CraftFont.section)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(CraftColor.hairline, lineWidth: editing ? 2 : 1)
-            )
-    }
-}
-
 private struct OverviewPlateView: View {
+    var project: Project
     var plate: OverviewPlate
     var editing: Bool
     var isGhost: Bool
     var onSize: (OverviewWidgetSize) -> Void
+    var onEdit: () -> Void
     var onDelete: () -> Void
     var onFrame: (CGRect) -> Void
     var onDragChanged: (DragGesture.Value) -> Void
     var onDragEnded: () -> Void
 
     var body: some View {
-        OverviewPlateChrome(size: plate.size, editing: editing)
+        OverviewWidgetFace(project: project, plate: plate, editing: editing, interactive: !editing)
             .opacity(isGhost ? 0.35 : 1)
             .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .onGeometryChange(for: CGRect.self) { proxy in
@@ -433,15 +462,16 @@ private struct OverviewPlateView: View {
             }
             .overlay(alignment: .bottomTrailing) {
                 if editing, !isGhost {
-                    plateButton("ellipsis", label: "Plate actions")
+                    plateButton("ellipsis", label: "Edit widget", action: onEdit)
                 }
             }
             .contextMenu {
+                Button("Edit") { onEdit() }
                 ForEach(OverviewWidgetSize.allCases) { size in
                     Button(size.label) { onSize(size) }
                 }
             }
-            .accessibilityLabel("Plate \(plate.size.label)")
+            .accessibilityLabel("\(plate.kind.label) \(plate.size.label)")
     }
 
     private var drag: some Gesture {

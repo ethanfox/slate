@@ -16,6 +16,7 @@ enum AppModal: Identifiable {
     case editThread(ProjectThread)
     case editDecision(Decision)
     case editNote(Note)
+    case editOverviewWidget(Project, UUID, CGSize)
 
     var id: String {
         switch self {
@@ -32,15 +33,18 @@ enum AppModal: Identifiable {
         case .editThread(let thread): "edit-thread-\(thread.id.uuidString)"
         case .editDecision(let decision): "edit-decision-\(decision.id.uuidString)"
         case .editNote(let note): "edit-note-\(note.id.uuidString)"
+        case .editOverviewWidget(let project, let plateID, _): "edit-overview-\(project.id.uuidString)-\(plateID.uuidString)"
         }
     }
 
     var panelWidth: CGFloat {
         switch self {
         case .newEvent, .editEvent, .newReminder, .newReminderFromNote, .editReminder: 520
+        case .editOverviewWidget: 680
         default: 440
         }
     }
+
 }
 
 struct ModalDismissAction {
@@ -56,6 +60,7 @@ enum ModalHost {
 extension EnvironmentValues {
     @Entry var modalDismiss = ModalDismissAction(action: {})
     @Entry var modalHost = ModalHost.main
+    @Entry var modalInnerSize = CGSize.zero
 }
 
 struct SlateModalPresenter<ModalContent: View>: View {
@@ -68,6 +73,7 @@ struct SlateModalPresenter<ModalContent: View>: View {
     var body: some View {
         GeometryReader { geo in
             let margin: CGFloat = 40
+            let panelWidth = min(modal?.panelWidth ?? 440, max(geo.size.width - margin * 2, 280))
             let available = max(geo.size.height - margin * 2, 240)
             ZStack {
                 if let modal {
@@ -76,15 +82,16 @@ struct SlateModalPresenter<ModalContent: View>: View {
                         .onTapGesture(perform: onDismiss)
                         .transition(.opacity)
 
-                    ModalHeightClamp(maxHeight: available) {
+                    ModalHeightClamp(maxWidth: panelWidth, maxHeight: available) {
                         modalContent(modal)
                             .environment(\.modalDismiss, ModalDismissAction(action: onDismiss))
+                            .environment(\.modalInnerSize, CGSize(width: panelWidth - 40, height: available - 40))
                             .padding(20)
-                            .frame(width: modal.panelWidth)
+                            .frame(width: panelWidth)
                     }
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .glassEffect(.regular, in: panelShape)
+                    .clipShape(panelShape)
                     .shadow(color: .black.opacity(0.20), radius: 30, y: 12)
-                    .clipped()
                     .transition(panelTransition)
                 }
             }
@@ -98,18 +105,36 @@ struct SlateModalPresenter<ModalContent: View>: View {
     }
 
     private struct ModalHeightClamp: Layout {
+        var maxWidth: CGFloat
         var maxHeight: CGFloat
 
         func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
             guard let child = subviews.first else { return .zero }
-            let size = child.sizeThatFits(.init(width: proposal.width, height: maxHeight))
-            return CGSize(width: size.width, height: min(size.height, maxHeight))
+            let widthCap = min(proposal.width ?? maxWidth, maxWidth)
+            let ideal = child.sizeThatFits(.init(width: widthCap, height: nil))
+            var width = min(max(ideal.width, 1), widthCap)
+            var height = ideal.height
+            if ideal.width > widthCap {
+                let fitted = child.sizeThatFits(.init(width: widthCap, height: nil))
+                width = min(fitted.width, widthCap)
+                height = fitted.height
+            }
+            if height > maxHeight {
+                let fitted = child.sizeThatFits(.init(width: width, height: maxHeight))
+                width = min(max(fitted.width, 1), widthCap)
+                height = maxHeight
+            }
+            return CGSize(width: width, height: min(height, maxHeight))
         }
 
         func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
             guard let child = subviews.first else { return }
             child.place(at: bounds.origin, proposal: .init(width: bounds.width, height: bounds.height))
         }
+    }
+
+    private var panelShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
     }
 
     private var modalAnimation: Animation {
@@ -130,16 +155,20 @@ struct ModalScroll<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        ScrollView(.vertical) {
+        ViewThatFits(in: .vertical) {
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.trailing, 12)
+            ScrollView(.vertical) {
+                content()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.trailing, 12)
+            }
+            .scrollIndicators(.visible, axes: .vertical)
+            .scrollIndicators(.hidden, axes: .horizontal)
+            .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+            .clipped()
+            .background(ModalScrollLock())
         }
-        .scrollIndicators(.visible, axes: .vertical)
-        .scrollIndicators(.hidden, axes: .horizontal)
-        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-        .clipped()
-        .background(ModalScrollLock())
     }
 }
 
