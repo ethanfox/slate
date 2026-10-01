@@ -37,7 +37,6 @@ struct FocusWidgetView: View {
     var size: OverviewWidgetSize
     var interactive: Bool
     @Environment(AppModel.self) private var app
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         pillColumn(visibleTracks, compact: size == .small)
@@ -54,21 +53,20 @@ struct FocusWidgetView: View {
     }
 
     private var visibleTracks: [ProjectThread] {
-        Array(matching.prefix(pillLimit))
+        Array(matching.prefix(Self.itemLimit(for: size)))
     }
 
-    private var pillLimit: Int {
+    private static func itemLimit(for size: OverviewWidgetSize) -> Int {
         switch size {
-        case .small: 3
-        case .medium: 3
-        case .large: 5
+        case .small, .medium: 2
+        case .large: 4
         }
     }
 
     private func pillColumn(_ pills: [ProjectThread], compact: Bool) -> some View {
         VStack(spacing: compact ? 6 : 8) {
             if pills.isEmpty {
-                FocusTrackPill(
+                WidgetRowPill(
                     title: "No tracks",
                     meta: "",
                     compact: compact,
@@ -77,7 +75,7 @@ struct FocusWidgetView: View {
                 )
             } else {
                 ForEach(pills) { track in
-                    FocusTrackPill(
+                    WidgetRowPill(
                         title: track.title.isEmpty ? "Untitled" : track.title,
                         meta: track.kind.label,
                         compact: compact,
@@ -90,59 +88,6 @@ struct FocusWidgetView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
-    }
-}
-
-private struct FocusTrackPill: View {
-    var title: String
-    var meta: String
-    var compact: Bool
-    var interactive: Bool
-    var action: () -> Void
-    @Environment(\.colorScheme) private var scheme
-    @State private var hovering = false
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
-        let row = HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: compact ? 13 : 15, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                if !meta.isEmpty {
-                    Text(meta)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 0)
-            Image(systemName: "arrow.up.right")
-                .font(.system(size: compact ? 11 : 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, compact ? 12 : 14)
-        .padding(.vertical, compact ? 8 : 11)
-        .background(Color.white.opacity(fillOpacity), in: shape)
-        .contentShape(shape)
-        .onHover { hovering = $0 }
-        .animation(Motion.hover, value: hovering)
-        .accessibilityLabel(meta.isEmpty ? title : "\(title), \(meta)")
-
-        if interactive {
-            Button(action: action) { row }
-                .buttonStyle(.plain)
-        } else {
-            row
-        }
-    }
-
-    private var fillOpacity: Double {
-        let rest = scheme == .dark ? 0.10 : 0.45
-        let hover = scheme == .dark ? 0.20 : 0.68
-        return hovering ? hover : rest
     }
 }
 
@@ -163,32 +108,8 @@ struct FocusWidgetFields: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Gradient")
-                    .font(CraftFont.section)
-                ModalControlRow("Start") {
-                    ColorPicker("Start", selection: hexBinding(\.startHex), supportsOpacity: false)
-                        .labelsHidden()
-                }
-                ModalControlRow("End") {
-                    ColorPicker("End", selection: hexBinding(\.endHex), supportsOpacity: false)
-                        .labelsHidden()
-                }
-                HStack(spacing: 10) {
-                    Button("Random") { settings.gradient.randomizeColors() }
-                    Button("Scramble") { settings.gradient.scramble() }
-                }
-                .buttonStyle(.plain)
-                .font(CraftFont.body)
-            }
+            WidgetGradientFields(gradient: $settings.gradient)
         }
-    }
-
-    private func hexBinding(_ keyPath: WritableKeyPath<WidgetGradient, String>) -> Binding<Color> {
-        Binding(
-            get: { Color(hex: settings.gradient[keyPath: keyPath]) },
-            set: { settings.gradient[keyPath: keyPath] = $0.hexString }
-        )
     }
 
     private func binding(for status: ThreadStatus) -> Binding<Bool> {

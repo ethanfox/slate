@@ -129,30 +129,53 @@ private struct OverviewWidthControl: View {
 private struct OverviewInspectorInsert: View {
     var project: Project
 
-    private let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
+    private let columns = [
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12)
+    ]
 
     var body: some View {
-        LazyVGrid(columns: columns, alignment: .center, spacing: 16) {
-            ForEach(OverviewWidgetSize.allCases) { size in
-                Button {
-                    project.addOverviewPlate(size)
-                } label: {
-                    VStack(spacing: 8) {
-                        Image(systemName: size.symbol)
-                            .font(CraftFont.sidebarIcon)
-                            .foregroundStyle(.primary)
-                            .frame(width: 44, height: 44)
-                            .glassEffect(.regular, in: Circle())
-                        Text(size.label)
-                            .font(CraftFont.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .contentShape(Rectangle())
+        LazyVGrid(columns: columns, alignment: .center, spacing: 18) {
+            ForEach(OverviewWidgetKind.allCases) { kind in
+                OverviewInsertTile(kind: kind) {
+                    project.addOverviewPlate(kind)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Insert \(size.label)")
             }
         }
+    }
+}
+
+private struct OverviewInsertTile: View {
+    var kind: OverviewWidgetKind
+    var action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        let well = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: kind.symbol)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .frame(width: 56, height: 56)
+                    .background {
+                        well.fill(Color.primary.opacity(hovering ? 0.10 : 0.06))
+                    }
+                    .overlay {
+                        well.strokeBorder(Color.white.opacity(hovering ? 0.16 : 0.08), lineWidth: 1)
+                    }
+                Text(kind.label)
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(Motion.hover, value: hovering)
+        .accessibilityLabel("Insert \(kind.label)")
     }
 }

@@ -8,7 +8,8 @@ struct OverviewWidgetEditor: View {
     @Environment(\.modalDismiss) private var modalDismiss
     @Environment(\.modalInnerSize) private var inner
     @State private var size: OverviewWidgetSize
-    @State private var settings: FocusWidgetSettings
+    @State private var focusSettings: FocusWidgetSettings
+    @State private var notesSettings: NotesWidgetSettings
     private let sourceSize: OverviewWidgetSize
 
     init(project: Project, plateID: UUID, onScreen: CGSize) {
@@ -17,9 +18,11 @@ struct OverviewWidgetEditor: View {
         self.onScreen = onScreen
         let plate = project.overviewPlates.first(where: { $0.id == plateID })
         let opened = plate?.size ?? .medium
+        let json = plate?.settingsJSON ?? ""
         sourceSize = opened
         _size = State(initialValue: opened)
-        _settings = State(initialValue: FocusWidgetSettings.decode(plate?.settingsJSON ?? ""))
+        _focusSettings = State(initialValue: FocusWidgetSettings.decode(json))
+        _notesSettings = State(initialValue: NotesWidgetSettings.decode(json))
     }
 
     var body: some View {
@@ -95,7 +98,7 @@ struct OverviewWidgetEditor: View {
         let slot = previewSlot
         return OverviewWidgetFace(
             project: project,
-            plate: OverviewPlate(id: plateID, size: size, kind: kind, settingsJSON: settings.encoded),
+            plate: OverviewPlate(id: plateID, size: size, kind: kind, settingsJSON: draftJSON),
             editing: false,
             interactive: false
         )
@@ -120,7 +123,9 @@ struct OverviewWidgetEditor: View {
 
             switch kind {
             case .focus:
-                FocusWidgetFields(settings: $settings)
+                FocusWidgetFields(settings: $focusSettings)
+            case .notes:
+                NotesWidgetFields(settings: $notesSettings)
             default:
                 Text("This widget has no settings yet.")
                     .font(CraftFont.body)
@@ -129,8 +134,16 @@ struct OverviewWidgetEditor: View {
         }
     }
 
+    private var draftJSON: String {
+        switch kind {
+        case .focus: focusSettings.encoded
+        case .notes: notesSettings.encoded
+        default: ""
+        }
+    }
+
     private func save() {
-        project.updateOverviewPlate(plateID, size: size, settingsJSON: settings.encoded)
+        project.updateOverviewPlate(plateID, size: size, settingsJSON: draftJSON)
         modalDismiss()
     }
 }

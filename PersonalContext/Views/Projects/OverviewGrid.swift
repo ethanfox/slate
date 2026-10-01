@@ -228,6 +228,21 @@ struct OverviewPackLayout: Layout {
     }
 }
 
+struct OverviewCell: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
+        CGSize(width: proposal.width ?? 0, height: proposal.height ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
+        for subview in subviews {
+            subview.place(
+                at: bounds.origin,
+                proposal: ProposedViewSize(width: bounds.width, height: bounds.height)
+            )
+        }
+    }
+}
+
 extension Project {
     var overviewWidth: OverviewWidth {
         get { OverviewWidth(rawValue: overviewWidthRaw) ?? .twoThirds }
@@ -253,9 +268,13 @@ extension Project {
         touch()
     }
 
-    func addOverviewPlate(_ size: OverviewWidgetSize) {
+    func addOverviewPlate(_ kind: OverviewWidgetKind, size: OverviewWidgetSize? = nil) {
         var plates = overviewPlates
-        plates.append(OverviewPlate(size: size))
+        plates.append(OverviewPlate(
+            size: size ?? kind.defaultSize,
+            kind: kind,
+            settingsJSON: kind.defaultSettingsJSON
+        ))
         overviewPlates = plates
         touch()
     }
@@ -448,9 +467,13 @@ private struct OverviewPlateView: View {
     var onDragEnded: () -> Void
 
     var body: some View {
-        OverviewWidgetFace(project: project, plate: plate, editing: editing, interactive: !editing)
-            .opacity(isGhost ? 0.35 : 1)
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        OverviewCell {
+            OverviewWidgetFace(project: project, plate: plate, editing: editing, interactive: !editing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: OverviewWidgetMetrics.cornerRadius, style: .continuous))
+        .opacity(isGhost ? 0.35 : 1)
+        .contentShape(RoundedRectangle(cornerRadius: OverviewWidgetMetrics.cornerRadius, style: .continuous))
             .onGeometryChange(for: CGRect.self) { proxy in
                 proxy.frame(in: .named(OverviewDragSpace.name))
             } action: { onFrame($0) }
