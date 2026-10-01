@@ -54,6 +54,16 @@ struct OverviewPlate: Identifiable, Codable, Equatable, Hashable {
         OverviewPlate(size: .small),
         OverviewPlate(size: .medium)
     ]
+
+    static func moving(_ plates: [OverviewPlate], id: UUID?, before target: UUID?) -> [OverviewPlate] {
+        guard let id, let target, id != target else { return plates }
+        var next = plates
+        guard let from = next.firstIndex(where: { $0.id == id }) else { return plates }
+        let plate = next.remove(at: from)
+        guard let dest = next.firstIndex(where: { $0.id == target }) else { return plates }
+        next.insert(plate, at: dest)
+        return next
+    }
 }
 
 struct OverviewSpan: Equatable {
@@ -233,39 +243,145 @@ extension Project {
         overviewPlates = overviewPlates.filter { $0.id != id }
         touch()
     }
+
+    func moveOverviewPlate(_ id: UUID, before target: UUID) {
+        let next = OverviewPlate.moving(overviewPlates, id: id, before: target)
+        guard next != overviewPlates else { return }
+        overviewPlates = next
+        touch()
+    }
+}
+
+private enum OverviewDragSpace {
+    static let name = "overviewGrid"
 }
 
 struct OverviewCanvas: View {
     @Bindable var project: Project
+    @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pendingDelete: UUID?
+    @State private var frames: [UUID: CGRect] = [:]
+    @State private var draggingID: UUID?
+    @State private var hoverID: UUID?
+    @State private var liftFrame: CGRect = .zero
+    @State private var dragTranslation: CGSize = .zero
 
     var body: some View {
         GeometryReader { geo in
             let paneWidth = geo.size.width
             let measureWidth = Self.measureWidth(paneWidth: paneWidth, fraction: project.overviewWidth.fraction)
             let columns = OverviewGridMetrics.columns(for: measureWidth)
+            let plates = OverviewPlate.moving(project.overviewPlates, id: draggingID, before: hoverID)
 
             ScrollView(.vertical) {
-                OverviewPackLayout(columns: columns, width: measureWidth) {
-                    ForEach(project.overviewPlates) { plate in
-                        OverviewPlateView(plate: plate) { size in
-                            project.setOverviewPlate(plate.id, size: size)
-                        } onDelete: {
-                            project.removeOverviewPlate(plate.id)
+                ZStack(alignment: .topLeading) {
+                    OverviewPackLayout(columns: columns, width: measureWidth) {
+                        ForEach(plates) { plate in
+                            OverviewPlateView(
+                                plate: plate,
+                                editing: app.inspectorOpen,
+                                isGhost: draggingID == plate.id,
+                                onSize: { project.setOverviewPlate(plate.id, size: $0) },
+                                onDelete: { pendingDelete = plate.id },
+                                onFrame: { frames[plate.id] = $0 },
+                                onDragChanged: { dragChanged(plate.id, $0) },
+                                onDragEnded: commitDrag
+                            )
+                            .layoutValue(key: OverviewSpanKey.self, value: plate.size.span(in: columns))
+                            .transition(.opacity.combined(with: .scale(0.96)))
                         }
-                        .layoutValue(key: OverviewSpanKey.self, value: plate.size.span(in: columns))
+                    }
+                    .frame(width: measureWidth)
+                    .animation(gridMotion, value: hoverID)
+                    .animation(gridMotion, value: project.overviewLayoutJSON)
+
+                    if let draggingID, let plate = project.overviewPlates.first(where: { $0.id == draggingID }) {
+                        OverviewPlateChrome(size: plate.size, editing: true)
+                            .frame(width: max(liftFrame.width, 1), height: max(liftFrame.height, 1))
+                            .offset(
+                                x: liftFrame.minX + dragTranslation.width,
+                                y: liftFrame.minY + dragTranslation.height
+                            )
+                            .compositingGroup()
+                            .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
+                            .allowsHitTesting(false)
                     }
                 }
-                .frame(width: measureWidth)
+                .coordinateSpace(name: OverviewDragSpace.name)
                 .padding(.horizontal, 32)
                 .padding(.vertical, 28)
                 .frame(width: paneWidth, alignment: .center)
-                .animation(Motion.snappy, value: project.overviewWidth)
-                .animation(Motion.snappy, value: measureWidth)
+                .animation(gridMotion, value: project.overviewWidth)
+                .animation(gridMotion, value: measureWidth)
+                .animation(gridMotion, value: app.inspectorOpen)
             }
             .scrollContentBackground(.hidden)
         }
         .clipped()
         .onAppear(perform: project.seedOverviewPlatesIfNeeded)
+        .onChange(of: app.inspectorOpen) { _, open in
+            if !open { clearDrag() }
+        }
+        .alert(
+            "Delete this plate?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            )
+        ) {
+            Button("Delete", role: .destructive, action: confirmDelete)
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: {
+            Text("It will be removed from this overview.")
+        }
+    }
+
+    private var gridMotion: Animation? {
+        reduceMotion ? nil : Motion.snappy
+    }
+
+    private func dragChanged(_ id: UUID, _ value: DragGesture.Value) {
+        if draggingID == nil {
+            draggingID = id
+            liftFrame = frames[id] ?? CGRect(origin: value.startLocation, size: .zero)
+        }
+        dragTranslation = value.translation
+        let hit = frames.first { key, rect in
+            key != id && rect.contains(value.location)
+        }?.key
+        if let hit, hoverID != hit {
+            hoverID = hit
+        }
+    }
+
+    private func commitDrag() {
+        let id = draggingID
+        let target = hoverID
+        dragTranslation = .zero
+        draggingID = nil
+        hoverID = nil
+        if let id, let target {
+            withAnimation(gridMotion) {
+                project.moveOverviewPlate(id, before: target)
+            }
+        }
+    }
+
+    private func clearDrag() {
+        draggingID = nil
+        hoverID = nil
+        dragTranslation = .zero
+    }
+
+    private func confirmDelete() {
+        let id = pendingDelete
+        pendingDelete = nil
+        withAnimation(gridMotion) {
+            if let id {
+                project.removeOverviewPlate(id)
+            }
+        }
     }
 
     private static func measureWidth(paneWidth: CGFloat, fraction: CGFloat) -> CGFloat {
@@ -275,29 +391,79 @@ struct OverviewCanvas: View {
     }
 }
 
-private struct OverviewPlateView: View {
-    var plate: OverviewPlate
-    var onSize: (OverviewWidgetSize) -> Void
-    var onDelete: () -> Void
+private struct OverviewPlateChrome: View {
+    var size: OverviewWidgetSize
+    var editing: Bool
 
     var body: some View {
-        Text(plate.size.label)
+        Text(size.label)
             .font(CraftFont.section)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(CraftColor.hairline)
+                    .strokeBorder(CraftColor.hairline, lineWidth: editing ? 2 : 1)
             )
+    }
+}
+
+private struct OverviewPlateView: View {
+    var plate: OverviewPlate
+    var editing: Bool
+    var isGhost: Bool
+    var onSize: (OverviewWidgetSize) -> Void
+    var onDelete: () -> Void
+    var onFrame: (CGRect) -> Void
+    var onDragChanged: (DragGesture.Value) -> Void
+    var onDragEnded: () -> Void
+
+    var body: some View {
+        OverviewPlateChrome(size: plate.size, editing: editing)
+            .opacity(isGhost ? 0.35 : 1)
             .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .onGeometryChange(for: CGRect.self) { proxy in
+                proxy.frame(in: .named(OverviewDragSpace.name))
+            } action: { onFrame($0) }
+            .gesture(drag, including: editing ? .all : .subviews)
+            .overlay(alignment: .topTrailing) {
+                if editing, !isGhost {
+                    plateButton("xmark", label: "Delete plate", action: onDelete)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if editing, !isGhost {
+                    plateButton("ellipsis", label: "Plate actions")
+                }
+            }
             .contextMenu {
                 ForEach(OverviewWidgetSize.allCases) { size in
                     Button(size.label) { onSize(size) }
                 }
-                Divider()
-                Button("Delete", role: .destructive, action: onDelete)
             }
             .accessibilityLabel("Plate \(plate.size.label)")
+    }
+
+    private var drag: some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .named(OverviewDragSpace.name))
+            .onChanged(onDragChanged)
+            .onEnded { _ in onDragEnded() }
+    }
+
+    private func plateButton(_ systemImage: String, label: String, action: @escaping () -> Void = {}) -> some View {
+        Button(action: action) {
+            ZStack {
+                Circle().fill(.clear)
+                Image(systemName: systemImage)
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .frame(width: 28, height: 28)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular, in: Circle())
+        .contentShape(Circle())
+        .padding(6)
+        .accessibilityLabel(label)
     }
 }
