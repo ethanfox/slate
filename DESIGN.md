@@ -41,7 +41,8 @@ Glass rules:
 
 - Hidden title bar. Window background is `WindowGlass` (`NSVisualEffectView`, material `.sidebar`, blending `.behindWindow`).
 - `HStack` spacing 0: `SidebarView` | content column.
-- Sidebar width is 232, or 0 when collapsed. Animate width. Do not use `NavigationSplitViewVisibility`.
+- Sidebar width is 232, or 0 when collapsed. Do not use `NavigationSplitViewVisibility`.
+- **Chrome column slide (locked).** The sidebar is the reference. Width `232 ↔ 0`, `alignment: .leading`, `.clipped()`, opacity `1 ↔ 0`, `withAnimation(.easeInOut(duration: 0.22))`. Any other chrome column that opens onto the page (the overview inspector) uses this same clip, the same curve, and the same duration. Do not invent a second slide. Do not pop. Do not use `Motion.snappy` or `Motion.smooth` for this. Reduce Motion: opacity only, no width slide.
 - Content column: 52pt custom bar (sidebar toggle, page icon, page title, page actions), then the solid page card (radius 12, canvas fill, hairline, shadow). Inset 10 trailing and bottom. Leading inset 10 only when the sidebar is collapsed (78pt on the bar so traffic lights stay clear).
 - Default size 1180×760.
 - Inactive window: sidebar icons dim with `@Environment(\.appearsActive)`. Selected rows stay readable.
@@ -324,6 +325,7 @@ Rules:
 - **Paging:** content that pages (next week, previous week) uses `.transition(.push(from: .trailing))` or `.leading`, matching the direction, with `Motion.smooth`.
 - **Modals:** entry `.scale(0.96).combined(with: .opacity)` with `Motion.snappy`; exit `.scale(0.98).combined(with: .opacity)` with `Motion.quick`. Use an asymmetric transition.
 - **Destination changes** (sidebar navigation) are instant. Do not animate the page swap.
+- **Chrome column slide:** sidebar and inspector. Width clip plus opacity, `.easeInOut(duration: 0.22)`, as specified under Window. The page grid may reflow with that same transaction. Do not give the inspector its own animation.
 - No stagger. No hover scale. No looping or ambient animation (the chat orb is the one exception and lives in its own spec). No bounce above the `.snappy` default.
 - **Reduce Motion:** read `@Environment(\.accessibilityReduceMotion)`. When it is on, every transition becomes `.opacity`, and every animation that moves or scales becomes `Motion.quick` opacity only. Nothing slides, scales, or pushes.
 

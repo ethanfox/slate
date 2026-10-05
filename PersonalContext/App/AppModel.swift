@@ -66,6 +66,15 @@ final class AppModel {
     }
     var trackChatOpen = false
     var inspectorOpen = false
+    var selectedOverviewPlate: UUID?
+
+    func selectOverviewPlate(_ id: UUID?) {
+        selectedOverviewPlate = id
+        guard id != nil, !inspectorOpen else { return }
+        withAnimation(.easeInOut(duration: 0.22)) {
+            inspectorOpen = true
+        }
+    }
 
     func toggleSidebar() {
         withAnimation(.easeInOut(duration: 0.22)) {

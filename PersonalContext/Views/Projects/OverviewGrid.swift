@@ -147,14 +147,16 @@ enum OverviewPacker {
         let columns = max(1, columns)
         var occupied: [[Bool]] = []
         var placements: [OverviewPacked] = []
+        var cursor = (row: 0, column: 0)
 
         for span in spans {
             let span = OverviewSpan(columns: min(max(1, span.columns), columns), rows: max(1, span.rows))
             var placed = false
-            var row = 0
+            var row = cursor.row
             while !placed {
                 ensureRows(row + span.rows, columns: columns, occupied: &occupied)
-                for column in 0...(columns - span.columns) {
+                let start = row == cursor.row ? cursor.column : 0
+                for column in start..<max(start, columns - span.columns + 1) {
                     guard fits(row: row, column: column, span: span, occupied: occupied) else { continue }
                     occupy(row: row, column: column, span: span, occupied: &occupied)
                     placements.append(
@@ -165,6 +167,7 @@ enum OverviewPacker {
                             rowSpan: span.rows
                         )
                     )
+                    cursor = (row, column)
                     placed = true
                     break
                 }
@@ -268,15 +271,35 @@ extension Project {
         touch()
     }
 
-    func addOverviewPlate(_ kind: OverviewWidgetKind, size: OverviewWidgetSize? = nil) {
-        var plates = overviewPlates
-        plates.append(OverviewPlate(
+    @discardableResult
+    func addOverviewPlate(_ kind: OverviewWidgetKind, size: OverviewWidgetSize? = nil) -> UUID {
+        let plate = OverviewPlate(
             size: size ?? kind.defaultSize,
             kind: kind,
             settingsJSON: kind.defaultSettingsJSON
-        ))
+        )
+        var plates = overviewPlates
+        plates.append(plate)
         overviewPlates = plates
         touch()
+        return plate.id
+    }
+
+    func overviewSettings<Settings>(
+        _ id: UUID,
+        decode: @escaping (String) -> Settings,
+        encode: @escaping (Settings) -> String
+    ) -> Binding<Settings> {
+        Binding(
+            get: { decode(self.overviewPlates.first(where: { $0.id == id })?.settingsJSON ?? "") },
+            set: { value in
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    self.updateOverviewPlate(id, settingsJSON: encode(value))
+                }
+            }
+        )
     }
 
     func setOverviewPlate(_ id: UUID, size: OverviewWidgetSize) {
@@ -308,6 +331,12 @@ extension Project {
         guard next != overviewPlates else { return }
         overviewPlates = next
         touch()
+    }
+
+    var overviewLayoutSignature: String {
+        overviewPlates
+            .map { "\($0.id.uuidString):\($0.size.rawValue):\($0.kind.rawValue)" }
+            .joined(separator: "|")
     }
 }
 
@@ -341,11 +370,11 @@ struct OverviewCanvas: View {
                                 project: project,
                                 plate: plate,
                                 editing: app.inspectorOpen,
+                                isSelected: app.selectedOverviewPlate == plate.id,
                                 isGhost: draggingID == plate.id,
+                                onSelect: { app.selectOverviewPlate(plate.id) },
+                                onClear: { app.selectOverviewPlate(nil) },
                                 onSize: { project.setOverviewPlate(plate.id, size: $0) },
-                                onEdit: {
-                                    app.present(.editOverviewWidget(project, plate.id, frames[plate.id]?.size ?? .zero))
-                                },
                                 onDelete: { pendingDelete = plate.id },
                                 onFrame: { frames[plate.id] = $0 },
                                 onDragChanged: { dragChanged(plate.id, $0) },
@@ -357,10 +386,10 @@ struct OverviewCanvas: View {
                     }
                     .frame(width: measureWidth)
                     .animation(gridMotion, value: hoverID)
-                    .animation(gridMotion, value: project.overviewLayoutJSON)
+                    .animation(gridMotion, value: project.overviewLayoutSignature)
 
                     if let draggingID, let plate = project.overviewPlates.first(where: { $0.id == draggingID }) {
-                        OverviewWidgetFace(project: project, plate: plate, editing: true, interactive: false)
+                        OverviewWidgetFace(project: project, plate: plate, selected: true, interactive: false)
                             .frame(width: max(liftFrame.width, 1), height: max(liftFrame.height, 1))
                             .offset(
                                 x: liftFrame.minX + dragTranslation.width,
@@ -379,12 +408,27 @@ struct OverviewCanvas: View {
                 .animation(gridMotion, value: measureWidth)
                 .animation(gridMotion, value: app.inspectorOpen)
             }
+            .background {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { app.selectOverviewPlate(nil) }
+            }
             .scrollContentBackground(.hidden)
+        }
+        .background {
+            Button("Deselect widget") { app.selectOverviewPlate(nil) }
+                .keyboardShortcut(.escape, modifiers: [])
+                .disabled(app.selectedOverviewPlate == nil)
+                .opacity(0)
+                .accessibilityHidden(true)
         }
         .clipped()
         .onAppear(perform: project.seedOverviewPlatesIfNeeded)
         .onChange(of: app.inspectorOpen) { _, open in
-            if !open { clearDrag() }
+            if !open {
+                clearDrag()
+                app.selectedOverviewPlate = nil
+            }
         }
         .alert(
             "Delete this plate?",
@@ -442,6 +486,9 @@ struct OverviewCanvas: View {
         pendingDelete = nil
         withAnimation(gridMotion) {
             if let id {
+                if app.selectedOverviewPlate == id {
+                    app.selectedOverviewPlate = nil
+                }
                 project.removeOverviewPlate(id)
             }
         }
@@ -458,9 +505,11 @@ private struct OverviewPlateView: View {
     var project: Project
     var plate: OverviewPlate
     var editing: Bool
+    var isSelected: Bool
     var isGhost: Bool
+    var onSelect: () -> Void
+    var onClear: () -> Void
     var onSize: (OverviewWidgetSize) -> Void
-    var onEdit: () -> Void
     var onDelete: () -> Void
     var onFrame: (CGRect) -> Void
     var onDragChanged: (DragGesture.Value) -> Void
@@ -468,7 +517,7 @@ private struct OverviewPlateView: View {
 
     var body: some View {
         OverviewCell {
-            OverviewWidgetFace(project: project, plate: plate, editing: editing, interactive: !editing)
+            OverviewWidgetFace(project: project, plate: plate, selected: isSelected, interactive: !editing)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .clipShape(RoundedRectangle(cornerRadius: OverviewWidgetMetrics.cornerRadius, style: .continuous))
@@ -477,24 +526,31 @@ private struct OverviewPlateView: View {
             .onGeometryChange(for: CGRect.self) { proxy in
                 proxy.frame(in: .named(OverviewDragSpace.name))
             } action: { onFrame($0) }
+            .simultaneousGesture(
+                TapGesture().onEnded(isSelected ? onClear : onSelect),
+                including: editing ? .all : .subviews
+            )
             .gesture(drag, including: editing ? .all : .subviews)
             .overlay(alignment: .topTrailing) {
                 if editing, !isGhost {
                     plateButton("xmark", label: "Delete plate", action: onDelete)
                 }
             }
-            .overlay(alignment: .bottomTrailing) {
-                if editing, !isGhost {
-                    plateButton("ellipsis", label: "Edit widget", action: onEdit)
-                }
-            }
             .contextMenu {
-                Button("Edit") { onEdit() }
+                if isSelected {
+                    Button("Deselect") { onClear() }
+                } else {
+                    Button("Edit") { onSelect() }
+                }
                 ForEach(OverviewWidgetSize.allCases) { size in
                     Button(size.label) { onSize(size) }
                 }
             }
             .accessibilityLabel("\(plate.kind.label) \(plate.size.label)")
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+            .accessibilityAction(named: isSelected ? "Deselect" : "Edit") {
+                isSelected ? onClear() : onSelect()
+            }
     }
 
     private var drag: some Gesture {

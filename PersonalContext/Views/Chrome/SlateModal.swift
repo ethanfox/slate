@@ -16,7 +16,6 @@ enum AppModal: Identifiable {
     case editThread(ProjectThread)
     case editDecision(Decision)
     case editNote(Note)
-    case editOverviewWidget(Project, UUID, CGSize)
 
     var id: String {
         switch self {
@@ -33,14 +32,12 @@ enum AppModal: Identifiable {
         case .editThread(let thread): "edit-thread-\(thread.id.uuidString)"
         case .editDecision(let decision): "edit-decision-\(decision.id.uuidString)"
         case .editNote(let note): "edit-note-\(note.id.uuidString)"
-        case .editOverviewWidget(let project, let plateID, _): "edit-overview-\(project.id.uuidString)-\(plateID.uuidString)"
         }
     }
 
     var panelWidth: CGFloat {
         switch self {
         case .newEvent, .editEvent, .newReminder, .newReminderFromNote, .editReminder: 520
-        case .editOverviewWidget: 680
         default: 440
         }
     }

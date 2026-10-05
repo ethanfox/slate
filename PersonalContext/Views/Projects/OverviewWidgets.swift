@@ -43,6 +43,7 @@ enum OverviewWidgetKind: String, Codable, CaseIterable, Identifiable, Hashable {
     var defaultSettingsJSON: String {
         switch self {
         case .notes: NotesWidgetSettings.default.encoded
+        case .countdown: CountdownWidgetSettings.default.encoded
         default: ""
         }
     }
@@ -143,7 +144,7 @@ extension View {
 struct OverviewWidgetFace: View {
     var project: Project
     var plate: OverviewPlate
-    var editing: Bool
+    var selected = false
     var interactive: Bool
 
     var body: some View {
@@ -163,6 +164,11 @@ struct OverviewWidgetFace: View {
                     size: plate.size,
                     interactive: interactive
                 )
+            case .countdown:
+                CountdownWidgetView(
+                    settings: CountdownWidgetSettings.decode(plate.settingsJSON),
+                    size: plate.size
+                )
             default:
                 Text(plate.kind.label)
                     .font(CraftFont.section)
@@ -174,9 +180,9 @@ struct OverviewWidgetFace: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay {
-            if editing {
+            if selected {
                 RoundedRectangle(cornerRadius: OverviewWidgetMetrics.cornerRadius, style: .continuous)
-                    .strokeBorder(CraftColor.hairline, lineWidth: 2)
+                    .strokeBorder(Color.primary, lineWidth: 3)
             }
         }
     }

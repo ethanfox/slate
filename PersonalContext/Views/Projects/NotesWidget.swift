@@ -249,16 +249,6 @@ struct NotesWidgetFields: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            ModalControlRow("Style") {
-                GlassCapsuleSwitcher(
-                    items: NotesWidgetStyle.allCases,
-                    selection: $settings.style,
-                    symbol: \.symbol,
-                    label: \.label,
-                    accessibilityLabel: "Style"
-                )
-            }
-
             VStack(alignment: .leading, spacing: 8) {
                 Text("Range")
                     .font(CraftFont.section)
@@ -272,6 +262,16 @@ struct NotesWidgetFields: View {
                         .labelsHidden()
                         .datePickerStyle(.compact)
                 }
+            }
+
+            ModalControlRow("Style") {
+                GlassCapsuleSwitcher(
+                    items: NotesWidgetStyle.allCases,
+                    selection: $settings.style,
+                    symbol: \.symbol,
+                    label: \.label,
+                    accessibilityLabel: "Style"
+                )
             }
 
             WidgetGradientFields(gradient: $settings.gradient)

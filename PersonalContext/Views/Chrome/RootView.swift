@@ -191,6 +191,11 @@ struct RootView: View {
         .onChange(of: showingTrackChat) { _, open in
             open ? openChat() : closeChat()
         }
+        .onChange(of: app.inspectorOpen) { _, open in
+            if open {
+                growWindow(to: LayoutMetrics.windowMin(sidebar: !sidebarHidden, chat: showingTrackChat, inspector: true))
+            }
+        }
         .containerBackground(for: .window) {
             WindowGlass()
         }
@@ -501,8 +506,6 @@ struct RootView: View {
             EditDecisionModal(decision: decision)
         case .editNote(let note):
             EditNoteModal(note: note)
-        case .editOverviewWidget(let project, let plateID, let onScreen):
-            OverviewWidgetEditor(project: project, plateID: plateID, onScreen: onScreen)
         }
     }
 

@@ -59,10 +59,11 @@ struct SlideInspector<Content: View>: View {
 
     var body: some View {
         content()
-            .frame(width: width)
+            .frame(width: width, alignment: .leading)
             .frame(width: isOpen ? width : 0, alignment: .leading)
             .clipped()
-            .accessibilityHidden(!isOpen)
+            .opacity(isOpen ? 1 : 0)
             .allowsHitTesting(isOpen)
+            .accessibilityHidden(!isOpen)
     }
 }

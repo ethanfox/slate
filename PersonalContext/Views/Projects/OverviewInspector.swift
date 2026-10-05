@@ -2,27 +2,122 @@ import SwiftData
 import SwiftUI
 
 private enum OverviewInspectorTab: String, Hashable {
-    case settings
+    case subject
     case insert
 }
 
 struct OverviewInspector: View {
     @Bindable var project: Project
-    @State private var tab = OverviewInspectorTab.settings
+    @Environment(AppModel.self) private var app
+    @State private var tab = OverviewInspectorTab.subject
 
-    private let tabs = [
-        InspectorTab(id: OverviewInspectorTab.settings, title: "Settings"),
-        InspectorTab(id: OverviewInspectorTab.insert, title: "Insert")
-    ]
+    private var selectedPlate: OverviewPlate? {
+        guard let id = app.selectedOverviewPlate else { return nil }
+        return project.overviewPlates.first(where: { $0.id == id })
+    }
+
+    private var tabs: [InspectorTab<OverviewInspectorTab>] {
+        [
+            InspectorTab(id: .subject, title: selectedPlate?.kind.label ?? "Settings"),
+            InspectorTab(id: .insert, title: "Insert")
+        ]
+    }
 
     var body: some View {
         InspectorPanel(tabs: tabs, selection: $tab) { tab in
             switch tab {
-            case .settings:
-                OverviewInspectorSettings(project: project)
+            case .subject:
+                subject
             case .insert:
                 OverviewInspectorInsert(project: project)
             }
+        }
+        .onChange(of: app.selectedOverviewPlate) { _, id in
+            if id != nil { tab = .subject }
+        }
+        .onChange(of: project.overviewLayoutJSON) { _, _ in
+            if let id = app.selectedOverviewPlate,
+               !project.overviewPlates.contains(where: { $0.id == id }) {
+                app.selectedOverviewPlate = nil
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var subject: some View {
+        let plate = selectedPlate
+        Group {
+            if let plate {
+                OverviewInspectorWidget(project: project, plate: plate)
+                    .id(plate.id)
+                    .transition(.opacity)
+            } else {
+                OverviewInspectorSettings(project: project)
+                    .transition(.opacity)
+            }
+        }
+        .animation(Motion.quick, value: plate?.id)
+    }
+}
+
+private struct OverviewInspectorWidget: View {
+    @Bindable var project: Project
+    var plate: OverviewPlate
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Button {
+                app.selectOverviewPlate(nil)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Project")
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.secondary)
+                        Text(project.displayName)
+                            .font(CraftFont.body)
+                            .foregroundStyle(.primary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.escape, modifiers: [])
+            .accessibilityLabel("Deselect widget")
+
+            fields
+        }
+    }
+
+    @ViewBuilder
+    private var fields: some View {
+        switch plate.kind {
+        case .focus:
+            FocusWidgetFields(settings: project.overviewSettings(
+                plate.id,
+                decode: FocusWidgetSettings.decode,
+                encode: { $0.encoded }
+            ))
+        case .notes:
+            NotesWidgetFields(settings: project.overviewSettings(
+                plate.id,
+                decode: NotesWidgetSettings.decode,
+                encode: { $0.encoded }
+            ))
+        case .countdown:
+            CountdownWidgetFields(settings: project.overviewSettings(
+                plate.id,
+                decode: CountdownWidgetSettings.decode,
+                encode: { $0.encoded }
+            ))
+        default:
+            Text("This widget has no settings yet.")
+                .font(CraftFont.body)
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -128,6 +223,7 @@ private struct OverviewWidthControl: View {
 
 private struct OverviewInspectorInsert: View {
     var project: Project
+    @Environment(AppModel.self) private var app
 
     private let columns = [
         GridItem(.flexible(), spacing: 12),
@@ -138,7 +234,8 @@ private struct OverviewInspectorInsert: View {
         LazyVGrid(columns: columns, alignment: .center, spacing: 18) {
             ForEach(OverviewWidgetKind.allCases) { kind in
                 OverviewInsertTile(kind: kind) {
-                    project.addOverviewPlate(kind)
+                    let id = project.addOverviewPlate(kind)
+                    app.selectOverviewPlate(id)
                 }
             }
         }
