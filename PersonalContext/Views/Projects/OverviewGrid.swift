@@ -22,13 +22,19 @@ enum OverviewWidgetSize: String, Codable, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    var label: String { "\(columns)×\(rows)" }
-
-    var symbol: String {
+    var label: String {
         switch self {
-        case .small: "square"
-        case .medium: "rectangle"
-        case .large: "square.grid.2x2"
+        case .small: "sm"
+        case .medium: "md"
+        case .large: "lg"
+        }
+    }
+
+    var spokenLabel: String {
+        switch self {
+        case .small: "Small"
+        case .medium: "Medium"
+        case .large: "Large"
         }
     }
 
@@ -546,7 +552,7 @@ private struct OverviewPlateView: View {
                     Button(size.label) { onSize(size) }
                 }
             }
-            .accessibilityLabel("\(plate.kind.label) \(plate.size.label)")
+            .accessibilityLabel("\(plate.kind.label) \(plate.size.spokenLabel)")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityAction(named: isSelected ? "Deselect" : "Edit") {
                 isSelected ? onClear() : onSelect()

@@ -89,8 +89,23 @@ private struct OverviewInspectorWidget: View {
             .keyboardShortcut(.escape, modifiers: [])
             .accessibilityLabel("Deselect widget")
 
+            InspectorChoiceGroup(
+                "Size",
+                items: OverviewWidgetSize.allCases,
+                selection: sizeBinding,
+                label: \.label,
+                accessibilityName: \.spokenLabel
+            )
+
             fields
         }
+    }
+
+    private var sizeBinding: Binding<OverviewWidgetSize> {
+        Binding(
+            get: { project.overviewPlates.first(where: { $0.id == plate.id })?.size ?? plate.size },
+            set: { project.setOverviewPlate(plate.id, size: $0) }
+        )
     }
 
     @ViewBuilder
@@ -156,9 +171,13 @@ private struct OverviewInspectorSettings: View {
                     .toggleStyle(.switch)
             }
 
-            inspectorField("Overview width") {
-                OverviewWidthControl(project: project)
-            }
+            InspectorChoiceGroup(
+                "Overview width",
+                items: OverviewWidth.allCases,
+                selection: $project.overviewWidth,
+                label: \.compactLabel,
+                accessibilityName: \.label
+            )
         }
         .onChange(of: project.name) { _, _ in project.touch() }
         .onChange(of: project.symbol) { _, _ in project.touch() }
@@ -174,50 +193,6 @@ private struct OverviewInspectorSettings: View {
                 .foregroundStyle(.secondary)
             content()
         }
-    }
-}
-
-struct GlassCapsuleSwitcher<Value: Hashable & Identifiable>: View {
-    var items: [Value]
-    @Binding var selection: Value
-    var symbol: (Value) -> String
-    var label: (Value) -> String
-    var accessibilityLabel: String
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(items) { item in
-                Button {
-                    selection = item
-                } label: {
-                    Image(systemName: symbol(item))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(label(item))
-                .foregroundStyle(selection == item ? .primary : .secondary)
-                .accessibilityLabel(label(item))
-            }
-        }
-        .padding(2)
-        .glassEffect(.regular, in: Capsule())
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(accessibilityLabel)
-    }
-}
-
-private struct OverviewWidthControl: View {
-    @Bindable var project: Project
-
-    var body: some View {
-        GlassCapsuleSwitcher(
-            items: OverviewWidth.allCases,
-            selection: $project.overviewWidth,
-            symbol: \.symbol,
-            label: \.label,
-            accessibilityLabel: "Overview width"
-        )
     }
 }
 

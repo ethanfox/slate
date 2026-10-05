@@ -15,14 +15,6 @@ enum CountdownStyle: String, Codable, CaseIterable, Identifiable, Hashable {
         case .dial: "Dial"
         }
     }
-
-    var symbol: String {
-        switch self {
-        case .figure: "number"
-        case .units: "rectangle.split.3x1"
-        case .dial: "circle"
-        }
-    }
 }
 
 enum CountdownTypeface: String, Codable, CaseIterable, Identifiable, Hashable {
@@ -33,15 +25,8 @@ enum CountdownTypeface: String, Codable, CaseIterable, Identifiable, Hashable {
 
     var label: String {
         switch self {
-        case .normal: "Normal"
+        case .normal: "Sans serif"
         case .mono: "Mono"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .normal: "textformat"
-        case .mono: "textformat.123"
         }
     }
 
@@ -65,14 +50,6 @@ enum CountdownWeight: String, Codable, CaseIterable, Identifiable, Hashable {
         case .light: "Light"
         case .medium: "Medium"
         case .bold: "Bold"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .light: "textformat.size.smaller"
-        case .medium: "textformat"
-        case .bold: "bold"
         }
     }
 
@@ -573,35 +550,28 @@ struct CountdownWidgetFields: View {
                 ModalDateField(date: $settings.target, includesTime: true, isPresented: $pickingTarget)
             }
 
-            ModalControlRow("Style") {
-                GlassCapsuleSwitcher(
-                    items: CountdownStyle.allCases,
-                    selection: $settings.style,
-                    symbol: \.symbol,
-                    label: \.label,
-                    accessibilityLabel: "Style"
-                )
-            }
+            InspectorChoiceGroup(
+                "Style",
+                items: CountdownStyle.allCases,
+                selection: $settings.style,
+                label: \.label
+            )
 
-            ModalControlRow("Typeface") {
-                GlassCapsuleSwitcher(
-                    items: CountdownTypeface.allCases,
-                    selection: $settings.typeface,
-                    symbol: \.symbol,
-                    label: \.label,
-                    accessibilityLabel: "Typeface"
-                )
-            }
+            InspectorChoiceGroup(
+                "Typeface",
+                items: CountdownTypeface.allCases,
+                selection: $settings.typeface,
+                label: \.label,
+                font: { Font.system(size: 13, design: $0.design) }
+            )
 
-            ModalControlRow("Weight") {
-                GlassCapsuleSwitcher(
-                    items: CountdownWeight.allCases,
-                    selection: $settings.weight,
-                    symbol: \.symbol,
-                    label: \.label,
-                    accessibilityLabel: "Weight"
-                )
-            }
+            InspectorChoiceGroup(
+                "Weight",
+                items: CountdownWeight.allCases,
+                selection: $settings.weight,
+                label: \.label,
+                font: { Font.system(size: 13, weight: $0.fontWeight) }
+            )
 
             ModalControlRow("Text") {
                 ColorPicker("Text", selection: hexBinding(\.textHex), supportsOpacity: false)

@@ -31,7 +31,7 @@ struct HomeView: View {
                         } else {
                             ForEach(activeProjects.prefix(6)) { project in
                                 Button {
-                                    app.open(project)
+                                    app.open(project, tab: .overview)
                                 } label: {
                                     ProjectLine(project: project)
                                 }

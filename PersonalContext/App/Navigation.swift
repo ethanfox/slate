@@ -51,11 +51,11 @@ enum OverviewWidth: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    var symbol: String {
+    var compactLabel: String {
         switch self {
-        case .oneThird: "rectangle.portrait"
-        case .twoThirds: "rectangle.lefthalf.inset.filled"
-        case .full: "rectangle"
+        case .oneThird: "1/3"
+        case .twoThirds: "2/3"
+        case .full: "Full"
         }
     }
 }

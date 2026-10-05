@@ -67,3 +67,87 @@ struct SlideInspector<Content: View>: View {
             .accessibilityHidden(!isOpen)
     }
 }
+
+struct InspectorChoiceGroup<Value: Hashable & Identifiable>: View {
+    var title: String
+    var items: [Value]
+    @Binding var selection: Value
+    var label: (Value) -> String
+    var font: (Value) -> Font = { _ in CraftFont.body }
+    var accessibilityName: (Value) -> String
+
+    init(
+        _ title: String,
+        items: [Value],
+        selection: Binding<Value>,
+        label: @escaping (Value) -> String,
+        font: @escaping (Value) -> Font = { _ in CraftFont.body },
+        accessibilityName: @escaping (Value) -> String
+    ) {
+        self.title = title
+        self.items = items
+        self._selection = selection
+        self.label = label
+        self.font = font
+        self.accessibilityName = accessibilityName
+    }
+
+    init(
+        _ title: String,
+        items: [Value],
+        selection: Binding<Value>,
+        label: @escaping (Value) -> String,
+        font: @escaping (Value) -> Font = { _ in CraftFont.body }
+    ) {
+        self.init(
+            title,
+            items: items,
+            selection: selection,
+            label: label,
+            font: font,
+            accessibilityName: label
+        )
+    }
+
+    @Namespace private var selectionSlide
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(CraftFont.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                ForEach(items) { item in
+                    let selected = selection == item
+                    Button {
+                        selection = item
+                    } label: {
+                        Text(label(item))
+                            .font(font(item))
+                            .foregroundStyle(selected ? .primary : .secondary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .background {
+                        if selected, !reduceMotion {
+                            Capsule()
+                                .fill(CraftColor.selection)
+                                .matchedGeometryEffect(id: "choice", in: selectionSlide)
+                        } else {
+                            Capsule()
+                                .fill(selected ? CraftColor.selection : Color.primary.opacity(0.06))
+                        }
+                    }
+                    .accessibilityLabel(accessibilityName(item))
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+            .animation(reduceMotion ? Motion.quick : Motion.snappy, value: selection)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(title)
+    }
+}

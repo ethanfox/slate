@@ -13,13 +13,6 @@ enum NotesWidgetStyle: String, Codable, CaseIterable, Identifiable, Hashable {
         case .cards: "Cards"
         }
     }
-
-    var symbol: String {
-        switch self {
-        case .list: "list.bullet"
-        case .cards: "rectangle.stack"
-        }
-    }
 }
 
 struct NotesWidgetSettings: Codable, Equatable, Hashable {
@@ -246,6 +239,8 @@ private struct NotesCascadeCard: View {
 
 struct NotesWidgetFields: View {
     @Binding var settings: NotesWidgetSettings
+    @State private var pickingStart = false
+    @State private var pickingEnd = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -253,26 +248,19 @@ struct NotesWidgetFields: View {
                 Text("Range")
                     .font(CraftFont.section)
                 ModalControlRow("From") {
-                    DatePicker("From", selection: $settings.start, displayedComponents: .date)
-                        .labelsHidden()
-                        .datePickerStyle(.compact)
+                    ModalDateField(date: $settings.start, includesTime: false, isPresented: $pickingStart)
                 }
                 ModalControlRow("To") {
-                    DatePicker("To", selection: $settings.end, displayedComponents: .date)
-                        .labelsHidden()
-                        .datePickerStyle(.compact)
+                    ModalDateField(date: $settings.end, includesTime: false, isPresented: $pickingEnd)
                 }
             }
 
-            ModalControlRow("Style") {
-                GlassCapsuleSwitcher(
-                    items: NotesWidgetStyle.allCases,
-                    selection: $settings.style,
-                    symbol: \.symbol,
-                    label: \.label,
-                    accessibilityLabel: "Style"
-                )
-            }
+            InspectorChoiceGroup(
+                "Style",
+                items: NotesWidgetStyle.allCases,
+                selection: $settings.style,
+                label: \.label
+            )
 
             WidgetGradientFields(gradient: $settings.gradient)
         }
