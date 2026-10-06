@@ -6,9 +6,10 @@ enum AppModal: Identifiable {
     case newProject
     case newEvent
     case editEvent(CalendarEvent)
-    case newReminder
-    case newReminderFromNote(Note)
+    case newTask
+    case newTaskFromNote(Note)
     case editReminder(ReminderItem)
+    case editTask(AgendaItem)
     case save(SaveKind)
     case connectCursor
     case editProject(Project)
@@ -22,9 +23,10 @@ enum AppModal: Identifiable {
         case .newProject: "new-project"
         case .newEvent: "new-event"
         case .editEvent(let event): "edit-event-\(event.id)"
-        case .newReminder: "new-reminder"
-        case .newReminderFromNote(let note): "new-reminder-note-\(note.id.uuidString)"
+        case .newTask: "new-task"
+        case .newTaskFromNote(let note): "new-task-note-\(note.id.uuidString)"
         case .editReminder(let reminder): "edit-reminder-\(reminder.id)"
+        case .editTask(let task): "edit-task-\(task.id.uuidString)"
         case .save(let kind): "save-\(kind.id)"
         case .connectCursor: "connect-cursor"
         case .editProject(let project): "edit-project-\(project.id.uuidString)"
@@ -37,7 +39,7 @@ enum AppModal: Identifiable {
 
     var panelWidth: CGFloat {
         switch self {
-        case .newEvent, .editEvent, .newReminder, .newReminderFromNote, .editReminder: 520
+        case .newEvent, .editEvent, .newTask, .newTaskFromNote, .editReminder, .editTask: 520
         default: 440
         }
     }

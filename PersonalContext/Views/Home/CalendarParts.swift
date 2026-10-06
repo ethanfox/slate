@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 struct CalendarHero: View {
@@ -271,9 +272,12 @@ struct CalendarNextUpCard: View {
 struct CalendarAllDaySection: View {
     var events: [CalendarEvent]
     var reminders: [ReminderItem]
+    var tasks: [AgendaItem]
     var onOpenEvent: (CalendarEvent) -> Void
     var onOpenReminder: (ReminderItem) -> Void
-    var onToggle: (ReminderItem) -> Void
+    var onOpenTask: (AgendaItem) -> Void
+    var onToggleReminder: (ReminderItem) -> Void
+    var onToggleTask: (AgendaItem) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -283,8 +287,13 @@ struct CalendarAllDaySection: View {
                 ForEach(events) { event in
                     CalendarAllDayRow(event: event) { onOpenEvent(event) }
                 }
+                ForEach(tasks) { item in
+                    CalendarTaskRow(item: item, onToggle: { onToggleTask(item) }) {
+                        onOpenTask(item)
+                    }
+                }
                 ForEach(reminders) { item in
-                    CalendarReminderRow(item: item, onToggle: { onToggle(item) }) {
+                    CalendarReminderRow(item: item, onToggle: { onToggleReminder(item) }) {
                         onOpenReminder(item)
                     }
                 }
@@ -327,6 +336,51 @@ private struct CalendarAllDayRow: View {
         .animation(Motion.hover, value: hovering)
         .onHover { hovering = $0 }
         .help("Edit event")
+    }
+}
+
+private struct CalendarTaskRow: View {
+    @Environment(AppModel.self) private var app
+    var item: AgendaItem
+    var onToggle: () -> Void
+    var onOpen: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Button(action: onToggle) {
+                Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 13))
+                    .foregroundStyle(app.accent.color)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(item.isCompleted ? "Mark incomplete" : "Mark complete")
+
+            Button(action: onOpen) {
+                HStack(spacing: 8) {
+                    Text(item.displayTitle)
+                        .font(CraftFont.body)
+                        .strikethrough(item.isCompleted)
+                        .foregroundStyle(item.isCompleted ? .tertiary : .primary)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                    AgendaMarks(item: item)
+                    Spacer(minLength: 8)
+                    if let project = item.project {
+                        Text(project.displayName)
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Edit task")
+        }
+        .padding(.vertical, 5)
     }
 }
 

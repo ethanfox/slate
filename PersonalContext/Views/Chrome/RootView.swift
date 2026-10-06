@@ -255,16 +255,16 @@ struct RootView: View {
             .help("New Event")
         } else if case .tasks = app.destination {
             Button {
-                Task { await presentNewReminder() }
+                app.present(.newTask)
             } label: {
-                Label("New Reminder", systemImage: "plus")
+                Label("New Task", systemImage: "plus")
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .contentShape(Capsule())
             }
             .buttonStyle(.plain)
             .glassEffect(.regular, in: Capsule())
-            .help("New Reminder")
+            .help("New Task")
         } else if focusedThread != nil {
             Button {
                 app.trackChatOpen.toggle()
@@ -380,17 +380,6 @@ struct RootView: View {
         }
     }
 
-    private func presentNewReminder() async {
-        if !app.eventKit.canWriteReminders {
-            await app.eventKit.requestRemindersAccess()
-        }
-        if app.eventKit.canWriteReminders {
-            app.present(.newReminder)
-        } else {
-            app.eventKit.openSettings(for: .reminder)
-        }
-    }
-
     private func toggleInspector() {
         if !app.inspectorOpen {
             growWindow(to: LayoutMetrics.windowMin(sidebar: !sidebarHidden, chat: showingTrackChat, inspector: true))
@@ -479,12 +468,14 @@ struct RootView: View {
             NewEventSheet()
         case .editEvent(let event):
             NewEventSheet(event: event)
-        case .newReminder:
-            NewReminderSheet()
-        case .newReminderFromNote(let note):
-            NewReminderSheet(sourceNote: note)
+        case .newTask:
+            NewTaskSheet()
+        case .newTaskFromNote(let note):
+            NewTaskSheet(sourceNote: note)
         case .editReminder(let reminder):
-            NewReminderSheet(reminder: reminder)
+            NewTaskSheet(reminder: reminder)
+        case .editTask(let task):
+            NewTaskSheet(task: task)
         case .save(let kind):
             if let conversation = activeConversation {
                 SaveSheet(

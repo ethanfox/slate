@@ -5,6 +5,7 @@ struct SidebarRow: View {
     var systemImage: String
     var isSelected: Bool
     var showsPin = false
+    var badge = 0
 
     @Environment(\.appearsActive) private var appearsActive
     @State private var hovering = false
@@ -26,6 +27,12 @@ struct SidebarRow: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
             Spacer(minLength: 0)
+            if badge > 0 {
+                Text("\(badge)")
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityLabel("\(badge) due")
+            }
             if showsPin {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9))

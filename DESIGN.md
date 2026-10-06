@@ -72,6 +72,7 @@ Rows (`SidebarRow`):
 - Selection / hover: continuous rounded rect, radius 8, `CraftColor.selection` or `CraftColor.hover`.
 - Icon: primary when selected, secondary when the window is active, tertiary when it is not. No tile behind the icon.
 - Pin: `pin.fill`, 9pt, tertiary, trailing edge. Not a badge.
+- **Tasks due count (locked exception):** the Tasks row may show a trailing count in that same slot, `CraftFont.caption`, tertiary, when there are incomplete reminders or Slate tasks due today or earlier. Accessibility value: “3 due”. Do not badge any other row.
 - Plain buttons. Section labels are 13 semibold, secondary, 20 above / 4 below / 8 inset, no hit testing.
 
 Do not add hover to section labels. Do not move Settings into the scroll. Do not add a divider. Do not change the width, the 52pt drag strip, or the row metrics.
@@ -257,7 +258,7 @@ Rules:
 
 ## Modals
 
-There is one modal presenter for the whole app (`SlateModal`), and every modal goes through it: new project, new event, edit event, new reminder, edit reminder, save from chat, connect Cursor, and every Edit modal. Do not use `.sheet` for these.
+There is one modal presenter for the whole app (`SlateModal`), and every modal goes through it: new project, new event, edit event, new task, edit task, edit reminder, save from chat, connect Cursor, and every Edit modal. Do not use `.sheet` for these.
 
 Why: on macOS the system sheet drops out of the title bar. With the hidden title bar in this window it reads as a pop. The modal instead rises in place over the page.
 
@@ -342,7 +343,7 @@ Top to bottom, inside the page inset:
    - Today’s number is the accent color. The selected day sits on a `CraftColor.selection` pill, radius 10, which slides between cells (`matchedGeometryEffect`, `Motion.snappy`). Hover on an unselected cell uses the hover fill with `Motion.hover`.
    - The chevrons page by week. The strip content pushes in from the matching edge (`Motion.smooth`). Paging keeps the same weekday selected.
 3. **Next up card**, 24 below, only when the selected day is today and an event is still upcoming or in progress. It follows Summary cards. The meta is “Next up · in 45 min”, or “Now · ends in 20 min” when in progress. Clicking it opens the edit event modal.
-4. **All-day and reminders**, 24 below, only when present. Label “All day” (section style). All-day events are rows with the tint bar. Reminders keep their completion toggle and open the edit reminder modal on click.
+4. **All-day, tasks, and reminders**, 24 below, only when present. Label “All day” (section style). All-day events are rows with the tint bar. Slate tasks and reminders keep their completion toggle and open the matching edit modal on click. A repeating task only appears on its current due day.
 5. **Timeline**, 24 below.
    - Hours from 8 to 20 by default. It widens to include the earliest start and the latest end of the day’s timed events.
    - Each hour is 48 tall. The hour label (11 tertiary, monospaced digits, “9 AM”) is 44 wide, leading, top-aligned to its hour line. The hour line is a hairline running from the label’s trailing edge plus 8 to the inset edge.

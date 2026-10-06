@@ -108,6 +108,7 @@ struct ReminderItem: Identifiable, Hashable, Sendable {
     var isCompleted: Bool
     var allowsEditing: Bool
     var tint: CalendarTint
+    var repeatRule: TaskRepeat
 
     init(_ reminder: EKReminder) {
         id = reminder.calendarItemIdentifier
@@ -124,6 +125,62 @@ struct ReminderItem: Identifiable, Hashable, Sendable {
         isCompleted = reminder.isCompleted
         allowsEditing = reminder.calendar.allowsContentModifications
         tint = CalendarTint(reminder.calendar.cgColor)
+        repeatRule = TaskRepeat.from(rules: reminder.recurrenceRules)
+    }
+}
+
+extension TaskRepeat {
+    var ekRule: EKRecurrenceRule? {
+        switch self {
+        case .none, .custom:
+            return nil
+        case .daily:
+            return EKRecurrenceRule(recurrenceWith: .daily, interval: 1, end: nil)
+        case .weekdays:
+            let days = [EKWeekday.monday, .tuesday, .wednesday, .thursday, .friday]
+                .map { EKRecurrenceDayOfWeek($0) }
+            return EKRecurrenceRule(
+                recurrenceWith: .weekly,
+                interval: 1,
+                daysOfTheWeek: days,
+                daysOfTheMonth: nil,
+                monthsOfTheYear: nil,
+                weeksOfTheYear: nil,
+                daysOfTheYear: nil,
+                setPositions: nil,
+                end: nil
+            )
+        case .weekly:
+            return EKRecurrenceRule(recurrenceWith: .weekly, interval: 1, end: nil)
+        case .monthly:
+            return EKRecurrenceRule(recurrenceWith: .monthly, interval: 1, end: nil)
+        case .yearly:
+            return EKRecurrenceRule(recurrenceWith: .yearly, interval: 1, end: nil)
+        }
+    }
+
+    static func from(rules: [EKRecurrenceRule]?) -> TaskRepeat {
+        guard let rule = rules?.first else { return .none }
+        if rule.interval != 1 { return .custom }
+        if rule.recurrenceEnd != nil { return .custom }
+        switch rule.frequency {
+        case .daily:
+            if rule.daysOfTheWeek == nil, rule.daysOfTheMonth == nil { return .daily }
+            return .custom
+        case .weekly:
+            let days = Set((rule.daysOfTheWeek ?? []).map(\.dayOfTheWeek))
+            let weekdays: Set<EKWeekday> = [.monday, .tuesday, .wednesday, .thursday, .friday]
+            if days == weekdays { return .weekdays }
+            if days.isEmpty || days.count == 1 { return .weekly }
+            return .custom
+        case .monthly:
+            if rule.daysOfTheWeek == nil { return .monthly }
+            return .custom
+        case .yearly:
+            return .yearly
+        @unknown default:
+            return .custom
+        }
     }
 }
 
@@ -282,9 +339,9 @@ final class EventKitService {
     }
 
     @discardableResult
-    func createReminder(title: String, listID: String, due: Date?, notes: String = "") throws -> ReminderItem {
+    func createReminder(title: String, listID: String, due: Date?, notes: String = "", repeatRule: TaskRepeat = .none) throws -> ReminderItem {
         let reminder = EKReminder(eventStore: store)
-        apply(reminder, title: title, listID: listID, due: due, notes: notes)
+        apply(reminder, title: title, listID: listID, due: due, notes: notes, repeatRule: repeatRule)
         try store.save(reminder, commit: true)
         remindersTask?.cancel()
         remindersTask = Task { await refreshReminders() }
@@ -303,9 +360,9 @@ final class EventKitService {
         Set(allReminders.map(\.id) + reminders.map(\.id) + allEvents.map(\.seriesID) + events.map(\.seriesID))
     }
 
-    func updateReminder(_ item: ReminderItem, title: String, listID: String, due: Date?, notes: String = "") throws {
+    func updateReminder(_ item: ReminderItem, title: String, listID: String, due: Date?, notes: String = "", repeatRule: TaskRepeat = .none) throws {
         guard let reminder = store.calendarItem(withIdentifier: item.id) as? EKReminder else { return }
-        apply(reminder, title: title, listID: listID, due: due, notes: notes)
+        apply(reminder, title: title, listID: listID, due: due, notes: notes, repeatRule: repeatRule)
         try store.save(reminder, commit: true)
     }
 
@@ -420,7 +477,7 @@ final class EventKitService {
         }
     }
 
-    private func apply(_ reminder: EKReminder, title: String, listID: String, due: Date?, notes: String) {
+    private func apply(_ reminder: EKReminder, title: String, listID: String, due: Date?, notes: String, repeatRule: TaskRepeat) {
         reminder.title = title
         reminder.notes = notes.isEmpty ? nil : notes
         reminder.calendar = store.calendar(withIdentifier: listID) ?? reminder.calendar ?? store.defaultCalendarForNewReminders()
@@ -431,6 +488,14 @@ final class EventKitService {
             )
         } else {
             reminder.dueDateComponents = nil
+        }
+        switch repeatRule {
+        case .custom:
+            break
+        case .none:
+            reminder.recurrenceRules = nil
+        default:
+            reminder.recurrenceRules = repeatRule.ekRule.map { [$0] }
         }
     }
 

@@ -1,21 +1,24 @@
 import SwiftData
 import SwiftUI
 
-struct NewReminderSheet: View {
+struct NewTaskSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @Environment(\.modalDismiss) private var modalDismiss
     @Environment(\.openURL) private var openURL
 
     var reminder: ReminderItem?
+    var task: AgendaItem?
     var sourceNote: Note?
 
     @FocusState private var focusTitle: Bool
     @State private var title = ""
+    @State private var itemType: AgendaKind = .task
     @State private var listID = ""
     @State private var hasDueDate = false
     @State private var due = Date.now
     @State private var notes = ""
+    @State private var repeatRule: TaskRepeat = .none
     @State private var confirmDelete = false
     @State private var pickingDue = false
     @State private var agenda: AgendaItem?
@@ -24,9 +27,13 @@ struct NewReminderSheet: View {
     @State private var conflict: AssociationConflict?
     @State private var resolveConflict: (() -> Void)?
 
-    private var isEditing: Bool { reminder != nil }
+    private var isEditing: Bool { reminder != nil || task != nil }
+    private var allowsEditing: Bool { reminder?.allowsEditing ?? true }
     private var canSave: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (reminder?.allowsEditing ?? true)
+        let named = !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard named, allowsEditing else { return false }
+        if itemType == .reminder { return !listID.isEmpty }
+        return true
     }
 
     private var lists: [EventKitList] {
@@ -44,7 +51,7 @@ struct NewReminderSheet: View {
 
     private var form: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(isEditing ? "Reminder" : "New Reminder")
+            Text(headerTitle)
                 .font(CraftFont.title)
 
             ViewThatFits(in: .vertical) {
@@ -60,7 +67,7 @@ struct NewReminderSheet: View {
             }
 
             ModalFooter(actionTitle: isEditing ? "Save" : "Create", actionEnabled: canSave, action: save) {
-                if isEditing, reminder?.allowsEditing == true {
+                if isEditing, allowsEditing {
                     ModalFooterButton(title: "Delete", role: .destructive) { confirmDelete = true }
                 }
             }
@@ -71,8 +78,22 @@ struct NewReminderSheet: View {
             focusTitle = true
         }
         .onDisappear { discardIfNeeded() }
-        .confirmationDialog("Delete this reminder?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Delete Reminder", role: .destructive) { deleteReminder() }
+        .onChange(of: itemType) { _, newType in
+            if newType == .reminder {
+                Task { await ensureReminderAccess() }
+            }
+        }
+        .onChange(of: hasDueDate) { _, on in
+            if !on { repeatRule = .none }
+        }
+        .onChange(of: repeatRule) { _, rule in
+            if rule != .none, !hasDueDate {
+                hasDueDate = true
+                due = .now
+            }
+        }
+        .confirmationDialog(deletePrompt, isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button(deleteActionTitle, role: .destructive) { deleteItem() }
         }
         .confirmationDialog(
             conflict.map { "Switch to \($0.incoming.displayName)?" } ?? "Switch project?",
@@ -89,19 +110,43 @@ struct NewReminderSheet: View {
                 resolveConflict = nil
             }
         } message: {
-            Text("This belongs to a different project. Switching moves this reminder and drops links that don’t belong.")
+            Text("This belongs to a different project. Switching moves this item and drops links that don’t belong.")
         }
+    }
+
+    private var headerTitle: String {
+        if !isEditing { return "New Task" }
+        return itemType.label
+    }
+
+    private var deletePrompt: String {
+        itemType == .reminder ? "Delete this reminder?" : "Delete this task?"
+    }
+
+    private var deleteActionTitle: String {
+        itemType == .reminder ? "Delete Reminder" : "Delete Task"
     }
 
     private var fields: some View {
         VStack(alignment: .leading, spacing: 16) {
             ModalField("Title") {
-                TextField("Reminder", text: $title)
+                TextField("Task", text: $title)
                     .textFieldStyle(.plain)
                     .focused($focusTitle)
             }
 
-            if !lists.isEmpty {
+            ModalControlRow("Type") {
+                Picker("Type", selection: $itemType) {
+                    Text("Task").tag(AgendaKind.task)
+                    Text("Reminder").tag(AgendaKind.reminder)
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .fixedSize()
+                .disabled(!allowsEditing)
+            }
+
+            if itemType == .reminder, !lists.isEmpty {
                 ModalControlRow("List") {
                     Picker("List", selection: $listID) {
                         ForEach(lists) { list in
@@ -111,7 +156,7 @@ struct NewReminderSheet: View {
                     .pickerStyle(.menu)
                     .labelsHidden()
                     .fixedSize()
-                    .disabled(!(reminder?.allowsEditing ?? true))
+                    .disabled(!allowsEditing)
                 }
             }
 
@@ -124,6 +169,18 @@ struct NewReminderSheet: View {
             if hasDueDate {
                 ModalField("Due", boxed: false) {
                     ModalDateField(date: $due, includesTime: true, isPresented: $pickingDue)
+                }
+
+                ModalControlRow("Repeat") {
+                    Picker("Repeat", selection: $repeatRule) {
+                        ForEach(TaskRepeat.pickerCases(including: repeatRule)) { rule in
+                            Text(rule.label).tag(rule)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .fixedSize()
+                    .disabled(!allowsEditing)
                 }
             }
 
@@ -143,25 +200,45 @@ struct NewReminderSheet: View {
     }
 
     private func load() {
-        guard let reminder else {
-            if listID.isEmpty {
-                listID = app.eventKit.defaultReminderListID
-            }
+        if let task {
+            title = task.title
+            itemType = .task
+            hasDueDate = task.due != nil
+            due = task.due ?? .now
+            notes = task.notes
+            repeatRule = task.repeatRule
             return
         }
-        title = reminder.title
-        listID = reminder.listID
-        hasDueDate = reminder.due != nil
-        due = reminder.due ?? .now
-        notes = reminder.notes
+        if let reminder {
+            title = reminder.title
+            itemType = .reminder
+            listID = reminder.listID
+            hasDueDate = reminder.due != nil
+            due = reminder.due ?? .now
+            notes = reminder.notes
+            repeatRule = reminder.repeatRule
+            return
+        }
+        itemType = .task
+        if listID.isEmpty {
+            listID = app.eventKit.defaultReminderListID
+        }
     }
 
     private func prepareAgenda() {
+        if let task {
+            agenda = task
+            return
+        }
         if let reminder, let existing = AgendaStore.item(kind: .reminder, eventKitID: reminder.id, in: context) {
             agenda = existing
             return
         }
-        let item = AgendaItem(kind: .reminder, eventKitID: reminder?.id ?? "", title: title.isEmpty ? (sourceNote?.displayTitle ?? "") : title)
+        let item = AgendaItem(
+            kind: reminder == nil ? .task : .reminder,
+            eventKitID: reminder?.id ?? "",
+            title: title.isEmpty ? (sourceNote?.displayTitle ?? "") : title
+        )
         context.insert(item)
         createdAgenda = true
         if let sourceNote {
@@ -179,10 +256,8 @@ struct NewReminderSheet: View {
 
     private func discardIfNeeded() {
         guard !saved, createdAgenda, let agenda else { return }
-        if reminder == nil || !hasAssociations {
-            context.delete(agenda)
-            try? context.save()
-        }
+        context.delete(agenda)
+        try? context.save()
     }
 
     private var meetingURL: URL? {
@@ -198,26 +273,33 @@ struct NewReminderSheet: View {
         return "Join Meeting"
     }
 
+    private func ensureReminderAccess() async {
+        if !app.eventKit.canWriteReminders {
+            await app.eventKit.requestRemindersAccess()
+        }
+        if app.eventKit.canWriteReminders {
+            await app.eventKit.prepareReminders()
+            if listID.isEmpty {
+                listID = app.eventKit.defaultReminderListID
+            }
+            if listID.isEmpty {
+                itemType = .task
+                app.flash("No Reminders list available.")
+            }
+        } else {
+            app.eventKit.openSettings(for: .reminder)
+            itemType = .task
+        }
+    }
+
     private func save() {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         do {
-            let created: ReminderItem
-            if let reminder {
-                try app.eventKit.updateReminder(reminder, title: trimmed, listID: listID, due: hasDueDate ? due : nil, notes: notes.trimmingCharacters(in: .whitespacesAndNewlines))
-                created = reminder
+            if itemType == .task {
+                try saveTask(title: trimmed)
             } else {
-                created = try app.eventKit.createReminder(title: trimmed, listID: listID, due: hasDueDate ? due : nil, notes: notes.trimmingCharacters(in: .whitespacesAndNewlines))
-            }
-            if let agenda {
-                agenda.title = trimmed
-                if hasAssociations || !createdAgenda {
-                    agenda.eventKitID = created.id
-                    try? context.save()
-                } else {
-                    context.delete(agenda)
-                    try? context.save()
-                }
+                try saveReminder(title: trimmed)
             }
             saved = true
             modalDismiss()
@@ -226,10 +308,66 @@ struct NewReminderSheet: View {
         }
     }
 
-    private func deleteReminder() {
+    private func saveTask(title: String) throws {
+        let completed = reminder?.isCompleted
+        if let reminder {
+            try app.eventKit.deleteReminder(reminder)
+        }
+        guard let agenda else { return }
+        if let completed { agenda.isCompleted = completed }
+        agenda.kind = .task
+        agenda.eventKitID = ""
+        agenda.title = title
+        agenda.due = hasDueDate ? due : nil
+        agenda.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        agenda.repeatRule = hasDueDate ? repeatRule : .none
+        agenda.touch()
+        try context.save()
+    }
+
+    private func saveReminder(title: String) throws {
+        let dueDate = hasDueDate ? due : nil
+        let scratch = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rule = hasDueDate ? repeatRule : .none
+        let created: ReminderItem
+        if let reminder {
+            try app.eventKit.updateReminder(reminder, title: title, listID: listID, due: dueDate, notes: scratch, repeatRule: rule)
+            created = reminder
+        } else {
+            created = try app.eventKit.createReminder(title: title, listID: listID, due: dueDate, notes: scratch, repeatRule: rule)
+        }
+        guard let agenda else { return }
+        agenda.kind = .reminder
+        agenda.title = title
+        if hasAssociations || !createdAgenda || task != nil {
+            agenda.eventKitID = created.id
+            agenda.due = dueDate
+            agenda.notes = scratch
+            agenda.repeatRule = rule == .custom ? .none : rule
+            agenda.touch()
+            try context.save()
+        } else {
+            context.delete(agenda)
+            try context.save()
+        }
+    }
+
+    private func deleteItem() {
+        if let task {
+            context.delete(task)
+            try? context.save()
+            saved = true
+            modalDismiss()
+            return
+        }
         guard let reminder else { return }
         do {
             try app.eventKit.deleteReminder(reminder)
+            if let agenda {
+                context.delete(agenda)
+                try? context.save()
+            }
+            saved = true
             modalDismiss()
         } catch {
             app.flash(error.localizedDescription)

@@ -5,11 +5,11 @@ Plan from 30 Sep 2026. First cut is in. Decisions below are locked.
 Two systems. Do not merge them.
 
 - **Tags** are labels you invent in Settings. Any tagged object can have many. They do not own anything and they do not imply a project.
-- **Associations** are links between objects. They are how a reminder, event, or future task sits on a track, a note, or a project.
+- **Associations** are links between objects. They are how a reminder, event, or task sits on a track, a note, or a project.
 
 Projects do not get tags. A project is a container. You find work in a project by looking at what is in it, or by tags on those objects.
 
-App tasks do not exist yet. When they do, they are the same Slate object as a reminder, just not stored in EventKit. Design the Slate side now. Do not hang tags off EventKit identifiers.
+App tasks are the same Slate object as a reminder, stored on `AgendaItem` instead of EventKit. Do not hang tags off EventKit identifiers.
 
 ## What already exists
 
@@ -23,6 +23,7 @@ Associations do not replace this ownership.
 | Conversation | one Project (nullable in code) | one Track |
 | Chat message | one Conversation | — |
 | Reminder | EventKit list | scratch text |
+| Task | Slate | scratch text |
 | Event | EventKit calendar | scratch text |
 
 A note or track always has a project. That is why linking one to a reminder can fill in the project.
@@ -41,7 +42,7 @@ Scratch text on a reminder or event is not a Slate Note. Both can exist on the s
 | Decision | yes | already has one | already optional | no | — |
 | Conversation | yes | already has one | already optional | no | no |
 | Chat message | no | via conversation | via conversation | no | no |
-| Reminder / future Task | yes | at most one | many, same project | many, same project | no |
+| Reminder / Task | yes | at most one | many, same project | many, same project | no |
 | Event | yes | at most one | many, same project | many, same project | no |
 
 Reminders and events do not link to decisions. A decision can sit on a project with or without a track. Work that implements it hangs on the track if it has one, or on the project.
@@ -63,7 +64,7 @@ A tag is: name, optional color or symbol, stable id. Names are unique, case-inse
 - Rename keeps the id. Merge is a later Settings action if two names collide.
 - Create-on-tag is allowed. Creating a tag from an object adds it to the same Settings vocabulary.
 
-Taggable: tracks, notes, decisions, conversations, reminders, events, future tasks.
+Taggable: tracks, notes, decisions, conversations, reminders, events, tasks.
 
 Not taggable: projects, chat messages.
 
@@ -77,7 +78,7 @@ Surfaces that show tags: the object itself, and Home / Tasks / Calendar rows. A 
 
 ## Associations
 
-On a reminder, event, or future task:
+On a reminder, event, or task:
 
 1. **Tags** — any number.
 2. **Project** — at most one. User-set or inherited.
@@ -175,7 +176,7 @@ Archived tracks are not deleted. Keep the link. Hide those items on views that a
 
 Tags are their own SwiftData model.
 
-Reminders, events, and future tasks share one Slate-side record (name TBD):
+Reminders, events, and tasks share one Slate-side record (`AgendaItem`):
 
 - `kind`: reminder | event | task
 - EventKit identifier, nullable
@@ -186,7 +187,7 @@ Reminders, events, and future tasks share one Slate-side record (name TBD):
 
 EventKit mirrors title, due, list/calendar, and scratch text. It is not the source of truth for tags or links.
 
-Build this record when reminders get associations, even if the Slate-only task create flow ships later.
+Tasks persist the body (title, due, complete, scratch, repeat) on this record. Reminders and events still mirror title, due, list/calendar, and scratch from EventKit.
 
 Recurring events store tags and associations on the series.
 

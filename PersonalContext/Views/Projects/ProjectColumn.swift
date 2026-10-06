@@ -75,9 +75,9 @@ struct ProjectColumn: View {
                             Label("Edit…", systemImage: "pencil")
                         }
                         Button {
-                            app.present(.newReminderFromNote(note))
+                            app.present(.newTaskFromNote(note))
                         } label: {
-                            Label("New Reminder…", systemImage: "checklist")
+                            Label("New Task…", systemImage: "checklist")
                         }
                         Divider()
                         Button(role: .destructive) {

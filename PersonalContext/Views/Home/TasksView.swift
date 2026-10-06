@@ -1,8 +1,12 @@
 import EventKit
+import SwiftData
 import SwiftUI
 
 struct TasksView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
+    @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" }, sort: \AgendaItem.updatedAt, order: .reverse)
+    private var slateTasks: [AgendaItem]
     @State private var completedOpen = false
 
     var body: some View {
@@ -20,97 +24,135 @@ struct TasksView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch app.eventKit.remindersAccess {
-        case .fullAccess:
+        if isEmpty {
+            emptyState
+        } else {
             lists
-        case .notDetermined, .writeOnly:
-            EventKitAccessLine(
-                text: "Slate needs Reminders access to show your tasks.",
-                actionTitle: "Allow Reminders Access"
-            ) {
-                Task { await app.eventKit.requestRemindersAccess() }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if !app.eventKit.canReadReminders {
+            switch app.eventKit.remindersAccess {
+            case .notDetermined, .writeOnly:
+                EventKitAccessLine(
+                    text: "Slate can also show Apple Reminders here.",
+                    actionTitle: "Allow Reminders Access"
+                ) {
+                    Task { await app.eventKit.requestRemindersAccess() }
+                }
+            default:
+                EmptyLine(text: "No tasks.")
             }
-        case .denied, .restricted:
-            EventKitAccessLine(
-                text: "Reminders access is off. Enable it in System Settings.",
-                actionTitle: "Open Settings"
-            ) {
-                app.eventKit.openSettings(for: .reminder)
-            }
-        @unknown default:
-            EventKitAccessLine(
-                text: "Reminders access is off. Enable it in System Settings.",
-                actionTitle: "Open Settings"
-            ) {
-                app.eventKit.openSettings(for: .reminder)
-            }
+        } else {
+            EmptyLine(text: "No tasks.")
         }
     }
 
     @ViewBuilder
     private var lists: some View {
-        if openGroups.isEmpty && completedItems.isEmpty {
-            EmptyLine(text: "No reminders.")
-        } else {
-            VStack(alignment: .leading, spacing: 24) {
-                ForEach(openGroups) { group in
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(group.tint.color)
-                                .frame(width: 6, height: 6)
-                            Text(group.title)
-                                .font(CraftFont.section)
-                        }
-                        .padding(.bottom, 8)
-                        ForEach(group.items) { item in
-                            ReminderRow(item: item, onToggle: { toggle(item) })
+        VStack(alignment: .leading, spacing: 24) {
+            if !openTasks.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(app.accent.color)
+                            .frame(width: 6, height: 6)
+                        Text("Tasks")
+                            .font(CraftFont.section)
+                    }
+                    .padding(.bottom, 8)
+                    ForEach(openTasks) { item in
+                        TaskRow(item: item, tint: app.accent.color) {
+                            AgendaStore.toggleComplete(item, in: context)
                         }
                     }
                 }
+            }
 
-                if !completedItems.isEmpty {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Button {
-                            completedOpen.toggle()
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: completedOpen ? "chevron.down" : "chevron.right")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 12)
-                                Text("Completed")
-                                    .font(CraftFont.section)
-                                Text("\(completedItems.count)")
-                                    .font(CraftFont.caption)
-                                    .foregroundStyle(.tertiary)
-                                Spacer(minLength: 0)
-                            }
-                            .contentShape(Rectangle())
+            ForEach(openGroups) { group in
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(group.tint.color)
+                            .frame(width: 6, height: 6)
+                        Text(group.title)
+                            .font(CraftFont.section)
+                    }
+                    .padding(.bottom, 8)
+                    ForEach(group.items) { item in
+                        ReminderRow(item: item, onToggle: { toggle(item) })
+                    }
+                }
+            }
+
+            if !completedItems.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    Button {
+                        completedOpen.toggle()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: completedOpen ? "chevron.down" : "chevron.right")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 12)
+                            Text("Completed")
+                                .font(CraftFont.section)
+                            Text("\(completedItems.count)")
+                                .font(CraftFont.caption)
+                                .foregroundStyle(.tertiary)
+                            Spacer(minLength: 0)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Completed")
-                        .accessibilityValue(completedOpen ? "Expanded" : "Collapsed")
-                        .accessibilityHint("Shows completed reminders")
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Completed")
+                    .accessibilityValue(completedOpen ? "Expanded" : "Collapsed")
+                    .accessibilityHint("Shows completed tasks")
 
-                        if completedOpen {
-                            ForEach(completedItems) { item in
+                    if completedOpen {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(completedTasks) { item in
+                                TaskRow(item: item, tint: app.accent.color) {
+                                    AgendaStore.toggleComplete(item, in: context)
+                                }
+                            }
+                            ForEach(completedReminders) { item in
                                 ReminderRow(item: item, onToggle: { toggle(item) })
                             }
-                            .padding(.top, 8)
                         }
+                        .padding(.top, 8)
                     }
                 }
             }
         }
     }
 
-    private var openGroups: [ReminderGroup] {
-        groups(from: app.eventKit.reminders.filter { !$0.isCompleted })
+    private var isEmpty: Bool {
+        openTasks.isEmpty && openGroups.isEmpty && completedItems.isEmpty
     }
 
-    private var completedItems: [ReminderItem] {
+    private var openTasks: [AgendaItem] {
+        slateTasks.filter { !$0.isCompleted }
+    }
+
+    private var completedTasks: [AgendaItem] {
+        slateTasks.filter(\.isCompleted)
+    }
+
+    private var completedReminders: [ReminderItem] {
         app.eventKit.reminders.filter(\.isCompleted)
+    }
+
+    private var completedItems: [CompletedWork] {
+        let tasks = completedTasks.map { CompletedWork.task($0.id) }
+        let reminders = completedReminders.map { CompletedWork.reminder($0.id) }
+        return tasks + reminders
+    }
+
+    private var openGroups: [ReminderGroup] {
+        groups(from: app.eventKit.reminders.filter { !$0.isCompleted })
     }
 
     private func groups(from items: [ReminderItem]) -> [ReminderGroup] {
@@ -128,6 +170,86 @@ struct TasksView: View {
         } catch {
             app.flash(error.localizedDescription)
         }
+    }
+}
+
+private enum CompletedWork: Identifiable {
+    case task(UUID)
+    case reminder(String)
+
+    var id: String {
+        switch self {
+        case .task(let id): "t-\(id.uuidString)"
+        case .reminder(let id): "r-\(id)"
+        }
+    }
+}
+
+private struct TaskRow: View {
+    @Environment(AppModel.self) private var app
+    var item: AgendaItem
+    var tint: Color
+    var onToggle: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Button(action: onToggle) {
+                Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 13))
+                    .foregroundStyle(tint)
+                    .opacity(item.isCompleted ? 0.45 : 1)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(item.isCompleted ? "Mark incomplete" : "Mark complete")
+            .accessibilityLabel(item.isCompleted ? "Mark \(title) incomplete" : "Mark \(title) complete")
+
+            Button {
+                app.present(.editTask(item))
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(title)
+                            .font(.system(size: 13, weight: .medium))
+                            .strikethrough(item.isCompleted)
+                            .foregroundStyle(item.isCompleted ? .tertiary : .primary)
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                        AgendaMarks(item: item)
+                    }
+                    if !item.notes.isEmpty {
+                        Text(item.notes)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    if let due = item.due {
+                        Text(TaskDue.label(due))
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Edit task")
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(hovering ? CraftColor.hover : Color.clear)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.horizontal, -8)
+        .onHover { hovering = $0 }
+    }
+
+    private var title: String {
+        item.displayTitle
     }
 }
 
@@ -171,7 +293,7 @@ private struct ReminderRow: View {
                             .lineLimit(2)
                     }
                     if let due = item.due {
-                        Text(dueLabel(due))
+                        Text(TaskDue.label(due))
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -195,16 +317,6 @@ private struct ReminderRow: View {
 
     private var title: String {
         item.title.isEmpty ? "Untitled" : item.title
-    }
-
-    private func dueLabel(_ date: Date) -> String {
-        if Calendar.current.isDateInToday(date) {
-            return "Due today"
-        }
-        if Calendar.current.isDateInTomorrow(date) {
-            return "Due tomorrow"
-        }
-        return "Due \(date.formatted(date: .abbreviated, time: .omitted))"
     }
 }
 

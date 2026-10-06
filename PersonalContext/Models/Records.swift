@@ -350,6 +350,75 @@ enum AgendaKind: String, Codable, CaseIterable, Identifiable, Hashable {
     }
 }
 
+enum TaskRepeat: String, CaseIterable, Identifiable, Hashable {
+    case none
+    case daily
+    case weekdays
+    case weekly
+    case monthly
+    case yearly
+    case custom
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .none: "Never"
+        case .daily: "Daily"
+        case .weekdays: "Weekdays"
+        case .weekly: "Weekly"
+        case .monthly: "Monthly"
+        case .yearly: "Yearly"
+        case .custom: "Custom"
+        }
+    }
+
+    var advances: Bool {
+        self != .none && self != .custom
+    }
+
+    static var choices: [TaskRepeat] {
+        [.none, .daily, .weekdays, .weekly, .monthly, .yearly]
+    }
+
+    static func pickerCases(including current: TaskRepeat) -> [TaskRepeat] {
+        current == .custom ? choices + [.custom] : choices
+    }
+
+    func nextDue(after date: Date, calendar: Calendar = .current) -> Date {
+        switch self {
+        case .none, .custom:
+            return date
+        case .daily:
+            return calendar.date(byAdding: .day, value: 1, to: date) ?? date
+        case .weekdays:
+            var next = calendar.date(byAdding: .day, value: 1, to: date) ?? date
+            while calendar.isDateInWeekend(next) {
+                next = calendar.date(byAdding: .day, value: 1, to: next) ?? next
+            }
+            return next
+        case .weekly:
+            return calendar.date(byAdding: .weekOfYear, value: 1, to: date) ?? date
+        case .monthly:
+            return calendar.date(byAdding: .month, value: 1, to: date) ?? date
+        case .yearly:
+            return calendar.date(byAdding: .year, value: 1, to: date) ?? date
+        }
+    }
+}
+
+enum TaskDue {
+    static func isOutstanding(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> Bool {
+        calendar.startOfDay(for: date) <= calendar.startOfDay(for: now)
+    }
+
+    static func label(_ date: Date, calendar: Calendar = .current) -> String {
+        if calendar.isDateInToday(date) { return "Due today" }
+        if calendar.isDateInTomorrow(date) { return "Due tomorrow" }
+        return "Due \(date.formatted(date: .abbreviated, time: .omitted))"
+    }
+}
+
 @Model
 final class Tag {
     var id: UUID
@@ -382,6 +451,10 @@ final class AgendaItem {
     var kindRaw: String
     var eventKitID: String
     var title: String
+    var due: Date?
+    var isCompleted: Bool = false
+    var notes: String = ""
+    var repeatRaw: String = "none"
     var projectIsInherited: Bool
     var createdAt: Date
     var updatedAt: Date
@@ -399,6 +472,11 @@ final class AgendaItem {
     var kind: AgendaKind {
         get { AgendaKind(rawValue: kindRaw) ?? .reminder }
         set { kindRaw = newValue.rawValue }
+    }
+
+    var repeatRule: TaskRepeat {
+        get { TaskRepeat(rawValue: repeatRaw) ?? .none }
+        set { repeatRaw = newValue == .custom ? TaskRepeat.none.rawValue : newValue.rawValue }
     }
 
     var displayTitle: String {
@@ -419,6 +497,10 @@ final class AgendaItem {
         self.kindRaw = kind.rawValue
         self.eventKitID = eventKitID
         self.title = title
+        self.due = nil
+        self.isCompleted = false
+        self.notes = ""
+        self.repeatRaw = TaskRepeat.none.rawValue
         self.projectIsInherited = false
         self.createdAt = .now
         self.updatedAt = .now

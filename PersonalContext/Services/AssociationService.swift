@@ -48,6 +48,32 @@ enum AgendaStore {
         return try? context.fetch(descriptor).first
     }
 
+    static func item(id: UUID, in context: ModelContext) -> AgendaItem? {
+        try? context.fetch(FetchDescriptor<AgendaItem>(predicate: #Predicate { $0.id == id })).first
+    }
+
+    static func tasks(in context: ModelContext) -> [AgendaItem] {
+        let kind = AgendaKind.task.rawValue
+        let descriptor = FetchDescriptor<AgendaItem>(
+            predicate: #Predicate { $0.kindRaw == kind },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    static func toggleComplete(_ item: AgendaItem, in context: ModelContext) {
+        if item.isCompleted {
+            item.isCompleted = false
+        } else if item.repeatRule.advances, let due = item.due {
+            item.due = item.repeatRule.nextDue(after: due)
+            item.isCompleted = false
+        } else {
+            item.isCompleted = true
+        }
+        item.touch()
+        try? context.save()
+    }
+
     static func findOrCreate(kind: AgendaKind, eventKitID: String, title: String, in context: ModelContext) -> AgendaItem {
         if let existing = item(kind: kind, eventKitID: eventKitID, in: context) {
             if !title.isEmpty { existing.title = title }

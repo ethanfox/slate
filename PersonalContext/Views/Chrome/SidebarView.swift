@@ -5,6 +5,8 @@ struct SidebarView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @Query private var projects: [Project]
+    @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" && $0.isCompleted == false })
+    private var openTasks: [AgendaItem]
     @State private var pendingDelete: Project?
 
     private var orderedProjects: [Project] {
@@ -28,7 +30,7 @@ struct SidebarView: View {
 
                     section("Workspace")
                     row("Projects", "square.stack", destination: .projects)
-                    row("Tasks", "checklist", destination: .tasks)
+                    row("Tasks", "checklist", destination: .tasks, badge: dueCount)
                     row("Calendar", "calendar", destination: .calendar)
 
                     if !orderedProjects.isEmpty {
@@ -91,6 +93,7 @@ struct SidebarView: View {
                 secondaryButton: .cancel()
             )
         }
+        .task { await app.eventKit.prepareReminders() }
     }
 
     private func section(_ title: String) -> some View {
@@ -103,12 +106,25 @@ struct SidebarView: View {
             .allowsHitTesting(false)
     }
 
-    private func row(_ title: String, _ symbol: String, destination: Destination) -> some View {
+    private func row(_ title: String, _ symbol: String, destination: Destination, badge: Int = 0) -> some View {
         Button {
             app.destination = destination
         } label: {
-            SidebarRow(title: title, systemImage: symbol, isSelected: app.destination == destination)
+            SidebarRow(title: title, systemImage: symbol, isSelected: app.destination == destination, badge: badge)
         }
         .buttonStyle(.plain)
+        .accessibilityValue(badge > 0 ? "\(badge) due" : "")
+    }
+
+    private var dueCount: Int {
+        let tasks = openTasks.filter { task in
+            guard let due = task.due else { return false }
+            return TaskDue.isOutstanding(due)
+        }.count
+        let reminders = app.eventKit.reminders.filter { reminder in
+            guard !reminder.isCompleted, let due = reminder.due else { return false }
+            return TaskDue.isOutstanding(due)
+        }.count
+        return tasks + reminders
     }
 }

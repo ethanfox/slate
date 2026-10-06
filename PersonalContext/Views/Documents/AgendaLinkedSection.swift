@@ -59,7 +59,7 @@ struct AgendaLinkedSection: View {
 
     var body: some View {
         if !items.isEmpty {
-            DocumentSection("Reminders & events") {
+            DocumentSection("Tasks & events") {
                 ForEach(items) { item in
                     RecordRow(
                         systemImage: item.kind == .event ? "calendar" : "checklist",
@@ -85,7 +85,9 @@ struct AgendaLinkedSection: View {
 
     private func open(_ item: AgendaItem) {
         switch item.kind {
-        case .reminder, .task:
+        case .task:
+            app.present(.editTask(item))
+        case .reminder:
             if let reminder = app.eventKit.reminder(id: item.eventKitID) {
                 app.present(.editReminder(reminder))
             } else {

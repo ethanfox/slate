@@ -1,8 +1,12 @@
 import EventKit
+import SwiftData
 import SwiftUI
 
 struct CalendarView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
+    @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" })
+    private var slateTasks: [AgendaItem]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedDay = Calendar.current.startOfDay(for: .now)
     @State private var weekStart = CalendarView.startOfWeek(containing: .now)
@@ -102,13 +106,16 @@ struct CalendarView: View {
                     app.present(.editEvent(event))
                 }
             }
-            if !selectedAllDay.isEmpty || !selectedReminders.isEmpty {
+            if !selectedAllDay.isEmpty || !selectedReminders.isEmpty || !selectedTasks.isEmpty {
                 CalendarAllDaySection(
                     events: selectedAllDay,
                     reminders: selectedReminders,
+                    tasks: selectedTasks,
                     onOpenEvent: { app.present(.editEvent($0)) },
                     onOpenReminder: { app.present(.editReminder($0)) },
-                    onToggle: toggle
+                    onOpenTask: { app.present(.editTask($0)) },
+                    onToggleReminder: toggle,
+                    onToggleTask: { AgendaStore.toggleComplete($0, in: context) }
                 )
             }
             if !selectedTimed.isEmpty {
@@ -122,7 +129,7 @@ struct CalendarView: View {
                     onScrolledToNow: { didScrollToNow = true },
                     onOpen: { app.present(.editEvent($0)) }
                 )
-            } else if selectedAllDay.isEmpty && selectedReminders.isEmpty {
+            } else if selectedAllDay.isEmpty && selectedReminders.isEmpty && selectedTasks.isEmpty {
                 EmptyLine(text: "Nothing scheduled.")
             }
         }
@@ -144,6 +151,13 @@ struct CalendarView: View {
     private var selectedReminders: [ReminderItem] {
         selectedItems.compactMap {
             if case .reminder(let item) = $0 { return item }
+            return nil
+        }
+    }
+
+    private var selectedTasks: [AgendaItem] {
+        selectedItems.compactMap {
+            if case .task(let item) = $0 { return item }
             return nil
         }
     }
@@ -194,7 +208,17 @@ struct CalendarView: View {
             }
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
             .map(DayItem.reminder)
-        return reminders + events
+        let tasks = slateTasks
+            .filter { task in
+                if task.isCompleted { return false }
+                if let due = task.due {
+                    return calendar.isDate(due, inSameDayAs: day)
+                }
+                return undated
+            }
+            .sorted { $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending }
+            .map(DayItem.task)
+        return reminders + tasks + events
     }
 
     private func eventFalls(_ event: CalendarEvent, on day: Date) -> Bool {
@@ -291,11 +315,13 @@ struct CalendarView: View {
 private enum DayItem: Identifiable {
     case event(CalendarEvent)
     case reminder(ReminderItem)
+    case task(AgendaItem)
 
     var id: String {
         switch self {
         case .event(let event): "e-\(event.id)"
         case .reminder(let reminder): "r-\(reminder.id)"
+        case .task(let task): "t-\(task.id.uuidString)"
         }
     }
 }
