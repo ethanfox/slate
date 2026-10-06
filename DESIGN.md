@@ -135,6 +135,7 @@ Do not put each setting in its own card. Do not put a card inside the plate.
 ### Documents and chat
 
 The page is the document. No panel around the text.
+Shared chat component responsibilities and usage are documented in [`features/chat-components.md`](features/chat-components.md).
 
 - Body 15, line height about 1.45. Titles in the document follow the toolbar title. Do not add a second 24pt bold title in the middle of the page.
 - Composer is a solid field on the solid page: 12 corner radius, 12 padding, hairline border at the content color’s hairline token. It sticks to the bottom of the column, inset 32, with 14 of padding around it. A hairline may separate it from the transcript because it is pinned chrome on the page, not a section break.

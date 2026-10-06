@@ -4,6 +4,7 @@ import Combine
 import SwiftData
 import SwiftUI
 
+/// The independent session and persistence state for exactly one conversation ID.
 @MainActor
 @Observable
 final class ChatRuntime {

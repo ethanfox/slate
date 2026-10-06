@@ -9,7 +9,6 @@ struct HomeView: View {
     @Query(sort: \Note.updatedAt, order: .reverse) private var notes: [Note]
     @Query(sort: \Decision.createdAt, order: .reverse) private var decisions: [Decision]
     @Query(sort: \ProjectThread.updatedAt, order: .reverse) private var threads: [ProjectThread]
-    @State private var ask = ""
 
     private var activeProjects: [Project] {
         projects
@@ -85,24 +84,13 @@ struct HomeView: View {
     }
 
     private var quickAsk: some View {
-        ComposerPlate {
-            VStack(alignment: .leading, spacing: 8) {
-                ModelPicker(selection: Bindable(app).defaultModelID)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Quick Ask")
-                        .font(CraftFont.caption)
-                        .foregroundStyle(.tertiary)
-                    ComposerFieldRow(
-                        placeholder: "Ask anything, not attached to a project",
-                        text: $ask,
-                        lineLimit: 1...8,
-                        canSend: !ask.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                        onSend: submitAsk
-                    )
-                    .keyboardShortcut(.return, modifiers: .command)
-                }
-            }
-        }
+        ChatInput(
+            modelID: Bindable(app).defaultModelID,
+            label: "Quick Ask",
+            placeholder: "Ask anything, not attached to a project",
+            lineLimit: 1...8,
+            onSend: submitAsk
+        )
     }
 
     private var recentItems: [RecentItem] {
@@ -174,13 +162,11 @@ struct HomeView: View {
         }
     }
 
-    private func submitAsk() {
-        let text = ask.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+    private func submitAsk(_ text: String) -> Bool {
         let conversation = app.makeConversation(in: nil, context: context)
         app.pendingSend = PendingSend(conversationID: conversation.id, text: text)
         ChatTrace.event("quick ask queued conversation=\(conversation.id) chars=\(text.count)")
-        ask = ""
+        return true
     }
 }
 

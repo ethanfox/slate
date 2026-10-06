@@ -4,6 +4,7 @@ import SwiftUI
 struct ProjectChatCenter: View {
     var project: Project
     @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
 
     var body: some View {
         if let id = app.selectedConversation,
@@ -18,8 +19,24 @@ struct ProjectChatCenter: View {
                     .padding(.top, 28)
                     .frame(maxWidth: .infinity)
                 Spacer(minLength: 0)
-                PinnedComposer(project: project)
+                Hairline()
+                ChatInput(
+                    modelID: Bindable(app).defaultModelID,
+                    placeholder: "Message \(project.name)",
+                    onSend: startChat
+                )
+                .frame(maxWidth: 680)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity)
             }
         }
+    }
+
+    private func startChat(_ text: String) -> Bool {
+        let conversation = app.makeConversation(in: project, context: context)
+        app.pendingSend = PendingSend(conversationID: conversation.id, text: text)
+        ChatTrace.event("project composer queued conversation=\(conversation.id) project=\(project.name) chars=\(text.count)")
+        return true
     }
 }

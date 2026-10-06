@@ -19,6 +19,8 @@
 		A1B2C3D4E5F60718293A0019 /* FocusWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0018 /* FocusWidget.swift */; };
 		A1B2C3D4E5F60718293A001D /* NotesWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A001C /* NotesWidget.swift */; };
 		A1B2C3D4E5F60718293A001F /* CountdownWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A001E /* CountdownWidget.swift */; };
+		A1B2C3D4E5F60718293A0021 /* ChatInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0020 /* ChatInput.swift */; };
+		A1B2C3D4E5F60718293A0023 /* ChatMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0022 /* ChatMessages.swift */; };
 		05BA026B4AF137407DFFBB70 /* ColorHex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A843C76D621958EDA8D94D61 /* ColorHex.swift */; };
 		06A4B5A5812EFA0E120BAFC9 /* DocumentSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591D54A725FC8665EAB3A680 /* DocumentSection.swift */; };
 		08E6C08EE6ADDD3911650B76 /* Hairline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35658CC3CC77FE7EF9839CD9 /* Hairline.swift */; };
@@ -27,7 +29,6 @@
 		13FD8FA303849D188FEF4F1A /* NewEventSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F87366046EA0F345AB8B54B2 /* NewEventSheet.swift */; };
 		166DC65EE5FB938E78BAB773 /* LiquidOrbMetalA.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A8218EF5EA1ED6FA6EA092 /* LiquidOrbMetalA.swift */; };
 		19E0640705A6EAD921AE18AD /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E1C1BA29975214BCAABBD6A /* RootView.swift */; };
-		1F48BD11B051B8BAFF91C95B /* PinnedComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CDE70B076840735BBD769FC /* PinnedComposer.swift */; };
 		2184775826B65D7AB594775A /* ProjectLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77F4B6484C6BED0CADABAF2B /* ProjectLine.swift */; };
 		29EED17BD5A4994333989D73 /* ChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A174CA3B685C41C4ABCF1D54 /* ChatScreen.swift */; };
 		2B3FFCA249FAB9946EA65A82 /* SettingsDeveloperPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A07E5F475297DE983C9EAB1 /* SettingsDeveloperPage.swift */; };
@@ -54,7 +55,6 @@
 		6271F4DD4DF1EF931FFE51BD /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718061204D90BCFCD66D501C /* KeychainStore.swift */; };
 		628E38B59A9414F249425F2B /* EventKitAccessLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E58979D71F21F89355E97C7 /* EventKitAccessLine.swift */; };
 		67A5B40080FF84F855A04995 /* DocumentPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7F5DDBFDDE9BF6067DE5CCC /* DocumentPage.swift */; };
-		6EA8114AC2BDCA9E45433B88 /* ProjectComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9A9F7069A0AFF20858380A3 /* ProjectComposer.swift */; };
 		727A13054357C732319E171D /* OverviewPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 690265881D471474DCC2ECDF /* OverviewPage.swift */; };
 		760DDFD8D6967066C5710C5E /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CD200308EE0C3ADEEAFBB91C /* MetalKit.framework */; };
 		777EF2FC8B39A970FAC7E1B4 /* SlateModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57195853AAFC087CC563F2F /* SlateModal.swift */; };
@@ -153,6 +153,8 @@
 		A1B2C3D4E5F60718293A0018 /* FocusWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusWidget.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A001C /* NotesWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesWidget.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A001E /* CountdownWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CountdownWidget.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0020 /* ChatInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatInput.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0022 /* ChatMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessages.swift; sourceTree = "<group>"; };
 		00DB08B2B0C6ACC8AEA864AE /* FocusDismissal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusDismissal.swift; sourceTree = "<group>"; };
 		022EAD2D997C0A29F21400CA /* SettingsChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsChrome.swift; sourceTree = "<group>"; };
 		06566D4B5F0858C10300294C /* MarkdownPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownPreview.swift; sourceTree = "<group>"; };
@@ -184,7 +186,6 @@
 		5543E221A797F7A128F4D5B2 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		55C705E6D771B0D57F792CD5 /* ContextBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextBuilder.swift; sourceTree = "<group>"; };
 		591D54A725FC8665EAB3A680 /* DocumentSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentSection.swift; sourceTree = "<group>"; };
-		5CDE70B076840735BBD769FC /* PinnedComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedComposer.swift; sourceTree = "<group>"; };
 		603696A95CC22D7F59124C6E /* OrbPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbPalette.swift; sourceTree = "<group>"; };
 		6511A520858D0A3DD5A76CE6 /* NewReminderSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewReminderSheet.swift; sourceTree = "<group>"; };
 		68295CFD02295B5FC4CAD0AF /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
@@ -218,7 +219,6 @@
 		B53F847FAC96205C323B63B7 /* SettingsCalendarPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCalendarPage.swift; sourceTree = "<group>"; };
 		B5FFBDB290AFF05316BF8B75 /* ModalDatePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalDatePicker.swift; sourceTree = "<group>"; };
 		B8E5D3661B12BD18C62A9BCC /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
-		B9A9F7069A0AFF20858380A3 /* ProjectComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectComposer.swift; sourceTree = "<group>"; };
 		C15F7AD6019E54818996ACF5 /* ProjectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectView.swift; sourceTree = "<group>"; };
 		C6A64CB1FEFB6EBC10E76BB6 /* DocumentTitle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTitle.swift; sourceTree = "<group>"; };
 		C9BF693E037581C46858B261 /* PersonalContextApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalContextApp.swift; sourceTree = "<group>"; };
@@ -314,13 +314,13 @@
 			isa = PBXGroup;
 			children = (
 				4433E89BB7AF1A5C5E09EF95 /* AssistantMarkdown.swift */,
+				A1B2C3D4E5F60718293A0020 /* ChatInput.swift */,
+				A1B2C3D4E5F60718293A0022 /* ChatMessages.swift */,
 				B7E20D3F8A1C5F26D7B56E32 /* ChatRuntime.swift */,
 				A174CA3B685C41C4ABCF1D54 /* ChatScreen.swift */,
 				2F537EBD24BAA7ACDCB5E193 /* ConversationChat.swift */,
 				48D2751AE227D1D7C67EBCF3 /* ConversationRow.swift */,
-				5CDE70B076840735BBD769FC /* PinnedComposer.swift */,
 				168EFE558B001E07EC27771C /* ProjectChatCenter.swift */,
-				B9A9F7069A0AFF20858380A3 /* ProjectComposer.swift */,
 				6ECF851614787529168C56C0 /* SaveSheet.swift */,
 				321A7F2216EB9AE585A3B8E3 /* SelectableText.swift */,
 				F6150FF3E36C1B80F324ADC3 /* ThreadChatPane.swift */,
@@ -660,6 +660,8 @@
 				D0BE55C67A0150AAA2EF6656 /* ConnectCursorSheet.swift in Sources */,
 				A1A0A9B87ABC17645115475D /* ContextBuilder.swift in Sources */,
 				A8F31C2E9B0D4E17C6A45D21 /* ChatRuntime.swift in Sources */,
+				A1B2C3D4E5F60718293A0021 /* ChatInput.swift in Sources */,
+				A1B2C3D4E5F60718293A0023 /* ChatMessages.swift in Sources */,
 				4C28C10B14E56AA46AD05239 /* ConversationChat.swift in Sources */,
 				D3871C283E178B0A26AD8953 /* ConversationRow.swift in Sources */,
 				99356301DEE9A913A536600F /* Craft.swift in Sources */,
@@ -702,10 +704,8 @@
 				A1B2C3D4E5F60718293A001F /* CountdownWidget.swift in Sources */,
 				727A13054357C732319E171D /* OverviewPage.swift in Sources */,
 				30B1DB553DC0EB0931DAC3EE /* PersonalContextApp.swift in Sources */,
-				1F48BD11B051B8BAFF91C95B /* PinnedComposer.swift in Sources */,
 				08ED1A6DE7655C4501620914 /* ProjectChatCenter.swift in Sources */,
 				F7923FE98A551FFBCE7186A4 /* ProjectColumn.swift in Sources */,
-				6EA8114AC2BDCA9E45433B88 /* ProjectComposer.swift in Sources */,
 				52EE7F1BE3AD5886F5CF29D2 /* ProjectHost.swift in Sources */,
 				2184775826B65D7AB594775A /* ProjectLine.swift in Sources */,
 				F1ABE449C39ECC8D4E25C090 /* ProjectView.swift in Sources */,
