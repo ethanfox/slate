@@ -16,6 +16,9 @@ struct ThreadPage: View {
                     Label(parent.title.isEmpty ? "Untitled" : parent.title, systemImage: "arrow.turn.left.up")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
                 .padding(.bottom, 4)
@@ -51,6 +54,7 @@ struct ThreadPage: View {
                 TagField(tags: thread.tags) { thread.tags = $0; touch() }
                 linked
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 8)
 
             MarkdownEditor(text: $thread.body, minHeight: 360)

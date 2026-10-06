@@ -28,6 +28,7 @@ struct NotePage: View {
                     .font(CraftFont.caption)
                     .foregroundStyle(.tertiary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 8)
             MarkdownEditor(text: $note.content)
                 .padding(.top, 16)

@@ -117,6 +117,7 @@ struct RootView: View {
     var body: some View {
         HStack(spacing: 0) {
             SidebarView()
+                .id(app.storeGeneration)
                 .frame(width: sidebarHidden ? 0 : LayoutMetrics.sidebarWidth, alignment: .leading)
                 .clipped()
                 .opacity(sidebarHidden ? 0 : 1)
@@ -154,10 +155,12 @@ struct RootView: View {
                 HStack(spacing: showingInspector ? LayoutMetrics.gap : 0) {
                     PaneRowLayout(progress: chatProgress) {
                         detail
+                            .id(app.storeGeneration)
                             .modifier(PaneChrome())
 
                         if chatMounted, let project = openProject, let thread = focusedThread {
                             ThreadChatPane(thread: thread, project: project)
+                                .id("\(thread.id.uuidString)-\(app.storeGeneration)")
                                 .modifier(PaneChrome())
                                 .allowsHitTesting(chatSettled)
                         }
@@ -167,6 +170,7 @@ struct RootView: View {
                     SlideInspector(isOpen: showingInspector) {
                         if let project = openProject {
                             OverviewInspector(project: project)
+                                .id(app.storeGeneration)
                         }
                     }
                 }
@@ -187,6 +191,13 @@ struct RootView: View {
             proxy.size.width
         } action: { width in
             windowWidth = width
+        }
+        .onAppear {
+            if showingTrackChat {
+                chatMounted = true
+                chatProgress = 1
+                chatSettled = true
+            }
         }
         .onChange(of: showingTrackChat) { _, open in
             open ? openChat() : closeChat()

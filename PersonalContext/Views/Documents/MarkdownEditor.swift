@@ -25,6 +25,10 @@ struct MarkdownEditor: NSViewRepresentable {
         if view.string != text, !view.hasMarkedText() {
             view.string = text
         }
+        let width = view.bounds.width
+        if width > 0 {
+            view.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: MarkdownTextView, context: Context) -> CGSize? {
@@ -94,7 +98,7 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
         let layout = NSLayoutManager()
         storage.addLayoutManager(layout)
         let container = NSTextContainer(size: NSSize(width: 480, height: CGFloat.greatestFiniteMagnitude))
-        container.widthTracksTextView = false
+        container.widthTracksTextView = true
         container.lineFragmentPadding = 0
         layout.addTextContainer(container)
         self.init(frame: .zero, textContainer: container)

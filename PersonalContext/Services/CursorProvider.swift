@@ -40,6 +40,9 @@ final class CursorConversationBridge {
         guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "slate-mcp") else {
             throw CursorAPIError(status: 0, message: "The Slate MCP is missing from the app.")
         }
+        guard conversation.modelContext != nil else {
+            throw CursorAPIError(status: 0, message: "Chat lost its place in the knowledge base. Send again.")
+        }
         guard let store = conversation.modelContext?.container.configurations.first?.url else {
             throw CursorAPIError(status: 0, message: "Couldn’t find the knowledge base on disk.")
         }
@@ -132,6 +135,7 @@ final class CursorConversationBridge {
     }
 
     func agentStarted(_ id: String) {
+        guard conversation.modelContext != nil else { return }
         guard conversation.cursorAgentId != id else { return }
         ChatTrace.event("agent id=\(id)")
         conversation.cursorAgentId = id

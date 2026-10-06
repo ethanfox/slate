@@ -38,6 +38,7 @@ struct DecisionPage: View {
                     .font(CraftFont.caption)
                     .foregroundStyle(.tertiary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 8)
             MarkdownEditor(text: $decision.decision, placeholder: "What was decided")
                 .padding(.top, 16)

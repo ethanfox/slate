@@ -15,6 +15,8 @@ struct PropertyPill<Content: View>: View {
                     .font(.system(size: 11))
                 Text(title)
                     .font(.system(size: 12))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
             .foregroundStyle(.secondary)
             .padding(.horizontal, 9)
@@ -25,7 +27,7 @@ struct PropertyPill<Content: View>: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .tint(.secondary)
-        .fixedSize()
+        .fixedSize(horizontal: false, vertical: true)
         .onHover { hovering = $0 }
     }
 }

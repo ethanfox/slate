@@ -9,17 +9,25 @@ struct ConversationChat: View {
     var project: Project?
     var compact = false
     @Environment(AppModel.self) private var app
-    @Environment(\.modelContext) private var context
-    @State private var bridge: CursorConversationBridge
-    @StateObject private var session: ChatSession
 
-    init(conversation: Conversation, project: Project?, compact: Bool = false) {
-        self.conversation = conversation
-        self.project = project
+    var body: some View {
+        ConversationSessionView(
+            runtime: app.chatRuntime(for: conversation, project: project),
+            compact: compact
+        )
+    }
+}
+
+private struct ConversationSessionView: View {
+    @Bindable var runtime: ChatRuntime
+    var compact = false
+    @Environment(AppModel.self) private var app
+    @ObservedObject private var session: ChatSession
+
+    init(runtime: ChatRuntime, compact: Bool) {
+        self.runtime = runtime
         self.compact = compact
-        let bridge = CursorConversationBridge(conversation: conversation, project: project ?? conversation.project)
-        _bridge = State(initialValue: bridge)
-        _session = StateObject(wrappedValue: Self.makeSession(bridge: bridge, conversation: conversation))
+        _session = ObservedObject(wrappedValue: runtime.session)
     }
 
     var body: some View {
@@ -28,53 +36,35 @@ struct ConversationChat: View {
             chatBox
         }
         .environment(\.chatLayout, compact ? .compact : .regular)
-        .onChange(of: session.isGenerating) { _, generating in
-            if !generating { persist() }
-            publishChrome()
-        }
-        .onChange(of: ObjectIdentifier(conversation)) { _, _ in
-            bridge.conversation = conversation
-            bridge.project = project ?? conversation.project
-        }
-        .onChange(of: session.entries.count) { _, _ in
-            publishChrome()
-        }
-        .onChange(of: lastReply) { _, _ in
-            publishChrome()
-        }
         .onAppear {
-            ChatTrace.event("chat appear conversation=\(conversation.id) messages=\(conversation.messages.count) model=\(conversation.model) hasKey=\(app.hasAPIKey) connection=\(String(describing: app.connection)) pending=\(app.pendingSend != nil)")
-            publishChrome()
-            consumePending()
+            ChatTrace.event("chat appear conversation=\(runtime.conversationID) generating=\(session.isGenerating) hasKey=\(app.hasAPIKey) pending=\(app.pendingSend != nil)")
+            app.revealChat(runtime)
+            runtime.consumePending(from: app)
             if app.hasAPIKey, app.models.isEmpty, app.connection != .checking {
                 app.refreshConnection()
             }
             app.refreshUsage()
         }
         .onDisappear {
-            if app.chatConversationID == conversation.id {
-                app.chatConversationID = nil
-                app.activeReply = ""
-                app.chatGenerating = false
-            }
+            runtime.persist()
         }
-        .onChange(of: app.pendingSend) { _, _ in consumePending() }
-        .onChange(of: conversation.model) { _, newValue in session.model = newValue }
+        .onChange(of: app.pendingSend) { _, _ in runtime.consumePending(from: app) }
+        .onChange(of: runtime.modelID) { _, _ in runtime.applyModel() }
     }
 
     private var chatBox: some View {
         ComposerPlate {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    ModelPicker(selection: Bindable(conversation).model)
+                    ModelPicker(selection: Bindable(runtime).modelID)
                     Spacer(minLength: 8)
                     if let usage = app.usage {
                         UsageLine(usage: usage)
                     }
                 }
                 ChatComposerField(session: session)
-                if !bridge.changes.isEmpty {
-                    Label(bridge.changes.joined(separator: " · "), systemImage: "checkmark.circle")
+                if !runtime.bridge.changes.isEmpty {
+                    Label(runtime.bridge.changes.joined(separator: " · "), systemImage: "checkmark.circle")
                         .font(CraftFont.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -88,71 +78,6 @@ struct ConversationChat: View {
         }
         .padding(.horizontal, compact ? 16 : 32)
         .padding(.vertical, 14)
-    }
-
-    private func publishChrome() {
-        app.chatConversationID = conversation.id
-        app.chatGenerating = session.isGenerating
-        app.activeReply = lastReply
-    }
-
-    private var lastReply: String {
-        for entry in session.entries.reversed() {
-            if case .aiMessage(let reply) = entry, !reply.text.isEmpty { return reply.text }
-        }
-        return ""
-    }
-
-    private static func makeSession(bridge: CursorConversationBridge, conversation: Conversation) -> ChatSession {
-        let session = ChatSession(provider: CursorChatProvider(bridge: bridge), model: conversation.model)
-        var entries: [ChatSession.Entry] = []
-        var history: [AIChatCore.ChatMessage] = []
-        for message in conversation.orderedMessages where !message.content.isEmpty {
-            switch message.role {
-            case .user:
-                entries.append(.userMessage(.init(id: message.id, text: message.content)))
-                history.append(.init(id: message.id, role: .user, content: message.content))
-            case .assistant:
-                entries.append(.aiMessage(.init(id: message.id, text: message.content, isStreaming: false)))
-                history.append(.init(id: message.id, role: .assistant, content: message.content))
-            }
-        }
-        session.loadSnapshot(entries: entries, history: history)
-        return session
-    }
-
-    private func persist() {
-        let known = Set(conversation.messages.map(\.id))
-        for entry in session.entries {
-            let stored: ChatMessage?
-            switch entry {
-            case .userMessage(let user) where !user.isCancelled && !user.isFailed:
-                stored = ChatMessage(id: user.id, role: .user, content: user.text)
-            case .aiMessage(let reply) where !reply.text.isEmpty:
-                stored = ChatMessage(id: reply.id, role: .assistant, content: reply.text)
-            default:
-                stored = nil
-            }
-            guard let stored, !known.contains(stored.id) else { continue }
-            conversation.messages.append(stored)
-        }
-        conversation.updatedAt = .now
-        try? context.save()
-    }
-
-    private func consumePending() {
-        guard let pending = app.pendingSend else {
-            ChatTrace.event("consumePending skip conversation=\(conversation.id) reason=none")
-            return
-        }
-        guard pending.conversationID == conversation.id else {
-            ChatTrace.event("consumePending skip conversation=\(conversation.id) pending=\(pending.conversationID)")
-            return
-        }
-        app.pendingSend = nil
-        ChatTrace.event("consumePending send conversation=\(conversation.id) chars=\(pending.text.count) generating=\(session.isGenerating)")
-        let sent = session.send(pending.text)
-        ChatTrace.event("consumePending session.send=\(sent)")
     }
 }
 

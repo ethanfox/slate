@@ -37,6 +37,7 @@
 		3CCD06A49303CD0AB90CE2FF /* SettingsAppearancePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B4F19BD6D45E8CB70440A62 /* SettingsAppearancePage.swift */; };
 		463C9AC124371E05CBFFECCC /* OrbPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603696A95CC22D7F59124C6E /* OrbPalette.swift */; };
 		4C28C10B14E56AA46AD05239 /* ConversationChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F537EBD24BAA7ACDCB5E193 /* ConversationChat.swift */; };
+		A8F31C2E9B0D4E17C6A45D21 /* ChatRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E20D3F8A1C5F26D7B56E32 /* ChatRuntime.swift */; };
 		4C826F096841B03ECA5F8ABE /* EmptyLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CD7C7DFD28E72C0A9D4AA41 /* EmptyLine.swift */; };
 		4E2DA01EB53D623F3121BF60 /* TextFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EED727D15FC7D4FD4574F7 /* TextFormat.swift */; };
 		4E4575D43D714CD2473BFF9F /* SidebarSectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = F721FDC648EAE06103D02D53 /* SidebarSectionHeader.swift */; };
@@ -165,6 +166,7 @@
 		2B480D4B60CF75203CF57B45 /* RecordRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordRow.swift; sourceTree = "<group>"; };
 		2B4F19BD6D45E8CB70440A62 /* SettingsAppearancePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsAppearancePage.swift; sourceTree = "<group>"; };
 		2F537EBD24BAA7ACDCB5E193 /* ConversationChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationChat.swift; sourceTree = "<group>"; };
+		B7E20D3F8A1C5F26D7B56E32 /* ChatRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRuntime.swift; sourceTree = "<group>"; };
 		321A7F2216EB9AE585A3B8E3 /* SelectableText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectableText.swift; sourceTree = "<group>"; };
 		336663AE5AC294B2BA0386CC /* CalendarParts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarParts.swift; sourceTree = "<group>"; };
 		35658CC3CC77FE7EF9839CD9 /* Hairline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hairline.swift; sourceTree = "<group>"; };
@@ -312,6 +314,7 @@
 			isa = PBXGroup;
 			children = (
 				4433E89BB7AF1A5C5E09EF95 /* AssistantMarkdown.swift */,
+				B7E20D3F8A1C5F26D7B56E32 /* ChatRuntime.swift */,
 				A174CA3B685C41C4ABCF1D54 /* ChatScreen.swift */,
 				2F537EBD24BAA7ACDCB5E193 /* ConversationChat.swift */,
 				48D2751AE227D1D7C67EBCF3 /* ConversationRow.swift */,
@@ -656,6 +659,7 @@
 				05BA026B4AF137407DFFBB70 /* ColorHex.swift in Sources */,
 				D0BE55C67A0150AAA2EF6656 /* ConnectCursorSheet.swift in Sources */,
 				A1A0A9B87ABC17645115475D /* ContextBuilder.swift in Sources */,
+				A8F31C2E9B0D4E17C6A45D21 /* ChatRuntime.swift in Sources */,
 				4C28C10B14E56AA46AD05239 /* ConversationChat.swift in Sources */,
 				D3871C283E178B0A26AD8953 /* ConversationRow.swift in Sources */,
 				99356301DEE9A913A536600F /* Craft.swift in Sources */,

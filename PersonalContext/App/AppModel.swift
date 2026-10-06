@@ -13,7 +13,6 @@ enum ConnectionState: Equatable {
 @Observable
 final class AppModel {
     private(set) var container: ModelContainer
-    private var storeChangedElsewhere = false
     var destination: Destination = .home
     var tabs: [UUID: ProjectTab] = [:]
     var selectedThread: UUID?
@@ -26,11 +25,13 @@ final class AppModel {
     var pendingSend: PendingSend?
     var chatConversationID: UUID?
     var activeReply = ""
+    @ObservationIgnored private var chatRuntimes: [UUID: ChatRuntime] = [:]
+    @ObservationIgnored private var retiredContainers: [ModelContainer] = []
+    @ObservationIgnored private var storeReloadTask: Task<Void, Never>?
+    private(set) var storeGeneration = UUID()
     var chatGenerating = false {
         didSet {
-            guard !chatGenerating else { return }
-            reloadIfIdle()
-            if oldValue { refreshUsage(force: true) }
+            if oldValue, !chatGenerating { refreshUsage(force: true) }
         }
     }
     var appearance: AppearancePreference {
@@ -212,23 +213,67 @@ final class AppModel {
         }
     }
 
-    /// The MCP writes from its own process, so this context never sees those rows until the store is reopened.
-    /// A streaming chat still holds records from the current context, so the reopen waits until it has saved its reply.
     private func storeDidChangeElsewhere() {
-        storeChangedElsewhere = true
-        reloadIfIdle()
+        storeReloadTask?.cancel()
+        storeReloadTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(200))
+            guard let self, !Task.isCancelled else { return }
+            self.reloadStore()
+            self.storeReloadTask = nil
+        }
     }
 
-    private func reloadIfIdle() {
-        guard storeChangedElsewhere, !chatGenerating else { return }
-        storeChangedElsewhere = false
+    private func reloadStore() {
+        for runtime in chatRuntimes.values {
+            runtime.persist()
+        }
         try? container.mainContext.save()
         do {
-            container = try Store.open()
+            let previous = container
+            let reopened = try Store.open()
+            retiredContainers.append(previous)
+            container = reopened
+            storeGeneration = UUID()
+            storeError = nil
+            for runtime in chatRuntimes.values {
+                runtime.reattach(in: reopened.mainContext)
+                runtime.persist()
+            }
             ChatTrace.event("store reopened after outside change")
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(2))
+                self?.retiredContainers.removeAll { $0 === previous }
+            }
         } catch {
             storeError = error.localizedDescription
         }
+    }
+
+    func chatRuntime(for conversation: Conversation, project: Project?) -> ChatRuntime {
+        if let runtime = chatRuntimes[conversation.id] {
+            runtime.attach(conversation: conversation, project: project)
+            return runtime
+        }
+        let runtime = ChatRuntime(conversation: conversation, project: project)
+        runtime.onTick = { [weak self, weak runtime] in
+            guard let self, let runtime else { return }
+            runtime.persist()
+            self.syncChrome(from: runtime)
+        }
+        chatRuntimes[conversation.id] = runtime
+        return runtime
+    }
+
+    func revealChat(_ runtime: ChatRuntime) {
+        chatConversationID = runtime.conversationID
+        syncChrome(from: runtime)
+        runtime.persist()
+    }
+
+    private func syncChrome(from runtime: ChatRuntime) {
+        guard chatConversationID == runtime.conversationID else { return }
+        chatGenerating = runtime.session.isGenerating
+        activeReply = runtime.lastReply
     }
 
     func tab(for project: UUID) -> ProjectTab {

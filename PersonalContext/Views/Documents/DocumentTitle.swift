@@ -10,5 +10,6 @@ struct DocumentTitle: View {
             .font(CraftFont.title)
             .lineLimit(1...4)
             .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
