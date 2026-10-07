@@ -1,25 +1,42 @@
 import AppKit
-import LinkPresentation
 import SwiftUI
 
 struct AssistantMarkdown: View {
     var text: String
+    var sources: [ChatSource] = []
+    var pinUnused = true
+    @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var modelContext
     @State private var hover: LinkHover?
+    @State private var sourceHover: SourceHover?
 
     var body: some View {
-        MarkdownBody(text: text, hover: $hover)
+        MarkdownBody(
+            text: text,
+            sources: sources,
+            pinUnused: pinUnused,
+            hover: $hover,
+            sourceHover: $sourceHover,
+            onOpen: { $0.open(app: app, context: modelContext) }
+        )
             .overlay(alignment: .topLeading) {
-                if let hover {
+                if let sourceHover {
+                    SourcePager(sources: sourceHover.sources) { source in
+                        source.open(app: app, context: modelContext)
+                    }
+                    .offset(x: sourceHover.rect.minX, y: previewY(for: sourceHover.rect, height: 92))
+                } else if let hover {
                     LinkPreviewCard(url: hover.url)
-                        .offset(x: hover.rect.minX, y: previewY(for: hover.rect))
+                        .offset(x: hover.rect.minX, y: previewY(for: hover.rect, height: 76))
                         .allowsHitTesting(false)
                 }
             }
-            .animation(.easeOut(duration: 0.12), value: hover?.url)
+            .animation(Motion.hover, value: hover?.url)
+            .animation(Motion.hover, value: sourceHover?.sources.map(\.id))
     }
 
-    private func previewY(for rect: CGRect) -> CGFloat {
-        let above = rect.minY - 76
+    private func previewY(for rect: CGRect, height: CGFloat) -> CGFloat {
+        let above = rect.minY - height
         return above > 4 ? above : rect.maxY + 8
     }
 }
@@ -31,22 +48,25 @@ private struct LinkHover: Equatable {
 
 private struct MarkdownBody: NSViewRepresentable {
     var text: String
+    var sources: [ChatSource]
+    var pinUnused: Bool
     @Binding var hover: LinkHover?
+    @Binding var sourceHover: SourceHover?
+    var onOpen: (ChatSource) -> Void
 
     func makeNSView(context: Context) -> AssistantMarkdownTextView {
         let view = AssistantMarkdownTextView()
-        view.onHoverLink = { url, rect in
-            if let url, let rect {
-                hover = LinkHover(url: url, rect: rect)
-            } else {
-                hover = nil
-            }
-        }
-        view.apply(text)
+        bind(view)
+        view.apply(text, sources: sources, pinUnused: pinUnused)
         return view
     }
 
     func updateNSView(_ view: AssistantMarkdownTextView, context: Context) {
+        bind(view)
+        view.apply(text, sources: sources, pinUnused: pinUnused)
+    }
+
+    private func bind(_ view: AssistantMarkdownTextView) {
         view.onHoverLink = { url, rect in
             if let url, let rect {
                 hover = LinkHover(url: url, rect: rect)
@@ -54,7 +74,14 @@ private struct MarkdownBody: NSViewRepresentable {
                 hover = nil
             }
         }
-        view.apply(text)
+        view.onHoverSources = { sources, rect in
+            if let sources, let rect {
+                sourceHover = SourceHover(sources: sources, rect: rect)
+            } else {
+                sourceHover = nil
+            }
+        }
+        view.onOpenSource = onOpen
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: AssistantMarkdownTextView, context: Context) -> CGSize? {
@@ -65,7 +92,10 @@ private struct MarkdownBody: NSViewRepresentable {
 
 fileprivate final class AssistantMarkdownTextView: NSTextView {
     var onHoverLink: ((URL?, CGRect?) -> Void)?
+    var onHoverSources: (([ChatSource]?, CGRect?) -> Void)?
+    var onOpenSource: ((ChatSource) -> Void)?
     private var source = ""
+    private var sourceIDs: [String] = []
     private var tracking: NSTrackingArea?
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
@@ -89,16 +119,19 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         configure()
     }
 
-    func apply(_ text: String) {
-        guard source != text else { return }
+    func apply(_ text: String, sources: [ChatSource] = [], pinUnused: Bool = true) {
+        let ids = sources.map(\.id)
+        guard source != text || sourceIDs != ids else { return }
         source = text
+        sourceIDs = ids
         let selected = selectedRange()
-        textStorage?.setAttributedString(Self.attributed(text))
+        textStorage?.setAttributedString(Self.attributed(text, sources: sources, pinUnused: pinUnused))
         let max = (string as NSString).length
         let location = min(selected.location, max)
         setSelectedRange(NSRange(location: location, length: min(selected.length, max - location)))
         invalidateIntrinsicContentSize()
         window?.invalidateCursorRects(for: self)
+        loadChipIcons()
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
@@ -135,6 +168,9 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         enumerateLinkRects { rect, _ in
             self.addCursorRect(rect, cursor: .pointingHand)
         }
+        enumerateSourceRects { rect, _ in
+            self.addCursorRect(rect, cursor: .pointingHand)
+        }
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -145,11 +181,21 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         onHoverLink?(nil, nil)
+        onHoverSources?(nil, nil)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if let sources = sources(at: point), let first = sources.first {
+            onOpenSource?(first)
+            return
+        }
+        super.mouseDown(with: event)
     }
 
     override func cursorUpdate(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if link(at: point) != nil {
+        if link(at: point) != nil || sources(at: point) != nil {
             NSCursor.pointingHand.set()
         } else {
             super.cursorUpdate(with: event)
@@ -163,6 +209,12 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
     override func updateInsertionPointStateAndRestartTimer(_ restartFlag: Bool) {}
 
     private func reportHover(at point: NSPoint) {
+        if let sources = sources(at: point) {
+            onHoverLink?(nil, nil)
+            onHoverSources?(sources, chipRect(for: sources))
+            return
+        }
+        onHoverSources?(nil, nil)
         guard let url = link(at: point) else {
             onHoverLink?(nil, nil)
             return
@@ -172,6 +224,59 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
             if link == url, first == nil { first = rect }
         }
         onHoverLink?(url, first)
+    }
+
+    private func sources(at point: NSPoint) -> [ChatSource]? {
+        guard let layoutManager, let textContainer, let textStorage else { return nil }
+        let containerPoint = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
+        var fraction: CGFloat = 0
+        let index = layoutManager.characterIndex(
+            for: containerPoint,
+            in: textContainer,
+            fractionOfDistanceBetweenInsertionPoints: &fraction
+        )
+        guard index < textStorage.length else { return nil }
+        return textStorage.attribute(.chatSources, at: index, effectiveRange: nil) as? [ChatSource]
+    }
+
+    private func chipRect(for sources: [ChatSource]) -> CGRect? {
+        var first: CGRect?
+        enumerateSourceRects { rect, value in
+            if value.map(\.id) == sources.map(\.id), first == nil { first = rect }
+        }
+        return first
+    }
+
+    private func enumerateSourceRects(_ body: @escaping (CGRect, [ChatSource]) -> Void) {
+        guard let layoutManager, let textContainer, let textStorage else { return }
+        let full = NSRange(location: 0, length: textStorage.length)
+        textStorage.enumerateAttribute(.chatSources, in: full) { value, range, _ in
+            guard let sources = value as? [ChatSource] else { return }
+            let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            layoutManager.enumerateEnclosingRects(
+                forGlyphRange: glyphs,
+                withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+                in: textContainer
+            ) { rect, _ in
+                body(rect.offsetBy(dx: self.textContainerOrigin.x, dy: self.textContainerOrigin.y), sources)
+            }
+        }
+    }
+
+    private func loadChipIcons() {
+        guard let textStorage else { return }
+        let full = NSRange(location: 0, length: textStorage.length)
+        textStorage.enumerateAttribute(.attachment, in: full) { value, _, _ in
+            guard let attachment = value as? SourceChipAttachment,
+                  let url = attachment.sources.first?.url.flatMap(URL.init(string:))
+            else { return }
+            Task { @MainActor in
+                let icon = await FaviconStore.shared.image(for: url)
+                attachment.icon = icon
+                self.needsDisplay = true
+                self.invalidateIntrinsicContentSize()
+            }
+        }
     }
 
     private func link(at point: NSPoint) -> URL? {
@@ -234,83 +339,229 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         ]
     }
 
-    private static func attributed(_ markdown: String) -> NSAttributedString {
-        let fontSize: CGFloat = 15
-        let body = NSFont.systemFont(ofSize: fontSize)
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineSpacing = 6
-        paragraph.paragraphSpacing = 10
-        var options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .full)
-        options.failurePolicy = .returnPartiallyParsedIfPossible
-        guard let parsed = try? AttributedString(markdown: markdown, options: options) else {
-            return NSAttributedString(string: markdown, attributes: [
-                .font: body,
-                .foregroundColor: NSColor.labelColor,
-                .paragraphStyle: paragraph
-            ])
+    private static func attributed(_ markdown: String, sources: [ChatSource] = [], pinUnused: Bool = true) -> NSAttributedString {
+        let result = ChatMarkdown.attributed(markdown)
+        insertSources(sources, pinUnused: pinUnused, into: result)
+        return result
+    }
+
+    private static func insertSources(_ sources: [ChatSource], pinUnused: Bool, into result: NSMutableAttributedString) {
+        let placements = ChatSourceMatcher.place(sources, in: result.string, pinUnused: pinUnused)
+        for placement in placements.reversed() {
+            let attachment = SourceChipAttachment(sources: placement.sources)
+            let chip = NSMutableAttributedString(string: " ")
+            chip.append(NSAttributedString(attachment: attachment))
+            chip.addAttribute(.chatSources, value: placement.sources, range: NSRange(location: 0, length: chip.length))
+            let location = min(max(placement.utf16, 0), result.length)
+            result.insert(chip, at: location)
         }
+    }
+}
 
+/// Styles markers in the source text. Does not join lines or drop spaces.
+private enum ChatMarkdown {
+    static func attributed(_ source: String, fontSize: CGFloat = 15) -> NSMutableAttributedString {
         let result = NSMutableAttributedString()
-        var lastIdentity: Int?
-        var prefixedIdentities = Set<Int>()
-
-        for run in parsed.runs {
-            var text = String(parsed.characters[run.range])
-            var font = body
-            let style = paragraph.mutableCopy() as! NSMutableParagraphStyle
-            if let intent = run.presentationIntent {
-                if let lastIdentity, lastIdentity != intent.hashValue, !text.hasPrefix("\n") {
-                    result.append(NSAttributedString(string: "\n"))
-                }
-                lastIdentity = intent.hashValue
-                for component in intent.components {
-                    switch component.kind {
-                    case .header(let level):
-                        let size = fontSize + CGFloat(max(0, 5 - level)) * 2
-                        font = NSFont.systemFont(ofSize: size, weight: .semibold)
-                        style.paragraphSpacingBefore = level == 1 ? 16 : 12
-                        style.paragraphSpacing = 8
-                    case .listItem:
-                        style.headIndent = 22
-                        style.firstLineHeadIndent = 8
-                        style.paragraphSpacing = 4
-                        if !prefixedIdentities.contains(intent.hashValue) {
-                            prefixedIdentities.insert(intent.hashValue)
-                            if !text.hasPrefix("•"), !text.hasPrefix("- "), !text.hasPrefix("* ") {
-                                text = "• " + text
-                            }
-                        }
-                    case .codeBlock:
-                        font = NSFont.monospacedSystemFont(ofSize: fontSize - 1, weight: .regular)
-                    default:
-                        break
-                    }
-                }
+        let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
+        var inFence = false
+        for (index, raw) in lines.enumerated() {
+            let line = String(raw)
+            if line.hasPrefix("```") {
+                inFence.toggle()
+                if index < lines.count - 1 { result.append(breakLine(fontSize: fontSize, empty: true)) }
+                continue
             }
-            if let inline = run.inlinePresentationIntent {
-                if inline.contains(.code) {
-                    font = NSFont.monospacedSystemFont(ofSize: fontSize - 1, weight: .regular)
-                } else {
-                    var traits = font.fontDescriptor.symbolicTraits
-                    if inline.contains(.stronglyEmphasized) { traits.insert(.bold) }
-                    if inline.contains(.emphasized) { traits.insert(.italic) }
-                    font = NSFont(descriptor: font.fontDescriptor.withSymbolicTraits(traits), size: font.pointSize) ?? font
-                }
+            if inFence {
+                result.append(NSAttributedString(string: line, attributes: attributes(
+                    fontSize: fontSize, code: true, empty: line.isEmpty
+                )))
+            } else {
+                result.append(renderLine(line, fontSize: fontSize))
             }
-            var attributes: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: NSColor.labelColor,
-                .paragraphStyle: style
-            ]
-            if let url = run.link {
-                attributes[.link] = url
-                attributes[.foregroundColor] = NSColor.linkColor
-                attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
-                attributes[.cursor] = NSCursor.pointingHand
+            if index < lines.count - 1 {
+                result.append(breakLine(fontSize: fontSize, empty: line.isEmpty))
             }
-            result.append(NSAttributedString(string: text, attributes: attributes))
         }
         return result
+    }
+
+    private static func renderLine(_ line: String, fontSize: CGFloat) -> NSAttributedString {
+        var rest = Substring(line)
+        var header: Int?
+        let hashes = rest.prefix(while: { $0 == "#" }).count
+        if (1...6).contains(hashes), rest.dropFirst(hashes).first == " " {
+            header = hashes
+            rest = rest.dropFirst(hashes + 1)
+        }
+        return renderInline(String(rest), fontSize: fontSize, header: header, list: lineHasList(line))
+    }
+
+    private static func lineHasList(_ line: String) -> Bool {
+        let trimmed = line.drop(while: \.isWhitespace)
+        if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("+ ") { return true }
+        let digits = trimmed.prefix(while: \.isNumber)
+        return !digits.isEmpty && trimmed.dropFirst(digits.count).hasPrefix(". ")
+    }
+
+    private static func renderInline(_ text: String, fontSize: CGFloat, header: Int?, list: Bool) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        var index = text.startIndex
+        while index < text.endIndex {
+            if let fence = take(text, from: index, opening: "`", closing: "`") {
+                result.append(piece(fence.inner, fontSize: fontSize, header: header, list: list, code: true))
+                index = fence.end
+                continue
+            }
+            if let link = takeLink(text, from: index) {
+                result.append(piece(link.label, fontSize: fontSize, header: header, list: list, url: link.url))
+                index = link.end
+                continue
+            }
+            if let bold = take(text, from: index, opening: "**", closing: "**")
+                ?? take(text, from: index, opening: "__", closing: "__") {
+                result.append(piece(bold.inner, fontSize: fontSize, header: header, list: list, bold: true))
+                index = bold.end
+                continue
+            }
+            if let italic = take(text, from: index, opening: "*", closing: "*")
+                ?? take(text, from: index, opening: "_", closing: "_") {
+                result.append(piece(italic.inner, fontSize: fontSize, header: header, list: list, italic: true))
+                index = italic.end
+                continue
+            }
+            let next = specialStart(text, from: index) ?? text.endIndex
+            if next > index {
+                result.append(piece(String(text[index..<next]), fontSize: fontSize, header: header, list: list))
+                index = next
+            } else {
+                result.append(piece(String(text[index]), fontSize: fontSize, header: header, list: list))
+                index = text.index(after: index)
+            }
+        }
+        return result
+    }
+
+    private static func take(
+        _ text: String,
+        from start: String.Index,
+        opening: String,
+        closing: String
+    ) -> (inner: String, end: String.Index)? {
+        guard text[start...].hasPrefix(opening) else { return nil }
+        let innerStart = text.index(start, offsetBy: opening.count)
+        guard innerStart < text.endIndex else { return nil }
+        var search = innerStart
+        while let found = text[search...].range(of: closing) {
+            if found.lowerBound > innerStart {
+                return (String(text[innerStart..<found.lowerBound]), found.upperBound)
+            }
+            search = found.upperBound
+        }
+        return nil
+    }
+
+    private static func takeLink(
+        _ text: String,
+        from start: String.Index
+    ) -> (label: String, url: URL, end: String.Index)? {
+        guard text[start] == "[" , let close = text[start...].range(of: "](") else { return nil }
+        let labelStart = text.index(after: start)
+        guard close.lowerBound > labelStart else { return nil }
+        let urlStart = close.upperBound
+        guard let end = text[urlStart...].firstIndex(of: ")") else { return nil }
+        let label = String(text[labelStart..<close.lowerBound])
+        guard let url = URL(string: String(text[urlStart..<end])) else { return nil }
+        return (label, url, text.index(after: end))
+    }
+
+    private static func specialStart(_ text: String, from start: String.Index) -> String.Index? {
+        var index = start
+        while index < text.endIndex {
+            switch text[index] {
+            case "`", "[", "*":
+                return index
+            case "_":
+                return index
+            default:
+                index = text.index(after: index)
+            }
+        }
+        return nil
+    }
+
+    private static func piece(
+        _ text: String,
+        fontSize: CGFloat,
+        header: Int?,
+        list: Bool,
+        bold: Bool = false,
+        italic: Bool = false,
+        code: Bool = false,
+        url: URL? = nil
+    ) -> NSAttributedString {
+        NSAttributedString(string: text, attributes: attributes(
+            fontSize: fontSize,
+            header: header,
+            list: list,
+            bold: bold,
+            italic: italic,
+            code: code,
+            url: url,
+            empty: text.isEmpty
+        ))
+    }
+
+    private static func breakLine(fontSize: CGFloat, empty: Bool) -> NSAttributedString {
+        NSAttributedString(string: "\n", attributes: attributes(fontSize: fontSize, empty: empty))
+    }
+
+    private static func attributes(
+        fontSize: CGFloat,
+        header: Int? = nil,
+        list: Bool = false,
+        bold: Bool = false,
+        italic: Bool = false,
+        code: Bool = false,
+        url: URL? = nil,
+        empty: Bool = false
+    ) -> [NSAttributedString.Key: Any] {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 6
+        paragraph.paragraphSpacing = empty ? 8 : 4
+        if let header {
+            paragraph.paragraphSpacingBefore = header == 1 ? 16 : 12
+            paragraph.paragraphSpacing = 8
+        }
+        if list {
+            paragraph.headIndent = 22
+            paragraph.firstLineHeadIndent = 0
+            paragraph.paragraphSpacing = 4
+        }
+        let font: NSFont
+        if code {
+            font = NSFont.monospacedSystemFont(ofSize: fontSize - 1, weight: .regular)
+        } else if let header {
+            font = NSFont.systemFont(ofSize: fontSize + CGFloat(max(0, 5 - header)) * 2, weight: .semibold)
+        } else {
+            var traits = NSFont.systemFont(ofSize: fontSize).fontDescriptor.symbolicTraits
+            if bold { traits.insert(.bold) }
+            if italic { traits.insert(.italic) }
+            font = NSFont(
+                descriptor: NSFont.systemFont(ofSize: fontSize).fontDescriptor.withSymbolicTraits(traits),
+                size: fontSize
+            ) ?? NSFont.systemFont(ofSize: fontSize, weight: bold ? .semibold : .regular)
+        }
+        var attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: url == nil ? NSColor.labelColor : NSColor.linkColor,
+            .paragraphStyle: paragraph
+        ]
+        if let url {
+            attrs[.link] = url
+            attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            attrs[.cursor] = NSCursor.pointingHand
+        }
+        return attrs
     }
 }
 
@@ -365,32 +616,9 @@ private struct LinkPreviewCard: View {
     }
 
     private func load() async {
-        if let cached = await LinkPreviewCache.shared.metadata(for: url) {
-            apply(cached)
-            return
+        icon = await FaviconStore.shared.image(for: url)
+        if let metadata = await FaviconStore.shared.metadata(for: url) {
+            title = metadata.title
         }
-        let provider = LPMetadataProvider()
-        guard let metadata = try? await provider.startFetchingMetadata(for: url) else { return }
-        await LinkPreviewCache.shared.store(metadata, for: url)
-        apply(metadata)
-    }
-
-    private func apply(_ metadata: LPLinkMetadata) {
-        title = metadata.title
-        metadata.iconProvider?.loadDataRepresentation(forTypeIdentifier: "public.image") { data, _ in
-            guard let data, let image = NSImage(data: data) else { return }
-            DispatchQueue.main.async { icon = image }
-        }
-    }
-}
-
-private actor LinkPreviewCache {
-    static let shared = LinkPreviewCache()
-    private var values: [URL: LPLinkMetadata] = [:]
-
-    func metadata(for url: URL) -> LPLinkMetadata? { values[url] }
-
-    func store(_ metadata: LPLinkMetadata, for url: URL) {
-        values[url] = metadata
     }
 }

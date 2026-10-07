@@ -30,7 +30,17 @@ private struct ConversationSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ChatMessages(session: session, compact: compact)
+            ChatMessages(
+                session: session,
+                compact: compact,
+                turn: runtime.bridge.turn,
+                turnText: runtime.bridge.turnText,
+                waitState: runtime.bridge.waitState,
+                sources: runtime.bridge.sources,
+                thinking: runtime.bridge.thinkingText,
+                workedSeconds: runtime.bridge.workedSeconds,
+                answers: runtime.answers
+            )
             ChatInput(
                 modelID: Bindable(runtime).modelID,
                 isGenerating: session.isGenerating,
@@ -52,6 +62,9 @@ private struct ConversationSessionView: View {
         }
         .onChange(of: app.pendingSend) { _, _ in runtime.consumePending(from: app) }
         .onChange(of: runtime.modelID) { _, _ in runtime.applyModel() }
+        .onChange(of: session.isGenerating) { _, generating in
+            if !generating { runtime.rememberAnswer() }
+        }
     }
 
     private func send(_ text: String) -> Bool {

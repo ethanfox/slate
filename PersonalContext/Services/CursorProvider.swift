@@ -13,6 +13,14 @@ struct RunnerRequest: Encodable, Sendable {
     var mcpCommand: String
 }
 
+struct RunnerSource: Decodable, Sendable {
+    var id: String?
+    var title: String
+    var url: String?
+    var kind: String?
+    var pin: Bool?
+}
+
 struct RunnerEvent: Decodable, Sendable {
     var type: String
     var agentId: String?
@@ -21,6 +29,97 @@ struct RunnerEvent: Decodable, Sendable {
     var status: String?
     var error: String?
     var message: String?
+    var id: String?
+    var detail: String?
+    var sources: [RunnerSource]?
+}
+
+enum ChatWaitState: Equatable {
+    case starting, thinking, working, writing
+}
+
+struct ChatTurnItem: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case text(String)
+        case tool(ChatToolActivity)
+    }
+
+    var id: String
+    var kind: Kind
+}
+
+struct ChatToolActivity: Identifiable, Equatable, Codable {
+    enum Status: String, Equatable, Codable {
+        case running, succeeded, failed
+
+        init(event: String) {
+            switch event.lowercased() {
+            case "running", "in_progress", "pending", "started": self = .running
+            case "error", "failed", "cancelled", "canceled": self = .failed
+            default: self = .succeeded
+            }
+        }
+    }
+
+    var id: String
+    var name: String
+    var status: Status
+    var detail: String = ""
+
+    var title: String { Self.title(for: name, status: status) }
+
+    var isCursorSource: Bool {
+        name == "ask_cursor" || name.contains("cursor")
+    }
+
+    var symbol: String {
+        if isCursorSource { return "chevron.left.forwardslash.chevron.right" }
+        switch name {
+        case "webSearch": return "globe"
+        case "webFetch": return "safari"
+        default: break
+        }
+        if name.contains("note") { return "eyeglasses" }
+        if name.hasPrefix("list_") || name.hasPrefix("get_") { return "doc.text.magnifyingglass" }
+        if name.hasPrefix("create_") { return "plus" }
+        if name.hasPrefix("update_") { return "pencil" }
+        return "wrench.and.screwdriver"
+    }
+
+    static func title(for tool: String, status: Status) -> String {
+        switch tool {
+        case "webSearch":
+            return status == .running ? "Searching the web" : status == .failed ? "Couldn’t search the web" : "Searched the web"
+        case "webFetch":
+            return status == .running ? "Fetching a page" : status == .failed ? "Couldn’t fetch a page" : "Fetched a page"
+        case "mcp":
+            return status == .running ? "Using a tool" : status == .failed ? "A tool failed" : "Used a tool"
+        default:
+            break
+        }
+        let verbs: [(prefix: String, running: String, done: String, fail: String)] = [
+            ("list_", "Listing", "Listed", "list"),
+            ("get_", "Reading", "Read", "read"),
+            ("create_", "Adding", "Added", "add"),
+            ("update_", "Updating", "Updated", "update")
+        ]
+        for verb in verbs {
+            guard let range = tool.range(of: verb.prefix) else { continue }
+            let noun = tool[range.upperBound...].replacingOccurrences(of: "_", with: " ")
+            switch status {
+            case .running: return "\(verb.running) \(noun)"
+            case .succeeded: return "\(verb.done) \(noun)"
+            case .failed: return "Couldn’t \(verb.fail) \(noun)"
+            }
+        }
+        let readable = tool
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "([a-z])([A-Z])", with: "$1 $2", options: .regularExpression)
+        switch status {
+        case .running, .succeeded: return readable.localizedCapitalized
+        case .failed: return "Couldn’t run \(readable.lowercased())"
+        }
+    }
 }
 
 @MainActor
@@ -29,7 +128,37 @@ final class CursorConversationBridge {
     var conversation: Conversation
     var project: Project?
     private(set) var changes: [String] = []
+    private(set) var turn: [ChatTurnItem] = []
+    private(set) var waitState: ChatWaitState = .starting
+    private(set) var sources: [ChatSource] = []
+    private(set) var thinkingText = ""
+    private(set) var startedAt: Date?
+    private(set) var finishedAt: Date?
     @ObservationIgnored private var process: Process?
+    @ObservationIgnored private var startNewText = false
+
+    var workedSeconds: Int {
+        guard let startedAt else { return 0 }
+        return max(0, Int((finishedAt ?? .now).timeIntervalSince(startedAt).rounded()))
+    }
+
+    var work: ChatWork {
+        ChatWork(seconds: workedSeconds, thinking: thinkingText, tools: tools)
+    }
+
+    var tools: [ChatToolActivity] {
+        turn.compactMap { item in
+            if case .tool(let tool) = item.kind { return tool }
+            return nil
+        }
+    }
+
+    var turnText: String {
+        turn.compactMap { item in
+            if case .text(let text) = item.kind { return text }
+            return nil
+        }.joined(separator: "\n\n")
+    }
 
     init(conversation: Conversation, project: Project?) {
         self.conversation = conversation
@@ -52,6 +181,13 @@ final class CursorConversationBridge {
         let opening = conversation.cursorAgentId.isEmpty
         ChatTrace.event("prepare conversation=\(conversation.id) opening=\(opening) agent=\(conversation.cursorAgentId) model=\(conversation.model) project=\(project?.name ?? "none") textChars=\(userText.count)")
         changes = []
+        turn = []
+        sources = []
+        thinkingText = ""
+        waitState = .starting
+        startedAt = .now
+        finishedAt = nil
+        startNewText = false
         if conversation.title == "New chat" || conversation.title.isEmpty {
             conversation.title = conversationTitle(from: userText)
         }
@@ -142,29 +278,161 @@ final class CursorConversationBridge {
         try? conversation.modelContext?.save()
     }
 
-    func toolFinished(name: String, status: String) {
+    func appendText(_ text: String) {
+        guard !text.isEmpty else { return }
+        waitState = .writing
+        if !startNewText, case .text(let existing) = turn.last?.kind {
+            turn[turn.count - 1].kind = .text(existing + text)
+            return
+        }
+        startNewText = false
+        turn.append(ChatTurnItem(id: UUID().uuidString, kind: .text(text)))
+    }
+
+    func markThinking(_ text: String? = nil) {
+        if let text, !text.isEmpty { thinkingText += text }
+        if tools.contains(where: { $0.status == .running }) { return }
+        waitState = .thinking
+    }
+
+    func applyStatus(_ status: String) {
+        switch status.uppercased() {
+        case "CREATING": waitState = .starting
+        case "RUNNING":
+            if waitState == .starting { waitState = .thinking }
+        case "ERROR", "CANCELLED", "CANCELED", "EXPIRED":
+            break
+        default:
+            break
+        }
+    }
+
+    func beginTextSegment() {
+        startNewText = true
+    }
+
+    func applyTool(name: String, status: String, id: String? = nil, detail: String? = nil, sources incoming: [RunnerSource]? = nil) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        let next = ChatToolActivity.Status(event: status)
+        let detail = detail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         ChatTrace.event("tool \(name) status=\(status)")
-        guard let label = Self.label(tool: name, failed: status == "error") else { return }
-        changes.append(label)
+        if let incoming { mergeSources(incoming) }
+        if next == .running {
+            startNewText = true
+            waitState = .working
+        }
+        if let id, let index = toolIndex(id: id) {
+            updateTool(at: index, status: next, detail: detail)
+            refreshWaitState()
+            return
+        }
+        if next == .running, let index = lastRunningTool(named: name) {
+            updateTool(at: index, status: next, detail: detail)
+            return
+        }
+        if next != .running, let index = lastRunningTool(named: name) {
+            updateTool(at: index, status: next, detail: detail)
+            refreshWaitState()
+            return
+        }
+        if next != .running, case .tool(let tool) = turn.last?.kind, tool.name == name {
+            updateTool(at: turn.count - 1, status: next, detail: detail)
+            refreshWaitState()
+            return
+        }
+        turn.append(ChatTurnItem(
+            id: UUID().uuidString,
+            kind: .tool(ChatToolActivity(id: id ?? UUID().uuidString, name: name, status: next, detail: detail))
+        ))
+        recordChange(name: name, status: next)
+        refreshWaitState()
     }
 
     func stop() {
+        markRunning(as: .failed)
+        if finishedAt == nil { finishedAt = .now }
         guard let process, process.isRunning else { return }
         ChatTrace.event("runner stop pid=\(process.processIdentifier)")
         process.terminate()
     }
 
     func finished() {
+        if finishedAt == nil { finishedAt = .now }
         process = nil
     }
 
-    private static func label(tool: String, failed: Bool) -> String? {
-        for (prefix, done, attempt) in [("create_", "Added", "add"), ("update_", "Updated", "update")] {
-            guard let range = tool.range(of: prefix) else { continue }
-            let noun = tool[range.upperBound...].replacingOccurrences(of: "_", with: " ")
-            return failed ? "Couldn’t \(attempt) \(noun)" : "\(done) \(noun)"
+    func completeRunningTools() {
+        markRunning(as: .succeeded)
+    }
+
+    func failRunningTools() {
+        markRunning(as: .failed)
+    }
+
+    private func markRunning(as status: ChatToolActivity.Status) {
+        for index in turn.indices {
+            guard case .tool(var tool) = turn[index].kind, tool.status == .running else { continue }
+            tool.status = status
+            turn[index].kind = .tool(tool)
+            recordChange(name: tool.name, status: status)
         }
-        return nil
+    }
+
+    private func toolIndex(id: String) -> Int? {
+        turn.firstIndex { item in
+            if case .tool(let tool) = item.kind { return tool.id == id }
+            return false
+        }
+    }
+
+    private func lastRunningTool(named name: String) -> Int? {
+        turn.lastIndex { item in
+            if case .tool(let tool) = item.kind { return tool.name == name && tool.status == .running }
+            return false
+        }
+    }
+
+    private func updateTool(at index: Int, status: ChatToolActivity.Status, detail: String = "") {
+        guard case .tool(var tool) = turn[index].kind else { return }
+        tool.status = status
+        if !detail.isEmpty { tool.detail = detail }
+        turn[index].kind = .tool(tool)
+        recordChange(name: tool.name, status: status)
+    }
+
+    private func refreshWaitState() {
+        if tools.contains(where: { $0.status == .running }) {
+            waitState = .working
+        } else if waitState == .working {
+            waitState = .thinking
+        }
+    }
+
+    private func mergeSources(_ incoming: [RunnerSource]) {
+        for raw in incoming {
+            let source = ChatSource(
+                id: raw.id?.isEmpty == false ? raw.id! : raw.url ?? raw.title,
+                title: raw.title,
+                url: raw.url,
+                kind: ChatSource.Kind(rawValue: raw.kind ?? "") ?? (raw.url == nil ? .note : .url),
+                pin: raw.pin ?? true
+            )
+            if let index = sources.firstIndex(where: { $0.isSame(as: source) }) {
+                if source.pin { sources[index].pin = true }
+                if sources[index].title.count < source.title.count { sources[index].title = source.title }
+                if sources[index].url == nil { sources[index].url = source.url }
+            } else {
+                sources.append(source)
+            }
+        }
+    }
+
+    private func recordChange(name: String, status: ChatToolActivity.Status) {
+        guard status != .running else { return }
+        guard name.hasPrefix("create_") || name.hasPrefix("update_") else { return }
+        let label = ChatToolActivity.title(for: name, status: status)
+        if !changes.contains(label) { changes.append(label) }
     }
 }
 
@@ -204,12 +472,25 @@ struct CursorChatProvider: ChatProvider {
                         case "text":
                             if let text = event.text, !text.isEmpty {
                                 emitted = true
+                                bridge.appendText(text)
                                 continuation.yield(.text(text))
                             }
+                        case "break":
+                            bridge.beginTextSegment()
+                            continuation.yield(.text("\n\n"))
                         case "thinking":
+                            bridge.markThinking(event.text)
                             if let text = event.text { continuation.yield(.reasoning(text)) }
+                        case "status":
+                            if let status = event.status { bridge.applyStatus(status) }
                         case "tool":
-                            bridge.toolFinished(name: event.name ?? "", status: event.status ?? "")
+                            bridge.applyTool(
+                                name: event.name ?? "",
+                                status: event.status ?? "",
+                                id: event.id,
+                                detail: event.detail,
+                                sources: event.sources
+                            )
                         case "result":
                             if !emitted, let text = event.text, !text.isEmpty {
                                 emitted = true
@@ -226,9 +507,11 @@ struct CursorChatProvider: ChatProvider {
                         }
                     }
                     ChatTrace.event("provider.stream complete emitted=\(emitted)")
+                    bridge.completeRunningTools()
                     continuation.yield(.done)
                     continuation.finish()
                 } catch {
+                    bridge.failRunningTools()
                     ChatTrace.event("provider.stream error: \(error.localizedDescription)")
                     continuation.finish(throwing: error)
                 }

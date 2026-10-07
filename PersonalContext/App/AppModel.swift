@@ -301,6 +301,13 @@ final class AppModel {
         destination = .project(project.id)
     }
 
+    func open(_ decision: Decision) {
+        guard let project = decision.project else { return }
+        selectedDecision = decision.id
+        tabs[project.id] = .decisions
+        destination = .project(project.id)
+    }
+
     func open(_ conversation: Conversation) {
         selectedConversation = conversation.id
         if let project = conversation.project {

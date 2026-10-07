@@ -13,11 +13,15 @@ type Request = {
   mcpCommand: string;
 };
 
+type Source = { id?: string; title: string; url?: string; kind: string; pin?: boolean };
+
 type Event =
   | { type: "agent"; agentId: string }
   | { type: "text"; text: string }
+  | { type: "break" }
   | { type: "thinking"; text: string }
-  | { type: "tool"; name: string; status: string }
+  | { type: "status"; status: string }
+  | { type: "tool"; name: string; status: string; id?: string; detail?: string; sources?: Source[] }
   | { type: "result"; status: string; text?: string; error?: string }
   | { type: "error"; message: string };
 
@@ -49,6 +53,135 @@ function toolName(name: string, args: unknown): string {
     if (typeof fields[key] === "string") return fields[key] as string;
   }
   return name;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function field(record: Record<string, unknown> | undefined, ...keys: string[]): string | undefined {
+  if (!record) return undefined;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function unwrapResult(result: unknown): unknown {
+  const record = asRecord(result);
+  const content = record?.content;
+  if (Array.isArray(content)) {
+    const text = content
+      .map((block) => (typeof block === "object" && block && "text" in block ? String((block as { text?: unknown }).text ?? "") : ""))
+      .join("\n")
+      .trim();
+    if (!text) return result;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  }
+  return result;
+}
+
+function titlesFrom(value: unknown): string[] {
+  if (typeof value === "string") return value.length > 80 ? [`${value.slice(0, 77)}…`] : [value];
+  if (Array.isArray(value)) return value.flatMap((item) => titlesFrom(item)).filter(Boolean);
+  const record = asRecord(value);
+  if (!record) return [];
+  const title = field(record, "title", "name", "query", "url");
+  return title ? [title] : [];
+}
+
+function toolDetail(name: string, args: unknown, result?: unknown): string {
+  const fields = asRecord(args);
+  if (name === "webSearch") return field(fields, "query", "search", "q") ?? "";
+  if (name === "webFetch" || name === "WebFetch") return field(fields, "url", "href") ?? "";
+  const fromResult = titlesFrom(unwrapResult(result)).slice(0, 4);
+  if (fromResult.length) return fromResult.join(" · ");
+  return field(fields, "title", "name", "query", "url") ?? "";
+}
+
+function hostName(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+function kindFromTool(name: string): Source["kind"] | undefined {
+  const n = name.toLowerCase();
+  if (n.includes("note")) return "note";
+  if (n.includes("thread")) return "thread";
+  if (n.includes("decision")) return "decision";
+  return undefined;
+}
+
+function urlsFrom(value: unknown): string[] {
+  if (typeof value === "string") {
+    return (value.match(/https?:\/\/[^\s"'<>]+/g) ?? []).map((url) => url.replace(/[.,);]+$/, ""));
+  }
+  if (Array.isArray(value)) return [...new Set(value.flatMap(urlsFrom))];
+  const record = asRecord(value);
+  if (!record) return [];
+  const url = field(record, "url", "href", "link");
+  const rest = Object.values(record).flatMap(urlsFrom);
+  return [...new Set(url ? [url, ...rest] : rest)];
+}
+
+function recordsFrom(value: unknown): { id?: string; title: string; url?: string }[] {
+  if (Array.isArray(value)) return value.flatMap(recordsFrom);
+  const record = asRecord(value);
+  if (!record) return [];
+  const title = field(record, "title", "name");
+  const id = field(record, "id");
+  const rawURL = field(record, "url", "href", "source");
+  const url = rawURL?.startsWith("http") ? rawURL : undefined;
+  if (title || url) return [{ id, title: title ?? hostName(url ?? ""), url }];
+  return Object.values(record).flatMap(recordsFrom);
+}
+
+function sourcesFrom(name: string, args: unknown, result?: unknown): Source[] {
+  const n = name.toLowerCase();
+  if (n === "webfetch") {
+    const url = field(asRecord(args), "url", "href") ?? urlsFrom(unwrapResult(result))[0];
+    return url ? [{ id: url, title: hostName(url), url, kind: "url", pin: true }] : [];
+  }
+  if (n === "websearch") {
+    return urlsFrom(unwrapResult(result))
+      .slice(0, 4)
+      .map((url) => ({ id: url, title: hostName(url), url, kind: "url", pin: true }));
+  }
+  const kind = kindFromTool(name);
+  if (!kind) return [];
+  const pin = n.startsWith("get_");
+  return recordsFrom(unwrapResult(result) ?? args)
+    .slice(0, pin ? 1 : 8)
+    .map((record) => ({
+      id: record.id ?? record.url ?? record.title,
+      title: record.title,
+      url: record.url,
+      kind,
+      pin,
+    }));
+}
+
+function toolEvent(name: string, status: string, args?: unknown, result?: unknown, id?: string): Event {
+  const detail = toolDetail(name, args, result);
+  const sources = sourcesFrom(name, args, result);
+  return {
+    type: "tool",
+    name,
+    status,
+    id,
+    ...(detail ? { detail } : {}),
+    ...(sources.length ? { sources } : {}),
+  };
 }
 
 type McpTool = { name: string; description?: string; inputSchema?: SDKCustomTool["inputSchema"]; annotations?: SDKCustomTool["annotations"] };
@@ -86,7 +219,17 @@ async function slateTools(command: string): Promise<Record<string, SDKCustomTool
         description: tool.description,
         inputSchema: tool.inputSchema,
         annotations: tool.annotations,
-        execute: async (args) => (await call("tools/call", { name: tool.name, arguments: args })) as SDKCustomToolResult,
+        execute: async (args) => {
+          emit(toolEvent(tool.name, "running", args));
+          try {
+            const result = (await call("tools/call", { name: tool.name, arguments: args })) as SDKCustomToolResult;
+            emit(toolEvent(tool.name, "completed", args, result));
+            return result;
+          } catch (error) {
+            emit(toolEvent(tool.name, "error", args));
+            throw error;
+          }
+        },
       } satisfies SDKCustomTool,
     ]),
   );
@@ -130,22 +273,40 @@ async function main() {
 
   run = await agent.send(request.text);
   log("run", { runId: run.id });
+  let lastAssistant = "";
+  let sawAssistant = false;
   for await (const message of run.stream()) {
     if (message.type !== "assistant" && message.type !== "thinking") log(message.type, message);
     switch (message.type) {
-      case "assistant":
+      case "assistant": {
+        let chunk = "";
         for (const block of message.message.content) {
-          if (block.type === "text" && block.text) emit({ type: "text", text: block.text });
+          if (block.type === "text" && block.text) chunk += block.text;
+        }
+        if (!chunk) break;
+        if (lastAssistant && chunk.startsWith(lastAssistant)) {
+          const delta = chunk.slice(lastAssistant.length);
+          lastAssistant = chunk;
+          if (delta) emit({ type: "text", text: delta });
+        } else {
+          if (sawAssistant) emit({ type: "break" });
+          sawAssistant = true;
+          lastAssistant = chunk;
+          emit({ type: "text", text: chunk });
         }
         break;
+      }
       case "thinking":
         if (message.text) emit({ type: "thinking", text: message.text });
         break;
-      case "tool_call":
-        if (message.status !== "running") {
-          emit({ type: "tool", name: toolName(message.name, message.args), status: message.status });
-        }
+      case "status":
+        emit({ type: "status", status: message.status });
         break;
+      case "tool_call": {
+        const id = "call_id" in message && typeof message.call_id === "string" ? message.call_id : undefined;
+        emit(toolEvent(toolName(message.name, message.args), message.status, message.args, message.result, id));
+        break;
+      }
     }
   }
   const result = await run.wait();

@@ -12,6 +12,7 @@ final class ChatRuntime {
     let bridge: CursorConversationBridge
     let session: ChatSession
     var modelID: String
+    var answers: [UUID: ChatTranscript.Unpacked] = [:]
     @ObservationIgnored private var conversation: Conversation?
     @ObservationIgnored private var ticks: AnyCancellable?
     @ObservationIgnored var onTick: (() -> Void)?
@@ -23,6 +24,12 @@ final class ChatRuntime {
         self.bridge = bridge
         modelID = conversation.model
         session = Self.makeSession(bridge: bridge, conversation: conversation)
+        answers = Dictionary(uniqueKeysWithValues: conversation.orderedMessages.compactMap { message in
+            guard message.role == .assistant else { return nil }
+            let answer = ChatTranscript.unpack(message.content)
+            guard !answer.sources.isEmpty || answer.work?.hasContent == true else { return nil }
+            return (message.id, answer)
+        })
         ticks = session.objectWillChange.sink { [weak self] _ in
             Task { @MainActor in
                 self?.onTick?()
@@ -48,7 +55,9 @@ final class ChatRuntime {
 
     var lastReply: String {
         for entry in session.entries.reversed() {
-            if case .aiMessage(let reply) = entry, !reply.text.isEmpty { return reply.text }
+            if case .aiMessage(let reply) = entry, !reply.text.isEmpty {
+                return ChatTranscript.unpack(reply.text).text
+            }
         }
         return ""
     }
@@ -69,7 +78,7 @@ final class ChatRuntime {
             case .userMessage(let user) where !user.isCancelled && !user.isFailed:
                 stored = ChatMessage(id: user.id, role: .user, content: user.text)
             case .aiMessage(let reply) where !reply.text.isEmpty:
-                stored = ChatMessage(id: reply.id, role: .assistant, content: reply.text)
+                stored = ChatMessage(id: reply.id, role: .assistant, content: packed(reply))
             default:
                 stored = nil
             }
@@ -112,11 +121,38 @@ final class ChatRuntime {
                 entries.append(.userMessage(.init(id: message.id, text: message.content)))
                 history.append(.init(id: message.id, role: .user, content: message.content))
             case .assistant:
+                let answer = ChatTranscript.unpack(message.content)
                 entries.append(.aiMessage(.init(id: message.id, text: message.content, isStreaming: false)))
-                history.append(.init(id: message.id, role: .assistant, content: message.content))
+                history.append(.init(id: message.id, role: .assistant, content: answer.text))
             }
         }
         session.loadSnapshot(entries: entries, history: history)
         return session
+    }
+
+    func rememberAnswer() {
+        for entry in session.entries.reversed() {
+            if case .aiMessage(let reply) = entry, !reply.text.isEmpty {
+                let text = ChatTranscript.unpack(reply.text).text
+                answers[reply.id] = ChatTranscript.Unpacked(
+                    text: text,
+                    sources: bridge.sources,
+                    work: bridge.work
+                )
+                persist()
+                return
+            }
+        }
+    }
+
+    private func packed(_ reply: ChatSession.AIEntry) -> String {
+        if let answer = answers[reply.id] {
+            return ChatTranscript.pack(text: answer.text, sources: answer.sources, work: answer.work)
+        }
+        let answer = ChatTranscript.unpack(reply.text)
+        guard !bridge.turnText.isEmpty, answer.text == bridge.turnText || reply.text == bridge.turnText else {
+            return reply.text
+        }
+        return ChatTranscript.pack(text: answer.text, sources: bridge.sources, work: bridge.work)
     }
 }

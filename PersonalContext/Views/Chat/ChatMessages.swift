@@ -6,10 +6,26 @@ import SwiftUI
 struct ChatMessages: View {
     @ObservedObject var session: ChatSession
     var compact = false
+    var turn: [ChatTurnItem] = []
+    var turnText = ""
+    var waitState: ChatWaitState = .starting
+    var sources: [ChatSource] = []
+    var thinking = ""
+    var workedSeconds = 0
+    var answers: [UUID: ChatTranscript.Unpacked] = [:]
 
     var body: some View {
-        ChatMessageList(session: session)
-            .environment(\.chatMessageLayout, compact ? .compact : .regular)
+        ChatMessageList(
+            session: session,
+            turn: turn,
+            turnText: turnText,
+            waitState: waitState,
+            sources: sources,
+            thinking: thinking,
+            workedSeconds: workedSeconds,
+            answers: answers
+        )
+        .environment(\.chatMessageLayout, compact ? .compact : .regular)
     }
 }
 
@@ -46,6 +62,13 @@ private extension EnvironmentValues {
 
 private struct ChatMessageList: View {
     @ObservedObject var session: ChatSession
+    var turn: [ChatTurnItem]
+    var turnText: String
+    var waitState: ChatWaitState
+    var sources: [ChatSource]
+    var thinking: String
+    var workedSeconds: Int
+    var answers: [UUID: ChatTranscript.Unpacked]
     @Environment(\.chatMessageLayout) private var layout
     @Environment(AppModel.self) private var app
 
@@ -53,25 +76,19 @@ private struct ChatMessageList: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
-                    ForEach(session.entries, id: \.id) { entry in
-                        row(entry)
-                            .id(entry.id)
-                    }
-                    if let live = liveOrb {
-                        HStack(spacing: 10) {
-                            ChatOrb(
-                                state: live.state,
-                                palette: app.orbPalette,
-                                status: live.status,
-                                size: 28,
-                                showsStatus: false
-                            )
-                            Text(live.status)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                    ForEach(Array(session.entries.enumerated()), id: \.element.id) { index, entry in
+                        Group {
+                            if !hideCurrentTurn(entry, index: index) {
+                                row(entry)
+                                    .id(entry.id)
+                            }
+                            if index == lastUserIndex, showTurn {
+                                turnRows.id("turn")
+                            }
                         }
-                        .id("orb")
+                    }
+                    if lastUserIndex == nil, showTurn {
+                        turnRows.id("turn")
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
@@ -90,7 +107,101 @@ private struct ChatMessageList: View {
             .onChange(of: session.isGenerating) { _, generating in
                 if generating { proxy.scrollTo("bottom", anchor: .bottom) }
             }
+            .onChange(of: turn.count) { _, _ in
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
+            .onChange(of: turnText) { _, _ in
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
         }
+    }
+
+    private var lastUserIndex: Int? {
+        session.entries.lastIndex { entry in
+            switch entry {
+            case .userMessage, .knowledgeRetrieval: true
+            default: false
+            }
+        }
+    }
+
+    private var showTurn: Bool {
+        session.isGenerating || !turn.isEmpty
+    }
+
+    private func hideCurrentTurn(_ entry: ChatSession.Entry, index: Int) -> Bool {
+        guard showTurn, let lastUserIndex, index > lastUserIndex else { return false }
+        switch entry {
+        case .aiMessage, .reasoning: return true
+        default: return false
+        }
+    }
+
+    private var tools: [ChatToolActivity] {
+        turn.compactMap { item in
+            if case .tool(let tool) = item.kind { return tool }
+            return nil
+        }
+    }
+
+    private var lastTextID: String? {
+        turn.last(where: { item in
+            if case .text = item.kind { return true }
+            return false
+        })?.id
+    }
+
+    private var turnRows: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if session.isGenerating || !thinking.isEmpty || !tools.isEmpty || workedSeconds > 0 {
+                WorkAccordion(
+                    isGenerating: session.isGenerating,
+                    waitState: waitState,
+                    seconds: workedSeconds,
+                    thinking: thinking,
+                    tools: [],
+                    liveTitle: tools.last(where: { $0.status == .running })?.title
+                )
+            }
+            ForEach(turn) { item in
+                switch item.kind {
+                case .text(let text):
+                    AssistantMarkdown(
+                        text: text,
+                        sources: sources,
+                        pinUnused: item.id == lastTextID
+                    )
+                    .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
+                case .tool(let tool):
+                    ChatToolRow(tool: tool)
+                }
+            }
+            if !session.isGenerating, !turnText.isEmpty {
+                MessageActionRow {
+                    MessageActionButton(title: "Copy", systemImage: "doc.on.doc", confirms: true) {
+                        CraftClipboard.copy(turnText)
+                    }
+                    MessageActionButton(title: "Save to Notes", systemImage: "note.text") {
+                        save(.note)
+                    }
+                    MessageActionButton(title: "Create Track", systemImage: TrackStyle.symbol) {
+                        save(.thread)
+                    }
+                    MessageActionButton(title: "Add to Track", systemImage: "text.append") {
+                        save(.addToThread)
+                    }
+                    MessageActionButton(title: "Create Decision", systemImage: "checkmark.seal") {
+                        save(.decision)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
+    }
+
+    private func save(_ kind: SaveKind) {
+        app.activeReply = turnText
+        app.present(.save(kind))
     }
 
     @ViewBuilder
@@ -102,7 +213,7 @@ private struct ChatMessageList: View {
             if message.text.isEmpty, message.isStreaming {
                 EmptyView()
             } else {
-                AssistantMessageBlock(message: message)
+                AssistantMessageBlock(message: message, stored: answers[message.id], showWork: !showTurn)
             }
         case .reasoning(let reasoning):
             if reasoning.isThinking {
@@ -127,23 +238,8 @@ private struct ChatMessageList: View {
                 }
                 .buttonStyle(.plain)
             }
-        case .toolCall(let tool):
-            VStack(alignment: .leading, spacing: 4) {
-                Text(tool.name)
-                    .font(.system(size: 13, weight: .medium))
-                Text(toolStatus(tool.status))
-                    .font(CraftFont.caption)
-                    .foregroundStyle(.tertiary)
-                if let result = tool.result, !result.isEmpty {
-                    Text(result)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(8)
-                }
-            }
-            .padding(12)
-            .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
-            .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        case .toolCall:
+            EmptyView()
         case .knowledgeRetrieval(let knowledge):
             Button {
                 session.toggleKnowledgeRetrieval(id: knowledge.id)
@@ -174,39 +270,135 @@ private struct ChatMessageList: View {
     }
 
     private var lastReply: String {
-        for entry in session.entries.reversed() {
-            if case .aiMessage(let reply) = entry { return reply.text }
-        }
-        return ""
+        turnText.isEmpty
+            ? session.entries.reversed().compactMap { entry -> String? in
+                if case .aiMessage(let reply) = entry { return reply.text }
+                return nil
+            }.first ?? ""
+            : turnText
     }
+}
 
-    private var liveOrb: (state: OrbState, status: String)? {
-        guard session.isGenerating else { return nil }
-        for entry in session.entries.reversed() {
-            switch entry {
-            case .reasoning(let reasoning) where reasoning.isThinking:
-                return (.thinking, OrbState.thinking.status)
-            case .toolCall(let tool) where tool.status == .running:
-                return (.working, tool.name.isEmpty ? OrbState.working.status : tool.name)
-            case .activity(let activity) where !activity.isError:
-                return (.working, activity.text.isEmpty ? OrbState.working.status : activity.text)
-            case .aiMessage(let message) where message.isStreaming:
-                if message.text.isEmpty {
-                    return (.thinking, OrbState.thinking.status)
-                }
-                return (.streaming, OrbState.streaming.status)
-            default:
-                continue
+private struct WorkAccordion: View {
+    var isGenerating: Bool
+    var waitState: ChatWaitState
+    var seconds: Int
+    var thinking: String
+    var tools: [ChatToolActivity]
+    var liveTitle: String?
+    @State private var opened: Bool?
+
+    private var expanded: Bool { opened ?? isGenerating }
+
+    private var label: String {
+        if isGenerating {
+            if let liveTitle, !liveTitle.isEmpty { return liveTitle }
+            switch waitState {
+            case .starting: return "Starting"
+            case .thinking: return "Thinking"
+            case .working: return "Working"
+            case .writing: return "Writing"
             }
         }
-        return (.thinking, OrbState.thinking.status)
+        return seconds <= 0 ? "Worked" : "Worked for \(seconds)s"
     }
 
-    private func toolStatus(_ status: ChatSession.ToolCallEntry.Status) -> String {
-        switch status {
-        case .running: "Running"
-        case .succeeded: "Complete"
-        case .failed: "Failed"
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: toggle) {
+                HStack(spacing: 6) {
+                    if isGenerating {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Text(label)
+                        .font(CraftFont.body)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+            .accessibilityAddTraits(expanded ? [.isSelected] : [])
+
+            if expanded, hasBody {
+                VStack(alignment: .leading, spacing: 10) {
+                    if !thinking.isEmpty {
+                        Text(thinking)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(tools) { tool in
+                        ChatToolRow(tool: tool)
+                    }
+                }
+            }
+        }
+        .onChange(of: isGenerating) { _, generating in
+            opened = generating
+        }
+        .animation(Motion.quick, value: expanded)
+        .animation(Motion.quick, value: label)
+    }
+
+    private var hasBody: Bool {
+        !thinking.isEmpty || !tools.isEmpty
+    }
+
+    private func toggle() {
+        opened = !expanded
+    }
+}
+
+private struct ChatToolRow: View {
+    var tool: ChatToolActivity
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            ChatToolMark(symbol: tool.symbol)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(tool.title)
+                        .font(CraftFont.body)
+                        .foregroundStyle(.secondary)
+                    if tool.status == .running {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+                if !tool.detail.isEmpty {
+                    Text(tool.detail)
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(tool.detail.isEmpty ? tool.title : "\(tool.title). \(tool.detail)")
+    }
+}
+
+private struct ChatToolMark: View {
+    var symbol: String
+
+    var body: some View {
+        if symbol == "chevron.left.forwardslash.chevron.right" {
+            Text("C")
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .frame(width: 16, height: 16)
+                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Cursor")
+        } else {
+            Image(systemName: symbol)
+                .font(CraftFont.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 16, height: 16)
         }
     }
 }
@@ -254,8 +446,14 @@ private struct UserMessageBubble: View {
 
 private struct AssistantMessageBlock: View {
     let message: ChatSession.AIEntry
+    var stored: ChatTranscript.Unpacked?
+    var showWork = true
     @Environment(AppModel.self) private var app
     @Environment(\.chatMessageLayout) private var layout
+
+    private var answer: ChatTranscript.Unpacked {
+        stored ?? ChatTranscript.unpack(message.text)
+    }
 
     var body: some View {
         if message.text.isEmpty, message.isStreaming {
@@ -264,12 +462,22 @@ private struct AssistantMessageBlock: View {
                 .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                AssistantMarkdown(text: message.text)
+                if showWork, let work = answer.work, work.hasContent {
+                    WorkAccordion(
+                        isGenerating: false,
+                        waitState: .thinking,
+                        seconds: work.seconds,
+                        thinking: work.thinking,
+                        tools: work.tools,
+                        liveTitle: nil
+                    )
+                }
+                AssistantMarkdown(text: answer.text, sources: answer.sources, pinUnused: true)
                     .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
-                if !message.text.isEmpty {
+                if !answer.text.isEmpty {
                     MessageActionRow {
                         MessageActionButton(title: "Copy", systemImage: "doc.on.doc", confirms: true) {
-                            CraftClipboard.copy(message.text)
+                            CraftClipboard.copy(answer.text)
                         }
                         MessageActionButton(title: "Save to Notes", systemImage: "note.text") {
                             save(.note)
@@ -291,7 +499,7 @@ private struct AssistantMessageBlock: View {
     }
 
     private func save(_ kind: SaveKind) {
-        app.activeReply = message.text
+        app.activeReply = answer.text
         app.present(.save(kind))
     }
 }
