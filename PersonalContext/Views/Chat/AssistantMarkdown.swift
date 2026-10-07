@@ -5,34 +5,76 @@ struct AssistantMarkdown: View {
     var text: String
     var sources: [ChatSource] = []
     var pinUnused = true
+    var streaming = false
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.modelContext) private var modelContext
     @State private var hover: LinkHover?
     @State private var sourceHover: SourceHover?
+    @State private var overPager = false
+    @State private var dismissPager: Task<Void, Never>?
 
     var body: some View {
         MarkdownBody(
             text: text,
             sources: sources,
             pinUnused: pinUnused,
+            streaming: streaming && !reduceMotion,
             hover: $hover,
-            sourceHover: $sourceHover,
+            sourceHover: Binding(
+                get: { sourceHover },
+                set: { setSourceHover($0) }
+            ),
             onOpen: { $0.open(app: app, context: modelContext) }
         )
-            .overlay(alignment: .topLeading) {
-                if let sourceHover {
-                    SourcePager(sources: sourceHover.sources) { source in
-                        source.open(app: app, context: modelContext)
-                    }
-                    .offset(x: sourceHover.rect.minX, y: previewY(for: sourceHover.rect, height: 92))
-                } else if let hover {
-                    LinkPreviewCard(url: hover.url)
-                        .offset(x: hover.rect.minX, y: previewY(for: hover.rect, height: 76))
-                        .allowsHitTesting(false)
+        .animation(streaming && !reduceMotion ? Motion.quick : nil, value: text.count)
+        .padding(.bottom, sourceHover == nil ? 0 : 96)
+        .overlay(alignment: .topLeading) {
+            if let sourceHover {
+                SourcePager(sources: sourceHover.sources) { source in
+                    source.open(app: app, context: modelContext)
+                    clearPager()
                 }
+                .offset(x: sourceHover.rect.minX, y: sourceHover.rect.maxY + 4)
+                .onHover { hovering in
+                    overPager = hovering
+                    if hovering {
+                        dismissPager?.cancel()
+                    } else {
+                        setSourceHover(nil)
+                    }
+                }
+                .zIndex(2)
+            } else if let hover {
+                LinkPreviewCard(url: hover.url)
+                    .offset(x: hover.rect.minX, y: previewY(for: hover.rect, height: 76))
+                    .allowsHitTesting(false)
             }
-            .animation(Motion.hover, value: hover?.url)
-            .animation(Motion.hover, value: sourceHover?.sources.map(\.id))
+        }
+        .animation(Motion.hover, value: hover?.url)
+        .animation(Motion.hover, value: sourceHover?.sources.map(\.id))
+        .onDisappear {
+            dismissPager?.cancel()
+        }
+    }
+
+    private func setSourceHover(_ next: SourceHover?) {
+        dismissPager?.cancel()
+        if let next {
+            sourceHover = next
+            return
+        }
+        dismissPager = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(220))
+            guard !Task.isCancelled, !overPager else { return }
+            sourceHover = nil
+        }
+    }
+
+    private func clearPager() {
+        dismissPager?.cancel()
+        overPager = false
+        sourceHover = nil
     }
 
     private func previewY(for rect: CGRect, height: CGFloat) -> CGFloat {
@@ -50,6 +92,7 @@ private struct MarkdownBody: NSViewRepresentable {
     var text: String
     var sources: [ChatSource]
     var pinUnused: Bool
+    var streaming: Bool
     @Binding var hover: LinkHover?
     @Binding var sourceHover: SourceHover?
     var onOpen: (ChatSource) -> Void
@@ -57,13 +100,13 @@ private struct MarkdownBody: NSViewRepresentable {
     func makeNSView(context: Context) -> AssistantMarkdownTextView {
         let view = AssistantMarkdownTextView()
         bind(view)
-        view.apply(text, sources: sources, pinUnused: pinUnused)
+        view.apply(text, sources: sources, pinUnused: pinUnused, streaming: streaming)
         return view
     }
 
     func updateNSView(_ view: AssistantMarkdownTextView, context: Context) {
         bind(view)
-        view.apply(text, sources: sources, pinUnused: pinUnused)
+        view.apply(text, sources: sources, pinUnused: pinUnused, streaming: streaming)
     }
 
     private func bind(_ view: AssistantMarkdownTextView) {
@@ -96,7 +139,15 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
     var onOpenSource: ((ChatSource) -> Void)?
     private var source = ""
     private var sourceIDs: [String] = []
+    private var streaming = false
     private var tracking: NSTrackingArea?
+    private var fadeTimer: Timer?
+    private var fadeRange = NSRange(location: 0, length: 0)
+    private var fadeStarted: CFTimeInterval = 0
+
+    deinit {
+        fadeTimer?.invalidate()
+    }
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
         super.init(frame: frameRect, textContainer: container)
@@ -119,11 +170,14 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         configure()
     }
 
-    func apply(_ text: String, sources: [ChatSource] = [], pinUnused: Bool = true) {
+    func apply(_ text: String, sources: [ChatSource] = [], pinUnused: Bool = true, streaming: Bool = false) {
         let ids = sources.map(\.id)
-        guard source != text || sourceIDs != ids else { return }
+        let grew = text.hasPrefix(source) && text.count > source.count
+        guard source != text || sourceIDs != ids || self.streaming != streaming else { return }
+        let oldLength = textStorage?.length ?? 0
         source = text
         sourceIDs = ids
+        self.streaming = streaming
         let selected = selectedRange()
         textStorage?.setAttributedString(Self.attributed(text, sources: sources, pinUnused: pinUnused))
         let max = (string as NSString).length
@@ -132,6 +186,58 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         invalidateIntrinsicContentSize()
         window?.invalidateCursorRects(for: self)
         loadChipIcons()
+        if streaming, grew, let storage = textStorage, storage.length > oldLength {
+            startFade(NSRange(location: oldLength, length: storage.length - oldLength))
+        } else if !streaming {
+            stopFade()
+        }
+    }
+
+    private func startFade(_ range: NSRange) {
+        fadeRange = range
+        fadeStarted = CACurrentMediaTime()
+        tintFade(progress: 0)
+        if fadeTimer == nil {
+            let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+                self?.tickFade()
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            fadeTimer = timer
+        }
+    }
+
+    private func tickFade() {
+        let progress = min((CACurrentMediaTime() - fadeStarted) / 0.2, 1)
+        tintFade(progress: progress)
+        if progress >= 1 { stopFade() }
+    }
+
+    private func tintFade(progress: CGFloat) {
+        guard let storage = textStorage else { return }
+        let end = storage.length
+        guard fadeRange.location < end else { return }
+        let range = NSRange(
+            location: fadeRange.location,
+            length: min(fadeRange.length, end - fadeRange.location)
+        )
+        let eased = 1 - (1 - progress) * (1 - progress)
+        let alpha = 0.22 + (0.78 * eased)
+        storage.addAttribute(.foregroundColor, value: NSColor.labelColor.withAlphaComponent(alpha), range: range)
+    }
+
+    private func stopFade() {
+        fadeTimer?.invalidate()
+        fadeTimer = nil
+        guard let storage = textStorage, fadeRange.length > 0, fadeRange.location < storage.length else {
+            fadeRange = NSRange(location: 0, length: 0)
+            return
+        }
+        let range = NSRange(
+            location: fadeRange.location,
+            length: min(fadeRange.length, storage.length - fadeRange.location)
+        )
+        storage.addAttribute(.foregroundColor, value: NSColor.labelColor, range: range)
+        fadeRange = NSRange(location: 0, length: 0)
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {

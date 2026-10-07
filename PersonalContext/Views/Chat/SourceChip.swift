@@ -59,18 +59,18 @@ struct SourcePager: View {
     var onOpen: (ChatSource) -> Void
     @State private var page = 0
     @State private var icon: NSImage?
+    @State private var overRow = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button {
-                onOpen(current)
-            } label: {
+            Button(action: { onOpen(current) }) {
                 HStack(alignment: .center, spacing: 10) {
                     pagerMark
                     VStack(alignment: .leading, spacing: 2) {
                         Text(current.title)
                             .font(CraftFont.section)
                             .foregroundStyle(.primary)
+                            .underline(overRow, color: .secondary)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
                         if let subtitle {
@@ -82,9 +82,12 @@ struct SourcePager: View {
                     }
                     Spacer(minLength: 0)
                 }
+                .padding(.top, 8)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .onHover { overRow = $0 }
+            .accessibilityHint("Opens this source")
 
             if sources.count > 1 {
                 HStack(spacing: 8) {

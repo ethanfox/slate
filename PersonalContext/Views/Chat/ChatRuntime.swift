@@ -107,8 +107,24 @@ final class ChatRuntime {
         }
         app.pendingSend = nil
         ChatTrace.event("consumePending send conversation=\(conversationID) chars=\(pending.text.count) generating=\(session.isGenerating)")
-        let sent = session.send(pending.text)
+        let sent = send(pending.text)
         ChatTrace.event("consumePending session.send=\(sent)")
+    }
+
+    func send(_ text: String) -> Bool {
+        guard !session.isGenerating else { return false }
+        rememberAnswer()
+        bridge.beginTurn()
+        let sent = session.send(text)
+        if sent {
+            for entry in session.entries.reversed() {
+                if case .userMessage(let user) = entry {
+                    bridge.bindTurn(to: user.id)
+                    break
+                }
+            }
+        }
+        return sent
     }
 
     private static func makeSession(bridge: CursorConversationBridge, conversation: Conversation) -> ChatSession {

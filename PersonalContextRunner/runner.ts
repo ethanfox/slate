@@ -274,7 +274,6 @@ async function main() {
   run = await agent.send(request.text);
   log("run", { runId: run.id });
   let lastAssistant = "";
-  let sawAssistant = false;
   for await (const message of run.stream()) {
     if (message.type !== "assistant" && message.type !== "thinking") log(message.type, message);
     switch (message.type) {
@@ -289,8 +288,6 @@ async function main() {
           lastAssistant = chunk;
           if (delta) emit({ type: "text", text: delta });
         } else {
-          if (sawAssistant) emit({ type: "break" });
-          sawAssistant = true;
           lastAssistant = chunk;
           emit({ type: "text", text: chunk });
         }

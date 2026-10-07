@@ -7,6 +7,7 @@ struct ChatMessages: View {
     @ObservedObject var session: ChatSession
     var compact = false
     var turn: [ChatTurnItem] = []
+    var turnUserID: UUID?
     var turnText = ""
     var waitState: ChatWaitState = .starting
     var sources: [ChatSource] = []
@@ -18,6 +19,7 @@ struct ChatMessages: View {
         ChatMessageList(
             session: session,
             turn: turn,
+            turnUserID: turnUserID,
             turnText: turnText,
             waitState: waitState,
             sources: sources,
@@ -63,6 +65,7 @@ private extension EnvironmentValues {
 private struct ChatMessageList: View {
     @ObservedObject var session: ChatSession
     var turn: [ChatTurnItem]
+    var turnUserID: UUID?
     var turnText: String
     var waitState: ChatWaitState
     var sources: [ChatSource]
@@ -70,7 +73,9 @@ private struct ChatMessageList: View {
     var workedSeconds: Int
     var answers: [UUID: ChatTranscript.Unpacked]
     @Environment(\.chatMessageLayout) private var layout
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var app
+    @State private var followBottom = true
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -98,19 +103,29 @@ private struct ChatMessageList: View {
                 .frame(maxWidth: .infinity)
             }
             .scrollContentBackground(.hidden)
-            .onChange(of: session.entries.count) { _, _ in
-                proxy.scrollTo("bottom", anchor: .bottom)
+            .defaultScrollAnchor(.bottom, for: .initialOffset)
+            .defaultScrollAnchor(followBottom ? .bottom : nil, for: .sizeChanges)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                let visible = geometry.contentOffset.y + geometry.containerSize.height
+                return visible >= geometry.contentSize.height - 56
+            } action: { _, nearBottom in
+                followBottom = nearBottom
             }
-            .onChange(of: lastReply) { _, _ in
-                proxy.scrollTo("bottom", anchor: .bottom)
+            .onChange(of: session.entries.count) { _, _ in
+                pinToBottom(proxy)
             }
             .onChange(of: session.isGenerating) { _, generating in
-                if generating { proxy.scrollTo("bottom", anchor: .bottom) }
+                if generating { pinToBottom(proxy) }
             }
-            .onChange(of: turn.count) { _, _ in
-                proxy.scrollTo("bottom", anchor: .bottom)
-            }
-            .onChange(of: turnText) { _, _ in
+        }
+    }
+
+    private func pinToBottom(_ proxy: ScrollViewProxy) {
+        followBottom = true
+        if reduceMotion {
+            proxy.scrollTo("bottom", anchor: .bottom)
+        } else {
+            withAnimation(Motion.smooth) {
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
         }
@@ -126,7 +141,24 @@ private struct ChatMessageList: View {
     }
 
     private var showTurn: Bool {
-        session.isGenerating || !turn.isEmpty
+        session.isGenerating || !liveTurn.isEmpty
+    }
+
+    private var liveTurn: [ChatTurnItem] {
+        guard let lastUserIndex, case .userMessage(let user) = session.entries[lastUserIndex] else {
+            return turn
+        }
+        if let turnUserID, turnUserID != user.id { return [] }
+        if turnUserID == nil, hasCommittedReply(before: lastUserIndex) { return [] }
+        return turn
+    }
+
+    private func hasCommittedReply(before index: Int) -> Bool {
+        for i in (0..<index).reversed() {
+            if case .aiMessage(let reply) = session.entries[i], !reply.text.isEmpty { return true }
+            if case .userMessage = session.entries[i] { return false }
+        }
+        return false
     }
 
     private func hideCurrentTurn(_ entry: ChatSession.Entry, index: Int) -> Bool {
@@ -138,17 +170,24 @@ private struct ChatMessageList: View {
     }
 
     private var tools: [ChatToolActivity] {
-        turn.compactMap { item in
+        liveTurn.compactMap { item in
             if case .tool(let tool) = item.kind { return tool }
             return nil
         }
     }
 
     private var lastTextID: String? {
-        turn.last(where: { item in
+        liveTurn.last(where: { item in
             if case .text = item.kind { return true }
             return false
         })?.id
+    }
+
+    private var liveTurnText: String {
+        liveTurn.compactMap { item in
+            if case .text(let text) = item.kind { return text }
+            return nil
+        }.joined(separator: "\n\n")
     }
 
     private var turnRows: some View {
@@ -163,23 +202,24 @@ private struct ChatMessageList: View {
                     liveTitle: tools.last(where: { $0.status == .running })?.title
                 )
             }
-            ForEach(turn) { item in
+            ForEach(liveTurn) { item in
                 switch item.kind {
                 case .text(let text):
                     AssistantMarkdown(
                         text: text,
                         sources: sources,
-                        pinUnused: item.id == lastTextID
+                        pinUnused: item.id == lastTextID,
+                        streaming: session.isGenerating && item.id == lastTextID
                     )
                     .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
                 case .tool(let tool):
                     ChatToolRow(tool: tool)
                 }
             }
-            if !session.isGenerating, !turnText.isEmpty {
+            if !session.isGenerating, !liveTurnText.isEmpty {
                 MessageActionRow {
                     MessageActionButton(title: "Copy", systemImage: "doc.on.doc", confirms: true) {
-                        CraftClipboard.copy(turnText)
+                        CraftClipboard.copy(liveTurnText)
                     }
                     MessageActionButton(title: "Save to Notes", systemImage: "note.text") {
                         save(.note)
@@ -200,7 +240,7 @@ private struct ChatMessageList: View {
     }
 
     private func save(_ kind: SaveKind) {
-        app.activeReply = turnText
+        app.activeReply = liveTurnText
         app.present(.save(kind))
     }
 
@@ -215,29 +255,8 @@ private struct ChatMessageList: View {
             } else {
                 AssistantMessageBlock(message: message, stored: answers[message.id], showWork: !showTurn)
             }
-        case .reasoning(let reasoning):
-            if reasoning.isThinking {
-                EmptyView()
-            } else {
-                Button {
-                    session.toggleThinking(id: reasoning.id)
-                } label: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Reasoning", systemImage: "brain")
-                            .font(CraftFont.body)
-                            .foregroundStyle(.secondary)
-                        if reasoning.isExpanded, !reasoning.text.isEmpty {
-                            Text(reasoning.text)
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(12)
-                    .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
-                    .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            }
+        case .reasoning:
+            EmptyView()
         case .toolCall:
             EmptyView()
         case .knowledgeRetrieval(let knowledge):
@@ -267,15 +286,6 @@ private struct ChatMessageList: View {
                 EmptyView()
             }
         }
-    }
-
-    private var lastReply: String {
-        turnText.isEmpty
-            ? session.entries.reversed().compactMap { entry -> String? in
-                if case .aiMessage(let reply) = entry { return reply.text }
-                return nil
-            }.first ?? ""
-            : turnText
     }
 }
 

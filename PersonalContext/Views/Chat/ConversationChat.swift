@@ -34,6 +34,7 @@ private struct ConversationSessionView: View {
                 session: session,
                 compact: compact,
                 turn: runtime.bridge.turn,
+                turnUserID: runtime.bridge.turnUserID,
                 turnText: runtime.bridge.turnText,
                 waitState: runtime.bridge.waitState,
                 sources: runtime.bridge.sources,
@@ -69,8 +70,7 @@ private struct ConversationSessionView: View {
 
     private func send(_ text: String) -> Bool {
         ChatTrace.event("composer send chars=\(text.count) generating=\(session.isGenerating)")
-        guard !session.isGenerating else { return false }
-        let sent = session.send(text)
+        let sent = runtime.send(text)
         ChatTrace.event("composer session.send=\(sent)")
         return sent
     }

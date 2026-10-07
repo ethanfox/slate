@@ -132,6 +132,7 @@ final class CursorConversationBridge {
     private(set) var waitState: ChatWaitState = .starting
     private(set) var sources: [ChatSource] = []
     private(set) var thinkingText = ""
+    private(set) var turnUserID: UUID?
     private(set) var startedAt: Date?
     private(set) var finishedAt: Date?
     @ObservationIgnored private var process: Process?
@@ -165,6 +166,22 @@ final class CursorConversationBridge {
         self.project = project
     }
 
+    func beginTurn() {
+        changes = []
+        turn = []
+        sources = []
+        thinkingText = ""
+        turnUserID = nil
+        waitState = .starting
+        startedAt = .now
+        finishedAt = nil
+        startNewText = false
+    }
+
+    func bindTurn(to userID: UUID) {
+        turnUserID = userID
+    }
+
     func prepare(userText: String, apiKey: String) throws -> RunnerRequest {
         guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "slate-mcp") else {
             throw CursorAPIError(status: 0, message: "The Slate MCP is missing from the app.")
@@ -180,14 +197,7 @@ final class CursorConversationBridge {
 
         let opening = conversation.cursorAgentId.isEmpty
         ChatTrace.event("prepare conversation=\(conversation.id) opening=\(opening) agent=\(conversation.cursorAgentId) model=\(conversation.model) project=\(project?.name ?? "none") textChars=\(userText.count)")
-        changes = []
-        turn = []
-        sources = []
-        thinkingText = ""
-        waitState = .starting
-        startedAt = .now
-        finishedAt = nil
-        startNewText = false
+        beginTurn()
         if conversation.title == "New chat" || conversation.title.isEmpty {
             conversation.title = conversationTitle(from: userText)
         }
@@ -476,11 +486,9 @@ struct CursorChatProvider: ChatProvider {
                                 continuation.yield(.text(text))
                             }
                         case "break":
-                            bridge.beginTextSegment()
-                            continuation.yield(.text("\n\n"))
+                            break
                         case "thinking":
                             bridge.markThinking(event.text)
-                            if let text = event.text { continuation.yield(.reasoning(text)) }
                         case "status":
                             if let status = event.status { bridge.applyStatus(status) }
                         case "tool":
