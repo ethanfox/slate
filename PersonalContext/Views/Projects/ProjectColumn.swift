@@ -1,11 +1,21 @@
 import SwiftData
 import SwiftUI
 
+enum ProjectColumnMetrics {
+    static let expandedWidth: CGFloat = 250
+    static let railWidth: CGFloat = 52
+    static let subtrackIndent: CGFloat = 28
+    static let openMotion = Animation.easeOut(duration: 0.22)
+    static let closeMotion = Animation.easeOut(duration: 0.14)
+}
+
 struct ProjectColumn: View {
     @Bindable var project: Project
+    var compact: Bool
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @State private var collapsed: Set<UUID> = []
+    @State private var expandedCompleted: Set<UUID> = []
     @State private var pendingThreadDelete: ProjectThread?
     @State private var pendingNoteDelete: Note?
     @State private var pendingDecisionDelete: Decision?
@@ -28,101 +38,13 @@ struct ProjectColumn: View {
     }
 
     var body: some View {
-        ScrollView {
-            PageBody {
-            VStack(alignment: .leading, spacing: 1) {
-                Button { show(.overview) } label: {
-                    SidebarRow(title: "Overview", systemImage: "doc.text", isSelected: tab == .overview)
-                }
-                .buttonStyle(.plain)
-
-                if !conversations.isEmpty {
-                    header("Chats", add: newChat)
-                    ForEach(conversations) { conversation in
-                        ConversationRow(conversation: conversation, isSelected: tab == .chat && app.selectedConversation == conversation.id) {
-                            app.selectedConversation = conversation.id
-                            show(.chat)
-                        }
-                    }
-                }
-
-                header("Tracks", add: { createThread(parent: nil) })
-                ForEach(project.rootThreads) { thread in
-                    ThreadBranch(
-                        thread: thread,
-                        depth: 0,
-                        selectedID: tab == .threads ? app.selectedThread : nil,
-                        collapsed: $collapsed,
-                        onSelect: { app.selectedThread = $0; show(.threads) },
-                        onCreateChild: { createThread(parent: $0) },
-                        onDelete: { pendingThreadDelete = $0 }
-                    )
-                }
-
-                header("Notes", add: createNote)
-                ForEach(notes) { note in
-                    Button {
-                        app.selectedNote = note.id
-                        show(.notes)
-                    } label: {
-                        SidebarRow(title: note.displayTitle, systemImage: "note.text", isSelected: tab == .notes && app.selectedNote == note.id)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button {
-                            app.present(.editNote(note))
-                        } label: {
-                            Label("Edit…", systemImage: "pencil")
-                        }
-                        Button {
-                            app.present(.newTaskFromNote(note))
-                        } label: {
-                            Label("New Task…", systemImage: "checklist")
-                        }
-                        Divider()
-                        Button(role: .destructive) {
-                            pendingNoteDelete = note
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                }
-
-                header("Decisions", add: createDecision)
-                ForEach(decisions) { decision in
-                    Button {
-                        app.selectedDecision = decision.id
-                        show(.decisions)
-                    } label: {
-                        SidebarRow(
-                            title: decision.title.isEmpty ? "Untitled" : decision.title,
-                            systemImage: decision.status == .active ? "checkmark.seal" : "xmark.seal",
-                            isSelected: tab == .decisions && app.selectedDecision == decision.id
-                        )
-                        .opacity(decision.status == .active ? 1 : 0.55)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button {
-                            app.present(.editDecision(decision))
-                        } label: {
-                            Label("Edit…", systemImage: "pencil")
-                        }
-                        Divider()
-                        Button(role: .destructive) {
-                            pendingDecisionDelete = decision
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.top, 8)
-            .padding(.bottom, 16)
+        Group {
+            if compact {
+                rail
+            } else {
+                fullList
             }
         }
-        .scrollContentBackground(.hidden)
         .alert(
             "Delete \(pendingThreadDelete?.title ?? "this track")?",
             isPresented: Binding(get: { pendingThreadDelete != nil }, set: { if !$0 { pendingThreadDelete = nil } })
@@ -172,9 +94,166 @@ struct ProjectColumn: View {
         }
     }
 
-    private func header(_ title: String, add: @escaping () -> Void) -> some View {
-        SidebarSectionHeader(title: title) {
-            SectionAddButton(title: String(title.dropLast()), action: add)
+    private var rail: some View {
+        VStack(alignment: .center, spacing: 1) {
+            ProjectColumnToggle(collapsed: app.projectColumnCollapsed, action: app.toggleProjectColumn)
+            ColumnIconButton(
+                systemImage: "doc.text",
+                isSelected: tab == .overview,
+                label: "Overview",
+                action: { show(.overview) }
+            )
+            if !conversations.isEmpty {
+                ColumnIconButton(
+                    systemImage: ProjectColumnSection.chats.symbol,
+                    isSelected: tab == .chat,
+                    label: ProjectColumnSection.chats.title,
+                    action: { show(.chat) }
+                )
+            }
+            ColumnIconButton(
+                systemImage: ProjectColumnSection.tracks.symbol,
+                isSelected: tab == .threads,
+                label: ProjectColumnSection.tracks.title,
+                action: { show(.threads) }
+            )
+            ColumnIconButton(
+                systemImage: ProjectColumnSection.notes.symbol,
+                isSelected: tab == .notes,
+                label: ProjectColumnSection.notes.title,
+                action: { show(.notes) }
+            )
+            ColumnIconButton(
+                systemImage: ProjectColumnSection.decisions.symbol,
+                isSelected: tab == .decisions,
+                label: ProjectColumnSection.decisions.title,
+                action: { show(.decisions) }
+            )
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var fullList: some View {
+        ScrollView {
+            PageBody {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 0) {
+                        Button { show(.overview) } label: {
+                            SidebarRow(title: "Overview", systemImage: "doc.text", isSelected: tab == .overview)
+                        }
+                        .buttonStyle(.plain)
+                        ProjectColumnToggle(collapsed: app.projectColumnCollapsed, action: app.toggleProjectColumn)
+                    }
+
+                    if !conversations.isEmpty {
+                        header(.chats, add: newChat)
+                        if app.isProjectSectionOpen(.chats) {
+                            ForEach(conversations) { conversation in
+                                ConversationRow(conversation: conversation, isSelected: tab == .chat && app.selectedConversation == conversation.id) {
+                                    app.selectedConversation = conversation.id
+                                    show(.chat)
+                                }
+                            }
+                        }
+                    }
+
+                    header(.tracks, add: { createThread(parent: nil) })
+                    if app.isProjectSectionOpen(.tracks) {
+                        ForEach(project.rootThreads) { thread in
+                            ThreadBranch(
+                                thread: thread,
+                                depth: 0,
+                                selectedID: tab == .threads ? app.selectedThread : nil,
+                                collapsed: $collapsed,
+                                expandedCompleted: $expandedCompleted,
+                                onSelect: { app.selectedThread = $0; show(.threads) },
+                                onCreateChild: { createThread(parent: $0) },
+                                onDelete: { pendingThreadDelete = $0 }
+                            )
+                        }
+                    }
+
+                    header(.notes, add: createNote)
+                    if app.isProjectSectionOpen(.notes) {
+                        ForEach(notes) { note in
+                            Button {
+                                app.selectedNote = note.id
+                                show(.notes)
+                            } label: {
+                                SidebarRow(title: note.displayTitle, systemImage: "note.text", isSelected: tab == .notes && app.selectedNote == note.id)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    app.present(.editNote(note))
+                                } label: {
+                                    Label("Edit…", systemImage: "pencil")
+                                }
+                                Button {
+                                    app.present(.newTaskFromNote(note))
+                                } label: {
+                                    Label("New Task…", systemImage: "checklist")
+                                }
+                                Divider()
+                                Button(role: .destructive) {
+                                    pendingNoteDelete = note
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+
+                    header(.decisions, add: createDecision)
+                    if app.isProjectSectionOpen(.decisions) {
+                        ForEach(decisions) { decision in
+                            Button {
+                                app.selectedDecision = decision.id
+                                show(.decisions)
+                            } label: {
+                                SidebarRow(
+                                    title: decision.title.isEmpty ? "Untitled" : decision.title,
+                                    systemImage: decision.status == .active ? "checkmark.seal" : "xmark.seal",
+                                    isSelected: tab == .decisions && app.selectedDecision == decision.id
+                                )
+                                .opacity(decision.status == .active ? 1 : 0.55)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    app.present(.editDecision(decision))
+                                } label: {
+                                    Label("Edit…", systemImage: "pencil")
+                                }
+                                Divider()
+                                Button(role: .destructive) {
+                                    pendingDecisionDelete = decision
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+            }
+        }
+        .scrollContentBackground(.hidden)
+    }
+
+    private func header(_ section: ProjectColumnSection, add: @escaping () -> Void) -> some View {
+        SidebarSectionHeader(
+            title: section.title,
+            isExpanded: app.isProjectSectionOpen(section),
+            onToggle: { app.toggleProjectSection(section) }
+        ) {
+            SectionAddButton(title: String(section.title.dropLast()), action: add)
         }
     }
 
@@ -183,11 +262,13 @@ struct ProjectColumn: View {
     }
 
     private func newChat() {
+        app.openProjectSection(.chats)
         app.selectedConversation = nil
         show(.chat)
     }
 
     private func createThread(parent: ProjectThread?) {
+        app.openProjectSection(.tracks)
         let thread = ProjectThread(title: "", kind: parent == nil ? .direction : .feature, project: project, parent: parent)
         context.insert(thread)
         project.touch()
@@ -198,6 +279,7 @@ struct ProjectColumn: View {
     }
 
     private func createNote() {
+        app.openProjectSection(.notes)
         let note = Note(content: "", project: project)
         context.insert(note)
         project.touch()
@@ -207,12 +289,76 @@ struct ProjectColumn: View {
     }
 
     private func createDecision() {
+        app.openProjectSection(.decisions)
         let decision = Decision(title: "", decision: "", project: project)
         context.insert(decision)
         project.touch()
         try? context.save()
         app.selectedDecision = decision.id
         show(.decisions)
+    }
+}
+
+private struct ProjectColumnToggle: View {
+    var collapsed: Bool
+    var action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "sidebar.leading")
+                .font(CraftFont.sidebarIcon)
+                .foregroundStyle(hovering ? .primary : .secondary)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(hovering ? CraftColor.selection : Color.clear)
+                        .animation(Motion.hover, value: hovering)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(collapsed ? "Expand Project Sidebar" : "Collapse Project Sidebar")
+        .accessibilityLabel(collapsed ? "Expand Project Sidebar" : "Collapse Project Sidebar")
+    }
+}
+
+private struct ColumnIconButton: View {
+    var systemImage: String
+    var isSelected: Bool
+    var label: String
+    var action: () -> Void
+
+    @Environment(\.appearsActive) private var appearsActive
+    @State private var hovering = false
+
+    private var iconColor: AnyShapeStyle {
+        if isSelected { return AnyShapeStyle(.primary) }
+        if appearsActive { return AnyShapeStyle(.secondary) }
+        return AnyShapeStyle(.tertiary)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(CraftFont.sidebarIcon)
+                .foregroundStyle(iconColor)
+                .frame(width: 28, height: 28)
+                .background {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isSelected ? CraftColor.selection : Color.clear)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(!isSelected && hovering ? CraftColor.hover : Color.clear)
+                        .animation(Motion.hover, value: hovering)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(label)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

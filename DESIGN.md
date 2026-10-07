@@ -43,7 +43,7 @@ Glass rules:
 - `HStack` spacing 0: `SidebarView` | content column.
 - Sidebar width is 232, or 0 when collapsed. Do not use `NavigationSplitViewVisibility`.
 - **Chrome column slide (locked).** The sidebar is the reference. Width `232 ↔ 0`, `alignment: .leading`, `.clipped()`, opacity `1 ↔ 0`, `withAnimation(.easeInOut(duration: 0.22))`. Any other chrome column that opens onto the page (the overview inspector) uses this same clip, the same curve, and the same duration. Do not invent a second slide. Do not pop. Do not use `Motion.snappy` or `Motion.smooth` for this. Reduce Motion: opacity only, no width slide.
-- Content column: 52pt custom bar (sidebar toggle, page icon, page title, page actions), then the solid page card (radius 12, canvas fill, hairline, shadow). Inset 10 trailing and bottom. Leading inset 10 only when the sidebar is collapsed (78pt on the bar so traffic lights stay clear).
+- Content column: 52pt custom bar (sidebar toggle, title slot, page actions), then the solid page card (radius 12, canvas fill, hairline, shadow). Inset 10 trailing and bottom. Leading inset 10 only when the sidebar is collapsed (78pt on the bar so traffic lights stay clear). The title slot is the page title, or the tab strip when more than one page is open. Do not add a second bar.
 - Default size 1180×760.
 - Inactive window: sidebar icons dim with `@Environment(\.appearsActive)`. Selected rows stay readable.
 
@@ -62,7 +62,7 @@ Structure (`SidebarView`):
 Order, top to bottom:
 
 1. Home (`house`)
-2. Workspace label, then Projects (`square.stack`), Tasks (`checklist`), Calendar (`calendar`)
+2. Workspace label, then Projects (`square.stack`), Tasks (`checklist`), Calendar (`calendar`), Chats (`bubble.left.and.bubble.right`)
 3. Projects label, then pinned projects first, then the rest by name. Omit the whole Projects block when there are none.
 4. Settings (`gearshape`), footer
 
@@ -73,21 +73,31 @@ Rows (`SidebarRow`):
 - Icon: primary when selected, secondary when the window is active, tertiary when it is not. No tile behind the icon.
 - Pin: `pin.fill`, 9pt, tertiary, trailing edge. Not a badge.
 - **Tasks due count (locked exception):** the Tasks row may show a trailing count in that same slot, `CraftFont.caption`, tertiary, when there are incomplete reminders or Slate tasks due today or earlier. Accessibility value: “3 due”. Do not badge any other row.
+- **Chats working spinner (locked exception):** when any conversation is generating, the Chats icon is a `ProgressView` in the same 18×18 slot. Idle icon stays `bubble.left.and.bubble.right`. This is not a badge. Reduce Motion uses a static `ellipsis` instead of the spinner. Accessibility value: “Working”.
 - Plain buttons. Section labels are 13 semibold, secondary, 20 above / 4 below / 8 inset, no hit testing.
 
 Do not add hover to section labels. Do not move Settings into the scroll. Do not add a divider. Do not change the width, the 52pt drag strip, or the row metrics.
 
 ## Toolbar
 
-One row. It names the page and holds the actions for that page.
+One row. It names the page and holds the actions for that page. When more than one page is open, the title slot becomes the tab strip. Do not add a second bar, and do not use native window tabbing.
 
-- Leading: back, when there is somewhere to go back to, then the page title at 20 semibold.
+- Leading: sidebar toggle, then the title slot.
+- **One page open:** today’s title. Icon + 20 semibold. No box. No close.
+- **Two or more:** a horizontal tab strip in that same slot.
+  - Every tab has an icon and a title. Try 15 first (`CraftFont` body / summary-card size). Fall back to 13 only if the bar feels tight.
+  - Current tab: `CraftColor.selection` fill, radius 8, semibold, primary. Idle: no fill, regular, secondary. Not a bordered capsule. Not glass. Not Craft’s tab strip.
+  - Close is an × on the tab. Always visible while the strip is showing. Do not animate the tab when the × is hovered or pressed.
+  - Overflow scrolls horizontally. No visible scroller. Keep the current tab in view.
+  - Trailing page actions stay pinned. The leftover gap after the tabs is the window-drag region. A scroll view must not eat drag-to-move for the whole bar.
 - Trailing: at most one primary button, then view switches (grid, list) if the page has them.
 - Primary button is a glass capsule (`.glassEffect(.regular, in: Capsule())`), label 13, padding 10 / 6. A circled plus drawn with a hairline stroke is not a button.
 - View switches are a system segmented control or a single glass group. Three loose icons with no grouping are not a control.
 - Search, if a page needs it, is the system toolbar search field. It is not a custom rounded rectangle in the scroll view.
 
 The toolbar scrolls away only if the page is a long document and the title is already in the document. Settings, lists, and home keep the toolbar fixed.
+
+A tab is one main-column view. Sidebar and other clicks navigate the current tab. Chat object links open in a new tab (setting, default on). ⌘T is a new chat. Same view already open: switch to it. Last tab closed: Home. A generating chat shows a spinner on its tab. Tabs restore on launch and can be dragged. Sidebar follows the current tab. Spec: `features/window-tabs.md`.
 
 ## Content
 
@@ -132,6 +142,16 @@ Settings and any “many properties” block use one plate per group.
 
 Do not put each setting in its own card. Do not put a card inside the plate.
 
+### Chats
+
+Workspace page. One job: what is still running, and how to get back to it.
+
+- Centered column, 560 wide. Row text stays left-aligned.
+- If any conversation is generating: section “Running”, then those rows. Meta is the live wait title (`Thinking`, `Searching the web`).
+- If none are: chat-bubble mark, “Nothing running.” in page title type, then “Chats that are still working will show up here.”
+- Then “Recent”: the 10 most recent unarchived sessions, excluding ones already in Running.
+- A row opens that conversation. Do not host a second chat on this page.
+
 ### Documents and chat
 
 The page is the document. No panel around the text.
@@ -154,9 +174,12 @@ Used when the page is a collection of documents, matching the Craft folder view.
 
 Threads, notes, and decisions are a source list on the solid page, not a second sidebar.
 
-- Width 250, solid canvas, no glass, no full-height divider. Separate it from the document with the page inset and the list’s own alignment, or with a single inset hairline if the two columns would otherwise merge.
+- Width 250 when pinned, solid canvas, no glass. Separate it from the document with a single inset hairline.
 - Same row metrics as the sidebar (28 tall, 8 inset, radius 8) so it feels like a list and not a new component.
 - The document to the right keeps the 32 inset and the 680 measure.
+- **Collapse (locked).** An icon-only `sidebar.leading` control sits on the Overview row. It does not hide the column the way the main sidebar does. Collapsed width is 52: Overview plus section icons (Chats, Tracks, Notes, Decisions) stay visible. Hovering the rail slides the full 250 column in from the leading edge, over the document. Leaving slides it back out the same way, a little quicker (open 0.22 easeOut, close 0.14 easeOut). The page does not reflow on hover. Clicking the control is the only action that pins the column open or closed and shifts the layout. Reduce Motion: opacity only, no slide.
+- **Sections.** Chats, Tracks, Notes, and Decisions are collapsible. The section label is the control; the plus stays for create.
+- **Tracks.** Subtracks indent 28 per level. Completed children of a track sit in a Completed group under that track, collapsed by default, and use `checkmark.circle` instead of the kind icon.
 
 ## Hero views
 
@@ -189,6 +212,7 @@ San Francisco. One family. System text styles, these sizes only:
 | --- | --- | --- |
 | Hero header (`CraftFont.display`) | 34 | bold (word) / regular (figure) |
 | Page title | 20 | semibold |
+| Toolbar tab (two or more open) | 15 | semibold (current) / regular (idle) |
 | Summary card title, document body | 15 | medium / regular |
 | Week-strip day number (`CraftFont.dayNumber`) | 15 | medium, monospaced digits |
 | Section | 13 | semibold |
@@ -328,7 +352,7 @@ Rules:
 - **Modals:** entry `.scale(0.96).combined(with: .opacity)` with `Motion.snappy`; exit `.scale(0.98).combined(with: .opacity)` with `Motion.quick`. Use an asymmetric transition.
 - **Destination changes** (sidebar navigation) are instant. Do not animate the page swap.
 - **Chrome column slide:** sidebar and inspector. Width clip plus opacity, `.easeInOut(duration: 0.22)`, as specified under Window. The page grid may reflow with that same transaction. Do not give the inspector its own animation.
-- No stagger. No hover scale. No looping or ambient animation (the chat orb is the one exception and lives in its own spec). No bounce above the `.snappy` default.
+- No stagger. No hover scale. No looping or ambient animation. Exceptions: the chat orb (its own spec), and the Chats sidebar icon while a conversation is generating. No bounce above the `.snappy` default.
 - **Reduce Motion:** read `@Environment(\.accessibilityReduceMotion)`. When it is on, every transition becomes `.opacity`, and every animation that moves or scales becomes `Motion.quick` opacity only. Nothing slides, scales, or pushes.
 
 ## Calendar
@@ -375,4 +399,4 @@ These are the specific ways this screen turns into slop. They are out of spec ev
 - A system `.sheet` for an app modal, or a modal that appears without its transition.
 - Inline rename in a row.
 - Hover that moves or scales something.
-- Copying Craft’s upgrade card, assistant pill, or tab strip. This app does not have those.
+- Copying Craft’s upgrade card, assistant pill, or tab strip. Tabs live in the existing title slot, as specified under Toolbar. They are not a second strip and not bordered capsules.

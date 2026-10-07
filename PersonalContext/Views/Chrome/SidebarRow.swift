@@ -6,8 +6,10 @@ struct SidebarRow: View {
     var isSelected: Bool
     var showsPin = false
     var badge = 0
+    var isBusy = false
 
     @Environment(\.appearsActive) private var appearsActive
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
 
     private var iconColor: AnyShapeStyle {
@@ -16,12 +18,30 @@ struct SidebarRow: View {
         return AnyShapeStyle(.tertiary)
     }
 
+    private var busyTint: Color {
+        if isSelected { return Color.primary }
+        if appearsActive { return Color.secondary }
+        return Color(nsColor: .tertiaryLabelColor)
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: systemImage)
-                .font(CraftFont.sidebarIcon)
-                .frame(width: 18, height: 18)
-                .foregroundStyle(iconColor)
+            Group {
+                if isBusy, !reduceMotion {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(busyTint)
+                } else if isBusy {
+                    Image(systemName: "ellipsis")
+                        .font(CraftFont.sidebarIcon)
+                        .foregroundStyle(iconColor)
+                } else {
+                    Image(systemName: systemImage)
+                        .font(CraftFont.sidebarIcon)
+                        .foregroundStyle(iconColor)
+                }
+            }
+            .frame(width: 18, height: 18)
             Text(title)
                 .font(CraftFont.sidebar)
                 .foregroundStyle(.primary)

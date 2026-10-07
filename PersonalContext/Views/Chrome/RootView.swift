@@ -323,6 +323,7 @@ struct RootView: View {
         case .projects: "Projects"
         case .tasks: "Tasks"
         case .calendar: "Calendar"
+        case .chats: "Chats"
         case .settings: "Settings"
         case .project(let id):
             projectTitle(id)
@@ -337,6 +338,7 @@ struct RootView: View {
         case .projects: "square.stack"
         case .tasks: "checklist"
         case .calendar: "calendar"
+        case .chats: "bubble.left.and.bubble.right"
         case .settings: "gearshape"
         case .project(let id):
             projectSymbol(id)
@@ -535,6 +537,8 @@ struct RootView: View {
             TasksView()
         case .calendar:
             CalendarView()
+        case .chats:
+            ChatsView()
         case .settings:
             SettingsView()
         case .project(let id):

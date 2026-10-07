@@ -5,8 +5,10 @@ struct RecordRow<Marks: View>: View {
     var title: String
     var subtitle = ""
     var meta = ""
+    var isBusy = false
     var marks: Marks
     var action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
 
     init(
@@ -14,6 +16,7 @@ struct RecordRow<Marks: View>: View {
         title: String,
         subtitle: String = "",
         meta: String = "",
+        isBusy: Bool = false,
         @ViewBuilder marks: () -> Marks,
         action: @escaping () -> Void
     ) {
@@ -21,6 +24,7 @@ struct RecordRow<Marks: View>: View {
         self.title = title
         self.subtitle = subtitle
         self.meta = meta
+        self.isBusy = isBusy
         self.marks = marks()
         self.action = action
     }
@@ -28,10 +32,21 @@ struct RecordRow<Marks: View>: View {
     var body: some View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 8) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 17)
+                Group {
+                    if isBusy, !reduceMotion {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else if isBusy {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Image(systemName: systemImage)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 22, height: 17)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(title)
@@ -74,8 +89,9 @@ extension RecordRow where Marks == EmptyView {
         title: String,
         subtitle: String = "",
         meta: String = "",
+        isBusy: Bool = false,
         action: @escaping () -> Void
     ) {
-        self.init(systemImage: systemImage, title: title, subtitle: subtitle, meta: meta, marks: { EmptyView() }, action: action)
+        self.init(systemImage: systemImage, title: title, subtitle: subtitle, meta: meta, isBusy: isBusy, marks: { EmptyView() }, action: action)
     }
 }

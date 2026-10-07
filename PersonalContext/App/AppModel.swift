@@ -25,6 +25,7 @@ final class AppModel {
     var pendingSend: PendingSend?
     var chatConversationID: UUID?
     var activeReply = ""
+    private(set) var runningChats: [RunningChat] = []
     @ObservationIgnored private var chatRuntimes: [UUID: ChatRuntime] = [:]
     @ObservationIgnored private var retiredContainers: [ModelContainer] = []
     @ObservationIgnored private var storeReloadTask: Task<Void, Never>?
@@ -55,6 +56,12 @@ final class AppModel {
     var sidebarCollapsed: Bool {
         didSet { defaults.set(sidebarCollapsed, forKey: Keys.sidebarCollapsed) }
     }
+    var projectColumnCollapsed: Bool {
+        didSet { defaults.set(projectColumnCollapsed, forKey: Keys.projectColumnCollapsed) }
+    }
+    var collapsedProjectSections: Set<String> {
+        didSet { defaults.set(Array(collapsedProjectSections), forKey: Keys.collapsedProjectSections) }
+    }
     var settingsSection: SettingsSection {
         didSet { defaults.set(settingsSection.rawValue, forKey: Keys.settingsSection) }
     }
@@ -81,6 +88,28 @@ final class AppModel {
         withAnimation(.easeInOut(duration: 0.22)) {
             sidebarCollapsed.toggle()
         }
+    }
+
+    func toggleProjectColumn() {
+        withAnimation(.easeInOut(duration: 0.22)) {
+            projectColumnCollapsed.toggle()
+        }
+    }
+
+    func isProjectSectionOpen(_ section: ProjectColumnSection) -> Bool {
+        !collapsedProjectSections.contains(section.rawValue)
+    }
+
+    func toggleProjectSection(_ section: ProjectColumnSection) {
+        if collapsedProjectSections.contains(section.rawValue) {
+            collapsedProjectSections.remove(section.rawValue)
+        } else {
+            collapsedProjectSections.insert(section.rawValue)
+        }
+    }
+
+    func openProjectSection(_ section: ProjectColumnSection) {
+        collapsedProjectSections.remove(section.rawValue)
     }
 
     func toggleInspector() {
@@ -145,6 +174,8 @@ final class AppModel {
         let storedLayout = UserDefaults.standard.string(forKey: Keys.projectsLayout) ?? ""
         projectsLayout = storedLayout == "list" ? .card : (ProjectsLayout(rawValue: storedLayout) ?? .table)
         sidebarCollapsed = UserDefaults.standard.bool(forKey: Keys.sidebarCollapsed)
+        projectColumnCollapsed = UserDefaults.standard.bool(forKey: Keys.projectColumnCollapsed)
+        collapsedProjectSections = Set(UserDefaults.standard.stringArray(forKey: Keys.collapsedProjectSections) ?? [])
         settingsSection = SettingsSection(rawValue: UserDefaults.standard.string(forKey: Keys.settingsSection) ?? "") ?? .cursor
         if let data = UserDefaults.standard.data(forKey: Keys.orbPalette),
            let stored = try? JSONDecoder().decode(OrbPalette.self, from: data),
@@ -259,6 +290,7 @@ final class AppModel {
             guard let self, let runtime else { return }
             runtime.persist()
             self.syncChrome(from: runtime)
+            self.syncRunning()
         }
         chatRuntimes[conversation.id] = runtime
         return runtime
@@ -274,6 +306,16 @@ final class AppModel {
         guard chatConversationID == runtime.conversationID else { return }
         chatGenerating = runtime.session.isGenerating
         activeReply = runtime.lastReply
+    }
+
+    private func syncRunning() {
+        let next = chatRuntimes.values
+            .filter { $0.session.isGenerating }
+            .map { RunningChat(id: $0.conversationID, label: $0.liveWaitLabel) }
+            .sorted { $0.id.uuidString < $1.id.uuidString }
+        if next != runningChats {
+            runningChats = next
+        }
     }
 
     func tab(for project: UUID) -> ProjectTab {
@@ -424,6 +466,11 @@ struct PendingSend: Equatable {
     var text: String
 }
 
+struct RunningChat: Equatable, Identifiable {
+    var id: UUID
+    var label: String
+}
+
 enum SaveKind: String, Identifiable {
     case note, thread, addToThread, decision
     var id: String { rawValue }
@@ -437,6 +484,8 @@ private enum Keys {
     static let showAgentIDs = "showAgentIDs"
     static let projectsLayout = "projectsLayout"
     static let sidebarCollapsed = "sidebarCollapsed"
+    static let projectColumnCollapsed = "projectColumnCollapsed"
+    static let collapsedProjectSections = "collapsedProjectSections"
     static let settingsSection = "settingsSection"
     static let orbPalette = "orbPalette"
 }

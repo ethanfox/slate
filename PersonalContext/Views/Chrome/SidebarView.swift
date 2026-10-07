@@ -32,6 +32,7 @@ struct SidebarView: View {
                     row("Projects", "square.stack", destination: .projects)
                     row("Tasks", "checklist", destination: .tasks, badge: dueCount)
                     row("Calendar", "calendar", destination: .calendar)
+                    row("Chats", "bubble.left.and.bubble.right", destination: .chats, busy: !app.runningChats.isEmpty)
 
                     if !orderedProjects.isEmpty {
                         section("Projects")
@@ -106,14 +107,20 @@ struct SidebarView: View {
             .allowsHitTesting(false)
     }
 
-    private func row(_ title: String, _ symbol: String, destination: Destination, badge: Int = 0) -> some View {
+    private func row(_ title: String, _ symbol: String, destination: Destination, badge: Int = 0, busy: Bool = false) -> some View {
         Button {
             app.destination = destination
         } label: {
-            SidebarRow(title: title, systemImage: symbol, isSelected: app.destination == destination, badge: badge)
+            SidebarRow(
+                title: title,
+                systemImage: symbol,
+                isSelected: app.destination == destination,
+                badge: badge,
+                isBusy: busy
+            )
         }
         .buttonStyle(.plain)
-        .accessibilityValue(badge > 0 ? "\(badge) due" : "")
+        .accessibilityValue(busy ? "Working" : badge > 0 ? "\(badge) due" : "")
     }
 
     private var dueCount: Int {

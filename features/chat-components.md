@@ -63,6 +63,7 @@ Sharing the components does not share conversation state.
 - **Empty project chat:** `ChatInput` creates a new conversation attached to that project.
 - **Existing project chat:** `ConversationChat` displays and continues the selected conversation.
 - **Ask Slate:** `ThreadChatPane` resolves a conversation attached to the selected track, then displays `ConversationChat` in compact layout.
+- **Chats:** workspace page. Running conversations first. If none are running, “Nothing running.” then the 10 most recent sessions. A row opens that conversation. The sidebar icon spins while any turn is generating.
 
 The queued first message includes its destination conversation ID. Only the matching runtime consumes it.
 

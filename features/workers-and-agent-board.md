@@ -157,7 +157,7 @@ Do not connect GitHub in Slate just to launch Cursor. Cursor’s (or Jules’s, 
 
 Open. Explore in Paper. Constraints from `DESIGN.md` still apply until we change them:
 
-- Sidebar is locked: 232 wide, 28-tall rows, no badge except the Tasks due count.
+- Sidebar is locked: 232 wide, 28-tall rows, no badge except the Tasks due count. Chats is the workspace page for Slate conversations (running plus recent). It is not the Work page.
 - One job per view. Rich, not busy.
 - The same object is edited the same way everywhere.
 

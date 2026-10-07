@@ -25,6 +25,7 @@
 		A1B2C3D4E5F60718293A0043 /* SourceChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0042 /* SourceChip.swift */; };
 		A1B2C3D4E5F60718293A0051 /* ChatObjectLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0050 /* ChatObjectLink.swift */; };
 		A1B2C3D4E5F60718293A0053 /* ObjectLinkCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0052 /* ObjectLinkCard.swift */; };
+		A1B2C3D4E5F60718293A0061 /* ChatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0060 /* ChatsView.swift */; };
 		05BA026B4AF137407DFFBB70 /* ColorHex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A843C76D621958EDA8D94D61 /* ColorHex.swift */; };
 		06A4B5A5812EFA0E120BAFC9 /* DocumentSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591D54A725FC8665EAB3A680 /* DocumentSection.swift */; };
 		08E6C08EE6ADDD3911650B76 /* Hairline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35658CC3CC77FE7EF9839CD9 /* Hairline.swift */; };
@@ -200,6 +201,7 @@
 		690265881D471474DCC2ECDF /* OverviewPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewPage.swift; sourceTree = "<group>"; };
 		6954DDFB7640212B41E6025E /* Craft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Craft.swift; sourceTree = "<group>"; };
 		6AC834A2D97E8747A0E41C2F /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0060 /* ChatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatsView.swift; sourceTree = "<group>"; };
 		6ECF851614787529168C56C0 /* SaveSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveSheet.swift; sourceTree = "<group>"; };
 		7010542B30FAEBDE947F38D0 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		718061204D90BCFCD66D501C /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
@@ -349,6 +351,7 @@
 				4A5537B9B75008C51A4CCB08 /* HomeView.swift */,
 				F87366046EA0F345AB8B54B2 /* NewEventSheet.swift */,
 				6511A520858D0A3DD5A76CE6 /* NewReminderSheet.swift */,
+				A1B2C3D4E5F60718293A0060 /* ChatsView.swift */,
 				6AC834A2D97E8747A0E41C2F /* TasksView.swift */,
 			);
 			path = Home;
@@ -747,6 +750,7 @@
 				777EF2FC8B39A970FAC7E1B4 /* SlateModal.swift in Sources */,
 				83B3538C787ACDDD267EF567 /* Store.swift in Sources */,
 				5CEECB088156040C95489B64 /* SymbolPicker.swift in Sources */,
+				A1B2C3D4E5F60718293A0061 /* ChatsView.swift in Sources */,
 				A0C059E2D2C3DD3EBD2AF605 /* TasksView.swift in Sources */,
 				4E2DA01EB53D623F3121BF60 /* TextFormat.swift in Sources */,
 				E176833741EC72F36BEB0491 /* ThreadBranch.swift in Sources */,

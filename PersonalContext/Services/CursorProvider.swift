@@ -36,6 +36,15 @@ struct RunnerEvent: Decodable, Sendable {
 
 enum ChatWaitState: Equatable {
     case starting, thinking, working, writing
+
+    var label: String {
+        switch self {
+        case .starting: "Starting"
+        case .thinking: "Thinking"
+        case .working: "Working"
+        case .writing: "Writing"
+        }
+    }
 }
 
 struct ChatTurnItem: Identifiable, Equatable {

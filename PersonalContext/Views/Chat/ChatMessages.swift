@@ -301,12 +301,7 @@ private struct WorkAccordion: View {
     private var label: String {
         if isGenerating {
             if let liveTitle, !liveTitle.isEmpty { return liveTitle }
-            switch waitState {
-            case .starting: return "Starting"
-            case .thinking: return "Thinking"
-            case .working: return "Working"
-            case .writing: return "Writing"
-            }
+            return waitState.label
         }
         return seconds <= 0 ? "Worked" : "Worked for \(seconds)s"
     }

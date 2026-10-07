@@ -125,6 +125,13 @@ final class ChatRuntime {
         return nil
     }
 
+    var liveWaitLabel: String {
+        if let title = bridge.tools.last(where: { $0.status == .running })?.title {
+            return title
+        }
+        return bridge.waitState.label
+    }
+
     var lastReply: String {
         for entry in session.entries.reversed() {
             if case .aiMessage(let reply) = entry, !reply.text.isEmpty {

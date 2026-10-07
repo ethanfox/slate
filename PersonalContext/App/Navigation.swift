@@ -5,6 +5,7 @@ enum Destination: Hashable {
     case projects
     case tasks
     case calendar
+    case chats
     case settings
     case project(UUID)
     case quickAsk(UUID)
@@ -25,6 +26,42 @@ enum ProjectTab: String, CaseIterable, Identifiable, Hashable {
         case .notes: "Notes"
         case .decisions: "Decisions"
         case .chat: "Chat"
+        }
+    }
+}
+
+enum ProjectColumnSection: String, CaseIterable, Identifiable, Hashable {
+    case chats
+    case tracks
+    case notes
+    case decisions
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .chats: "Chats"
+        case .tracks: "Tracks"
+        case .notes: "Notes"
+        case .decisions: "Decisions"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .chats: "bubble.left"
+        case .tracks: TrackStyle.symbol
+        case .notes: "note.text"
+        case .decisions: "checkmark.seal"
+        }
+    }
+
+    var tab: ProjectTab {
+        switch self {
+        case .chats: .chat
+        case .tracks: .threads
+        case .notes: .notes
+        case .decisions: .decisions
         }
     }
 }
