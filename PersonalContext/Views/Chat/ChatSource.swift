@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 
 struct ChatSource: Identifiable, Equatable, Codable, Hashable {
     enum Kind: String, Codable {
-        case url, note, thread, decision
+        case url, note, thread, decision, project, conversation
     }
 
     var id: String
@@ -23,8 +23,19 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable {
     var shortName: String {
         switch kind {
         case .url: return host ?? title
-        case .note, .thread, .decision:
-            return title.isEmpty ? kind.rawValue.localizedCapitalized : title
+        case .note, .thread, .decision, .project, .conversation:
+            return title.isEmpty ? kindLabel : title
+        }
+    }
+
+    var kindLabel: String {
+        switch kind {
+        case .url: return "Link"
+        case .note: return "Note"
+        case .thread: return "Track"
+        case .decision: return "Decision"
+        case .project: return "Project"
+        case .conversation: return "Chat"
         }
     }
 
@@ -34,6 +45,8 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable {
         case .note: return "eyeglasses"
         case .thread: return TrackStyle.symbol
         case .decision: return "checkmark.seal"
+        case .project: return "square.stack"
+        case .conversation: return "bubble.left"
         }
     }
 
@@ -51,24 +64,146 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable {
 
     @MainActor
     func open(app: AppModel, context: ModelContext) {
-        if kind == .url || url?.hasPrefix("http") == true, let url, let parsed = URL(string: url) {
-            NSWorkspace.shared.open(parsed)
-            return
+        presented(in: context).source.openResolved(app: app, context: context)
+    }
+
+    func presented(in context: ModelContext?) -> (source: ChatSource, title: String, subtitle: String) {
+        guard let context else {
+            return (self, title.isEmpty ? kindLabel : title, kind == .url ? host ?? "Link" : kindLabel)
         }
-        guard let uuid = UUID(uuidString: id) else { return }
         switch kind {
-        case .note:
-            let found = try? context.fetch(FetchDescriptor<Note>(predicate: #Predicate { $0.id == uuid }))
-            if let note = found?.first { app.open(note) }
-        case .thread:
-            let found = try? context.fetch(FetchDescriptor<ProjectThread>(predicate: #Predicate { $0.id == uuid }))
-            if let thread = found?.first { app.open(thread) }
-        case .decision:
-            let found = try? context.fetch(FetchDescriptor<Decision>(predicate: #Predicate { $0.id == uuid }))
-            if let decision = found?.first { app.open(decision) }
         case .url:
-            break
+            return (self, title.isEmpty ? (host ?? "Link") : title, host ?? "Link")
+        case .note:
+            guard let note = note(in: context) else { return missing(kindLabel) }
+            return live(id: note.id, title: note.displayTitle, kindLabel: kindLabel)
+        case .thread:
+            guard let thread = thread(in: context) else { return missing(kindLabel) }
+            return live(id: thread.id, title: thread.title.isEmpty ? "Untitled" : thread.title, kindLabel: kindLabel)
+        case .decision:
+            guard let decision = decision(in: context) else { return missing(kindLabel) }
+            return live(id: decision.id, title: decision.title, kindLabel: kindLabel)
+        case .project:
+            guard let project = project(in: context) else { return missing(kindLabel) }
+            return live(id: project.id, title: project.displayName, kindLabel: kindLabel)
+        case .conversation:
+            guard let conversation = conversation(in: context) else { return missing(kindLabel) }
+            return live(id: conversation.id, title: conversation.title.isEmpty ? "Chat" : conversation.title, kindLabel: kindLabel)
         }
+    }
+
+    private func live(id: UUID, title liveTitle: String, kindLabel: String) -> (source: ChatSource, title: String, subtitle: String) {
+        var source = self
+        source.id = id.uuidString
+        source.title = liveTitle
+        let renamed = !title.isEmpty && title != liveTitle
+        return (source, liveTitle, renamed ? "Was \(title)" : kindLabel)
+    }
+
+    private func missing(_ kindLabel: String) -> (source: ChatSource, title: String, subtitle: String) {
+        (self, title.isEmpty ? kindLabel : title, "Missing")
+    }
+
+    @MainActor
+    private func openResolved(app: AppModel, context: ModelContext) {
+        switch kind {
+        case .url:
+            if let url, let parsed = URL(string: url) {
+                NSWorkspace.shared.open(parsed)
+            }
+        case .note:
+            if let note = note(in: context) { app.open(note) }
+        case .thread:
+            if let thread = thread(in: context) { app.open(thread) }
+        case .decision:
+            if let decision = decision(in: context) { app.open(decision) }
+        case .project:
+            if let project = project(in: context) { app.open(project) }
+        case .conversation:
+            if let conversation = conversation(in: context) { app.open(conversation) }
+        }
+    }
+
+    func note(in context: ModelContext) -> Note? {
+        if let uuid = UUID(uuidString: id) {
+            let found = try? context.fetch(FetchDescriptor<Note>(predicate: #Predicate { $0.id == uuid }))
+            if let note = found?.first { return note }
+        }
+        let match = title.isEmpty ? id : title
+        guard !match.isEmpty else { return nil }
+        let found = try? context.fetch(FetchDescriptor<Note>())
+        return found?.first { $0.title == match || $0.displayTitle == match }
+    }
+
+    func thread(in context: ModelContext) -> ProjectThread? {
+        if let uuid = UUID(uuidString: id) {
+            let found = try? context.fetch(FetchDescriptor<ProjectThread>(predicate: #Predicate { $0.id == uuid }))
+            if let thread = found?.first { return thread }
+        }
+        let match = title
+        guard !match.isEmpty else { return nil }
+        let found = try? context.fetch(FetchDescriptor<ProjectThread>(predicate: #Predicate { $0.title == match }))
+        return found?.first
+    }
+
+    func decision(in context: ModelContext) -> Decision? {
+        if let uuid = UUID(uuidString: id) {
+            let found = try? context.fetch(FetchDescriptor<Decision>(predicate: #Predicate { $0.id == uuid }))
+            if let decision = found?.first { return decision }
+        }
+        let match = title
+        guard !match.isEmpty else { return nil }
+        let found = try? context.fetch(FetchDescriptor<Decision>(predicate: #Predicate { $0.title == match }))
+        return found?.first
+    }
+
+    func project(in context: ModelContext) -> Project? {
+        if let uuid = UUID(uuidString: id) {
+            let found = try? context.fetch(FetchDescriptor<Project>(predicate: #Predicate { $0.id == uuid }))
+            if let project = found?.first { return project }
+        }
+        let match = title
+        guard !match.isEmpty else { return nil }
+        let found = try? context.fetch(FetchDescriptor<Project>(predicate: #Predicate { $0.name == match }))
+        return found?.first
+    }
+
+    func conversation(in context: ModelContext) -> Conversation? {
+        if let uuid = UUID(uuidString: id) {
+            let found = try? context.fetch(FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == uuid }))
+            if let conversation = found?.first { return conversation }
+        }
+        let match = title
+        guard !match.isEmpty else { return nil }
+        let found = try? context.fetch(FetchDescriptor<Conversation>(predicate: #Predicate { $0.title == match }))
+        return found?.first
+    }
+
+    func snippet(in context: ModelContext?) -> String {
+        guard let context else { return "" }
+        switch kind {
+        case .url:
+            return host ?? ""
+        case .note:
+            return firstLine(note(in: context)?.content)
+        case .thread:
+            return firstLine(thread(in: context)?.summary)
+        case .decision:
+            return firstLine(decision(in: context)?.decision)
+        case .project:
+            return firstLine(project(in: context)?.summary)
+        case .conversation:
+            return ""
+        }
+    }
+
+    private func firstLine(_ text: String?) -> String {
+        let line = text?
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty } ?? ""
+        if line.count <= 90 { return line }
+        return String(line.prefix(89)) + "…"
     }
 }
 

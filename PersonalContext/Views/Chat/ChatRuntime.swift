@@ -4,6 +4,69 @@ import Combine
 import SwiftData
 import SwiftUI
 
+@MainActor
+@Observable
+final class ChatDebugLog {
+    struct Line: Identifiable, Equatable {
+        var id = UUID()
+        var at = Date()
+        var text: String
+    }
+
+    @ObservationIgnored private var stored: [Line] = []
+    private(set) var lines: [Line] = []
+
+    var copyText: String {
+        let clock = DateFormatter()
+        clock.dateFormat = "HH:mm:ss.SSS"
+        return stored.map { "\(clock.string(from: $0.at)) \($0.text)" }.joined(separator: "\n")
+    }
+
+    func add(_ text: String) {
+        #if DEBUG
+        stored.append(Line(text: text))
+        if stored.count > 500 { stored.removeFirst(stored.count - 500) }
+        #endif
+    }
+
+    func snapshot(_ session: ChatSession, label: String) {
+        add(label)
+        for (index, entry) in session.entries.enumerated() {
+            add("  [\(index)] \(Self.describe(entry))")
+        }
+    }
+
+    func publish() {
+        lines = stored
+    }
+
+    func clear() {
+        stored = []
+        lines = []
+    }
+
+    private static func describe(_ entry: ChatSession.Entry) -> String {
+        switch entry {
+        case .userMessage(let message):
+            return "user id=\(short(message.id)) \(ChatTrace.clip(message.text, 80))"
+        case .aiMessage(let message):
+            return "assistant id=\(short(message.id)) stream=\(message.isStreaming) \(ChatTrace.clip(message.text, 80))"
+        case .reasoning(let reasoning):
+            return "reasoning think=\(reasoning.isThinking) \(ChatTrace.clip(reasoning.text, 80))"
+        case .toolCall(let call):
+            return "toolCall \(call.name)"
+        case .knowledgeRetrieval(let knowledge):
+            return "knowledge \(ChatTrace.clip(knowledge.query, 80))"
+        case .activity(let activity):
+            return "activity error=\(activity.isError) \(ChatTrace.clip(activity.text, 80))"
+        }
+    }
+
+    private static func short(_ id: UUID) -> String {
+        String(id.uuidString.prefix(8))
+    }
+}
+
 /// The independent session and persistence state for exactly one conversation ID.
 @MainActor
 @Observable
@@ -51,6 +114,15 @@ final class ChatRuntime {
             bridge.conversation = found
             bridge.project = found.project
         }
+    }
+
+    var lastUserText: String? {
+        for entry in session.entries.reversed() {
+            if case .userMessage(let user) = entry, !user.text.isEmpty {
+                return user.text
+            }
+        }
+        return nil
     }
 
     var lastReply: String {
@@ -113,6 +185,8 @@ final class ChatRuntime {
 
     func send(_ text: String) -> Bool {
         guard !session.isGenerating else { return false }
+        bridge.debugLog.add("SEND model=\(modelID) generating=\(session.isGenerating) \(ChatTrace.clip(text, 120))")
+        bridge.debugLog.snapshot(session, label: "session before send")
         rememberAnswer()
         bridge.beginTurn()
         let sent = session.send(text)
@@ -124,6 +198,7 @@ final class ChatRuntime {
                 }
             }
         }
+        bridge.debugLog.snapshot(session, label: "session after send=\(sent) generating=\(session.isGenerating) turn=\(bridge.turn.count) turnUser=\(bridge.turnUserID?.uuidString.prefix(8) ?? "nil")")
         return sent
     }
 

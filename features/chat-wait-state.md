@@ -21,6 +21,14 @@ Do not dump raw ids. Use the title the tool already returned.
 
 Until ChatGPT-as-provider exists, Cursor will not send citation annotations. Attach chips from the tools that just ran (note title, thread title, fetched URL). When Responses `url_citation` exists, use those too.
 
+## Object cards
+
+When the model points the user at a note, track, decision, or other Slate object, it writes a markdown link with a `slate://` URL on its own line:
+
+`[Title](slate://note/UUID)`
+
+That renders as a card in the reply. Click opens the object. Source chips stay for citations on a claim. Cards are for destinations. Do not dump raw ids.
+
 Persist the title and the URL (or the KB id). Do not save favicon files. Resolve the site icon at display time from the host, in memory. Offline or a failed fetch uses a generic mark.
 
 ## Tool row in the stream

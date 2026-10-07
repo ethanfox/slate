@@ -88,12 +88,12 @@ private struct ChatMessageList: View {
                                     .id(entry.id)
                             }
                             if index == lastUserIndex, showTurn {
-                                turnRows.id("turn")
+                                turnRows.id(turnSlotID)
                             }
                         }
                     }
                     if lastUserIndex == nil, showTurn {
-                        turnRows.id("turn")
+                        turnRows.id(turnSlotID)
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
@@ -112,23 +112,30 @@ private struct ChatMessageList: View {
                 followBottom = nearBottom
             }
             .onChange(of: session.entries.count) { _, _ in
-                pinToBottom(proxy)
+                pinToBottom(proxy, animated: !session.isGenerating)
             }
             .onChange(of: session.isGenerating) { _, generating in
-                if generating { pinToBottom(proxy) }
+                if generating { pinToBottom(proxy, animated: false) }
             }
         }
     }
 
-    private func pinToBottom(_ proxy: ScrollViewProxy) {
+    private func pinToBottom(_ proxy: ScrollViewProxy, animated: Bool = true) {
         followBottom = true
-        if reduceMotion {
+        if reduceMotion || !animated {
             proxy.scrollTo("bottom", anchor: .bottom)
         } else {
             withAnimation(Motion.smooth) {
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
         }
+    }
+
+    private var turnSlotID: String {
+        guard let lastUserIndex, case .userMessage(let user) = session.entries[lastUserIndex] else {
+            return "turn"
+        }
+        return "turn-\(user.id.uuidString)"
     }
 
     private var lastUserIndex: Int? {
@@ -146,19 +153,10 @@ private struct ChatMessageList: View {
 
     private var liveTurn: [ChatTurnItem] {
         guard let lastUserIndex, case .userMessage(let user) = session.entries[lastUserIndex] else {
-            return turn
+            return []
         }
-        if let turnUserID, turnUserID != user.id { return [] }
-        if turnUserID == nil, hasCommittedReply(before: lastUserIndex) { return [] }
+        guard turnUserID == user.id else { return [] }
         return turn
-    }
-
-    private func hasCommittedReply(before index: Int) -> Bool {
-        for i in (0..<index).reversed() {
-            if case .aiMessage(let reply) = session.entries[i], !reply.text.isEmpty { return true }
-            if case .userMessage = session.entries[i] { return false }
-        }
-        return false
     }
 
     private func hideCurrentTurn(_ entry: ChatSession.Entry, index: Int) -> Bool {

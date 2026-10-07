@@ -89,6 +89,8 @@ enum ContextBuilder {
             When the user tells you something that should last (a fact, a decision, a change of direction, a new line of work), save it yourself with those tools right away, then say in one short line what you saved. Never ask the user to save anything. Update an existing decision, track, note, or project when it covers the same thing instead of adding a duplicate. When a new decision replaces an old one, pass supersedes_id. Use the ids shown in the project context.
 
             Treat the project context as the source of truth and weight active decisions above tracks and notes. Do not invent project facts. Do not create or edit files unless the user explicitly asks.
+
+            When you point the user at a note, track, decision, or other Slate record, put a markdown link on its own line using the id from the tools or project context: [Title](slate://note/UUID), slate://thread/UUID, slate://decision/UUID, slate://project/UUID, or slate://conversation/UUID. The app turns that into a card they can open. Do not paste raw ids. Do not invent ids.
             """)
         }
         if let thread = focusedThread {

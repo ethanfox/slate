@@ -1,4 +1,5 @@
 import AppKit
+import SwiftData
 import SwiftUI
 
 struct AssistantMarkdown: View {
@@ -9,72 +10,74 @@ struct AssistantMarkdown: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        let blocks = ChatObjectLink.blocks(in: text)
+        let leftover = ChatObjectLink.unlinked(sources, in: text)
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
+                switch block.content {
+                case .text(let value):
+                    MarkdownBlock(
+                        text: value,
+                        sources: leftover,
+                        pinUnused: pinUnused && isLastText(index, in: blocks),
+                        streaming: streaming && isLastText(index, in: blocks) && !reduceMotion,
+                        modelContext: modelContext,
+                        onOpen: { $0.open(app: app, context: modelContext) }
+                    )
+                case .object(let source):
+                    ObjectLinkCard(source: source) {
+                        source.open(app: app, context: modelContext)
+                    }
+                }
+            }
+        }
+        .transaction { transaction in
+            if streaming { transaction.animation = nil }
+        }
+    }
+
+    private func isLastText(_ index: Int, in blocks: [ChatContentBlock]) -> Bool {
+        !blocks.suffix(from: index + 1).contains { block in
+            if case .text = block.content { return true }
+            return false
+        }
+    }
+}
+
+private struct MarkdownBlock: View {
+    var text: String
+    var sources: [ChatSource]
+    var pinUnused: Bool
+    var streaming: Bool
+    var modelContext: ModelContext
+    var onOpen: (ChatSource) -> Void
     @State private var hover: LinkHover?
-    @State private var sourceHover: SourceHover?
-    @State private var overPager = false
-    @State private var dismissPager: Task<Void, Never>?
+    @State private var paintHeight: CGFloat = 22
 
     var body: some View {
         MarkdownBody(
             text: text,
             sources: sources,
             pinUnused: pinUnused,
-            streaming: streaming && !reduceMotion,
+            streaming: streaming,
             hover: $hover,
-            sourceHover: Binding(
-                get: { sourceHover },
-                set: { setSourceHover($0) }
-            ),
-            onOpen: { $0.open(app: app, context: modelContext) }
+            modelContext: modelContext,
+            onHeight: { height in
+                if abs(paintHeight - height) > 0.5 { paintHeight = height }
+            },
+            onOpen: onOpen
         )
-        .animation(streaming && !reduceMotion ? Motion.quick : nil, value: text.count)
-        .padding(.bottom, sourceHover == nil ? 0 : 96)
+        .frame(minHeight: paintHeight, alignment: .top)
         .overlay(alignment: .topLeading) {
-            if let sourceHover {
-                SourcePager(sources: sourceHover.sources) { source in
-                    source.open(app: app, context: modelContext)
-                    clearPager()
-                }
-                .offset(x: sourceHover.rect.minX, y: sourceHover.rect.maxY + 4)
-                .onHover { hovering in
-                    overPager = hovering
-                    if hovering {
-                        dismissPager?.cancel()
-                    } else {
-                        setSourceHover(nil)
-                    }
-                }
-                .zIndex(2)
-            } else if let hover {
+            if let hover {
                 LinkPreviewCard(url: hover.url)
                     .offset(x: hover.rect.minX, y: previewY(for: hover.rect, height: 76))
                     .allowsHitTesting(false)
             }
         }
         .animation(Motion.hover, value: hover?.url)
-        .animation(Motion.hover, value: sourceHover?.sources.map(\.id))
-        .onDisappear {
-            dismissPager?.cancel()
-        }
-    }
-
-    private func setSourceHover(_ next: SourceHover?) {
-        dismissPager?.cancel()
-        if let next {
-            sourceHover = next
-            return
-        }
-        dismissPager = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(220))
-            guard !Task.isCancelled, !overPager else { return }
-            sourceHover = nil
-        }
-    }
-
-    private func clearPager() {
-        dismissPager?.cancel()
-        overPager = false
-        sourceHover = nil
     }
 
     private func previewY(for rect: CGRect, height: CGFloat) -> CGFloat {
@@ -94,19 +97,20 @@ private struct MarkdownBody: NSViewRepresentable {
     var pinUnused: Bool
     var streaming: Bool
     @Binding var hover: LinkHover?
-    @Binding var sourceHover: SourceHover?
+    var modelContext: ModelContext
+    var onHeight: (CGFloat) -> Void
     var onOpen: (ChatSource) -> Void
 
     func makeNSView(context: Context) -> AssistantMarkdownTextView {
         let view = AssistantMarkdownTextView()
         bind(view)
-        view.apply(text, sources: sources, pinUnused: pinUnused, streaming: streaming)
+        view.apply(text, sources: sources, pinUnused: pinUnused, streaming: streaming, context: modelContext)
         return view
     }
 
     func updateNSView(_ view: AssistantMarkdownTextView, context: Context) {
         bind(view)
-        view.apply(text, sources: sources, pinUnused: pinUnused, streaming: streaming)
+        view.apply(text, sources: sources, pinUnused: pinUnused, streaming: streaming, context: modelContext)
     }
 
     private func bind(_ view: AssistantMarkdownTextView) {
@@ -117,14 +121,13 @@ private struct MarkdownBody: NSViewRepresentable {
                 hover = nil
             }
         }
-        view.onHoverSources = { sources, rect in
-            if let sources, let rect {
-                sourceHover = SourceHover(sources: sources, rect: rect)
-            } else {
-                sourceHover = nil
-            }
+        view.pager.onOpen = onOpen
+        view.pager.context = modelContext
+        view.onHeight = onHeight
+        view.onOpenSource = { source in
+            view.pager.close()
+            onOpen(source)
         }
-        view.onOpenSource = onOpen
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: AssistantMarkdownTextView, context: Context) -> CGSize? {
@@ -135,18 +138,33 @@ private struct MarkdownBody: NSViewRepresentable {
 
 fileprivate final class AssistantMarkdownTextView: NSTextView {
     var onHoverLink: ((URL?, CGRect?) -> Void)?
-    var onHoverSources: (([ChatSource]?, CGRect?) -> Void)?
     var onOpenSource: ((ChatSource) -> Void)?
+    var onHeight: ((CGFloat) -> Void)?
+    let pager = SourcePagerAnchor()
+    private var target = ""
+    private var shown = ""
     private var source = ""
     private var sourceIDs: [String] = []
+    private var pendingSources: [ChatSource] = []
+    private var pendingPin = true
+    private var pendingContext: ModelContext?
     private var streaming = false
     private var tracking: NSTrackingArea?
     private var fadeTimer: Timer?
+    private var pump: Timer?
     private var fadeRange = NSRange(location: 0, length: 0)
     private var fadeStarted: CFTimeInterval = 0
+    private var lastReportedHeight: CGFloat = 0
+    private var sizing = false
 
     deinit {
         fadeTimer?.invalidate()
+        pump?.invalidate()
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow == nil { pager.close() }
     }
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
@@ -170,27 +188,118 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         configure()
     }
 
-    func apply(_ text: String, sources: [ChatSource] = [], pinUnused: Bool = true, streaming: Bool = false) {
-        let ids = sources.map(\.id)
-        let grew = text.hasPrefix(source) && text.count > source.count
-        guard source != text || sourceIDs != ids || self.streaming != streaming else { return }
-        let oldLength = textStorage?.length ?? 0
-        source = text
-        sourceIDs = ids
+    func apply(_ text: String, sources: [ChatSource] = [], pinUnused: Bool = true, streaming: Bool = false, context: ModelContext? = nil) {
+        pendingSources = sources
+        pendingPin = pinUnused
+        pendingContext = context
+        sourceIDs = sources.map(\.id)
         self.streaming = streaming
+        target = text
+        if !streaming {
+            if shown != text {
+                paint(text, fade: false)
+            }
+            stopPump()
+            stopFade()
+            return
+        }
+        if !text.hasPrefix(shown) {
+            shown = Self.sharedPrefix(shown, text)
+            paint(shown, fade: false)
+        }
+        startPump()
+    }
+
+    private func startPump() {
+        guard pump == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            self?.tickPump()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pump = timer
+        tickPump()
+    }
+
+    private func stopPump() {
+        pump?.invalidate()
+        pump = nil
+    }
+
+    private func tickPump() {
+        guard shown != target else {
+            if !streaming { stopPump() }
+            return
+        }
+        guard target.hasPrefix(shown) else {
+            paint(target, fade: false)
+            return
+        }
+        let remaining = target.count - shown.count
+        let step = streaming ? 14 : 48
+        if !streaming, remaining <= step {
+            paint(target, fade: remaining <= 18)
+            stopPump()
+            return
+        }
+        paint(Self.advance(shown, toward: target, max: step), fade: true)
+    }
+
+    private func paint(_ text: String, fade: Bool) {
+        let grew = text.hasPrefix(shown) && text.count > shown.count
+        let oldLength = textStorage?.length ?? 0
+        shown = text
+        source = text
         let selected = selectedRange()
-        textStorage?.setAttributedString(Self.attributed(text, sources: sources, pinUnused: pinUnused))
+        textStorage?.setAttributedString(
+            Self.attributed(text, sources: pendingSources, pinUnused: pendingPin, context: pendingContext)
+        )
         let max = (string as NSString).length
         let location = min(selected.location, max)
         setSelectedRange(NSRange(location: location, length: min(selected.length, max - location)))
         invalidateIntrinsicContentSize()
         window?.invalidateCursorRects(for: self)
-        loadChipIcons()
-        if streaming, grew, let storage = textStorage, storage.length > oldLength {
+        if !pendingSources.isEmpty {
+            loadChipIcons()
+        }
+        reportHeight()
+        if fade, grew, let storage = textStorage, storage.length > oldLength {
             startFade(NSRange(location: oldLength, length: storage.length - oldLength))
-        } else if !streaming {
+        } else if !fade {
             stopFade()
         }
+    }
+
+    private func reportHeight() {
+        let width = bounds.width > 1 ? bounds.width : 680
+        let height = height(forWidth: width)
+        guard abs(height - lastReportedHeight) > 0.5 else { return }
+        lastReportedHeight = height
+        onHeight?(height)
+    }
+
+    private static func sharedPrefix(_ a: String, _ b: String) -> String {
+        var index = a.startIndex
+        var other = b.startIndex
+        while index < a.endIndex, other < b.endIndex, a[index] == b[other] {
+            index = a.index(after: index)
+            other = b.index(after: other)
+        }
+        return String(a[..<index])
+    }
+
+    private static func advance(_ shown: String, toward target: String, max limit: Int) -> String {
+        let start = target.index(target.startIndex, offsetBy: shown.count)
+        var index = start
+        var count = 0
+        while index < target.endIndex, count < limit {
+            if count >= 8, target[index].isWhitespace {
+                index = target.index(after: index)
+                break
+            }
+            index = target.index(after: index)
+            count += 1
+        }
+        return String(target[..<index])
     }
 
     private func startFade(_ range: NSRange) {
@@ -207,7 +316,7 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
     }
 
     private func tickFade() {
-        let progress = min((CACurrentMediaTime() - fadeStarted) / 0.2, 1)
+        let progress = min((CACurrentMediaTime() - fadeStarted) / 0.28, 1)
         tintFade(progress: progress)
         if progress >= 1 { stopFade() }
     }
@@ -221,7 +330,7 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
             length: min(fadeRange.length, end - fadeRange.location)
         )
         let eased = 1 - (1 - progress) * (1 - progress)
-        let alpha = 0.22 + (0.78 * eased)
+        let alpha = 0.1 + (0.9 * eased)
         storage.addAttribute(.foregroundColor, value: NSColor.labelColor.withAlphaComponent(alpha), range: range)
     }
 
@@ -242,17 +351,22 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
 
     func height(forWidth width: CGFloat) -> CGFloat {
         guard let layoutManager, let textContainer else { return 22 }
-        let current = textContainer.containerSize
-        textContainer.containerSize = NSSize(width: max(width, 1), height: .greatestFiniteMagnitude)
+        let target = NSSize(width: max(width, 1), height: .greatestFiniteMagnitude)
+        if abs(textContainer.containerSize.width - target.width) > 0.5 {
+            sizing = true
+            textContainer.containerSize = target
+            sizing = false
+        }
         layoutManager.ensureLayout(for: textContainer)
-        let used = layoutManager.usedRect(for: textContainer).height
-        textContainer.containerSize = current
-        return ceil(max(used, 22))
+        return ceil(max(layoutManager.usedRect(for: textContainer).height, 22))
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        guard !sizing else { return }
+        sizing = true
         textContainer?.containerSize = NSSize(width: newSize.width, height: CGFloat.greatestFiniteMagnitude)
+        sizing = false
         window?.invalidateCursorRects(for: self)
     }
 
@@ -287,7 +401,7 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         onHoverLink?(nil, nil)
-        onHoverSources?(nil, nil)
+        pager.hideSoon()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -296,7 +410,23 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
             onOpenSource?(first)
             return
         }
+        if let url = link(at: point), let source = ChatObjectLink.parse(url) {
+            onOpenSource?(source)
+            return
+        }
         super.mouseDown(with: event)
+    }
+
+    override func clicked(onLink link: Any, at charIndex: Int) {
+        let url: URL?
+        if let value = link as? URL { url = value }
+        else if let string = link as? String { url = URL(string: string) }
+        else { url = nil }
+        if let url, let source = ChatObjectLink.parse(url) {
+            onOpenSource?(source)
+            return
+        }
+        super.clicked(onLink: link, at: charIndex)
     }
 
     override func cursorUpdate(with event: NSEvent) {
@@ -315,12 +445,12 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
     override func updateInsertionPointStateAndRestartTimer(_ restartFlag: Bool) {}
 
     private func reportHover(at point: NSPoint) {
-        if let sources = sources(at: point) {
+        if let sources = sources(at: point), let rect = chipRect(for: sources) {
             onHoverLink?(nil, nil)
-            onHoverSources?(sources, chipRect(for: sources))
+            pager.show(sources: sources, from: self, rect: rect)
             return
         }
-        onHoverSources?(nil, nil)
+        pager.hideSoon()
         guard let url = link(at: point) else {
             onHoverLink?(nil, nil)
             return
@@ -333,16 +463,11 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
     }
 
     private func sources(at point: NSPoint) -> [ChatSource]? {
-        guard let layoutManager, let textContainer, let textStorage else { return nil }
-        let containerPoint = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
-        var fraction: CGFloat = 0
-        let index = layoutManager.characterIndex(
-            for: containerPoint,
-            in: textContainer,
-            fractionOfDistanceBetweenInsertionPoints: &fraction
-        )
-        guard index < textStorage.length else { return nil }
-        return textStorage.attribute(.chatSources, at: index, effectiveRange: nil) as? [ChatSource]
+        var hit: [ChatSource]?
+        enumerateSourceRects { rect, sources in
+            if rect.insetBy(dx: -3, dy: -3).contains(point) { hit = sources }
+        }
+        return hit
     }
 
     private func chipRect(for sources: [ChatSource]) -> CGRect? {
@@ -445,19 +570,20 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         ]
     }
 
-    private static func attributed(_ markdown: String, sources: [ChatSource] = [], pinUnused: Bool = true) -> NSAttributedString {
+    private static func attributed(_ markdown: String, sources: [ChatSource] = [], pinUnused: Bool = true, context: ModelContext? = nil) -> NSAttributedString {
         let result = ChatMarkdown.attributed(markdown)
-        insertSources(sources, pinUnused: pinUnused, into: result)
+        insertSources(sources, pinUnused: pinUnused, context: context, into: result)
         return result
     }
 
-    private static func insertSources(_ sources: [ChatSource], pinUnused: Bool, into result: NSMutableAttributedString) {
+    private static func insertSources(_ sources: [ChatSource], pinUnused: Bool, context: ModelContext?, into result: NSMutableAttributedString) {
         let placements = ChatSourceMatcher.place(sources, in: result.string, pinUnused: pinUnused)
         for placement in placements.reversed() {
-            let attachment = SourceChipAttachment(sources: placement.sources)
+            let live = placement.sources.map { $0.presented(in: context).source }
+            let attachment = SourceChipAttachment(sources: live)
             let chip = NSMutableAttributedString(string: " ")
             chip.append(NSAttributedString(attachment: attachment))
-            chip.addAttribute(.chatSources, value: placement.sources, range: NSRange(location: 0, length: chip.length))
+            chip.addAttribute(.chatSources, value: live, range: NSRange(location: 0, length: chip.length))
             let location = min(max(placement.utf16, 0), result.length)
             result.insert(chip, at: location)
         }

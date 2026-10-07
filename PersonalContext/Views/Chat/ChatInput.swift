@@ -12,9 +12,12 @@ struct ChatInput: View {
     var errorMessage: String?
     var onSend: (String) -> Bool
     var onStop: (() -> Void)?
+    var onRetryStuck: (() -> Void)?
+    var debugLog: ChatDebugLog?
 
     @Environment(AppModel.self) private var app
     @State private var text = ""
+    @State private var showDebug = false
 
     private var canSend: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isGenerating
@@ -28,6 +31,24 @@ struct ChatInput: View {
                 if let usage = app.usage {
                     ChatUsage(usage: usage)
                 }
+                #if DEBUG
+                if let debugLog {
+                    Button {
+                        showDebug.toggle()
+                    } label: {
+                        Image(systemName: "ladybug")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showDebug, arrowEdge: .top) {
+                        ChatDebugPopover(log: debugLog)
+                    }
+                    .accessibilityLabel("Chat debug log")
+                }
+                #endif
             }
 
             if let label {
@@ -48,10 +69,22 @@ struct ChatInput: View {
             }
 
             if let errorMessage {
-                Text(errorMessage)
+                if isStuckRun(errorMessage), let onRetryStuck {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text("The last reply is still running. Try again to take it over.")
+                            .foregroundStyle(.red)
+                        Button("Try again", action: onRetryStuck)
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.primary)
+                    }
                     .font(CraftFont.caption)
-                    .foregroundStyle(.red)
                     .onAppear { ChatTrace.event("chat ui error: \(errorMessage)") }
+                } else {
+                    Text(errorMessage)
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.red)
+                        .onAppear { ChatTrace.event("chat ui error: \(errorMessage)") }
+                }
             }
         }
         .padding(12)
@@ -104,6 +137,11 @@ struct ChatInput: View {
             text = ""
         }
     }
+
+    private func isStuckRun(_ message: String) -> Bool {
+        let text = message.lowercased()
+        return text.contains("already has active run") || text.contains("agent_busy")
+    }
 }
 
 private struct ChatUsage: View {
@@ -126,3 +164,45 @@ private struct ChatUsage: View {
         return "Cursor Models: \(CursorUsage.percent(usage.cursorModels)) used · Other Models: \(CursorUsage.percent(usage.otherModels)) used"
     }
 }
+
+#if DEBUG
+private struct ChatDebugPopover: View {
+    var log: ChatDebugLog
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Chat events")
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Copy") {
+                    CraftClipboard.copy(log.copyText)
+                }
+                Button("Clear") {
+                    log.clear()
+                }
+            }
+            .buttonStyle(.plain)
+            .font(CraftFont.caption)
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 3) {
+                    ForEach(log.lines) { line in
+                        Text(line.text)
+                            .font(.system(size: 11, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 460, height: 300)
+        .onAppear { log.publish() }
+        .onReceive(Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()) { _ in
+            log.publish()
+        }
+    }
+}
+#endif

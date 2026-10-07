@@ -1,9 +1,117 @@
 import AppKit
+import SwiftData
 import SwiftUI
 
-struct SourceHover: Equatable {
-    var sources: [ChatSource]
-    var rect: CGRect
+@MainActor
+final class SourcePagerAnchor {
+    var onOpen: ((ChatSource) -> Void)?
+    var context: ModelContext?
+
+    var isVisible: Bool { panel?.isVisible == true }
+
+    private var panel: NSPanel?
+    private var dismissTask: Task<Void, Never>?
+    private var overPager = false
+    private var shownIDs: [String] = []
+
+    func show(sources: [ChatSource], from view: NSView, rect: CGRect) {
+        dismissTask?.cancel()
+        let ids = sources.map(\.id)
+        if panel?.isVisible == true, shownIDs == ids {
+            place(panel, from: view, rect: rect)
+            return
+        }
+        shownIDs = ids
+        present(sources: sources, from: view, rect: rect)
+    }
+
+    func hideSoon() {
+        dismissTask?.cancel()
+        dismissTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(220))
+            guard !Task.isCancelled, !overPager else { return }
+            close()
+        }
+    }
+
+    func close() {
+        dismissTask?.cancel()
+        overPager = false
+        shownIDs = []
+        guard let panel else { return }
+        panel.parent?.removeChildWindow(panel)
+        panel.orderOut(nil)
+        self.panel = nil
+    }
+
+    private func present(sources: [ChatSource], from view: NSView, rect: CGRect) {
+        guard view.window != nil else { return }
+        let root = SourcePager(sources: sources, context: context) { [weak self] source in
+            self?.onOpen?(source)
+            self?.close()
+        }
+        .padding(14)
+        .onHover { [weak self] hovering in
+            self?.overPager = hovering
+            if hovering {
+                self?.dismissTask?.cancel()
+            } else {
+                self?.hideSoon()
+            }
+        }
+        let host = NSHostingView(rootView: root)
+        host.frame = NSRect(origin: .zero, size: NSSize(width: 280, height: 120))
+        host.layoutSubtreeIfNeeded()
+        var size = host.fittingSize
+        if size.width < 1 || size.height < 1 {
+            size = NSSize(width: 280, height: 96)
+        }
+        host.frame = NSRect(origin: .zero, size: size)
+
+        let panel = self.panel ?? makePanel()
+        panel.contentView = host
+        panel.setContentSize(size)
+        place(panel, from: view, rect: rect)
+        if let window = view.window, panel.parent !== window {
+            window.addChildWindow(panel, ordered: .above)
+        }
+        panel.makeKeyAndOrderFront(nil)
+        self.panel = panel
+    }
+
+    private func place(_ panel: NSPanel?, from view: NSView, rect: CGRect) {
+        guard let panel, let window = view.window else { return }
+        let size = panel.frame.size
+        let screen = window.convertToScreen(view.convert(rect, to: nil))
+        var origin = NSPoint(x: screen.minX, y: screen.minY - size.height - 4)
+        if let visible = window.screen?.visibleFrame {
+            origin.x = min(max(origin.x, visible.minX), max(visible.maxX - size.width, visible.minX))
+            if origin.y < visible.minY {
+                origin.y = screen.maxY + 4
+            }
+        }
+        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+    }
+
+    private func makePanel() -> NSPanel {
+        let panel = NSPanel(
+            contentRect: .zero,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = true
+        panel.hidesOnDeactivate = true
+        panel.isMovable = false
+        panel.acceptsMouseMovedEvents = true
+        panel.level = .floating
+        panel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
+        return panel
+    }
 }
 
 struct SourceChipLabel: View {
@@ -56,6 +164,7 @@ struct SourceChipLabel: View {
 
 struct SourcePager: View {
     var sources: [ChatSource]
+    var context: ModelContext?
     var onOpen: (ChatSource) -> Void
     @State private var page = 0
     @State private var icon: NSImage?
@@ -63,22 +172,20 @@ struct SourcePager: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button(action: { onOpen(current) }) {
+            Button(action: { onOpen(currentCard.source) }) {
                 HStack(alignment: .center, spacing: 10) {
                     pagerMark
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(current.title)
+                        Text(currentCard.title)
                             .font(CraftFont.section)
                             .foregroundStyle(.primary)
                             .underline(overRow, color: .secondary)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
-                        if let subtitle {
-                            Text(subtitle)
-                                .font(CraftFont.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
+                        Text(currentCard.subtitle)
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                     Spacer(minLength: 0)
                 }
@@ -127,7 +234,7 @@ struct SourcePager: View {
                 .frame(width: 28, height: 28)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         } else {
-            Image(systemName: current.symbol)
+            Image(systemName: currentCard.source.symbol)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 28, height: 28)
@@ -139,9 +246,8 @@ struct SourcePager: View {
         sources[min(page, sources.count - 1)]
     }
 
-    private var subtitle: String? {
-        if current.kind == .url { return current.host }
-        return current.kind.rawValue.localizedCapitalized
+    private var currentCard: (source: ChatSource, title: String, subtitle: String) {
+        current.presented(in: context)
     }
 
     private func previous() {

@@ -48,7 +48,9 @@ private struct ConversationSessionView: View {
                 changes: runtime.bridge.changes,
                 errorMessage: session.error?.localizedDescription,
                 onSend: send,
-                onStop: { session.cancel() }
+                onStop: { session.cancel() },
+                onRetryStuck: retryStuck,
+                debugLog: runtime.bridge.debugLog
             )
             .padding(.horizontal, compact ? 16 : 32)
             .padding(.vertical, 14)
@@ -64,6 +66,7 @@ private struct ConversationSessionView: View {
         .onChange(of: app.pendingSend) { _, _ in runtime.consumePending(from: app) }
         .onChange(of: runtime.modelID) { _, _ in runtime.applyModel() }
         .onChange(of: session.isGenerating) { _, generating in
+            runtime.bridge.debugLog.snapshot(session, label: "generating=\(generating) entries=\(session.entries.count)")
             if !generating { runtime.rememberAnswer() }
         }
     }
@@ -73,5 +76,11 @@ private struct ConversationSessionView: View {
         let sent = runtime.send(text)
         ChatTrace.event("composer session.send=\(sent)")
         return sent
+    }
+
+    private func retryStuck() {
+        ChatTrace.event("composer retry stuck run")
+        guard let text = runtime.lastUserText, !text.isEmpty else { return }
+        _ = send(text)
     }
 }

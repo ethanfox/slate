@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { writeSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { Agent, type Run, type SDKAgent, type SDKCustomTool, type SDKCustomToolResult } from "@cursor/sdk";
 
@@ -43,7 +44,42 @@ function describe(value: unknown): string {
 }
 
 function emit(event: Event) {
-  process.stdout.write(JSON.stringify(event) + "\n");
+  writeSync(1, `${JSON.stringify(event)}\n`);
+}
+
+function isBusy(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /already has active run|agent_busy|AgentBusy/i.test(message);
+}
+
+async function expireActiveRuns(agentId: string, cwd: string) {
+  try {
+    const { items } = await Agent.listRuns(agentId, { runtime: "local", cwd });
+    for (const item of items) {
+      const status = String(item.status ?? "");
+      if (!/running|creating|pending|started/i.test(status)) continue;
+      try {
+        await Agent.cancelRun(item.id, { runtime: "local", cwd });
+        log("cancelRun", { id: item.id, status });
+      } catch (error) {
+        log("cancelRun failed", error);
+      }
+    }
+  } catch (error) {
+    log("listRuns failed", error);
+  }
+}
+
+async function startRun(agent: SDKAgent, request: Request): Promise<Run> {
+  const options = { local: { force: true } };
+  try {
+    return await agent.send(request.text, options);
+  } catch (error) {
+    if (!isBusy(error)) throw error;
+    log("busy", { agentId: agent.agentId, error: describe(error) });
+    await expireActiveRuns(agent.agentId, request.cwd);
+    return await agent.send(request.text, options);
+  }
 }
 
 function toolName(name: string, args: unknown): string {
@@ -160,12 +196,13 @@ function sourcesFrom(name: string, args: unknown, result?: unknown): Source[] {
   const kind = kindFromTool(name);
   if (!kind) return [];
   const pin = n.startsWith("get_");
-  return recordsFrom(unwrapResult(result) ?? args)
+  return recordsFrom(unwrapResult(result))
+    .filter((record) => record.id)
     .slice(0, pin ? 1 : 8)
     .map((record) => ({
-      id: record.id ?? record.url ?? record.title,
+      id: record.id,
       title: record.title,
-      url: record.url,
+      url: record.url ?? `slate://${kind}/${record.id}`,
       kind,
       pin,
     }));
@@ -271,7 +308,7 @@ async function main() {
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
 
-  run = await agent.send(request.text);
+  run = await startRun(agent, request);
   log("run", { runId: run.id });
   let lastAssistant = "";
   for await (const message of run.stream()) {
