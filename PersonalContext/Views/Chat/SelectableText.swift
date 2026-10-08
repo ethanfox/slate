@@ -20,9 +20,7 @@ struct SelectableText: NSViewRepresentable {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: ChatSelectableTextView, context: Context) -> CGSize? {
-        let maxWidth = proposal.width ?? 680
-        let width = hugsWidth ? min(max(nsView.widthThatFits(), 1), maxWidth) : maxWidth
-        return CGSize(width: width, height: nsView.height(forWidth: width))
+        nsView.fittedSize(for: proposal.width, hugging: hugsWidth)
     }
 }
 
@@ -32,6 +30,9 @@ final class ChatSelectableTextView: NSTextView {
     private var fontSize: CGFloat = 15
     private var lineSpacing: CGFloat = 7
     private var color: NSColor = .labelColor
+    private var fittedWidth: CGFloat = 0
+    private var fittedHeight: CGFloat = 22
+    private var intrinsicWidth: CGFloat = 0
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
         super.init(frame: frameRect, textContainer: container)
@@ -66,6 +67,8 @@ final class ChatSelectableTextView: NSTextView {
         self.fontSize = fontSize
         self.lineSpacing = lineSpacing
         self.color = color
+        fittedWidth = 0
+        intrinsicWidth = 0
         let selected = selectedRange()
         textStorage?.setAttributedString(Self.attributed(text, markdown: markdown, fontSize: fontSize, lineSpacing: lineSpacing, color: color))
         let max = (string as NSString).length
@@ -74,24 +77,37 @@ final class ChatSelectableTextView: NSTextView {
         invalidateIntrinsicContentSize()
     }
 
+    func fittedSize(for proposed: CGFloat?, hugging: Bool) -> CGSize {
+        let maxWidth = proposed.map { $0 > 1 ? $0.rounded() : 680 } ?? 680
+        if !hugging {
+            return CGSize(width: maxWidth, height: height(forWidth: maxWidth))
+        }
+        let natural = widthThatFits() + 8
+        let width = min(max(natural, 1), maxWidth)
+        return CGSize(width: width, height: height(forWidth: width))
+    }
+
     func height(forWidth width: CGFloat) -> CGFloat {
+        let width = width.rounded()
+        if width <= 1 { return fittedHeight }
+        if abs(width - fittedWidth) < 0.5 { return fittedHeight }
         guard let layoutManager, let textContainer else { return 22 }
-        let current = textContainer.containerSize
-        textContainer.containerSize = NSSize(width: max(width, 1), height: CGFloat.greatestFiniteMagnitude)
+        textContainer.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
         layoutManager.ensureLayout(for: textContainer)
-        let used = layoutManager.usedRect(for: textContainer).height
-        textContainer.containerSize = current
-        return ceil(max(used, 22))
+        fittedWidth = width
+        fittedHeight = ceil(max(layoutManager.usedRect(for: textContainer).height, 22))
+        return fittedHeight
     }
 
     func widthThatFits() -> CGFloat {
+        if intrinsicWidth > 0 { return intrinsicWidth }
         guard let layoutManager, let textContainer else { return 0 }
         let current = textContainer.containerSize
         textContainer.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         layoutManager.ensureLayout(for: textContainer)
-        let used = layoutManager.usedRect(for: textContainer).width
+        intrinsicWidth = ceil(layoutManager.usedRect(for: textContainer).width)
         textContainer.containerSize = current
-        return ceil(used)
+        return intrinsicWidth
     }
 
     override func setFrameSize(_ newSize: NSSize) {

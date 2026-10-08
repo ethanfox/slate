@@ -7,13 +7,20 @@ enum ConnectionState: Equatable {
     case checking
     case connected(String)
     case failed(String)
+
+    var isPresent: Bool {
+        if case .missing = self { return false }
+        return true
+    }
 }
 
 @MainActor
 @Observable
 final class AppModel {
     private(set) var container: ModelContainer
-    var destination: Destination = .home
+    var chromeDestination: Destination = .home
+    var windowTabs: [WindowTab] = [AppModel.launchTab]
+    var selectedTabID = AppModel.launchTab.id
     var tabs: [UUID: ProjectTab] = [:]
     var selectedThread: UUID?
     var selectedNote: UUID?
@@ -47,6 +54,24 @@ final class AppModel {
     var defaultModelID: String {
         didSet { defaults.set(defaultModelID, forKey: Keys.defaultModel) }
     }
+    var talkProvider: TalkProvider {
+        didSet { defaults.set(talkProvider.rawValue, forKey: Keys.talkProvider) }
+    }
+    var chatGPTModelID: String {
+        didSet { defaults.set(chatGPTModelID, forKey: Keys.chatGPTModel) }
+    }
+    var readProvider: TalkProvider {
+        didSet { defaults.set(readProvider.rawValue, forKey: Keys.readProvider) }
+    }
+    var chatGPTReadModelID: String {
+        didSet { defaults.set(chatGPTReadModelID, forKey: Keys.chatGPTReadModel) }
+    }
+    var cursorReadModelID: String {
+        didSet { defaults.set(cursorReadModelID, forKey: Keys.cursorReadModel) }
+    }
+    private(set) var cursorCloudRepositories: CursorCloudRepositoriesState = .idle
+    @ObservationIgnored private var cursorCloudFetchStartedAt: Date?
+    private(set) var chatGPTModels: [ChatGPTModel] = ChatGPTModel.fallback
     var showAgentIDs: Bool {
         didSet { defaults.set(showAgentIDs, forKey: Keys.showAgentIDs) }
     }
@@ -64,6 +89,9 @@ final class AppModel {
     }
     var settingsSection: SettingsSection {
         didSet { defaults.set(settingsSection.rawValue, forKey: Keys.settingsSection) }
+    }
+    var openChatLinksInNewTab: Bool {
+        didSet { defaults.set(openChatLinksInNewTab, forKey: Keys.openChatLinksInNewTab) }
     }
     var orbPalette: OrbPalette {
         didSet {
@@ -160,16 +188,27 @@ final class AppModel {
     @ObservationIgnored private var usageCheckedAt: Date?
     var storeError: String?
     let eventKit = EventKitService()
+    let sources = SourceConnections()
 
     var hasAPIKey: Bool { apiKey?.isEmpty == false }
 
-    private let defaults = UserDefaults.standard
+    private static let launchTab = WindowTab.home()
+    let defaults = UserDefaults.standard
 
     init() {
         appearance = AppearancePreference(rawValue: UserDefaults.standard.string(forKey: Keys.appearance) ?? "") ?? .system
         accent = AccentPreference(rawValue: UserDefaults.standard.string(forKey: Keys.accent) ?? "") ?? .system
         accentedViews = Set(UserDefaults.standard.stringArray(forKey: Keys.accentedViews) ?? [])
         defaultModelID = UserDefaults.standard.string(forKey: Keys.defaultModel) ?? ""
+        talkProvider = TalkProvider(rawValue: UserDefaults.standard.string(forKey: Keys.talkProvider) ?? "") ?? .cursor
+        chatGPTModelID = UserDefaults.standard.string(forKey: Keys.chatGPTModel) ?? ""
+        readProvider = TalkProvider(rawValue: UserDefaults.standard.string(forKey: Keys.readProvider) ?? "") ?? .cursor
+        chatGPTReadModelID = UserDefaults.standard.string(forKey: Keys.chatGPTReadModel) ?? ""
+        cursorReadModelID = UserDefaults.standard.string(forKey: Keys.cursorReadModel) ?? ""
+        if let checkedAt = defaults.object(forKey: Keys.cursorCloudCheckedAt) as? TimeInterval,
+           let urls = defaults.stringArray(forKey: Keys.cursorCloudRepoURLs) {
+            cursorCloudRepositories = .ready(urls: urls, checkedAt: Date(timeIntervalSince1970: checkedAt))
+        }
         showAgentIDs = UserDefaults.standard.bool(forKey: Keys.showAgentIDs)
         let storedLayout = UserDefaults.standard.string(forKey: Keys.projectsLayout) ?? ""
         projectsLayout = storedLayout == "list" ? .card : (ProjectsLayout(rawValue: storedLayout) ?? .table)
@@ -177,6 +216,11 @@ final class AppModel {
         projectColumnCollapsed = UserDefaults.standard.bool(forKey: Keys.projectColumnCollapsed)
         collapsedProjectSections = Set(UserDefaults.standard.stringArray(forKey: Keys.collapsedProjectSections) ?? [])
         settingsSection = SettingsSection(rawValue: UserDefaults.standard.string(forKey: Keys.settingsSection) ?? "") ?? .cursor
+        if UserDefaults.standard.object(forKey: Keys.openChatLinksInNewTab) == nil {
+            openChatLinksInNewTab = true
+        } else {
+            openChatLinksInNewTab = UserDefaults.standard.bool(forKey: Keys.openChatLinksInNewTab)
+        }
         if let data = UserDefaults.standard.data(forKey: Keys.orbPalette),
            let stored = try? JSONDecoder().decode(OrbPalette.self, from: data),
            stored != .legacySlate {
@@ -184,7 +228,8 @@ final class AppModel {
         } else {
             orbPalette = .slate
         }
-        apiKey = KeychainStore.read()
+        apiKey = KeychainStore.read(.cursorAPIKey)
+        sources.load()
 
         var opened: ModelContainer?
         var failure: String?
@@ -222,7 +267,10 @@ final class AppModel {
         } else {
             connection = .missing
         }
+        normalizeTalkProvider()
+        refreshChatGPTModels()
         refreshUsage()
+        restoreWindowTabs()
     }
 
     func refreshUsage(force: Bool = false) {
@@ -322,56 +370,12 @@ final class AppModel {
         tabs[project] ?? .chat
     }
 
-    func open(_ project: Project, tab: ProjectTab? = nil) {
-        if let tab {
-            tabs[project.id] = tab
-        }
-        destination = .project(project.id)
-    }
-
-    func open(_ thread: ProjectThread) {
-        guard let project = thread.project else { return }
-        selectedThread = thread.id
-        tabs[project.id] = .threads
-        destination = .project(project.id)
-    }
-
-    func open(_ note: Note) {
-        guard let project = note.project else { return }
-        selectedNote = note.id
-        tabs[project.id] = .notes
-        destination = .project(project.id)
-    }
-
-    func open(_ decision: Decision) {
-        guard let project = decision.project else { return }
-        selectedDecision = decision.id
-        tabs[project.id] = .decisions
-        destination = .project(project.id)
-    }
-
-    func open(_ conversation: Conversation) {
-        selectedConversation = conversation.id
-        if let project = conversation.project {
-            tabs[project.id] = .chat
-            destination = .project(project.id)
-        } else {
-            destination = .quickAsk(conversation.id)
-        }
-    }
-
-    func makeConversation(in project: Project?, context: ModelContext) -> Conversation {
-        let conversation = Conversation(model: defaultModelID, project: project)
+    func makeConversation(in project: Project?, context: ModelContext, newTab: Bool = false) -> Conversation {
+        let conversation = Conversation(model: talkModelID, project: project)
         context.insert(conversation)
         project?.touch()
         try? context.save()
-        selectedConversation = conversation.id
-        if let project {
-            tabs[project.id] = .chat
-            destination = .project(project.id)
-        } else {
-            destination = .quickAsk(conversation.id)
-        }
+        open(conversation, newTab: newTab)
         return conversation
     }
 
@@ -382,7 +386,7 @@ final class AppModel {
             .first {
             return existing
         }
-        let conversation = Conversation(model: defaultModelID, project: project)
+        let conversation = Conversation(model: talkModelID, project: project)
         conversation.thread = thread
         conversation.title = thread.title.isEmpty ? "Track chat" : thread.title
         context.insert(conversation)
@@ -394,17 +398,23 @@ final class AppModel {
     func saveAPIKey(_ raw: String) throws {
         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
-        try KeychainStore.save(key)
+        try KeychainStore.save(key, account: .cursorAPIKey)
         apiKey = key
         refreshConnection()
+        refreshCursorCloudRepositories(force: true)
     }
 
     func removeAPIKey() throws {
-        try KeychainStore.delete()
+        try KeychainStore.delete(.cursorAPIKey)
         apiKey = nil
         models = []
         modelsError = nil
         connection = .missing
+        cursorCloudRepositories = .unavailable
+        defaults.removeObject(forKey: Keys.cursorCloudRepoURLs)
+        defaults.removeObject(forKey: Keys.cursorCloudCheckedAt)
+        normalizeTalkProvider()
+        normalizeReadProvider()
     }
 
     func refreshConnection() {
@@ -455,10 +465,158 @@ final class AppModel {
         }
     }
 
+    var availableTalkProviders: [TalkProvider] {
+        var list: [TalkProvider] = []
+        if sources.hasChatGPT { list.append(.chatgpt) }
+        if hasAPIKey { list.append(.cursor) }
+        return list
+    }
+
+    var talkModelID: String {
+        get {
+            if talkProvider == .chatgpt {
+                if !chatGPTModelID.isEmpty { return chatGPTModelID }
+                return talkModels.first?.id ?? ""
+            }
+            return defaultModelID
+        }
+        set {
+            if talkProvider == .chatgpt {
+                chatGPTModelID = newValue
+            } else {
+                defaultModelID = newValue
+            }
+        }
+    }
+
+    var talkModels: [(id: String, name: String)] {
+        switch talkProvider {
+        case .chatgpt:
+            let list = chatGPTModels.isEmpty ? ChatGPTModel.fallback : chatGPTModels
+            return list.map { (id: $0.id, name: $0.displayName) }
+        case .cursor:
+            return models.map { (id: $0.id, name: $0.displayName) }
+        }
+    }
+
     func modelName(for id: String) -> String {
         if id.isEmpty { return "Account default" }
+        if let name = chatGPTModels.first(where: { $0.id == id })?.displayName { return name }
         return models.first { $0.id == id }?.displayName ?? id
     }
+
+    func refreshChatGPTModels() {
+        guard let session = ChatGPTSignIn.load() else {
+            chatGPTModels = ChatGPTModel.fallback
+            return
+        }
+        Task {
+            do {
+                let fetched = try await ChatGPTSignIn.models(session: session)
+                chatGPTModels = fetched.isEmpty ? ChatGPTModel.fallback : fetched
+                if chatGPTModelID.isEmpty, let first = chatGPTModels.first {
+                    chatGPTModelID = first.id
+                }
+                if chatGPTReadModelID.isEmpty, let first = chatGPTModels.first {
+                    chatGPTReadModelID = first.id
+                }
+            } catch {
+                if chatGPTModels.isEmpty { chatGPTModels = ChatGPTModel.fallback }
+                ChatTrace.event("chatgpt models failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func normalizeTalkProvider() {
+        let available = availableTalkProviders
+        if !available.contains(talkProvider) {
+            talkProvider = available.first ?? .cursor
+        }
+    }
+
+    var availableReadProviders: [TalkProvider] { availableTalkProviders }
+
+    var readModelID: String {
+        get {
+            if readProvider == .chatgpt {
+                if !chatGPTReadModelID.isEmpty { return chatGPTReadModelID }
+                return readModels.first?.id ?? ""
+            }
+            return cursorReadModelID
+        }
+        set {
+            if readProvider == .chatgpt {
+                chatGPTReadModelID = newValue
+            } else {
+                cursorReadModelID = newValue
+            }
+        }
+    }
+
+    var readModels: [(id: String, name: String)] {
+        switch readProvider {
+        case .chatgpt:
+            let list = chatGPTModels.isEmpty ? ChatGPTModel.fallback : chatGPTModels
+            return list.map { (id: $0.id, name: $0.displayName) }
+        case .cursor:
+            return models.map { (id: $0.id, name: $0.displayName) }
+        }
+    }
+
+    func normalizeReadProvider() {
+        let available = availableReadProviders
+        if !available.contains(readProvider) {
+            readProvider = available.first ?? .cursor
+        }
+    }
+
+    func refreshCursorCloudRepositories(force: Bool = false) {
+        guard hasAPIKey, let apiKey else {
+            cursorCloudRepositories = .unavailable
+            return
+        }
+        if case .loading = cursorCloudRepositories { return }
+        if !force, case .ready(_, let checkedAt) = cursorCloudRepositories,
+           Date().timeIntervalSince(checkedAt) < 60 {
+            return
+        }
+        cursorCloudRepositories = .loading
+        cursorCloudFetchStartedAt = .now
+        Task {
+            do {
+                let urls = try await CursorClient(apiKey: apiKey).repositories()
+                let checkedAt = Date()
+                defaults.set(urls, forKey: Keys.cursorCloudRepoURLs)
+                defaults.set(checkedAt.timeIntervalSince1970, forKey: Keys.cursorCloudCheckedAt)
+                cursorCloudRepositories = .ready(urls: urls, checkedAt: checkedAt)
+            } catch {
+                cursorCloudRepositories = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    func cursorCloudIncludesGitHubAttachment(_ attachment: CodeAttachment) -> Bool? {
+        guard attachment.kind == .github else { return nil }
+        let target = GitHubRemote.url(forLocator: attachment.locator)
+        switch cursorCloudRepositories {
+        case .ready(let urls, _):
+            return urls.contains { GitHubRemote.sameRepository($0, target) }
+        case .loading, .idle:
+            return nil
+        case .unavailable, .failed:
+            return false
+        }
+    }
+
+    static let cursorIntegrationsURL = URL(string: "https://cursor.com/dashboard?tab=integrations")!
+}
+
+enum CursorCloudRepositoriesState: Equatable {
+    case unavailable
+    case idle
+    case loading
+    case ready(urls: [String], checkedAt: Date)
+    case failed(String)
 }
 
 struct PendingSend: Equatable {
@@ -476,11 +634,18 @@ enum SaveKind: String, Identifiable {
     var id: String { rawValue }
 }
 
-private enum Keys {
+enum Keys {
     static let appearance = "appearance"
     static let accent = "accent"
     static let accentedViews = "accentedViews"
     static let defaultModel = "defaultModelID"
+    static let talkProvider = "talkProvider"
+    static let chatGPTModel = "chatGPTModelID"
+    static let readProvider = "readProvider"
+    static let chatGPTReadModel = "chatGPTReadModelID"
+    static let cursorReadModel = "cursorReadModelID"
+    static let cursorCloudRepoURLs = "cursorCloudRepoURLs"
+    static let cursorCloudCheckedAt = "cursorCloudCheckedAt"
     static let showAgentIDs = "showAgentIDs"
     static let projectsLayout = "projectsLayout"
     static let sidebarCollapsed = "sidebarCollapsed"
@@ -488,4 +653,6 @@ private enum Keys {
     static let collapsedProjectSections = "collapsedProjectSections"
     static let settingsSection = "settingsSection"
     static let orbPalette = "orbPalette"
+    static let windowTabs = "windowTabs"
+    static let openChatLinksInNewTab = "openChatLinksInNewTab"
 }

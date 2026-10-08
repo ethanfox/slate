@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum Destination: Hashable {
+enum Destination: Hashable, Codable {
     case home
     case projects
     case tasks
@@ -10,7 +10,7 @@ enum Destination: Hashable {
     case project(UUID)
     case quickAsk(UUID)
 }
-enum ProjectTab: String, CaseIterable, Identifiable, Hashable {
+enum ProjectTab: String, CaseIterable, Identifiable, Hashable, Codable {
     case overview
     case threads
     case notes
@@ -137,10 +137,13 @@ enum ProjectSort: String, CaseIterable, Identifiable, Hashable {
 }
 
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
+    case chatgpt
     case cursor
+    case sources
     case calendar
     case tags
     case appearance
+    case model
     case orb
     case developer
 
@@ -148,10 +151,13 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
+        case .chatgpt: "ChatGPT"
         case .cursor: "Cursor"
+        case .sources: "Sources"
         case .calendar: "Calendar"
         case .tags: "Tags"
         case .appearance: "Appearance"
+        case .model: "Model"
         case .orb: "Orb"
         case .developer: "Developer"
         }
@@ -159,12 +165,44 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 
     var symbol: String {
         switch self {
+        case .chatgpt: "bubble.left"
         case .cursor: "sparkle"
+        case .sources: "link"
         case .calendar: "calendar"
         case .tags: "tag"
         case .appearance: "circle.lefthalf.filled"
+        case .model: "cpu"
         case .orb: "circle.circle"
         case .developer: "hammer"
+        }
+    }
+
+    var mark: BrandMark? {
+        switch self {
+        case .chatgpt: .chatgpt
+        case .cursor: .cursor
+        default: nil
+        }
+    }
+}
+
+enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
+    case chatgpt
+    case cursor
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .chatgpt: "ChatGPT"
+        case .cursor: "Cursor"
+        }
+    }
+
+    var mark: BrandMark {
+        switch self {
+        case .chatgpt: .chatgpt
+        case .cursor: .cursor
         }
     }
 }

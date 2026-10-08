@@ -85,7 +85,7 @@ struct HomeView: View {
 
     private var quickAsk: some View {
         ChatInput(
-            modelID: Bindable(app).defaultModelID,
+            modelID: Bindable(app).talkModelID,
             label: "Quick Ask",
             placeholder: "Ask anything, not attached to a project",
             lineLimit: 1...8,
@@ -144,21 +144,18 @@ struct HomeView: View {
             if let conversation = conversations.first(where: { $0.id == id }) {
                 app.open(conversation)
             }
-        case .thread(let id, let projectID):
-            guard let projectID else { return }
-            app.selectedThread = id
-            app.tabs[projectID] = .threads
-            app.destination = .project(projectID)
-        case .note(let id, let projectID):
-            guard let projectID else { return }
-            app.selectedNote = id
-            app.tabs[projectID] = .notes
-            app.destination = .project(projectID)
-        case .decision(let id, let projectID):
-            guard let projectID else { return }
-            app.selectedDecision = id
-            app.tabs[projectID] = .decisions
-            app.destination = .project(projectID)
+        case .thread(let id, _):
+            if let thread = threads.first(where: { $0.id == id }) {
+                app.open(thread)
+            }
+        case .note(let id, _):
+            if let note = notes.first(where: { $0.id == id }) {
+                app.open(note)
+            }
+        case .decision(let id, _):
+            if let decision = decisions.first(where: { $0.id == id }) {
+                app.open(decision)
+            }
         }
     }
 

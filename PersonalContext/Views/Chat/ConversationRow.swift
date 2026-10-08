@@ -4,6 +4,7 @@ import SwiftUI
 struct ConversationRow: View {
     @Bindable var conversation: Conversation
     var isSelected: Bool
+    var isMarkedForDeletion = false
     var onSelect: () -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
@@ -11,7 +12,12 @@ struct ConversationRow: View {
 
     var body: some View {
         Button(action: onSelect) {
-            SidebarRow(title: conversation.title, systemImage: "bubble.left", isSelected: isSelected)
+            SidebarRow(
+                title: conversation.title,
+                systemImage: "bubble.left",
+                isSelected: isSelected,
+                isMarkedForDeletion: isMarkedForDeletion
+            )
                 .help(subtitle)
         }
         .buttonStyle(.plain)
@@ -35,6 +41,13 @@ struct ConversationRow: View {
                 }
             }
             Divider()
+            if isMarkedForDeletion {
+                Button {
+                    keepMark()
+                } label: {
+                    Label("Keep", systemImage: "arrow.uturn.backward")
+                }
+            }
             Button(role: .destructive) {
                 confirmDelete = true
             } label: {
@@ -43,13 +56,25 @@ struct ConversationRow: View {
         }
         .alert("Delete this conversation?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) {
+                let project = conversation.project
+                if app.selectedConversation == conversation.id { app.selectedConversation = nil }
+                DeletionMarks.remove(targetingIDs: [conversation.id], in: context)
                 context.delete(conversation)
+                project?.touch()
                 try? context.save()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("It’s removed from this Mac. Decisions, notes, and tracks from it stay.")
         }
+    }
+
+    private func keepMark() {
+        guard let project = conversation.project,
+              let mark = DeletionMarks.existing(for: conversation.id, in: project) else { return }
+        DeletionMarks.keep(mark, in: context)
+        project.touch()
+        try? context.save()
     }
 
     private var subtitle: String {

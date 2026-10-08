@@ -1,5 +1,6 @@
 import AIChatCore
 import AIChatUI
+import SwiftData
 import SwiftUI
 
 /// Renders the entries from one chat session without owning send or persistence behavior.
@@ -81,19 +82,19 @@ private struct ChatMessageList: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
-                    ForEach(Array(session.entries.enumerated()), id: \.element.id) { index, entry in
-                        Group {
-                            if !hideCurrentTurn(entry, index: index) {
-                                row(entry)
-                                    .id(entry.id)
-                            }
-                            if index == lastUserIndex, showTurn {
-                                turnRows.id(turnSlotID)
-                            }
-                        }
+                    ForEach(visibleEntries, id: \.id) { entry in
+                        HistoryRow(
+                            entry: entry,
+                            stored: storedAnswer(for: entry),
+                            showWork: !showTurn,
+                            onToggleKnowledge: { session.toggleKnowledgeRetrieval(id: $0) }
+                        )
+                        .equatable()
+                        .id(entry.id)
                     }
-                    if lastUserIndex == nil, showTurn {
-                        turnRows.id(turnSlotID)
+                    if showTurn {
+                        turnRows
+                            .id(turnSlotID)
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
@@ -104,12 +105,17 @@ private struct ChatMessageList: View {
             }
             .scrollContentBackground(.hidden)
             .defaultScrollAnchor(.bottom, for: .initialOffset)
-            .defaultScrollAnchor(followBottom ? .bottom : nil, for: .sizeChanges)
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                let visible = geometry.contentOffset.y + geometry.containerSize.height
-                return visible >= geometry.contentSize.height - 56
-            } action: { _, nearBottom in
-                followBottom = nearBottom
+            .defaultScrollAnchor(followBottom && session.isGenerating ? .bottom : nil, for: .sizeChanges)
+            .onScrollGeometryChange(for: ScrollPin.self) { geometry in
+                ScrollPin(
+                    offset: geometry.contentOffset.y,
+                    height: geometry.contentSize.height,
+                    nearBottom: geometry.contentOffset.y + geometry.containerSize.height
+                        >= geometry.contentSize.height - 56
+                )
+            } action: { old, new in
+                guard abs(new.height - old.height) < 1 else { return }
+                followBottom = new.nearBottom
             }
             .onChange(of: session.entries.count) { _, _ in
                 pinToBottom(proxy, animated: !session.isGenerating)
@@ -136,6 +142,12 @@ private struct ChatMessageList: View {
             return "turn"
         }
         return "turn-\(user.id.uuidString)"
+    }
+
+    private var visibleEntries: [ChatSession.Entry] {
+        session.entries.enumerated().compactMap { index, entry in
+            hideCurrentTurn(entry, index: index) ? nil : entry
+        }
     }
 
     private var lastUserIndex: Int? {
@@ -211,7 +223,7 @@ private struct ChatMessageList: View {
                     )
                     .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
                 case .tool(let tool):
-                    ChatToolRow(tool: tool)
+                    ChatToolRow(tool: tool, sources: sources)
                 }
             }
             if !session.isGenerating, !liveTurnText.isEmpty {
@@ -242,8 +254,32 @@ private struct ChatMessageList: View {
         app.present(.save(kind))
     }
 
-    @ViewBuilder
-    private func row(_ entry: ChatSession.Entry) -> some View {
+    private func storedAnswer(for entry: ChatSession.Entry) -> ChatTranscript.Unpacked? {
+        if case .aiMessage(let message) = entry { return answers[message.id] }
+        return nil
+    }
+}
+
+private struct ScrollPin: Equatable {
+    var offset: CGFloat
+    var height: CGFloat
+    var nearBottom: Bool
+}
+
+private struct HistoryRow: View, Equatable {
+    var entry: ChatSession.Entry
+    var stored: ChatTranscript.Unpacked?
+    var showWork: Bool
+    var onToggleKnowledge: (UUID) -> Void
+    @Environment(\.chatMessageLayout) private var layout
+
+    static func == (lhs: HistoryRow, rhs: HistoryRow) -> Bool {
+        lhs.showWork == rhs.showWork
+            && lhs.stored == rhs.stored
+            && sameEntry(lhs.entry, rhs.entry)
+    }
+
+    var body: some View {
         switch entry {
         case .userMessage(let message):
             UserMessageBubble(message: message)
@@ -251,7 +287,7 @@ private struct ChatMessageList: View {
             if message.text.isEmpty, message.isStreaming {
                 EmptyView()
             } else {
-                AssistantMessageBlock(message: message, stored: answers[message.id], showWork: !showTurn)
+                AssistantMessageBlock(message: message, stored: stored, showWork: showWork)
             }
         case .reasoning:
             EmptyView()
@@ -259,7 +295,7 @@ private struct ChatMessageList: View {
             EmptyView()
         case .knowledgeRetrieval(let knowledge):
             Button {
-                session.toggleKnowledgeRetrieval(id: knowledge.id)
+                onToggleKnowledge(knowledge.id)
             } label: {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(knowledge.query.isEmpty ? "Retrieved context" : knowledge.query)
@@ -287,12 +323,38 @@ private struct ChatMessageList: View {
     }
 }
 
+private func sameEntry(_ left: ChatSession.Entry, _ right: ChatSession.Entry) -> Bool {
+    switch (left, right) {
+    case (.userMessage(let left), .userMessage(let right)):
+        left.id == right.id
+            && left.text == right.text
+            && left.isCancelled == right.isCancelled
+            && left.isFailed == right.isFailed
+    case (.aiMessage(let left), .aiMessage(let right)):
+        left.id == right.id && left.text == right.text && left.isStreaming == right.isStreaming
+    case (.knowledgeRetrieval(let left), .knowledgeRetrieval(let right)):
+        left.id == right.id
+            && left.query == right.query
+            && left.body == right.body
+            && left.isExpanded == right.isExpanded
+    case (.activity(let left), .activity(let right)):
+        left.id == right.id && left.text == right.text && left.isError == right.isError
+    case (.reasoning(let left), .reasoning(let right)):
+        left.id == right.id
+    case (.toolCall(let left), .toolCall(let right)):
+        left.id == right.id
+    default:
+        false
+    }
+}
+
 private struct WorkAccordion: View {
     var isGenerating: Bool
     var waitState: ChatWaitState
     var seconds: Int
     var thinking: String
     var tools: [ChatToolActivity]
+    var sources: [ChatSource] = []
     var liveTitle: String?
     @State private var opened: Bool?
 
@@ -336,7 +398,7 @@ private struct WorkAccordion: View {
                             .foregroundStyle(.secondary)
                     }
                     ForEach(tools) { tool in
-                        ChatToolRow(tool: tool)
+                        ChatToolRow(tool: tool, sources: sources)
                     }
                 }
             }
@@ -359,8 +421,34 @@ private struct WorkAccordion: View {
 
 private struct ChatToolRow: View {
     var tool: ChatToolActivity
+    var sources: [ChatSource] = []
+    @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var modelContext
+    @State private var hovering = false
 
     var body: some View {
+        if let destination {
+            Button(action: open) {
+                row
+            }
+            .buttonStyle(.plain)
+            .pointerStyle(.link)
+            .onHover { hovering = $0 }
+            .accessibilityHint("Opens this \(destination.kindLabel)")
+        } else {
+            row
+        }
+    }
+
+    private func open() {
+        tool.destination(from: sources)?.open(app: app, context: modelContext)
+    }
+
+    private var destination: ChatSource? {
+        tool.destination(from: sources)
+    }
+
+    private var row: some View {
         HStack(alignment: .top, spacing: 8) {
             ChatToolMark(symbol: tool.symbol)
             VStack(alignment: .leading, spacing: 2) {
@@ -376,11 +464,13 @@ private struct ChatToolRow: View {
                 if !tool.detail.isEmpty {
                     Text(tool.detail)
                         .font(CraftFont.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(destination == nil ? .tertiary : hovering ? .primary : .secondary)
+                        .underline(destination != nil && hovering)
                         .lineLimit(2)
                 }
             }
         }
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(tool.detail.isEmpty ? tool.title : "\(tool.title). \(tool.detail)")
     }
@@ -420,7 +510,6 @@ private struct UserMessageBubble: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(CraftColor.hairline)
                 )
-                .frame(maxWidth: layout.userMaxWidth, alignment: .trailing)
                 .opacity(message.isCancelled || message.isFailed ? 0.55 : 1)
             if message.isCancelled || message.isFailed {
                 Text(message.isCancelled ? "Cancelled" : "Not answered")
@@ -435,6 +524,7 @@ private struct UserMessageBubble: View {
                 }
             }
         }
+        .frame(maxWidth: layout.userMaxWidth, alignment: .trailing)
         .frame(maxWidth: .infinity, alignment: .trailing)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityLabel)
@@ -472,6 +562,7 @@ private struct AssistantMessageBlock: View {
                         seconds: work.seconds,
                         thinking: work.thinking,
                         tools: work.tools,
+                        sources: answer.sources,
                         liveTitle: nil
                     )
                 }

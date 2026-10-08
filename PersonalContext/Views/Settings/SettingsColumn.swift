@@ -8,11 +8,15 @@ struct SettingsColumn: View {
             PageBody {
                 VStack(alignment: .leading, spacing: 1) {
                     section("Account", first: true)
+                    row(.chatgpt)
                     row(.cursor)
+                    section("Sources")
+                    row(.sources)
                     section("Workspace")
                     row(.calendar)
                     row(.tags)
                     row(.appearance)
+                    row(.model)
                     section("Chat")
                     row(.orb)
                     section("Advanced")
@@ -43,6 +47,7 @@ struct SettingsColumn: View {
             SidebarRow(
                 title: section.title,
                 systemImage: section.symbol,
+                mark: section.mark,
                 isSelected: app.settingsSection == section
             )
         }

@@ -35,8 +35,9 @@ The complete interface for one existing conversation.
 
 It gets that conversation's `ChatRuntime`, then places:
 
-1. `ChatMessages`
-2. `ChatInput`
+1. `ChatTitleBar` when the chat is a project conversation in the regular layout
+2. `ChatMessages`
+3. `ChatInput`
 
 It also connects the input to that runtime's send, stop, model, error, and change state.
 

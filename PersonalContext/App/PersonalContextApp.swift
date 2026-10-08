@@ -11,6 +11,7 @@ struct SlateApp: App {
                 .environment(app)
                 .preferredColorScheme(app.appearance.colorScheme)
                 .modelContainer(app.container)
+                .textSelection(.enabled)
                 .onAppear { FocusDismissal.install() }
         }
         .defaultSize(width: 1180, height: 760)
@@ -22,6 +23,43 @@ struct SlateApp: App {
                     app.present(.newProject)
                 }
                 .keyboardShortcut("n")
+                Button("New Chat") {
+                    app.openNewChatTab()
+                }
+                .keyboardShortcut("t")
+            }
+            CommandMenu("Tabs") {
+                Button("Close Tab") {
+                    app.closeSelectedTab()
+                }
+                .keyboardShortcut("w")
+                Button("Show Next Tab") {
+                    app.selectAdjacentTab(1)
+                }
+                .keyboardShortcut("]", modifiers: [.command, .shift])
+                Button("Show Next Tab") {
+                    app.selectAdjacentTab(1)
+                }
+                .keyboardShortcut(.tab, modifiers: .control)
+                Button("Show Previous Tab") {
+                    app.selectAdjacentTab(-1)
+                }
+                .keyboardShortcut("[", modifiers: [.command, .shift])
+                Button("Show Previous Tab") {
+                    app.selectAdjacentTab(-1)
+                }
+                .keyboardShortcut(.tab, modifiers: [.control, .shift])
+                Divider()
+                ForEach(0..<8, id: \.self) { index in
+                    Button("Tab \(index + 1)") {
+                        app.selectTab(at: index)
+                    }
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")))
+                }
+                Button("Last Tab") {
+                    app.selectLastTab()
+                }
+                .keyboardShortcut("9")
             }
             CommandGroup(after: .sidebar) {
                 Button(app.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar") {
@@ -42,8 +80,12 @@ struct SlateApp: App {
                 .environment(\.modalHost, .settings)
                 .overlay {
                     SlateModalPresenter(modal: app.modal(in: .settings), onDismiss: app.dismissModal) { modal in
-                        if case .connectCursor = modal {
-                            ConnectCursorSheet()
+                        switch modal {
+                        case .connectCursor: ConnectCursorSheet()
+                        case .connectChatGPT: ConnectChatGPTSheet()
+                        case .connectGitHub: ConnectGitHubSheet()
+                        case .connectGitLab: ConnectGitLabSheet()
+                        default: EmptyView()
                         }
                     }
                     .environment(app)

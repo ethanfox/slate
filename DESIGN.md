@@ -89,6 +89,7 @@ One row. It names the page and holds the actions for that page. When more than o
   - Current tab: `CraftColor.selection` fill, radius 8, semibold, primary. Idle: no fill, regular, secondary. Not a bordered capsule. Not glass. Not Craft’s tab strip.
   - Close is an × on the tab. Always visible while the strip is showing. Do not animate the tab when the × is hovered or pressed.
   - Overflow scrolls horizontally. No visible scroller. Keep the current tab in view.
+  - Hovering a tab shows a small elevated pane with the full title, and the project (icon + name) underneath when the tab belongs to one. Not the system tooltip.
   - Trailing page actions stay pinned. The leftover gap after the tabs is the window-drag region. A scroll view must not eat drag-to-move for the whole bar.
 - Trailing: at most one primary button, then view switches (grid, list) if the page has them.
 - Primary button is a glass capsule (`.glassEffect(.regular, in: Capsule())`), label 13, padding 10 / 6. A circled plus drawn with a hairline stroke is not a button.
@@ -97,7 +98,7 @@ One row. It names the page and holds the actions for that page. When more than o
 
 The toolbar scrolls away only if the page is a long document and the title is already in the document. Settings, lists, and home keep the toolbar fixed.
 
-A tab is one main-column view. Sidebar and other clicks navigate the current tab. Chat object links open in a new tab (setting, default on). ⌘T is a new chat. Same view already open: switch to it. Last tab closed: Home. A generating chat shows a spinner on its tab. Tabs restore on launch and can be dragged. Sidebar follows the current tab. Spec: `features/window-tabs.md`.
+A tab is one main-column view. Sidebar and other clicks navigate the current tab. A project in the main sidebar always opens that project’s overview — it does not switch to a chat or other inner view already open for that project. Chat object links open in a new tab (setting, default on). ⌘T is a new chat. Same view already open: switch to it. Last tab closed: Home. A generating chat shows a spinner on its tab. Tabs restore on launch and can be dragged. Sidebar follows the current tab. Spec: `features/window-tabs.md`.
 
 ## Content
 
@@ -158,6 +159,8 @@ The page is the document. No panel around the text.
 Shared chat component responsibilities and usage are documented in [`features/chat-components.md`](features/chat-components.md).
 
 - Body 15, line height about 1.45. Titles in the document follow the toolbar title. Do not add a second 24pt bold title in the middle of the page.
+- **Project chat title (locked).** The project chat page pins a 52pt title bar at the top of the solid page: the conversation title in `CraftFont.title`, 32 inset, canvas fill, hairline below. It does not scroll with the transcript. Empty title or a new chat reads “New chat”. Ask Slate (compact) does not get this bar. This is page chrome, not a second window toolbar.
+- **Deletion banner (locked).** When a note, track, decision, or project chat is marked for deletion, pin a banner at the top of that page (under the chat title if one is showing). It does not scroll with the document. Collapsed: `xmark.octagon` in red, “Marked for deletion”, Keep, Delete, chevron. Height 52, 32 inset, canvas fill, hairline below. Expanded: the reason, then an optional replacement card. Keep clears the mark. Delete uses the existing confirmation and actually deletes. Do not put this in the window toolbar. Ask Slate (compact) does not get this banner. Spec in [`features/mark-for-deletion.md`](features/mark-for-deletion.md).
 - Composer is a solid field on the solid page: 12 corner radius, 12 padding, hairline border at the content color’s hairline token. It sticks to the bottom of the column, inset 32, with 14 of padding around it. A hairline may separate it from the transcript because it is pinned chrome on the page, not a section break.
 - Chat bubbles, if any, are flat fills using the elevated solid for the assistant and the selection solid for the user. No tails, no shadows, no gradient.
 
@@ -180,6 +183,7 @@ Threads, notes, and decisions are a source list on the solid page, not a second 
 - **Collapse (locked).** An icon-only `sidebar.leading` control sits on the Overview row. It does not hide the column the way the main sidebar does. Collapsed width is 52: Overview plus section icons (Chats, Tracks, Notes, Decisions) stay visible. Hovering the rail slides the full 250 column in from the leading edge, over the document. Leaving slides it back out the same way, a little quicker (open 0.22 easeOut, close 0.14 easeOut). The page does not reflow on hover. Clicking the control is the only action that pins the column open or closed and shifts the layout. Reduce Motion: opacity only, no slide.
 - **Sections.** Chats, Tracks, Notes, and Decisions are collapsible. The section label is the control; the plus stays for create.
 - **Tracks.** Subtracks indent 28 per level. Completed children of a track sit in a Completed group under that track, collapsed by default, and use `checkmark.circle` instead of the kind icon.
+- **Marked for deletion.** A marked chat, track, note, or decision swaps its leading icon for `xmark.octagon` in red. The title stays primary. This is a status exception, not a decorative color.
 
 ## Hero views
 
@@ -251,6 +255,8 @@ Data color is color that carries information the user already assigned elsewhere
 - Text on a tinted fill stays primary / secondary. Do not color text with the tint.
 - Nothing else in the app gets decorative color.
 
+One status exception: a deletion mark uses system red on `xmark.octagon` in the project column and on the deletion banner. Do not paint the title or the row red.
+
 Appearance is System, Light, or Dark. Accent is System (the Mac’s control accent) or one of the standard Apple accents, set in Settings → Appearance. The accent drives the primary action, keyboard focus, the hero dot, today’s number, and the calendar now-line.
 
 ## Controls
@@ -271,9 +277,10 @@ Hit targets are at least 28 on a side. Sidebar rows already are. Icon-only toolb
 Every object that can be edited has the same menu, in the same order, everywhere it appears (sidebar, project column, projects grid, projects list).
 
 1. `Edit…` (`pencil`): opens the Edit modal for that object.
-2. Object actions, in this order when present: Pin / Unpin (`pin` / `pin.slash`), New Sub-track (`plus`), Archive / Unarchive (`archivebox`), Copy Agent ID (`doc.on.doc`).
+2. Object actions, in this order when present: Open in New Tab (`plus.square.on.square`), Pin / Unpin (`pin` / `pin.slash`), New Sub-track (`plus`), Archive / Unarchive (`archivebox`), Copy Agent ID (`doc.on.doc`).
 3. `Divider()`
-4. `Delete` (`trash`), destructive role, followed by a confirmation alert.
+4. `Keep` (`arrow.uturn.backward`) when the object is marked for deletion. Clears the mark.
+5. `Delete` (`trash`), destructive role, followed by a confirmation alert.
 
 Rules:
 

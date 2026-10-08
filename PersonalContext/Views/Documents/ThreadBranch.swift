@@ -7,8 +7,10 @@ struct ThreadBranch: View {
     var selectedID: UUID?
     @Binding var collapsed: Set<UUID>
     @Binding var expandedCompleted: Set<UUID>
+    var markedIDs: Set<UUID>
     var onSelect: (UUID) -> Void
     var onCreateChild: (ProjectThread) -> Void
+    var onKeep: (ProjectThread) -> Void
     var onDelete: (ProjectThread) -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.appearsActive) private var appearsActive
@@ -43,8 +45,10 @@ struct ThreadBranch: View {
                         selectedID: selectedID,
                         collapsed: $collapsed,
                         expandedCompleted: $expandedCompleted,
+                        markedIDs: markedIDs,
                         onSelect: onSelect,
                         onCreateChild: onCreateChild,
+                        onKeep: onKeep,
                         onDelete: onDelete
                     )
                 }
@@ -63,8 +67,10 @@ struct ThreadBranch: View {
                                 selectedID: selectedID,
                                 collapsed: $collapsed,
                                 expandedCompleted: $expandedCompleted,
+                                markedIDs: markedIDs,
                                 onSelect: onSelect,
                                 onCreateChild: onCreateChild,
+                                onKeep: onKeep,
                                 onDelete: onDelete
                             )
                         }
@@ -76,8 +82,11 @@ struct ThreadBranch: View {
 
     private var isSelected: Bool { selectedID == thread.id }
 
+    private var isMarked: Bool { markedIDs.contains(thread.id) }
+
     private var rowSymbol: String {
-        thread.status == .completed ? ThreadStatus.completed.symbol : thread.kind.symbol
+        if isMarked { return "xmark.octagon" }
+        return thread.status == .completed ? ThreadStatus.completed.symbol : thread.kind.symbol
     }
 
     private var row: some View {
@@ -89,7 +98,7 @@ struct ThreadBranch: View {
                 HStack(spacing: 4) {
                     Image(systemName: rowSymbol)
                         .font(CraftFont.sidebarIcon)
-                        .foregroundStyle(iconColor)
+                        .foregroundStyle(isMarked ? AnyShapeStyle(.red) : iconColor)
                         .frame(width: 18)
                     Text(thread.title.isEmpty ? "Untitled" : thread.title)
                         .font(CraftFont.sidebar)
@@ -109,6 +118,7 @@ struct ThreadBranch: View {
             }
             .buttonStyle(.plain)
             .onHover { hovering = $0 }
+            .accessibilityValue(isMarked ? "Marked for deletion" : "")
             .contextMenu {
                 Button {
                     app.present(.editThread(thread))
@@ -121,6 +131,13 @@ struct ThreadBranch: View {
                     Label("New Sub-track", systemImage: "plus")
                 }
                 Divider()
+                if isMarked {
+                    Button {
+                        onKeep(thread)
+                    } label: {
+                        Label("Keep", systemImage: "arrow.uturn.backward")
+                    }
+                }
                 Button(role: .destructive) {
                     onDelete(thread)
                 } label: {

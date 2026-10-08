@@ -1,4 +1,5 @@
 import AIChatUI
+import SwiftData
 import SwiftUI
 
 /// Connects one persisted conversation to its runtime, messages, and shared input.
@@ -7,12 +8,75 @@ struct ConversationChat: View {
     var project: Project?
     var compact = false
     @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
+    @State private var confirmDelete = false
+
+    private var hostProject: Project? { project ?? conversation.project }
+
+    private var deletionMark: DeletionMark? {
+        guard let hostProject else { return nil }
+        return DeletionMarks.existing(for: conversation.id, in: hostProject)
+    }
 
     var body: some View {
-        ConversationSessionView(
-            runtime: app.chatRuntime(for: conversation, project: project),
-            compact: compact
-        )
+        VStack(spacing: 0) {
+            if project != nil, !compact {
+                ChatTitleBar(title: conversation.title)
+            }
+            if !compact, let mark = deletionMark {
+                DeletionBanner(mark: mark, onKeep: keepMark, onDelete: { confirmDelete = true })
+            }
+            ConversationSessionView(
+                runtime: app.chatRuntime(for: conversation, project: project),
+                compact: compact
+            )
+        }
+        .alert("Delete this conversation?", isPresented: $confirmDelete) {
+            Button("Delete", role: .destructive, action: deleteMarked)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("It’s removed from this Mac. Decisions, notes, and tracks from it stay.")
+        }
+    }
+
+    private func keepMark() {
+        guard let mark = deletionMark else { return }
+        DeletionMarks.keep(mark, in: context)
+        hostProject?.touch()
+        try? context.save()
+    }
+
+    private func deleteMarked() {
+        let project = hostProject
+        if app.selectedConversation == conversation.id { app.selectedConversation = nil }
+        DeletionMarks.remove(targetingIDs: [conversation.id], in: context)
+        context.delete(conversation)
+        project?.touch()
+        try? context.save()
+    }
+}
+
+struct ChatTitleBar: View {
+    var title: String
+
+    private var displayTitle: String {
+        title.isEmpty ? "New chat" : title
+    }
+
+    var body: some View {
+        Text(displayTitle)
+            .font(CraftFont.title)
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 32)
+            .frame(height: 52)
+            .background(CraftColor.canvas)
+            .overlay(alignment: .bottom) {
+                Hairline()
+            }
+            .accessibilityAddTraits(.isHeader)
     }
 }
 

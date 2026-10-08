@@ -43,6 +43,10 @@ struct EditProjectModal: View {
                     .lineLimit(3...6)
             }
 
+            ModalField("Code", boxed: false) {
+                ProjectCodeSection(project: project)
+            }
+
             ModalControlRow("Status") {
                 Picker("Status", selection: $status) {
                     ForEach(ProjectStatus.allCases) { item in

@@ -11,9 +11,12 @@ struct ConnectCursorSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Connect to Cursor")
-                .font(CraftFont.title)
-            Text("Create an API key in the Cursor dashboard, then paste it here. It’s stored in your keychain.")
+            HStack(spacing: 8) {
+                BrandMarkImage(mark: .cursor, size: 16)
+                Text("Connect to Cursor")
+                    .font(CraftFont.title)
+            }
+            Text("Create an API key in the Cursor dashboard, then paste it here. It spends your Cursor plan. It is not GitHub. ChatGPT never sees this key. Stored in the keychain on this Mac.")
                 .font(CraftFont.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

@@ -1,7 +1,7 @@
 import Foundation
 
 enum ContextBuilder {
-    static func package(for project: Project, focusedThread: ProjectThread? = nil) -> String {
+    static func identity(for project: Project) -> String {
         var lines: [String] = []
         lines.append("Project: \(project.name) (id \(project.id.uuidString))")
         lines.append("Status: \(project.status.label)")
@@ -11,6 +11,11 @@ enum ContextBuilder {
         if !project.currentDirection.isEmpty {
             lines.append("Current direction: \(clip(project.currentDirection, 900))")
         }
+        return lines.joined(separator: "\n")
+    }
+
+    static func package(for project: Project) -> String {
+        var lines: [String] = [identity(for: project)]
 
         let active = project.decisions
             .filter { $0.status == .active }
@@ -64,16 +69,15 @@ enum ContextBuilder {
             }
         }
 
-        if let thread = focusedThread {
+        let marks = project.deletionMarks.sorted { $0.createdAt > $1.createdAt }
+        if !marks.isEmpty {
             lines.append("")
-            lines.append("Focused track (this side chat is on this track):")
-            lines.append("- [\(thread.kind.label)] \(thread.title.isEmpty ? "Untitled" : thread.title) (\(thread.status.label), id \(thread.id.uuidString))")
-            if !thread.summary.isEmpty {
-                lines.append("  Summary: \(clip(thread.summary, 600))")
-            }
-            if !thread.body.isEmpty {
-                lines.append("  Body:")
-                lines.append(Self.bodyExcerpt(thread.body))
+            lines.append("Marked for deletion (waiting for the user to Keep or Delete). You cannot delete. Do not mark the same record again unless the reason changed:")
+            for mark in marks.prefix(20) {
+                lines.append("- \(mark.targetKind.label) \(mark.targetID.uuidString): \(clip(mark.reason, 280))")
+                if let kind = mark.replacementKind, let id = mark.replacementID {
+                    lines.append("  Replacement: \(kind.label) \(id.uuidString)")
+                }
             }
         }
 
@@ -86,18 +90,20 @@ enum ContextBuilder {
             parts.append("""
             You are the assistant inside Slate, the user's knowledge base for their projects. You have the Slate MCP tools, which read and change that knowledge base.
 
-            When the user tells you something that should last (a fact, a decision, a change of direction, a new line of work), save it yourself with those tools right away, then say in one short line what you saved. Never ask the user to save anything. Update an existing decision, track, note, or project when it covers the same thing instead of adding a duplicate. When a new decision replaces an old one, pass supersedes_id. Use the ids shown in the project context.
+            When the user tells you something that should last (a fact, a decision, a change of direction, a new line of work), save it yourself with those tools right away, then say in one short line what you saved. Never ask the user to save anything. Update an existing decision, track, note, or project when it covers the same thing instead of adding a duplicate. When a new decision replaces an old one, pass supersedes_id. Use the ids from the tools.
 
-            Treat the project context as the source of truth and weight active decisions above tracks and notes. Do not invent project facts. Do not create or edit files unless the user explicitly asks.
+            You cannot delete records. If something should go away, call mark_for_deletion with a required reason. Optionally pass replacement_type and replacement_id when another record replaces it. The user decides Keep or Delete. Archive is only for chats the user hides, not a substitute for delete.
 
-            When you point the user at a note, track, decision, or other Slate record, put a markdown link on its own line using the id from the tools or project context: [Title](slate://note/UUID), slate://thread/UUID, slate://decision/UUID, slate://project/UUID, or slate://conversation/UUID. The app turns that into a card they can open. Do not paste raw ids. Do not invent ids.
+            Look up decisions, tracks, and notes with the tools. Treat those records as the source of truth and weight active decisions above tracks and notes. Do not invent project facts. Do not create or edit files unless the user explicitly asks.
+
+            When you point the user at a note, track, decision, or other Slate record, put a markdown link on its own line using the id from the tools: [Title](slate://note/UUID), slate://thread/UUID, slate://decision/UUID, slate://project/UUID, or slate://conversation/UUID. The app turns that into a card they can open. Do not paste raw ids. Do not invent ids.
             """)
-        }
-        if let thread = focusedThread {
-            let title = thread.title.isEmpty ? "Untitled" : thread.title
-            parts.append("""
-            You are in the side chat on track "\(title)" (id \(thread.id.uuidString)). When the user asks you to write, draft, rewrite, or add to this track, call update_thread on that id immediately (body or append_to_body). Answer questions and look up other project records with the tools. Do not create a new track for work that belongs here.
-            """)
+            if let thread = focusedThread {
+                let title = thread.title.isEmpty ? "Untitled" : thread.title
+                parts.append("""
+                You are in the side chat on track "\(title)" (id \(thread.id.uuidString)). When the user asks you to write, draft, rewrite, or add to this track, call update_thread on that id immediately (body or append_to_body). Answer questions and look up other project records with the tools. Do not create a new track for work that belongs here.
+                """)
+            }
         }
         if !context.isEmpty {
             parts.append("""
@@ -108,11 +114,6 @@ enum ContextBuilder {
         }
         parts.append(userText)
         return parts.joined(separator: "\n\n")
-    }
-
-    private static func bodyExcerpt(_ text: String) -> String {
-        guard text.count > 6000 else { return text }
-        return String(text.prefix(6000)) + "…"
     }
 
     private static func depth(of thread: ProjectThread) -> Int {

@@ -14,8 +14,9 @@ This is not native window tabbing, not a second bar, and not Craft’s tab strip
 - Close is an × on the tab, always visible while the strip is showing. No motion on hover or press.
 - Overflow scrolls horizontally. No visible scroller. Current tab stays in view.
 - Trailing page actions stay pinned. Empty space after the tabs still drags the window.
-- Drag a tab to reorder.
+- Drag a tab to reorder. Other tabs slide into the new order while the drag is still down.
 - A tab whose chat is generating shows a spinner.
+- Hovering a tab shows a small elevated pane: the full title, and if the tab belongs to a project, that project’s icon and name underneath. Not the system tooltip.
 
 ## What a tab is
 
@@ -29,11 +30,15 @@ The main sidebar follows the current tab. A tab on Slate highlights Slate. Switc
 
 ## How a tab opens
 
-Sidebar, project column, Home recents, and other in-app clicks navigate the current tab. They do not add a tab. If that view is already open in another tab, switch to it.
+A click in the main sidebar changes the current tab. ⌘-click or **Open in New Tab** in the row’s context menu opens a new tab. If that view is already a tab, switch to it.
+
+A project in the main sidebar is the overview. Click it and the current tab goes to that overview. **Open in New Tab** opens the overview. A chat, note, track, or decision already open for that project is a different tab and stays put.
+
+Project column, Home recents, and other in-app clicks navigate the current tab.
 
 Chat links to notes and other objects open in a new tab. Setting, default on. Turn it off and those links behave like the clicks above.
 
-⌘T opens a new chat (new conversation in the current project, or Quick Ask if there is no project). That is always a new view.
+⌘T opens a generic chat (Quick Ask). It does not belong to the current project.
 
 Closing a tab selects the neighbor to the right, else the one to the left. Closing the last tab goes to Home. Home is then the single page, so the strip goes away.
 

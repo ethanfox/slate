@@ -135,17 +135,18 @@ struct RootView: View {
                     .glassEffect(.regular, in: Circle())
                     .help(sidebarHidden ? "Show Sidebar" : "Hide Sidebar")
                     .accessibilityLabel(sidebarHidden ? "Show Sidebar" : "Hide Sidebar")
-                    Image(systemName: pageSymbol)
-                        .font(CraftFont.titleIcon)
-                        .frame(width: 22, height: 22)
-                    Text(pageTitle)
-                        .font(CraftFont.title)
-                    Spacer()
+                    WindowTabStrip()
+                    Color.clear
+                        .frame(minWidth: 16)
+                        .frame(maxWidth: app.windowTabs.count < 2 ? .infinity : 24)
+                        .contentShape(Rectangle())
+                        .gesture(WindowDragGesture())
                     paneAction
                 }
                 .padding(.leading, sidebarHidden ? 78 : 16)
                 .padding(.trailing, 16)
                 .frame(height: 52)
+                .zIndex(1)
                 .background {
                     Color.clear
                         .contentShape(Rectangle())
@@ -221,8 +222,11 @@ struct RootView: View {
                     GlassEffectContainer {
                         Text(toast)
                             .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .textSelection(.enabled)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
+                            .compositingGroup()
                             .glassEffect(.regular, in: Capsule())
                     }
                     .padding(.bottom, 18)
@@ -301,9 +305,8 @@ struct RootView: View {
             .accessibilityLabel(app.inspectorOpen ? "Hide Inspector" : "Show Inspector")
         } else if openProject != nil {
             Button {
-                app.selectedConversation = nil
                 if let project = openProject {
-                    app.tabs[project.id] = .chat
+                    app.showNewChat(in: project)
                 }
             } label: {
                 Label("New Chat", systemImage: "square.and.pencil")
@@ -315,46 +318,6 @@ struct RootView: View {
             .glassEffect(.regular, in: Capsule())
             .help("New Chat")
         }
-    }
-
-    private var pageTitle: String {
-        switch app.destination {
-        case .home: "Home"
-        case .projects: "Projects"
-        case .tasks: "Tasks"
-        case .calendar: "Calendar"
-        case .chats: "Chats"
-        case .settings: "Settings"
-        case .project(let id):
-            projectTitle(id)
-        case .quickAsk:
-            "Quick Ask"
-        }
-    }
-
-    private var pageSymbol: String {
-        switch app.destination {
-        case .home: "house"
-        case .projects: "square.stack"
-        case .tasks: "checklist"
-        case .calendar: "calendar"
-        case .chats: "bubble.left.and.bubble.right"
-        case .settings: "gearshape"
-        case .project(let id):
-            projectSymbol(id)
-        case .quickAsk:
-            "bubble.left"
-        }
-    }
-
-    private func projectSymbol(_ id: UUID) -> String {
-        let symbol = projects.first { $0.id == id }?.symbol ?? ""
-        return symbol.isEmpty ? "folder" : symbol
-    }
-
-    private func projectTitle(_ id: UUID) -> String {
-        let name = projects.first { $0.id == id }?.name ?? ""
-        return name.isEmpty ? "Untitled" : name
     }
 
     private var openProject: Project? {
@@ -500,6 +463,12 @@ struct RootView: View {
             }
         case .connectCursor:
             ConnectCursorSheet()
+        case .connectChatGPT:
+            ConnectChatGPTSheet()
+        case .connectGitHub:
+            ConnectGitHubSheet()
+        case .connectGitLab:
+            ConnectGitLabSheet()
         case .editProject(let project):
             EditProjectModal(project: project)
         case .editConversation(let conversation):

@@ -155,6 +155,7 @@ function kindFromTool(name: string): Source["kind"] | undefined {
   if (n.includes("note")) return "note";
   if (n.includes("thread")) return "thread";
   if (n.includes("decision")) return "decision";
+  if (n.includes("project")) return "project";
   return undefined;
 }
 

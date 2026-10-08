@@ -178,6 +178,10 @@ private struct OverviewInspectorSettings: View {
                 label: \.compactLabel,
                 accessibilityName: \.label
             )
+
+            inspectorField("Code") {
+                ProjectCodeSection(project: project)
+            }
         }
         .onChange(of: project.name) { _, _ in project.touch() }
         .onChange(of: project.symbol) { _, _ in project.touch() }

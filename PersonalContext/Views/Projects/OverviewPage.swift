@@ -12,7 +12,7 @@ struct OverviewPage: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             Hairline()
             ChatInput(
-                modelID: Bindable(app).defaultModelID,
+                modelID: Bindable(app).talkModelID,
                 placeholder: "Message \(project.name)",
                 onSend: startChat
             )

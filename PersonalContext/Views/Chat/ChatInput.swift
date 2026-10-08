@@ -94,6 +94,7 @@ struct ChatInput: View {
             if app.hasAPIKey, app.models.isEmpty, app.connection != .checking {
                 app.refreshConnection()
             }
+            app.refreshChatGPTModels()
             app.refreshUsage()
         }
     }

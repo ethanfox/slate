@@ -81,6 +81,13 @@ struct CursorClient: Sendable {
         return try await send(make(path: "/v1/models", method: "GET"), as: Response.self).items
     }
 
+    func repositories() async throws -> [String] {
+        ChatTrace.event("GET /v1/repositories")
+        struct Repository: Decodable { var url: String }
+        struct Response: Decodable { var items: [Repository] }
+        return try await send(make(path: "/v1/repositories", method: "GET"), as: Response.self).items.map(\.url)
+    }
+
     private func make(path: String, method: String) -> URLRequest {
         var request = URLRequest(url: URL(string: "https://api.cursor.com\(path)")!)
         request.httpMethod = method

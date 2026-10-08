@@ -133,7 +133,7 @@ enum Tools {
         },
         Tool(
             name: "get_project",
-            description: "Get one project: its fields, the context summary the app gives agents, and every decision, thread, and note with ids.",
+            description: "Get one project: its fields, a context summary, and every decision, thread, and note with ids.",
             properties: ["project_id": projectID], required: ["project_id"], readOnly: true
         ) { args, context in
             let project = try Lookup.project(try args.uuid("project_id"), in: context)
@@ -142,6 +142,9 @@ enum Tools {
             shape["decisions"] = project.decisions.sorted { $0.createdAt > $1.createdAt }.map(JSONShape.decision)
             shape["threads"] = project.threads.sorted { $0.createdAt < $1.createdAt }.map { JSONShape.thread($0, full: false) }
             shape["notes"] = project.notes.sorted { $0.updatedAt > $1.updatedAt }.map { JSONShape.note($0, full: false) }
+            shape["deletion_marks"] = project.deletionMarks
+                .sorted { $0.createdAt > $1.createdAt }
+                .map(JSONShape.deletionMark)
             return shape
         },
         Tool(
@@ -411,6 +414,45 @@ enum Tools {
             note.updatedAt = .now
             note.project?.touch()
             return JSONShape.note(note, full: true)
+        },
+
+        Tool(
+            name: "mark_for_deletion",
+            description: "Propose deleting a note, track, decision, or chat. Agents cannot delete. The user sees the mark and can Keep or Delete. Reason is required. Optionally link a replacement in the same project. Calling again updates the reason and replacement.",
+            properties: [
+                "target_type": options(DeletionTargetKind.self, "Kind of record to mark."),
+                "target_id": text("Id of the record to mark."),
+                "reason": text("Why this should be deleted."),
+                "replacement_type": options(DeletionTargetKind.self, "Kind of the replacement record."),
+                "replacement_id": text("Id of the record that replaces it. Empty string clears the replacement.")
+            ],
+            required: ["target_type", "target_id", "reason"],
+            readOnly: false
+        ) { args, context in
+            guard let targetKind = try args.choice("target_type", as: DeletionTargetKind.self) else {
+                throw ToolError("target_type is required.")
+            }
+            let targetID = try args.uuid("target_id")
+            let target = try Lookup.markedRecord(targetKind, targetID, in: context)
+            let replacement = try Lookup.replacement(
+                type: try args.choice("replacement_type", as: DeletionTargetKind.self),
+                id: try args.optionalUUID("replacement_id"),
+                targetID: targetID,
+                project: target.project,
+                existing: DeletionMarks.existing(for: targetID, in: target.project),
+                in: context
+            )
+            let mark = DeletionMarks.upsert(
+                targetKind: targetKind,
+                targetID: targetID,
+                reason: try args.required("reason"),
+                project: target.project,
+                replacementKind: replacement.kind,
+                replacementID: replacement.id,
+                in: context
+            )
+            target.project.touch()
+            return JSONShape.deletionMark(mark)
         }
     ]
 }
@@ -442,6 +484,62 @@ enum Lookup {
             throw ToolError("No thread with id \(id.uuidString).")
         }
         return found
+    }
+
+    static func conversation(_ id: UUID, in context: ModelContext) throws -> Conversation {
+        guard let found = try context.fetch(FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == id })).first else {
+            throw ToolError("No chat with id \(id.uuidString).")
+        }
+        return found
+    }
+
+    static func markedRecord(_ kind: DeletionTargetKind, _ id: UUID, in context: ModelContext) throws -> (project: Project, title: String) {
+        switch kind {
+        case .note:
+            let note = try Self.note(id, in: context)
+            guard let project = note.project else { throw ToolError("That note has no project.") }
+            return (project, note.displayTitle)
+        case .thread:
+            let thread = try Self.thread(id, in: context)
+            guard let project = thread.project else { throw ToolError("That track has no project.") }
+            return (project, thread.title.isEmpty ? "Untitled" : thread.title)
+        case .decision:
+            let decision = try Self.decision(id, in: context)
+            guard let project = decision.project else { throw ToolError("That decision has no project.") }
+            return (project, decision.title.isEmpty ? "Untitled" : decision.title)
+        case .conversation:
+            let conversation = try Self.conversation(id, in: context)
+            guard let project = conversation.project else { throw ToolError("That chat has no project.") }
+            return (project, conversation.title.isEmpty ? "Chat" : conversation.title)
+        }
+    }
+
+    /// nil/nil means leave an existing replacement, or none on a new mark. Empty id clears it.
+    static func replacement(
+        type: DeletionTargetKind?,
+        id: UUID??,
+        targetID: UUID,
+        project: Project,
+        existing: DeletionMark?,
+        in context: ModelContext
+    ) throws -> (kind: DeletionTargetKind?, id: UUID?) {
+        if id == nil, type == nil {
+            return (existing?.replacementKind, existing?.replacementID)
+        }
+        if let wrapped = id, wrapped == nil {
+            return (nil, nil)
+        }
+        guard let type, let wrapped = id, let replacementID = wrapped else {
+            throw ToolError("replacement_type and replacement_id must be passed together.")
+        }
+        if replacementID == targetID {
+            throw ToolError("A record can't replace itself.")
+        }
+        let resolved = try markedRecord(type, replacementID, in: context)
+        if resolved.project.id != project.id {
+            throw ToolError("The replacement must be in the same project.")
+        }
+        return (type, replacementID)
     }
 
     /// Resolves an optional thread link within a project. nil means "not given" or "cleared".
@@ -476,7 +574,7 @@ enum JSONShape {
     }
 
     static func decision(_ decision: Decision) -> [String: Any] {
-        [
+        var shape: [String: Any] = [
             "id": decision.id.uuidString,
             "project_id": decision.project?.id.uuidString ?? "",
             "title": decision.title,
@@ -487,6 +585,8 @@ enum JSONShape {
             "thread_id": decision.thread?.id.uuidString ?? "",
             "created_at": iso.string(from: decision.createdAt)
         ]
+        attachMark(&shape, id: decision.id, project: decision.project)
+        return shape
     }
 
     static func thread(_ thread: ProjectThread, full: Bool) -> [String: Any] {
@@ -504,6 +604,7 @@ enum JSONShape {
             shape["body"] = thread.body
             shape["children"] = thread.orderedChildren.map { ["id": $0.id.uuidString, "title": $0.title] }
         }
+        attachMark(&shape, id: thread.id, project: thread.project)
         return shape
     }
 
@@ -521,6 +622,28 @@ enum JSONShape {
         } else {
             shape["preview"] = clip(note.content, 240)
         }
+        attachMark(&shape, id: note.id, project: note.project)
         return shape
+    }
+
+    static func deletionMark(_ mark: DeletionMark) -> [String: Any] {
+        var shape: [String: Any] = [
+            "id": mark.id.uuidString,
+            "target_type": mark.targetKind.rawValue,
+            "target_id": mark.targetID.uuidString,
+            "reason": mark.reason,
+            "created_at": iso.string(from: mark.createdAt)
+        ]
+        if let kind = mark.replacementKind, let id = mark.replacementID {
+            shape["replacement_type"] = kind.rawValue
+            shape["replacement_id"] = id.uuidString
+        }
+        return shape
+    }
+
+    private static func attachMark(_ shape: inout [String: Any], id: UUID, project: Project?) {
+        if let mark = project?.deletionMarks.first(where: { $0.targetID == id }) {
+            shape["deletion_mark"] = deletionMark(mark)
+        }
     }
 }

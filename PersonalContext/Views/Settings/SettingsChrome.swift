@@ -20,17 +20,24 @@ struct SettingsPage<Content: View>: View {
 
 struct SettingsGroup<Content: View>: View {
     var title: String
+    var mark: BrandMark?
     @ViewBuilder var content: () -> Content
 
-    init(_ title: String, @ViewBuilder content: @escaping () -> Content) {
+    init(_ title: String, mark: BrandMark? = nil, @ViewBuilder content: @escaping () -> Content) {
         self.title = title
+        self.mark = mark
         self.content = content
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(CraftFont.section)
+            HStack(spacing: 6) {
+                if let mark {
+                    BrandMarkImage(mark: mark, size: 16)
+                }
+                Text(title)
+                    .font(CraftFont.section)
+            }
             VStack(spacing: 0) {
                 content()
             }

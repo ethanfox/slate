@@ -3,10 +3,12 @@ import SwiftUI
 struct SidebarRow: View {
     var title: String
     var systemImage: String
+    var mark: BrandMark? = nil
     var isSelected: Bool
     var showsPin = false
     var badge = 0
     var isBusy = false
+    var isMarkedForDeletion = false
 
     @Environment(\.appearsActive) private var appearsActive
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -34,6 +36,13 @@ struct SidebarRow: View {
                 } else if isBusy {
                     Image(systemName: "ellipsis")
                         .font(CraftFont.sidebarIcon)
+                        .foregroundStyle(iconColor)
+                } else if isMarkedForDeletion {
+                    Image(systemName: "xmark.octagon")
+                        .font(CraftFont.sidebarIcon)
+                        .foregroundStyle(.red)
+                } else if let mark {
+                    BrandMarkImage(mark: mark, size: 16)
                         .foregroundStyle(iconColor)
                 } else {
                     Image(systemName: systemImage)
@@ -70,5 +79,6 @@ struct SidebarRow: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { hovering = $0 }
+        .accessibilityValue(isMarkedForDeletion ? "Marked for deletion" : "")
     }
 }

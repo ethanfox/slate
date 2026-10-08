@@ -8,7 +8,9 @@ Slate is the user's knowledge base of projects. Each project has decisions (what
 threads (directions, features, problems, experiments, topics, which can nest), and notes. \
 Active decisions are the source of truth. When the user states a fact, choice, or plan, record it here instead of \
 asking them to save it. Read before you write so you update an existing record rather than duplicating it. \
-When a decision replaces an older one, create the new decision with supersedes_id.
+When a decision replaces an older one, create the new decision with supersedes_id. \
+Agents cannot delete. To propose removing a note, track, decision, or chat, call mark_for_deletion \
+with a reason. Optionally link a replacement. The user Keeps or Deletes.
 """
 
 func write(_ message: [String: Any]) {

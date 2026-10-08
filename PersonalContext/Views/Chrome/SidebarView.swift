@@ -1,3 +1,4 @@
+import AppKit
 import SwiftData
 import SwiftUI
 
@@ -38,7 +39,7 @@ struct SidebarView: View {
                         section("Projects")
                         ForEach(orderedProjects) { project in
                             Button {
-                                app.open(project)
+                                app.open(project, newTab: NSEvent.modifierFlags.contains(.command))
                             } label: {
                                 SidebarRow(
                                     title: project.name.isEmpty ? "Untitled" : project.name,
@@ -53,6 +54,11 @@ struct SidebarView: View {
                                     app.present(.editProject(project))
                                 } label: {
                                     Label("Edit…", systemImage: "pencil")
+                                }
+                                Button {
+                                    app.open(project, newTab: true)
+                                } label: {
+                                    Label("Open in New Tab", systemImage: "plus.square.on.square")
                                 }
                                 Button {
                                     project.isPinned.toggle()
@@ -85,9 +91,7 @@ struct SidebarView: View {
                 title: Text("Delete \(project.name)?"),
                 message: Text("Tracks, notes, decisions, and conversations in this project will be removed from this Mac."),
                 primaryButton: .destructive(Text("Delete")) {
-                    if case .project(let id) = app.destination, id == project.id {
-                        app.destination = .projects
-                    }
+                    app.closeTabs(forProject: project.id)
                     context.delete(project)
                     try? context.save()
                 },
@@ -109,7 +113,7 @@ struct SidebarView: View {
 
     private func row(_ title: String, _ symbol: String, destination: Destination, badge: Int = 0, busy: Bool = false) -> some View {
         Button {
-            app.destination = destination
+            app.navigate(to: destination, newTab: NSEvent.modifierFlags.contains(.command))
         } label: {
             SidebarRow(
                 title: title,
@@ -120,6 +124,13 @@ struct SidebarView: View {
             )
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                app.navigate(to: destination, newTab: true)
+            } label: {
+                Label("Open in New Tab", systemImage: "plus.square.on.square")
+            }
+        }
         .accessibilityValue(busy ? "Working" : badge > 0 ? "\(badge) due" : "")
     }
 

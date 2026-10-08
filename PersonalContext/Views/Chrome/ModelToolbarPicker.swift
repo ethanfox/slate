@@ -6,12 +6,14 @@ struct ModelPicker: View {
 
     var body: some View {
         Menu {
-            Button("Account default") { selection = "" }
-            if !selection.isEmpty, !app.models.contains(where: { $0.id == selection }) {
-                Button(selection) { }
+            if app.talkProvider == .cursor {
+                Button("Account default") { selection = "" }
             }
-            ForEach(app.models) { model in
-                Button(model.displayName) { selection = model.id }
+            if !selection.isEmpty, !app.talkModels.contains(where: { $0.id == selection }) {
+                Button(app.modelName(for: selection)) { }
+            }
+            ForEach(app.talkModels, id: \.id) { model in
+                Button(model.name) { selection = model.id }
             }
         } label: {
             HStack(spacing: 4) {

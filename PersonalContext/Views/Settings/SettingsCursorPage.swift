@@ -8,7 +8,7 @@ struct SettingsCursorPage: View {
     var body: some View {
         @Bindable var app = app
         SettingsPage {
-            SettingsGroup("Cursor") {
+            SettingsGroup("Cursor", mark: .cursor) {
                 SettingsRow {
                     Text("Cursor API Key")
                     Spacer(minLength: 16)
@@ -20,27 +20,42 @@ struct SettingsCursorPage: View {
                         Button("Connect…") { app.present(.connectCursor, in: modalHost) }
                     }
                 }
-                if app.hasAPIKey {
-                    Hairline().padding(.horizontal, 16)
-                    SettingsRow {
-                        Text("Model")
-                        Spacer(minLength: 16)
-                        Picker("Model", selection: $app.defaultModelID) {
-                            Text("Account default").tag("")
-                            ForEach(app.models) { model in
-                                Text(model.displayName).tag(model.id)
-                            }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
-                    }
-                }
                 Hairline().padding(.horizontal, 16)
                 usageRows
+            }
+
+            SettingsGroup("Cloud code access") {
+                SettingsRow {
+                    Text("Cursor Cloud clones GitHub repos using GitHub connected on cursor.com. This is separate from GitHub tokens in Sources.")
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Hairline().padding(.horizontal, 16)
                 SettingsRow {
+                    Text("GitHub for cloud")
+                    Spacer(minLength: 16)
+                    cloudStatusLabel
+                        .multilineTextAlignment(.trailing)
+                        .lineLimit(3)
+                }
+                Hairline().padding(.horizontal, 16)
+                SettingsRow {
+                    Button("Open Cursor Integrations") {
+                        NSWorkspace.shared.open(AppModel.cursorIntegrationsURL)
+                    }
+                    Spacer(minLength: 16)
+                    Button("Refresh") {
+                        app.refreshCursorCloudRepositories(force: true)
+                    }
+                    .disabled(!app.hasAPIKey || app.cursorCloudRepositories == .loading)
+                }
+            }
+
+            SettingsGroup("Cursor app") {
+                SettingsRow {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Cursor app")
+                        Text("Knowledge base in Cursor")
                         Text("Lets agents in Cursor read and update this knowledge base.")
                             .font(CraftFont.caption)
                             .foregroundStyle(.secondary)
@@ -50,7 +65,10 @@ struct SettingsCursorPage: View {
                 }
             }
         }
-        .onAppear { app.refreshUsage() }
+        .onAppear {
+            app.refreshUsage()
+            app.refreshCursorCloudRepositories()
+        }
     }
 
     @ViewBuilder
@@ -68,6 +86,34 @@ struct SettingsCursorPage: View {
             Text(message)
                 .foregroundStyle(.red)
                 .lineLimit(2)
+        }
+    }
+
+    @ViewBuilder
+    private var cloudStatusLabel: some View {
+        if !app.hasAPIKey {
+            Text("Add a Cursor API key first.")
+                .foregroundStyle(.secondary)
+        } else {
+            switch app.cursorCloudRepositories {
+            case .unavailable:
+                Text("Add a Cursor API key first.")
+                    .foregroundStyle(.secondary)
+            case .idle, .loading:
+                Text("Checking…")
+                    .foregroundStyle(.secondary)
+            case .ready(let urls, let checkedAt):
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(urls.count) repos available")
+                    Text(checkedAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.secondary)
+                }
+            case .failed(let message):
+                Text(message)
+                    .foregroundStyle(.red)
+                    .lineLimit(3)
+            }
         }
     }
 

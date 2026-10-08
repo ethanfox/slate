@@ -22,14 +22,20 @@ struct SettingsView: View {
     @ViewBuilder
     private var detail: some View {
         switch app.settingsSection {
+        case .chatgpt:
+            SettingsChatGPTPage()
         case .cursor:
             SettingsCursorPage()
+        case .sources:
+            SettingsSourcesPage()
         case .calendar:
             SettingsCalendarPage()
         case .tags:
             SettingsTagsPage()
         case .appearance:
             SettingsAppearancePage()
+        case .model:
+            SettingsModelPage()
         case .orb:
             SettingsOrbPage()
         case .developer:

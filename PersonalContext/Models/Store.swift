@@ -16,7 +16,9 @@ enum Store {
         Tag.self,
         AgendaItem.self,
         AgendaTrackLink.self,
-        AgendaNoteLink.self
+        AgendaNoteLink.self,
+        DeletionMark.self,
+        CodeAttachment.self
     ])
 
     static var configuration: ModelConfiguration {

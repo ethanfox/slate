@@ -26,6 +26,9 @@
 		A1B2C3D4E5F60718293A0051 /* ChatObjectLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0050 /* ChatObjectLink.swift */; };
 		A1B2C3D4E5F60718293A0053 /* ObjectLinkCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0052 /* ObjectLinkCard.swift */; };
 		A1B2C3D4E5F60718293A0061 /* ChatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0060 /* ChatsView.swift */; };
+		A1B2C3D4E5F60718293A0071 /* WindowTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0070 /* WindowTab.swift */; };
+		A1B2C3D4E5F60718293A0073 /* WindowTabStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0072 /* WindowTabStrip.swift */; };
+		A1B2C3D4E5F60718293A0081 /* DeletionBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0080 /* DeletionBanner.swift */; };
 		05BA026B4AF137407DFFBB70 /* ColorHex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A843C76D621958EDA8D94D61 /* ColorHex.swift */; };
 		06A4B5A5812EFA0E120BAFC9 /* DocumentSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591D54A725FC8665EAB3A680 /* DocumentSection.swift */; };
 		08E6C08EE6ADDD3911650B76 /* Hairline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35658CC3CC77FE7EF9839CD9 /* Hairline.swift */; };
@@ -58,6 +61,17 @@
 		5D1208CD41C73CB5813D80D5 /* DecisionPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D08ADD9A59836BBFCCEDA98 /* DecisionPage.swift */; };
 		5D4E315BC149BA93FB000D85 /* Slate.icon in Resources */ = {isa = PBXBuildFile; fileRef = DCDFDF327D4CF27E208C2DAA /* Slate.icon */; };
 		6271F4DD4DF1EF931FFE51BD /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718061204D90BCFCD66D501C /* KeychainStore.swift */; };
+		A1B2C3D4E5F60718293A0202 /* LoopbackAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0201 /* LoopbackAuth.swift */; };
+		A1B2C3D4E5F60718293A0204 /* ChatGPTSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0203 /* ChatGPTSignIn.swift */; };
+		A1B2C3D4E5F60718293A0206 /* GitForgeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0205 /* GitForgeClient.swift */; };
+		A1B2C3D4E5F60718293A0208 /* SourceConnections.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0207 /* SourceConnections.swift */; };
+		A1B2C3D4E5F60718293A0210 /* SettingsChatGPTPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0209 /* SettingsChatGPTPage.swift */; };
+		A1B2C3D4E5F60718293A0212 /* SettingsSourcesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0211 /* SettingsSourcesPage.swift */; };
+		A1B2C3D4E5F60718293A0214 /* ConnectAccountSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0213 /* ConnectAccountSheets.swift */; };
+		A1B2C3D4E5F60718293A0216 /* AttachCodeViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0215 /* AttachCodeViews.swift */; };
+		A1B2C3D4E5F60718293A0221 /* SettingsModelPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0220 /* SettingsModelPage.swift */; };
+		A1B2C3D4E5F60718293A0302 /* BrandMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0301 /* BrandMark.swift */; };
+		A1B2C3D4E5F60718293A0304 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0303 /* Assets.xcassets */; };
 		628E38B59A9414F249425F2B /* EventKitAccessLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E58979D71F21F89355E97C7 /* EventKitAccessLine.swift */; };
 		67A5B40080FF84F855A04995 /* DocumentPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7F5DDBFDDE9BF6067DE5CCC /* DocumentPage.swift */; };
 		727A13054357C732319E171D /* OverviewPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 690265881D471474DCC2ECDF /* OverviewPage.swift */; };
@@ -202,9 +216,23 @@
 		6954DDFB7640212B41E6025E /* Craft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Craft.swift; sourceTree = "<group>"; };
 		6AC834A2D97E8747A0E41C2F /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A0060 /* ChatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatsView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0070 /* WindowTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTab.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0072 /* WindowTabStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTabStrip.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0080 /* DeletionBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeletionBanner.swift; sourceTree = "<group>"; };
 		6ECF851614787529168C56C0 /* SaveSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveSheet.swift; sourceTree = "<group>"; };
 		7010542B30FAEBDE947F38D0 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		718061204D90BCFCD66D501C /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0201 /* LoopbackAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopbackAuth.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0203 /* ChatGPTSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatGPTSignIn.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0205 /* GitForgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitForgeClient.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0207 /* SourceConnections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceConnections.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0209 /* SettingsChatGPTPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsChatGPTPage.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0211 /* SettingsSourcesPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSourcesPage.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0213 /* ConnectAccountSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectAccountSheets.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0215 /* AttachCodeViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachCodeViews.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0220 /* SettingsModelPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModelPage.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0301 /* BrandMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandMark.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0303 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		75926FA04CD11DF7C22B424B /* Tools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tools.swift; sourceTree = "<group>"; };
 		77F4B6484C6BED0CADABAF2B /* ProjectLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectLine.swift; sourceTree = "<group>"; };
 		7CB763C78357F21BD7C53F4E /* PersonalContext.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PersonalContext.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -291,6 +319,7 @@
 				C771726BF0CF7E51CC9E2A8F /* Models */,
 				4B96690FA556048AC8140789 /* Services */,
 				B0CFEA48A675560AE1D9829E /* Views */,
+				A1B2C3D4E5F60718293A0303 /* Assets.xcassets */,
 				A530004EEDCDC03762905AC4 /* PersonalContext.entitlements */,
 				DCDFDF327D4CF27E208C2DAA /* Slate.icon */,
 			);
@@ -303,6 +332,7 @@
 				68295CFD02295B5FC4CAD0AF /* AppModel.swift */,
 				00DB08B2B0C6ACC8AEA864AE /* FocusDismissal.swift */,
 				D74D3D5D164B5B5C20C530C8 /* Navigation.swift */,
+				A1B2C3D4E5F60718293A0070 /* WindowTab.swift */,
 				C9BF693E037581C46858B261 /* PersonalContextApp.swift */,
 				36EED727D15FC7D4FD4574F7 /* TextFormat.swift */,
 			);
@@ -312,6 +342,7 @@
 		1172301F40338501E90315BC /* Design */ = {
 			isa = PBXGroup;
 			children = (
+				A1B2C3D4E5F60718293A0301 /* BrandMark.swift */,
 				A843C76D621958EDA8D94D61 /* ColorHex.swift */,
 				6954DDFB7640212B41E6025E /* Craft.swift */,
 				B530330434B899D87B7F9D1D /* Motion.swift */,
@@ -367,6 +398,10 @@
 				A3145311DCFABD2A63DBE1A2 /* EventKitService.swift */,
 				A1B2C3D4E5F60718293A0001 /* AssociationService.swift */,
 				718061204D90BCFCD66D501C /* KeychainStore.swift */,
+				A1B2C3D4E5F60718293A0201 /* LoopbackAuth.swift */,
+				A1B2C3D4E5F60718293A0203 /* ChatGPTSignIn.swift */,
+				A1B2C3D4E5F60718293A0205 /* GitForgeClient.swift */,
+				A1B2C3D4E5F60718293A0207 /* SourceConnections.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -397,6 +432,7 @@
 			isa = PBXGroup;
 			children = (
 				7D08ADD9A59836BBFCCEDA98 /* DecisionPage.swift */,
+				A1B2C3D4E5F60718293A0080 /* DeletionBanner.swift */,
 				A7F5DDBFDDE9BF6067DE5CCC /* DocumentPage.swift */,
 				591D54A725FC8665EAB3A680 /* DocumentSection.swift */,
 				C6A64CB1FEFB6EBC10E76BB6 /* DocumentTitle.swift */,
@@ -431,6 +467,7 @@
 				F3A2E39623063207485C60C1 /* SidebarRow.swift */,
 				F721FDC648EAE06103D02D53 /* SidebarSectionHeader.swift */,
 				3E67767C42C9589E3B832171 /* SidebarView.swift */,
+				A1B2C3D4E5F60718293A0072 /* WindowTabStrip.swift */,
 				E57195853AAFC087CC563F2F /* SlateModal.swift */,
 			);
 			path = Chrome;
@@ -471,8 +508,12 @@
 		C7926439E0E70F1F8A33CBEA /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				A1B2C3D4E5F60718293A0213 /* ConnectAccountSheets.swift */,
 				EC016D22E36FCD26459AE8C5 /* ConnectCursorSheet.swift */,
+				A1B2C3D4E5F60718293A0209 /* SettingsChatGPTPage.swift */,
+				A1B2C3D4E5F60718293A0211 /* SettingsSourcesPage.swift */,
 				2B4F19BD6D45E8CB70440A62 /* SettingsAppearancePage.swift */,
+				A1B2C3D4E5F60718293A0220 /* SettingsModelPage.swift */,
 				B53F847FAC96205C323B63B7 /* SettingsCalendarPage.swift */,
 				022EAD2D997C0A29F21400CA /* SettingsChrome.swift */,
 				F95931057DAA72031D16DD3F /* SettingsColumn.swift */,
@@ -488,6 +529,7 @@
 		CEC11FA2DDE45ECDD725BFF6 /* Projects */ = {
 			isa = PBXGroup;
 			children = (
+				A1B2C3D4E5F60718293A0215 /* AttachCodeViews.swift */,
 				F19BF6A1920870A4A75C9063 /* NewProjectSheet.swift */,
 				A1B2C3D4E5F60718293A0010 /* OverviewGrid.swift */,
 				A1B2C3D4E5F60718293A0014 /* OverviewInspector.swift */,
@@ -608,6 +650,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B2C3D4E5F60718293A0304 /* Assets.xcassets in Resources */,
 				5D4E315BC149BA93FB000D85 /* Slate.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -664,6 +707,14 @@
 				A1B2C3D4E5F60718293A0006 /* AssociationFields.swift in Sources */,
 				A1B2C3D4E5F60718293A000A /* SettingsTagsPage.swift in Sources */,
 				A1B2C3D4E5F60718293A0004 /* TagField.swift in Sources */,
+				A1B2C3D4E5F60718293A0216 /* AttachCodeViews.swift in Sources */,
+				A1B2C3D4E5F60718293A0204 /* ChatGPTSignIn.swift in Sources */,
+				A1B2C3D4E5F60718293A0214 /* ConnectAccountSheets.swift in Sources */,
+				A1B2C3D4E5F60718293A0206 /* GitForgeClient.swift in Sources */,
+				A1B2C3D4E5F60718293A0202 /* LoopbackAuth.swift in Sources */,
+				A1B2C3D4E5F60718293A0210 /* SettingsChatGPTPage.swift in Sources */,
+				A1B2C3D4E5F60718293A0212 /* SettingsSourcesPage.swift in Sources */,
+				A1B2C3D4E5F60718293A0208 /* SourceConnections.swift in Sources */,
 				C56C26ED6A7BBE605258380B /* AppModel.swift in Sources */,
 				5607183847AB410FD65F258B /* AssistantMarkdown.swift in Sources */,
 				88D51B6E75045B1424C83192 /* CalendarParts.swift in Sources */,
@@ -683,6 +734,7 @@
 				A1B2C3D4E5F60718293A0043 /* SourceChip.swift in Sources */,
 				4C28C10B14E56AA46AD05239 /* ConversationChat.swift in Sources */,
 				D3871C283E178B0A26AD8953 /* ConversationRow.swift in Sources */,
+				A1B2C3D4E5F60718293A0302 /* BrandMark.swift in Sources */,
 				99356301DEE9A913A536600F /* Craft.swift in Sources */,
 				AC10C7614F71D4616792DB13 /* CursorClient.swift in Sources */,
 				E334A4EAED75959EBDE10905 /* CursorProvider.swift in Sources */,
@@ -709,6 +761,9 @@
 				CD57244DA64E916E273B1CDA /* ModelToolbarPicker.swift in Sources */,
 				37A3BBF0CF466D3A7765732D /* Motion.swift in Sources */,
 				50BF73C0F06B82FBE379A46A /* Navigation.swift in Sources */,
+				A1B2C3D4E5F60718293A0071 /* WindowTab.swift in Sources */,
+				A1B2C3D4E5F60718293A0073 /* WindowTabStrip.swift in Sources */,
+				A1B2C3D4E5F60718293A0081 /* DeletionBanner.swift in Sources */,
 				13FD8FA303849D188FEF4F1A /* NewEventSheet.swift in Sources */,
 				E58F683FB365775A078F780B /* NewProjectSheet.swift in Sources */,
 				E0F0AD3A5316C7FBF1E1DD66 /* NewReminderSheet.swift in Sources */,
@@ -737,6 +792,7 @@
 				8F74E8CF9CC8040D5B9F908F /* SaveSheet.swift in Sources */,
 				55D821BAAFC11B0776685369 /* SelectableText.swift in Sources */,
 				3CCD06A49303CD0AB90CE2FF /* SettingsAppearancePage.swift in Sources */,
+				A1B2C3D4E5F60718293A0221 /* SettingsModelPage.swift in Sources */,
 				B80064D74D797D90F7831E9F /* SettingsCalendarPage.swift in Sources */,
 				0D7F061768A531FE6F0479B8 /* SettingsChrome.swift in Sources */,
 				DE92F59D86BACF2159A03545 /* SettingsColumn.swift in Sources */,

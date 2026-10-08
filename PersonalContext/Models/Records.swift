@@ -91,6 +91,12 @@ final class Project: Identifiable {
     @Relationship(deleteRule: .nullify, inverse: \AgendaItem.project)
     var agendaItems: [AgendaItem] = []
 
+    @Relationship(deleteRule: .cascade, inverse: \DeletionMark.project)
+    var deletionMarks: [DeletionMark] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \CodeAttachment.project)
+    var codeAttachments: [CodeAttachment] = []
+
     var overviewWidthRaw: String = "twoThirds"
     var overviewLayoutJSON: String = ""
 
@@ -137,6 +143,60 @@ final class Project: Identifiable {
     }
 }
 
+enum CodeAttachmentKind: String, CaseIterable, Identifiable {
+    case folder
+    case github
+    case gitlab
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .folder: "Folder"
+        case .github: "GitHub"
+        case .gitlab: "GitLab"
+        }
+    }
+}
+
+@Model
+final class CodeAttachment {
+    var id: UUID
+    var kindRaw: String
+    var title: String
+    var locator: String
+    var bookmark: Data?
+    var defaultBranch: String
+    var tokenID: String = ""
+    var createdAt: Date
+
+    var project: Project?
+
+    var kind: CodeAttachmentKind {
+        get { CodeAttachmentKind(rawValue: kindRaw) ?? .folder }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    var subtitle: String {
+        switch kind {
+        case .folder: locator
+        case .github, .gitlab: defaultBranch.isEmpty ? locator : "\(locator) · \(defaultBranch)"
+        }
+    }
+
+    init(kind: CodeAttachmentKind, title: String, locator: String, bookmark: Data? = nil, defaultBranch: String = "", tokenID: String = "", project: Project) {
+        self.id = UUID()
+        self.kindRaw = kind.rawValue
+        self.title = title
+        self.locator = locator
+        self.bookmark = bookmark
+        self.defaultBranch = defaultBranch
+        self.tokenID = tokenID
+        self.createdAt = .now
+        self.project = project
+    }
+}
+
 @Model
 final class ProjectThread {
     var id: UUID
@@ -180,6 +240,10 @@ final class ProjectThread {
 
     var orderedChildren: [ProjectThread] {
         children.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    var deletionTargetIDs: [UUID] {
+        [id] + children.flatMap(\.deletionTargetIDs)
     }
 
     init(title: String, kind: ThreadKind, project: Project, parent: ProjectThread? = nil) {
@@ -272,6 +336,114 @@ final class Decision {
         self.createdAt = .now
         self.project = project
         self.thread = thread
+    }
+}
+
+enum DeletionTargetKind: String, Codable, CaseIterable, Identifiable, Hashable {
+    case note
+    case thread
+    case decision
+    case conversation
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .note: "Note"
+        case .thread: "Track"
+        case .decision: "Decision"
+        case .conversation: "Chat"
+        }
+    }
+}
+
+@Model
+final class DeletionMark {
+    var id: UUID
+    var targetKindRaw: String
+    var targetID: UUID
+    var reason: String
+    var replacementKindRaw: String
+    var replacementID: UUID?
+    var createdAt: Date
+    var project: Project?
+
+    var targetKind: DeletionTargetKind {
+        get { DeletionTargetKind(rawValue: targetKindRaw) ?? .note }
+        set { targetKindRaw = newValue.rawValue }
+    }
+
+    var replacementKind: DeletionTargetKind? {
+        get { DeletionTargetKind(rawValue: replacementKindRaw) }
+        set { replacementKindRaw = newValue?.rawValue ?? "" }
+    }
+
+    init(
+        targetKind: DeletionTargetKind,
+        targetID: UUID,
+        reason: String,
+        project: Project,
+        replacementKind: DeletionTargetKind? = nil,
+        replacementID: UUID? = nil
+    ) {
+        self.id = UUID()
+        self.targetKindRaw = targetKind.rawValue
+        self.targetID = targetID
+        self.reason = reason
+        self.replacementKindRaw = replacementKind?.rawValue ?? ""
+        self.replacementID = replacementID
+        self.createdAt = .now
+        self.project = project
+    }
+}
+
+enum DeletionMarks {
+    static func existing(for targetID: UUID, in project: Project) -> DeletionMark? {
+        project.deletionMarks.first { $0.targetID == targetID }
+    }
+
+    static func existing(for targetID: UUID, in context: ModelContext) -> DeletionMark? {
+        let id = targetID
+        return try? context.fetch(FetchDescriptor<DeletionMark>(predicate: #Predicate { $0.targetID == id })).first
+    }
+
+    static func upsert(
+        targetKind: DeletionTargetKind,
+        targetID: UUID,
+        reason: String,
+        project: Project,
+        replacementKind: DeletionTargetKind?,
+        replacementID: UUID?,
+        in context: ModelContext
+    ) -> DeletionMark {
+        if let mark = existing(for: targetID, in: project) {
+            mark.reason = reason
+            mark.replacementKind = replacementKind
+            mark.replacementID = replacementID
+            return mark
+        }
+        let mark = DeletionMark(
+            targetKind: targetKind,
+            targetID: targetID,
+            reason: reason,
+            project: project,
+            replacementKind: replacementKind,
+            replacementID: replacementID
+        )
+        context.insert(mark)
+        return mark
+    }
+
+    static func keep(_ mark: DeletionMark, in context: ModelContext) {
+        context.delete(mark)
+    }
+
+    static func remove(targetingIDs ids: [UUID], in context: ModelContext) {
+        guard !ids.isEmpty else { return }
+        let marks = (try? context.fetch(FetchDescriptor<DeletionMark>())) ?? []
+        for mark in marks where ids.contains(mark.targetID) {
+            context.delete(mark)
+        }
     }
 }
 

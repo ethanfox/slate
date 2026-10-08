@@ -33,6 +33,21 @@ struct SettingsAppearancePage: View {
                 }
             }
 
+            SettingsGroup("Tabs") {
+                SettingsRow {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Open chat links in a new tab")
+                        Text("Notes and other objects from chat open beside the conversation.")
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 16)
+                    Toggle("Open chat links in a new tab", isOn: $app.openChatLinksInNewTab)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                }
+            }
+
             SettingsGroup("Use accent") {
                 ForEach(Array(AccentedView.allCases.enumerated()), id: \.element.id) { index, view in
                     if index > 0 { Hairline().padding(.horizontal, 16) }

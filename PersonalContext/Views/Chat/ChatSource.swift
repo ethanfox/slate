@@ -64,7 +64,7 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable {
 
     @MainActor
     func open(app: AppModel, context: ModelContext) {
-        presented(in: context).source.openResolved(app: app, context: context)
+        presented(in: context).source.openResolved(app: app, context: context, newTab: app.openChatLinksInNewTab)
     }
 
     func presented(in context: ModelContext?) -> (source: ChatSource, title: String, subtitle: String) {
@@ -105,22 +105,22 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable {
     }
 
     @MainActor
-    private func openResolved(app: AppModel, context: ModelContext) {
+    private func openResolved(app: AppModel, context: ModelContext, newTab: Bool) {
         switch kind {
         case .url:
             if let url, let parsed = URL(string: url) {
                 NSWorkspace.shared.open(parsed)
             }
         case .note:
-            if let note = note(in: context) { app.open(note) }
+            if let note = note(in: context) { app.open(note, newTab: newTab) }
         case .thread:
-            if let thread = thread(in: context) { app.open(thread) }
+            if let thread = thread(in: context) { app.open(thread, newTab: newTab) }
         case .decision:
-            if let decision = decision(in: context) { app.open(decision) }
+            if let decision = decision(in: context) { app.open(decision, newTab: newTab) }
         case .project:
-            if let project = project(in: context) { app.open(project) }
+            if let project = project(in: context) { app.open(project, newTab: newTab) }
         case .conversation:
-            if let conversation = conversation(in: context) { app.open(conversation) }
+            if let conversation = conversation(in: context) { app.open(conversation, newTab: newTab) }
         }
     }
 

@@ -37,6 +37,10 @@ struct ProjectColumn: View {
         }
     }
 
+    private var markedIDs: Set<UUID> {
+        Set(project.deletionMarks.map(\.targetID))
+    }
+
     var body: some View {
         Group {
             if compact {
@@ -52,6 +56,7 @@ struct ProjectColumn: View {
             Button("Delete", role: .destructive) {
                 if let thread = pendingThreadDelete {
                     if app.selectedThread == thread.id { app.selectedThread = thread.parent?.id }
+                    DeletionMarks.remove(targetingIDs: thread.deletionTargetIDs, in: context)
                     context.delete(thread)
                     project.touch()
                     try? context.save()
@@ -69,6 +74,7 @@ struct ProjectColumn: View {
             Button("Delete", role: .destructive) {
                 if let note = pendingNoteDelete {
                     if app.selectedNote == note.id { app.selectedNote = nil }
+                    DeletionMarks.remove(targetingIDs: [note.id], in: context)
                     context.delete(note)
                     project.touch()
                     try? context.save()
@@ -84,6 +90,7 @@ struct ProjectColumn: View {
             Button("Delete", role: .destructive) {
                 if let decision = pendingDecisionDelete {
                     if app.selectedDecision == decision.id { app.selectedDecision = nil }
+                    DeletionMarks.remove(targetingIDs: [decision.id], in: context)
                     context.delete(decision)
                     project.touch()
                     try? context.save()
@@ -153,9 +160,12 @@ struct ProjectColumn: View {
                         header(.chats, add: newChat)
                         if app.isProjectSectionOpen(.chats) {
                             ForEach(conversations) { conversation in
-                                ConversationRow(conversation: conversation, isSelected: tab == .chat && app.selectedConversation == conversation.id) {
-                                    app.selectedConversation = conversation.id
-                                    show(.chat)
+                                ConversationRow(
+                                    conversation: conversation,
+                                    isSelected: tab == .chat && app.selectedConversation == conversation.id,
+                                    isMarkedForDeletion: markedIDs.contains(conversation.id)
+                                ) {
+                                    app.open(conversation)
                                 }
                             }
                         }
@@ -170,8 +180,14 @@ struct ProjectColumn: View {
                                 selectedID: tab == .threads ? app.selectedThread : nil,
                                 collapsed: $collapsed,
                                 expandedCompleted: $expandedCompleted,
-                                onSelect: { app.selectedThread = $0; show(.threads) },
+                                markedIDs: markedIDs,
+                                onSelect: { id in
+                                    if let thread = project.threads.first(where: { $0.id == id }) {
+                                        app.open(thread)
+                                    }
+                                },
                                 onCreateChild: { createThread(parent: $0) },
+                                onKeep: keepMark,
                                 onDelete: { pendingThreadDelete = $0 }
                             )
                         }
@@ -181,10 +197,14 @@ struct ProjectColumn: View {
                     if app.isProjectSectionOpen(.notes) {
                         ForEach(notes) { note in
                             Button {
-                                app.selectedNote = note.id
-                                show(.notes)
+                                app.open(note)
                             } label: {
-                                SidebarRow(title: note.displayTitle, systemImage: "note.text", isSelected: tab == .notes && app.selectedNote == note.id)
+                                SidebarRow(
+                                    title: note.displayTitle,
+                                    systemImage: "note.text",
+                                    isSelected: tab == .notes && app.selectedNote == note.id,
+                                    isMarkedForDeletion: markedIDs.contains(note.id)
+                                )
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
@@ -199,6 +219,13 @@ struct ProjectColumn: View {
                                     Label("New Task…", systemImage: "checklist")
                                 }
                                 Divider()
+                                if markedIDs.contains(note.id) {
+                                    Button {
+                                        keepMark(note.id)
+                                    } label: {
+                                        Label("Keep", systemImage: "arrow.uturn.backward")
+                                    }
+                                }
                                 Button(role: .destructive) {
                                     pendingNoteDelete = note
                                 } label: {
@@ -212,13 +239,13 @@ struct ProjectColumn: View {
                     if app.isProjectSectionOpen(.decisions) {
                         ForEach(decisions) { decision in
                             Button {
-                                app.selectedDecision = decision.id
-                                show(.decisions)
+                                app.open(decision)
                             } label: {
                                 SidebarRow(
                                     title: decision.title.isEmpty ? "Untitled" : decision.title,
                                     systemImage: decision.status == .active ? "checkmark.seal" : "xmark.seal",
-                                    isSelected: tab == .decisions && app.selectedDecision == decision.id
+                                    isSelected: tab == .decisions && app.selectedDecision == decision.id,
+                                    isMarkedForDeletion: markedIDs.contains(decision.id)
                                 )
                                 .opacity(decision.status == .active ? 1 : 0.55)
                             }
@@ -230,6 +257,13 @@ struct ProjectColumn: View {
                                     Label("Edit…", systemImage: "pencil")
                                 }
                                 Divider()
+                                if markedIDs.contains(decision.id) {
+                                    Button {
+                                        keepMark(decision.id)
+                                    } label: {
+                                        Label("Keep", systemImage: "arrow.uturn.backward")
+                                    }
+                                }
                                 Button(role: .destructive) {
                                     pendingDecisionDelete = decision
                                 } label: {
@@ -258,13 +292,12 @@ struct ProjectColumn: View {
     }
 
     private func show(_ tab: ProjectTab) {
-        app.tabs[project.id] = tab
+        app.open(project, tab: tab)
     }
 
     private func newChat() {
         app.openProjectSection(.chats)
-        app.selectedConversation = nil
-        show(.chat)
+        app.showNewChat(in: project)
     }
 
     private func createThread(parent: ProjectThread?) {
@@ -274,8 +307,7 @@ struct ProjectColumn: View {
         project.touch()
         try? context.save()
         if let parent { collapsed.remove(parent.id) }
-        app.selectedThread = thread.id
-        show(.threads)
+        app.open(thread)
     }
 
     private func createNote() {
@@ -284,8 +316,18 @@ struct ProjectColumn: View {
         context.insert(note)
         project.touch()
         try? context.save()
-        app.selectedNote = note.id
-        show(.notes)
+        app.open(note)
+    }
+
+    private func keepMark(_ id: UUID) {
+        guard let mark = DeletionMarks.existing(for: id, in: project) else { return }
+        DeletionMarks.keep(mark, in: context)
+        project.touch()
+        try? context.save()
+    }
+
+    private func keepMark(_ thread: ProjectThread) {
+        keepMark(thread.id)
     }
 
     private func createDecision() {
@@ -294,8 +336,7 @@ struct ProjectColumn: View {
         context.insert(decision)
         project.touch()
         try? context.save()
-        app.selectedDecision = decision.id
-        show(.decisions)
+        app.open(decision)
     }
 }
 

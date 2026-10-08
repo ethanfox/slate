@@ -4,8 +4,16 @@ import SwiftUI
 struct NotePage: View {
     @Bindable var note: Note
     var project: Project
+    @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
 
     var body: some View {
+        DeletionChrome(
+            mark: DeletionMarks.existing(for: note.id, in: project),
+            deleteTitle: "Delete this note?",
+            onKeep: keepMark,
+            onConfirmDelete: deleteMarked
+        ) {
         DocumentPage {
             DocumentTitle(text: $note.title)
             HStack(spacing: 6) {
@@ -35,6 +43,7 @@ struct NotePage: View {
 
             AgendaLinkedSection(items: note.agendaNoteLinks.compactMap(\.item))
         }
+        }
         .onChange(of: note.title) { _, _ in touch() }
         .onChange(of: note.content) { _, _ in touch() }
     }
@@ -42,5 +51,20 @@ struct NotePage: View {
     private func touch() {
         note.updatedAt = .now
         project.touch()
+    }
+
+    private func keepMark() {
+        guard let mark = DeletionMarks.existing(for: note.id, in: project) else { return }
+        DeletionMarks.keep(mark, in: context)
+        project.touch()
+        try? context.save()
+    }
+
+    private func deleteMarked() {
+        if app.selectedNote == note.id { app.selectedNote = nil }
+        DeletionMarks.remove(targetingIDs: [note.id], in: context)
+        context.delete(note)
+        project.touch()
+        try? context.save()
     }
 }

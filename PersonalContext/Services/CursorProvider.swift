@@ -74,8 +74,16 @@ struct ChatToolActivity: Identifiable, Equatable, Codable {
     var name: String
     var status: Status
     var detail: String = ""
+    var sources: [ChatSource] = []
 
     var title: String { Self.title(for: name, status: status) }
+
+    func destination(from extras: [ChatSource] = []) -> ChatSource? {
+        if sources.count == 1 { return sources[0] }
+        if let first = sources.first, opensRecord { return first }
+        if let match = extras.first(where: matches) { return match }
+        return inferredDestination
+    }
 
     var isCursorSource: Bool {
         name == "ask_cursor" || name.contains("cursor")
@@ -127,6 +135,60 @@ struct ChatToolActivity: Identifiable, Equatable, Codable {
         switch status {
         case .running, .succeeded: return readable.localizedCapitalized
         case .failed: return "Couldn’t run \(readable.lowercased())"
+        }
+    }
+
+    private var opensRecord: Bool {
+        name.hasPrefix("create_") || name.hasPrefix("update_") || name.hasPrefix("get_")
+    }
+
+    private var inferredKind: ChatSource.Kind? {
+        if name.contains("decision") { return .decision }
+        if name.contains("thread") { return .thread }
+        if name.contains("note") { return .note }
+        if name.contains("project") { return .project }
+        return nil
+    }
+
+    private var inferredDestination: ChatSource? {
+        guard status == .succeeded, opensRecord, let kind = inferredKind, !detail.isEmpty else { return nil }
+        return ChatSource(id: detail, title: detail, url: nil, kind: kind, pin: false)
+    }
+
+    private func matches(_ source: ChatSource) -> Bool {
+        guard opensRecord, source.kind == inferredKind, !detail.isEmpty else { return false }
+        return source.title == detail
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, status, detail, sources
+    }
+
+    init(id: String, name: String, status: Status, detail: String = "", sources: [ChatSource] = []) {
+        self.id = id
+        self.name = name
+        self.status = status
+        self.detail = detail
+        self.sources = sources
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        status = try container.decode(Status.self, forKey: .status)
+        detail = try container.decodeIfPresent(String.self, forKey: .detail) ?? ""
+        sources = try container.decodeIfPresent([ChatSource].self, forKey: .sources) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(status, forKey: .status)
+        try container.encode(detail, forKey: .detail)
+        if !sources.isEmpty {
+            try container.encode(sources, forKey: .sources)
         }
     }
 }
@@ -213,7 +275,7 @@ final class CursorConversationBridge {
             conversation.title = conversationTitle(from: userText)
         }
         let focused = conversation.thread
-        let context = project.map { ContextBuilder.package(for: $0, focusedThread: focused) } ?? ""
+        let context = opening ? (project.map(ContextBuilder.identity(for:)) ?? "") : ""
         if opening {
             conversation.contextSnapshot = context
         }
@@ -340,33 +402,34 @@ final class CursorConversationBridge {
         let next = ChatToolActivity.Status(event: status)
         let detail = detail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         ChatTrace.event("tool \(name) status=\(status)")
+        let attached = incoming.map(chatSources(from:)) ?? []
         if let incoming { mergeSources(incoming) }
         if next == .running {
             startNewText = true
             waitState = .working
         }
         if let id, let index = toolIndex(id: id) {
-            updateTool(at: index, status: next, detail: detail)
+            updateTool(at: index, status: next, detail: detail, sources: attached)
             refreshWaitState()
             return
         }
         if next == .running, let index = lastRunningTool(named: name) {
-            updateTool(at: index, status: next, detail: detail)
+            updateTool(at: index, status: next, detail: detail, sources: attached)
             return
         }
         if next != .running, let index = lastRunningTool(named: name) {
-            updateTool(at: index, status: next, detail: detail)
+            updateTool(at: index, status: next, detail: detail, sources: attached)
             refreshWaitState()
             return
         }
         if next != .running, case .tool(let tool) = turn.last?.kind, tool.name == name {
-            updateTool(at: turn.count - 1, status: next, detail: detail)
+            updateTool(at: turn.count - 1, status: next, detail: detail, sources: attached)
             refreshWaitState()
             return
         }
         turn.append(ChatTurnItem(
             id: UUID().uuidString,
-            kind: .tool(ChatToolActivity(id: id ?? UUID().uuidString, name: name, status: next, detail: detail))
+            kind: .tool(ChatToolActivity(id: id ?? UUID().uuidString, name: name, status: next, detail: detail, sources: attached))
         ))
         recordChange(name: name, status: next)
         refreshWaitState()
@@ -416,10 +479,16 @@ final class CursorConversationBridge {
         }
     }
 
-    private func updateTool(at index: Int, status: ChatToolActivity.Status, detail: String = "") {
+    private func updateTool(
+        at index: Int,
+        status: ChatToolActivity.Status,
+        detail: String = "",
+        sources: [ChatSource] = []
+    ) {
         guard case .tool(var tool) = turn[index].kind else { return }
         tool.status = status
         if !detail.isEmpty { tool.detail = detail }
+        if !sources.isEmpty { tool.sources = sources }
         turn[index].kind = .tool(tool)
         recordChange(name: tool.name, status: status)
     }
@@ -432,18 +501,23 @@ final class CursorConversationBridge {
         }
     }
 
-    private func mergeSources(_ incoming: [RunnerSource]) {
-        for raw in incoming {
+    private func chatSources(from incoming: [RunnerSource]) -> [ChatSource] {
+        incoming.map { raw in
             let kind = ChatSource.Kind(rawValue: raw.kind ?? "") ?? (raw.url == nil ? .note : .url)
             let id = raw.id?.isEmpty == false ? raw.id! : raw.url ?? raw.title
             let url = raw.url ?? (kind == .url ? nil : ChatObjectLink.href(kind: kind, id: id))
-            let source = ChatSource(
+            return ChatSource(
                 id: id,
                 title: raw.title,
                 url: url,
                 kind: kind,
                 pin: raw.pin ?? true
             )
+        }
+    }
+
+    private func mergeSources(_ incoming: [RunnerSource]) {
+        for source in chatSources(from: incoming) {
             if let index = sources.firstIndex(where: { $0.isSame(as: source) }) {
                 if source.pin { sources[index].pin = true }
                 if UUID(uuidString: source.id) != nil, UUID(uuidString: sources[index].id) == nil {
@@ -496,7 +570,7 @@ struct CursorChatProvider: ChatProvider {
                         }.joined()
                         bridge.debugLog.add("  msg[\(index)] \(message.role) \(ChatTrace.clip(text, 80))")
                     }
-                    guard let apiKey = KeychainStore.read() else {
+                    guard let apiKey = KeychainStore.read(.cursorAPIKey) else {
                         throw CursorAPIError(status: 0, message: "Add a Cursor API key in Settings.")
                     }
                     let request = try bridge.prepare(userText: userText, apiKey: apiKey)

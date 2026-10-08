@@ -8,10 +8,17 @@ struct ThreadPage: View {
     @Environment(\.modelContext) private var context
 
     var body: some View {
+        DeletionChrome(
+            mark: DeletionMarks.existing(for: thread.id, in: project),
+            deleteTitle: "Delete \(thread.title.isEmpty ? "this track" : thread.title)?",
+            deleteMessage: "Child tracks are removed too. Notes and decisions stay in the project.",
+            onKeep: keepMark,
+            onConfirmDelete: deleteMarked
+        ) {
         DocumentPage {
             if let parent = thread.parent {
                 Button {
-                    app.selectedThread = parent.id
+                    app.open(parent)
                 } label: {
                     Label(parent.title.isEmpty ? "Untitled" : parent.title, systemImage: "arrow.turn.left.up")
                         .font(.system(size: 12))
@@ -73,11 +80,12 @@ struct ThreadPage: View {
                             subtitle: plainPreview(child.summary.isEmpty ? child.body : child.summary),
                             meta: "\(child.status.label) · \(child.updatedAt.relativeLabel)"
                         ) {
-                            app.selectedThread = child.id
+                            app.open(child)
                         }
                     }
                 }
             }
+        }
         }
         .onChange(of: thread.title) { _, _ in touch() }
         .onChange(of: thread.summary) { _, _ in touch() }
@@ -93,8 +101,7 @@ struct ThreadPage: View {
                 Section("Decisions") {
                     ForEach(thread.decisions) { decision in
                         Button(decision.title.isEmpty ? "Untitled" : decision.title) {
-                            app.selectedDecision = decision.id
-                            app.tabs[project.id] = .decisions
+                            app.open(decision)
                         }
                     }
                 }
@@ -103,8 +110,7 @@ struct ThreadPage: View {
                 Section("Notes") {
                     ForEach(thread.notes) { note in
                         Button(note.displayTitle) {
-                            app.selectedNote = note.id
-                            app.tabs[project.id] = .notes
+                            app.open(note)
                         }
                     }
                 }
@@ -143,6 +149,21 @@ struct ThreadPage: View {
         context.insert(child)
         touch()
         try? context.save()
-        app.selectedThread = child.id
+        app.open(child)
+    }
+
+    private func keepMark() {
+        guard let mark = DeletionMarks.existing(for: thread.id, in: project) else { return }
+        DeletionMarks.keep(mark, in: context)
+        project.touch()
+        try? context.save()
+    }
+
+    private func deleteMarked() {
+        if app.selectedThread == thread.id { app.selectedThread = thread.parent?.id }
+        DeletionMarks.remove(targetingIDs: thread.deletionTargetIDs, in: context)
+        context.delete(thread)
+        project.touch()
+        try? context.save()
     }
 }

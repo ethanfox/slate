@@ -13,7 +13,8 @@ struct ProjectChatCenter: View {
                 .id(conversation.id)
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                EmptyLine(text: "Start a chat. It gets this project’s summary, direction, tracks, and decisions as context.")
+                ChatTitleBar(title: "New chat")
+                EmptyLine(text: "Start a chat. It gets this project’s summary and direction. Decisions, tracks, and notes are looked up as needed.")
                     .frame(maxWidth: 680, alignment: .leading)
                     .padding(.horizontal, 32)
                     .padding(.top, 28)
@@ -21,7 +22,7 @@ struct ProjectChatCenter: View {
                 Spacer(minLength: 0)
                 Hairline()
                 ChatInput(
-                    modelID: Bindable(app).defaultModelID,
+                    modelID: Bindable(app).talkModelID,
                     placeholder: "Message \(project.name)",
                     onSend: startChat
                 )

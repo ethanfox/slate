@@ -12,6 +12,9 @@ enum AppModal: Identifiable {
     case editTask(AgendaItem)
     case save(SaveKind)
     case connectCursor
+    case connectChatGPT
+    case connectGitHub
+    case connectGitLab
     case editProject(Project)
     case editConversation(Conversation)
     case editThread(ProjectThread)
@@ -29,6 +32,9 @@ enum AppModal: Identifiable {
         case .editTask(let task): "edit-task-\(task.id.uuidString)"
         case .save(let kind): "save-\(kind.id)"
         case .connectCursor: "connect-cursor"
+        case .connectChatGPT: "connect-chatgpt"
+        case .connectGitHub: "connect-github"
+        case .connectGitLab: "connect-gitlab"
         case .editProject(let project): "edit-project-\(project.id.uuidString)"
         case .editConversation(let conversation): "edit-conversation-\(conversation.id.uuidString)"
         case .editThread(let thread): "edit-thread-\(thread.id.uuidString)"
@@ -87,9 +93,14 @@ struct SlateModalPresenter<ModalContent: View>: View {
                             .environment(\.modalInnerSize, CGSize(width: panelWidth - 40, height: available - 40))
                             .padding(20)
                             .frame(width: panelWidth)
+                            .textSelection(.enabled)
                     }
-                    .glassEffect(.regular, in: panelShape)
-                    .clipShape(panelShape)
+                    .background {
+                        panelShape
+                            .fill(.clear)
+                            .glassEffect(.regular, in: panelShape)
+                    }
+                    .contentShape(panelShape)
                     .shadow(color: .black.opacity(0.20), radius: 30, y: 12)
                     .transition(panelTransition)
                 }

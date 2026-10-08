@@ -54,7 +54,6 @@ private struct MarkdownBlock: View {
     var modelContext: ModelContext
     var onOpen: (ChatSource) -> Void
     @State private var hover: LinkHover?
-    @State private var paintHeight: CGFloat = 22
 
     var body: some View {
         MarkdownBody(
@@ -64,12 +63,8 @@ private struct MarkdownBlock: View {
             streaming: streaming,
             hover: $hover,
             modelContext: modelContext,
-            onHeight: { height in
-                if abs(paintHeight - height) > 0.5 { paintHeight = height }
-            },
             onOpen: onOpen
         )
-        .frame(minHeight: paintHeight, alignment: .top)
         .overlay(alignment: .topLeading) {
             if let hover {
                 LinkPreviewCard(url: hover.url)
@@ -98,7 +93,6 @@ private struct MarkdownBody: NSViewRepresentable {
     var streaming: Bool
     @Binding var hover: LinkHover?
     var modelContext: ModelContext
-    var onHeight: (CGFloat) -> Void
     var onOpen: (ChatSource) -> Void
 
     func makeNSView(context: Context) -> AssistantMarkdownTextView {
@@ -123,7 +117,6 @@ private struct MarkdownBody: NSViewRepresentable {
         }
         view.pager.onOpen = onOpen
         view.pager.context = modelContext
-        view.onHeight = onHeight
         view.onOpenSource = { source in
             view.pager.close()
             onOpen(source)
@@ -131,35 +124,29 @@ private struct MarkdownBody: NSViewRepresentable {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: AssistantMarkdownTextView, context: Context) -> CGSize? {
-        let width = proposal.width ?? 680
-        return CGSize(width: width, height: nsView.height(forWidth: width))
+        nsView.fittedSize(for: proposal.width)
     }
 }
 
 fileprivate final class AssistantMarkdownTextView: NSTextView {
     var onHoverLink: ((URL?, CGRect?) -> Void)?
     var onOpenSource: ((ChatSource) -> Void)?
-    var onHeight: ((CGFloat) -> Void)?
     let pager = SourcePagerAnchor()
-    private var target = ""
     private var shown = ""
-    private var source = ""
     private var sourceIDs: [String] = []
     private var pendingSources: [ChatSource] = []
     private var pendingPin = true
     private var pendingContext: ModelContext?
-    private var streaming = false
     private var tracking: NSTrackingArea?
     private var fadeTimer: Timer?
-    private var pump: Timer?
     private var fadeRange = NSRange(location: 0, length: 0)
     private var fadeStarted: CFTimeInterval = 0
-    private var lastReportedHeight: CGFloat = 0
     private var sizing = false
+    private var fittedWidth: CGFloat = 0
+    private var fittedHeight: CGFloat = 22
 
     deinit {
         fadeTimer?.invalidate()
-        pump?.invalidate()
     }
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {
@@ -189,66 +176,28 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
     }
 
     func apply(_ text: String, sources: [ChatSource] = [], pinUnused: Bool = true, streaming: Bool = false, context: ModelContext? = nil) {
+        let sameSources = sourceIDs == sources.map(\.id) && pendingPin == pinUnused
         pendingSources = sources
         pendingPin = pinUnused
         pendingContext = context
         sourceIDs = sources.map(\.id)
-        self.streaming = streaming
-        target = text
         if !streaming {
-            if shown != text {
+            if shown != text || !sameSources {
                 paint(text, fade: false)
             }
-            stopPump()
             stopFade()
             return
         }
-        if !text.hasPrefix(shown) {
-            shown = Self.sharedPrefix(shown, text)
-            paint(shown, fade: false)
-        }
-        startPump()
-    }
-
-    private func startPump() {
-        guard pump == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-            self?.tickPump()
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        pump = timer
-        tickPump()
-    }
-
-    private func stopPump() {
-        pump?.invalidate()
-        pump = nil
-    }
-
-    private func tickPump() {
-        guard shown != target else {
-            if !streaming { stopPump() }
-            return
-        }
-        guard target.hasPrefix(shown) else {
-            paint(target, fade: false)
-            return
-        }
-        let remaining = target.count - shown.count
-        let step = streaming ? 14 : 48
-        if !streaming, remaining <= step {
-            paint(target, fade: remaining <= 18)
-            stopPump()
-            return
-        }
-        paint(Self.advance(shown, toward: target, max: step), fade: true)
+        if shown == text, sameSources { return }
+        let grew = !shown.isEmpty && text.hasPrefix(shown) && text.count > shown.count
+        paint(text, fade: grew)
     }
 
     private func paint(_ text: String, fade: Bool) {
         let grew = text.hasPrefix(shown) && text.count > shown.count
         let oldLength = textStorage?.length ?? 0
         shown = text
-        source = text
+        fittedWidth = 0
         let selected = selectedRange()
         textStorage?.setAttributedString(
             Self.attributed(text, sources: pendingSources, pinUnused: pendingPin, context: pendingContext)
@@ -261,45 +210,11 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         if !pendingSources.isEmpty {
             loadChipIcons()
         }
-        reportHeight()
         if fade, grew, let storage = textStorage, storage.length > oldLength {
             startFade(NSRange(location: oldLength, length: storage.length - oldLength))
         } else if !fade {
             stopFade()
         }
-    }
-
-    private func reportHeight() {
-        let width = bounds.width > 1 ? bounds.width : 680
-        let height = height(forWidth: width)
-        guard abs(height - lastReportedHeight) > 0.5 else { return }
-        lastReportedHeight = height
-        onHeight?(height)
-    }
-
-    private static func sharedPrefix(_ a: String, _ b: String) -> String {
-        var index = a.startIndex
-        var other = b.startIndex
-        while index < a.endIndex, other < b.endIndex, a[index] == b[other] {
-            index = a.index(after: index)
-            other = b.index(after: other)
-        }
-        return String(a[..<index])
-    }
-
-    private static func advance(_ shown: String, toward target: String, max limit: Int) -> String {
-        let start = target.index(target.startIndex, offsetBy: shown.count)
-        var index = start
-        var count = 0
-        while index < target.endIndex, count < limit {
-            if count >= 8, target[index].isWhitespace {
-                index = target.index(after: index)
-                break
-            }
-            index = target.index(after: index)
-            count += 1
-        }
-        return String(target[..<index])
     }
 
     private func startFade(_ range: NSRange) {
@@ -349,16 +264,33 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         fadeRange = NSRange(location: 0, length: 0)
     }
 
+    func fittedSize(for proposed: CGFloat?) -> CGSize {
+        let width: CGFloat
+        if let proposed, proposed > 1 {
+            width = proposed.rounded()
+        } else if fittedWidth > 1 {
+            width = fittedWidth
+        } else {
+            width = 680
+        }
+        return CGSize(width: width, height: height(forWidth: width))
+    }
+
     func height(forWidth width: CGFloat) -> CGFloat {
+        let width = width.rounded()
+        if width <= 1 { return fittedHeight }
+        if abs(width - fittedWidth) < 0.5 { return fittedHeight }
         guard let layoutManager, let textContainer else { return 22 }
-        let target = NSSize(width: max(width, 1), height: .greatestFiniteMagnitude)
+        let target = NSSize(width: width, height: .greatestFiniteMagnitude)
         if abs(textContainer.containerSize.width - target.width) > 0.5 {
             sizing = true
             textContainer.containerSize = target
             sizing = false
         }
         layoutManager.ensureLayout(for: textContainer)
-        return ceil(max(layoutManager.usedRect(for: textContainer).height, 22))
+        fittedWidth = width
+        fittedHeight = ceil(max(layoutManager.usedRect(for: textContainer).height, 22))
+        return fittedHeight
     }
 
     override func setFrameSize(_ newSize: NSSize) {
