@@ -52,10 +52,8 @@ enum ProjectCodeWorkspace {
         for attachment in attachments.sorted(by: { $0.createdAt < $1.createdAt }) {
             switch attachment.kind {
             case .folder:
-                if let url = resolveFolder(attachment), url.startAccessingSecurityScopedResource() {
-                    roots.append(root(for: attachment, path: url.path))
-                } else if FileManager.default.fileExists(atPath: attachment.locator) {
-                    roots.append(root(for: attachment, path: attachment.locator))
+                if let root = localRoot(for: attachment) {
+                    roots.append(root)
                 }
             case .github, .gitlab:
                 guard let storeURL else {
@@ -81,12 +79,52 @@ enum ProjectCodeWorkspace {
         return roots
     }
 
+    static func localRoots(for project: Project?) -> [ProjectCodeRoot] {
+        guard let project else { return [] }
+        return attachments(on: project)
+            .filter { $0.kind == .folder }
+            .sorted { $0.createdAt < $1.createdAt }
+            .compactMap(localRoot(for:))
+    }
+
+    static func remoteSnapshots(for project: Project?, storeURL: URL?) -> [RunnerCodeSnapshot] {
+        guard let project, let storeURL else { return [] }
+        return attachments(on: project).compactMap { attachment in
+            switch attachment.kind {
+            case .folder:
+                return nil
+            case .github, .gitlab:
+                let snapshot = RemoteSnapshot(attachment: attachment, projectID: project.id, storeURL: storeURL)
+                return RunnerCodeSnapshot(
+                    title: attachment.locator.isEmpty ? attachment.title : attachment.locator,
+                    locator: attachment.locator,
+                    kind: attachment.kind.rawValue,
+                    branch: attachment.defaultBranch,
+                    token: snapshot.token,
+                    path: snapshot.destination.path,
+                    archiveURL: snapshot.archiveURL?.absoluteString,
+                    commitsURL: snapshot.commitsURL?.absoluteString
+                )
+            }
+        }
+    }
+
     static func attachments(on project: Project) -> [CodeAttachment] {
         if !project.codeAttachments.isEmpty { return project.codeAttachments }
         guard let context = project.modelContext else { return [] }
         let id = project.id
         let found = (try? context.fetch(FetchDescriptor<CodeAttachment>())) ?? []
         return found.filter { $0.project?.id == id }
+    }
+
+    private static func localRoot(for attachment: CodeAttachment) -> ProjectCodeRoot? {
+        if let url = resolveFolder(attachment), url.startAccessingSecurityScopedResource() {
+            return root(for: attachment, path: url.path)
+        }
+        if FileManager.default.fileExists(atPath: attachment.locator) {
+            return root(for: attachment, path: attachment.locator)
+        }
+        return nil
     }
 
     private static func root(for attachment: CodeAttachment, path: String) -> ProjectCodeRoot {
@@ -195,11 +233,32 @@ struct RemoteSnapshot: Sendable {
 }
 
 enum ManagedCloneService {
+    static func tipSHA(from commits: Data) -> String? {
+        guard let items = try? JSONSerialization.jsonObject(with: commits) as? [[String: Any]] else { return nil }
+        for key in ["sha", "id"] {
+            if let sha = items.first?[key] as? String, !sha.isEmpty { return sha }
+        }
+        return nil
+    }
+
+    static func isCurrent(at destination: URL, commits: Data) -> Bool {
+        let stored = destination.appendingPathComponent(".slate-commits.json")
+        guard let have = try? Data(contentsOf: stored),
+              let tip = tipSHA(from: commits),
+              let existing = tipSHA(from: have)
+        else { return false }
+        return tip == existing
+    }
+
     static func prepare(_ snapshot: RemoteSnapshot) async throws -> URL {
         let marker = snapshot.destination.appendingPathComponent(".slate-snapshot")
-        if let values = try? marker.resourceValues(forKeys: [.contentModificationDateKey]),
-           let modified = values.contentModificationDate,
-           Date().timeIntervalSince(modified) < 60 {
+        let fetched = try? await fetchCommits(snapshot)
+        if let fetched, isCurrent(at: snapshot.destination, commits: fetched) {
+            return snapshot.destination
+        }
+        if fetched == nil,
+           FileManager.default.fileExists(atPath: snapshot.destination.path),
+           FileManager.default.fileExists(atPath: marker.path) {
             return snapshot.destination
         }
         guard let archiveURL = snapshot.archiveURL else {
@@ -210,7 +269,10 @@ enum ManagedCloneService {
         guard (200..<300).contains(status) else {
             throw ProjectWorkspaceError("Could not download \(snapshot.locator) (\(status)).")
         }
-        let commits = try? await fetchCommits(snapshot)
+        var commits = fetched
+        if commits == nil {
+            commits = try? await fetchCommits(snapshot)
+        }
         return try await Task.detached {
             let fm = FileManager.default
             let parent = snapshot.destination.deletingLastPathComponent()
@@ -260,7 +322,9 @@ enum ManagedCloneService {
         guard let url = snapshot.commitsURL else { return Data("[]".utf8) }
         let (data, response) = try await URLSession.shared.data(for: snapshot.authorizedRequest(url: url))
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else { return Data("[]".utf8) }
+        guard (200..<300).contains(status) else {
+            throw ProjectWorkspaceError("Could not read commits for \(snapshot.locator) (\(status)).")
+        }
         guard let items = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             return Data("[]".utf8)
         }

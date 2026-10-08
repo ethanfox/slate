@@ -1,9 +1,13 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { writeSync } from "node:fs";
-import { readdir, readFile, stat } from "node:fs/promises";
-import { resolve, relative, sep } from "node:path";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
+import { promisify } from "node:util";
 import { Agent, type Run, type SDKAgent, type SDKCustomTool, type SDKCustomToolResult } from "@cursor/sdk";
+
+const runFile = promisify(execFile);
 
 type Request = {
   apiKey: string;
@@ -19,6 +23,16 @@ type Request = {
   includeProjectTools: boolean;
   runtime: "local" | "cloud";
   cloudRepos: { url: string; startingRef?: string }[];
+  codeSnapshots: {
+    title: string;
+    locator: string;
+    kind: string;
+    branch: string;
+    token?: string;
+    path: string;
+    archiveURL?: string;
+    commitsURL?: string;
+  }[];
 };
 
 type Source = { id?: string; title: string; url?: string; kind: string; pin?: boolean };
@@ -340,7 +354,134 @@ function toolText(value: unknown): SDKCustomToolResult {
   return { content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }] } as SDKCustomToolResult;
 }
 
-function projectCodeTools(roots: Request["codeRoots"]): Record<string, SDKCustomTool> {
+function tipSHA(commits: unknown): string | undefined {
+  if (!Array.isArray(commits) || !commits.length) return undefined;
+  const first = asRecord(commits[0]);
+  const sha = field(first, "sha", "id");
+  return sha || undefined;
+}
+
+async function storedTip(destination: string): Promise<string | undefined> {
+  try {
+    return tipSHA(JSON.parse(await readFile(resolve(destination, ".slate-commits.json"), "utf8")));
+  } catch {
+    return undefined;
+  }
+}
+
+function snapshotHeaders(snapshot: Request["codeSnapshots"][number]): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "Slate",
+  };
+  if (snapshot.token) {
+    headers.Authorization = snapshot.kind === "gitlab" ? snapshot.token : `Bearer ${snapshot.token}`;
+    if (snapshot.kind === "gitlab") {
+      headers["PRIVATE-TOKEN"] = snapshot.token;
+      delete headers.Authorization;
+    }
+  }
+  return headers;
+}
+
+function normalizeCommits(kind: string, items: unknown): Record<string, string>[] {
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => {
+    const record = asRecord(item) ?? {};
+    if (kind === "github") {
+      const commit = asRecord(record.commit);
+      const author = asRecord(commit?.author);
+      return {
+        sha: String(record.sha ?? ""),
+        message: String(commit?.message ?? ""),
+        author: String(author?.name ?? ""),
+        date: String(author?.date ?? ""),
+        url: String(record.html_url ?? ""),
+      };
+    }
+    return {
+      sha: String(record.id ?? ""),
+      message: String(record.message ?? record.title ?? ""),
+      author: String(record.author_name ?? ""),
+      date: String(record.committed_date ?? ""),
+      url: String(record.web_url ?? ""),
+    };
+  });
+}
+
+async function fetchJSON(url: string, snapshot: Request["codeSnapshots"][number]): Promise<unknown> {
+  const response = await fetch(url, { headers: snapshotHeaders(snapshot) });
+  if (!response.ok) throw new Error(`Could not read ${url} (${response.status}).`);
+  return await response.json();
+}
+
+async function prepareSnapshot(snapshot: Request["codeSnapshots"][number]): Promise<string> {
+  let commits: Record<string, string>[] = [];
+  try {
+    if (snapshot.commitsURL) {
+      commits = normalizeCommits(snapshot.kind, await fetchJSON(snapshot.commitsURL, snapshot));
+    }
+  } catch (error) {
+    log("snapshot commits failed", { locator: snapshot.locator, error: describe(error) });
+  }
+  const tip = tipSHA(commits);
+  if (tip && tip === (await storedTip(snapshot.path))) return snapshot.path;
+  if (!snapshot.archiveURL) {
+    if (tip || (await storedTip(snapshot.path))) return snapshot.path;
+    throw new Error(`This attachment cannot be downloaded.`);
+  }
+  if (!commits.length) {
+    try {
+      await stat(resolve(snapshot.path, ".slate-snapshot"));
+      return snapshot.path;
+    } catch {
+      // download
+    }
+  }
+  const response = await fetch(snapshot.archiveURL, { headers: snapshotHeaders(snapshot) });
+  if (!response.ok) throw new Error(`Could not download ${snapshot.locator} (${response.status}).`);
+  const parent = dirname(snapshot.path);
+  await mkdir(parent, { recursive: true });
+  const archiveFile = join(parent, `${randomUUID()}.zip`);
+  const extracted = join(parent, randomUUID());
+  await writeFile(archiveFile, Buffer.from(await response.arrayBuffer()));
+  try {
+    await mkdir(extracted, { recursive: true });
+    await runFile("/usr/bin/ditto", ["-x", "-k", archiveFile, extracted]);
+    const children = (await readdir(extracted, { withFileTypes: true })).filter((entry) => entry.name !== ".DS_Store");
+    const source = children[0] ? join(extracted, children[0].name) : "";
+    if (!source) throw new Error("The repository archive was empty.");
+    await rm(snapshot.path, { recursive: true, force: true });
+    await mkdir(snapshot.path, { recursive: true });
+    for (const name of await readdir(source)) {
+      await runFile("/bin/mv", [join(source, name), join(snapshot.path, name)]);
+    }
+    if (commits.length) {
+      await writeFile(resolve(snapshot.path, ".slate-commits.json"), JSON.stringify(commits));
+    }
+    await writeFile(resolve(snapshot.path, ".slate-snapshot"), snapshot.locator);
+  } finally {
+    await rm(archiveFile, { force: true });
+    await rm(extracted, { recursive: true, force: true });
+  }
+  return snapshot.path;
+}
+
+async function prepareCodeRoots(request: Request): Promise<Request["codeRoots"]> {
+  const roots = [...(request.codeRoots ?? [])];
+  for (const snapshot of request.codeSnapshots ?? []) {
+    const path = await prepareSnapshot(snapshot);
+    roots.push({ title: snapshot.title, locator: snapshot.locator, path });
+  }
+  return roots;
+}
+
+function projectCodeTools(request: Request): Record<string, SDKCustomTool> {
+  let prepared: Promise<Request["codeRoots"]> | undefined;
+  const rootsFor = () => {
+    prepared ??= prepareCodeRoots(request);
+    return prepared;
+  };
   return {
     project_list_files: {
       description: "List files in the Slate project's attached code. Read-only.",
@@ -352,6 +493,7 @@ function projectCodeTools(roots: Request["codeRoots"]): Record<string, SDKCustom
       },
       execute: async (args) => {
         emit(toolEvent("project_list_files", "running", args));
+        const roots = await rootsFor();
         const query = field(asRecord(args), "query")?.toLowerCase() ?? "";
         const files = (await projectFiles(roots))
           .filter((file) => !query || file.relative.toLowerCase().includes(query))
@@ -373,6 +515,7 @@ function projectCodeTools(roots: Request["codeRoots"]): Record<string, SDKCustom
       },
       execute: async (args) => {
         emit(toolEvent("project_search_code", "running", args));
+        const roots = await rootsFor();
         const query = field(asRecord(args), "query");
         if (!query) throw new Error("query is required");
         const matches: { root: string; path: string; line: number; text: string }[] = [];
@@ -412,6 +555,7 @@ function projectCodeTools(roots: Request["codeRoots"]): Record<string, SDKCustom
       },
       execute: async (args) => {
         emit(toolEvent("project_read_file", "running", args));
+        const roots = await rootsFor();
         const fields = asRecord(args);
         const root = selectedRoot(roots, fields?.root);
         if (!root) throw new Error(roots.length ? "Specify root because this project has several code attachments." : "No code is attached to this Slate project.");
@@ -434,6 +578,7 @@ function projectCodeTools(roots: Request["codeRoots"]): Record<string, SDKCustom
       },
       execute: async (args) => {
         emit(toolEvent("project_git_log", "running", args));
+        const roots = await rootsFor();
         const requested = field(asRecord(args), "root");
         const selected = selectedRoots(roots, requested);
         const commits: Record<string, unknown>[] = [];
@@ -485,7 +630,7 @@ async function main() {
   } else {
     const customTools = {
       ...(request.includeSlateTools ? await slateTools(request.mcpCommand) : {}),
-      ...(request.includeProjectTools ? projectCodeTools(request.codeRoots ?? []) : {}),
+      ...(request.includeProjectTools ? projectCodeTools(request) : {}),
     };
     const options = {
       apiKey,

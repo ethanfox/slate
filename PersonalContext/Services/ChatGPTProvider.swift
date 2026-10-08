@@ -29,11 +29,12 @@ struct ChatGPTProvider: ChatProvider {
                         userText: userText,
                         includeSlateTools: includeSlateTools
                     )
-                    let roots = includeProjectTools ? try await bridge.prepareCodeRoots() : []
                     let gateway = SlateToolGateway(
-                        roots: roots,
                         includeSlateTools: includeSlateTools,
-                        includeProjectTools: includeProjectTools
+                        includeProjectTools: includeProjectTools,
+                        prepareRoots: includeProjectTools
+                            ? { try await bridge.prepareCodeRoots() }
+                            : nil
                     )
                     let tools = try await gateway.definitions()
                     var input: [[String: Any]] = messages.map(Self.responseInput)

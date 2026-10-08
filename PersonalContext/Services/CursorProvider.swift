@@ -16,6 +16,18 @@ struct RunnerRequest: Encodable, Sendable {
     var includeProjectTools: Bool
     var runtime: String
     var cloudRepos: [RunnerCloudRepo]
+    var codeSnapshots: [RunnerCodeSnapshot] = []
+}
+
+struct RunnerCodeSnapshot: Encodable, Sendable {
+    var title: String
+    var locator: String
+    var kind: String
+    var branch: String
+    var token: String?
+    var path: String
+    var archiveURL: String?
+    var commitsURL: String?
 }
 
 struct RunnerCloudRepo: Encodable, Sendable {
@@ -274,6 +286,10 @@ final class CursorConversationBridge {
         return roots
     }
 
+    func keepAccess(to roots: [ProjectCodeRoot]) {
+        activeCodeRoots = roots
+    }
+
     func prepare(
         userText: String,
         apiKey: String,
@@ -311,9 +327,6 @@ final class CursorConversationBridge {
         conversation.updatedAt = .now
         project?.touch()
         try? conversation.modelContext?.save()
-        if let project, !ProjectCodeWorkspace.attachments(on: project).isEmpty, includeProjectTools, codeRoots.isEmpty {
-            throw CursorAPIError(status: 0, message: "This project has attached code, but Slate could not open it.")
-        }
         let workspace = codeRoots.count == 1
             ? codeRoots[0].path
             : (codeRoots.first.map { URL(fileURLWithPath: $0.path).deletingLastPathComponent().path } ?? folder.path)
@@ -332,7 +345,10 @@ final class CursorConversationBridge {
             includeSlateTools: includeSlateTools,
             includeProjectTools: includeProjectTools,
             runtime: runtime.rawValue,
-            cloudRepos: cloudRepositories()
+            cloudRepos: cloudRepositories(),
+            codeSnapshots: includeProjectTools && runtime == .local
+                ? ProjectCodeWorkspace.remoteSnapshots(for: project, storeURL: store)
+                : []
         )
     }
 
@@ -659,7 +675,10 @@ struct CursorChatProvider: ChatProvider {
                     guard let apiKey = KeychainStore.read(.cursorAPIKey) else {
                         throw CursorAPIError(status: 0, message: "Add a Cursor API key in Settings.")
                     }
-                    let roots = runtime == .local && includeProjectTools ? try await bridge.prepareCodeRoots() : []
+                    let roots = runtime == .local && includeProjectTools
+                        ? ProjectCodeWorkspace.localRoots(for: bridge.project)
+                        : []
+                    bridge.keepAccess(to: roots)
                     let request = try bridge.prepare(
                         userText: userText,
                         apiKey: apiKey,

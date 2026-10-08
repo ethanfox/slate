@@ -145,6 +145,67 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertEqual(models.map(\.displayName), ["GPT-5.5"])
     }
 
+    func testCommitTipReadsGitHubAndGitLabShapes() throws {
+        let github = try JSONSerialization.data(withJSONObject: [["sha": "deadbeef"]])
+        XCTAssertEqual(ManagedCloneService.tipSHA(from: github), "deadbeef")
+        let gitlab = try JSONSerialization.data(withJSONObject: [["id": "cafebabe"]])
+        XCTAssertEqual(ManagedCloneService.tipSHA(from: gitlab), "cafebabe")
+        XCTAssertNil(ManagedCloneService.tipSHA(from: Data("[]".utf8)))
+    }
+
+    func testManagedCloneIsCurrentWhenTipMatches() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let stored = try JSONSerialization.data(withJSONObject: [["sha": "abc123", "message": "tip"]])
+        try stored.write(to: root.appendingPathComponent(".slate-commits.json"))
+        let fetched = try JSONSerialization.data(withJSONObject: [["sha": "abc123"]])
+        XCTAssertTrue(ManagedCloneService.isCurrent(at: root, commits: fetched))
+        let other = try JSONSerialization.data(withJSONObject: [["sha": "def456"]])
+        XCTAssertFalse(ManagedCloneService.isCurrent(at: root, commits: other))
+    }
+
+    @MainActor
+    func testGatewayPreparesRootsOnlyForProjectTools() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "ok\n".write(to: root.appendingPathComponent("A.swift"), atomically: true, encoding: .utf8)
+        var prepared = 0
+        let gateway = SlateToolGateway(
+            includeSlateTools: false,
+            prepareRoots: {
+                prepared += 1
+                return [.init(title: "Fixture", path: root.path)]
+            }
+        )
+        let tools = try await gateway.definitions()
+        XCTAssertEqual(prepared, 0)
+        XCTAssertTrue(tools.contains { $0["name"] as? String == "project_list_files" })
+        let listed = try await gateway.execute(name: "project_list_files", arguments: [:])
+        XCTAssertTrue(listed.contains("A.swift"))
+        XCTAssertEqual(prepared, 1)
+        _ = try await gateway.execute(name: "project_list_files", arguments: [:])
+        XCTAssertEqual(prepared, 1)
+    }
+
+    @MainActor
+    func testLocalRootsSkipRemoteAttachments() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let project = Project(name: "Harbor", symbol: "folder", summary: "")
+        container.mainContext.insert(project)
+        container.mainContext.insert(CodeAttachment(
+            kind: .github,
+            title: "repo",
+            locator: "owner/repo",
+            defaultBranch: "main",
+            project: project
+        ))
+        try container.mainContext.save()
+        XCTAssertTrue(ProjectCodeWorkspace.localRoots(for: project).isEmpty)
+    }
+
     @MainActor
     func testManagedCloneDiagnostic() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

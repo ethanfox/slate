@@ -3,19 +3,22 @@ import Foundation
 @MainActor
 final class SlateToolGateway {
     private let mcpCommand: String?
-    private let roots: [ProjectCodeRoot]
+    private var roots: [ProjectCodeRoot]
     private let includeSlateTools: Bool
     private let includeProjectTools: Bool
+    private let prepareRoots: (() async throws -> [ProjectCodeRoot])?
 
     init(
-        roots: [ProjectCodeRoot],
+        roots: [ProjectCodeRoot] = [],
         includeSlateTools: Bool = true,
-        includeProjectTools: Bool = true
+        includeProjectTools: Bool = true,
+        prepareRoots: (() async throws -> [ProjectCodeRoot])? = nil
     ) {
         mcpCommand = Bundle.main.url(forAuxiliaryExecutable: "slate-mcp")?.path
         self.roots = roots
         self.includeSlateTools = includeSlateTools
         self.includeProjectTools = includeProjectTools
+        self.prepareRoots = prepareRoots
     }
 
     func definitions() async throws -> [[String: Any]] {
@@ -43,6 +46,9 @@ final class SlateToolGateway {
     }
 
     func execute(name: String, arguments: [String: Any]) async throws -> String {
+        if name.hasPrefix("project_") {
+            try await ensureRoots()
+        }
         switch name {
         case "project_list_files":
             return try listFiles(query: arguments["query"] as? String)
@@ -79,6 +85,11 @@ final class SlateToolGateway {
             }
             return String(decoding: data, as: UTF8.self)
         }
+    }
+
+    private func ensureRoots() async throws {
+        guard roots.isEmpty, let prepareRoots else { return }
+        roots = try await prepareRoots()
     }
 
     private func listFiles(query: String?) throws -> String {
