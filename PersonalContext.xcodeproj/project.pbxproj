@@ -103,6 +103,7 @@
 		D9F2B3C415067E8F9B0C1D22 /* StreamTextCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8E1A2B304F56D7E8A9B0C11 /* StreamTextCoalescer.swift */; };
 		B82FC40282ED31CF898CD9B1 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A5537B9B75008C51A4CCB08 /* HomeView.swift */; };
 		B8870ECA941ADC69B2339111 /* SlateToolGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1AFC28C1F00D3700732A654 /* SlateToolGateway.swift */; };
+		F3B2C4D516078E9F0B1C2D3E /* SlateMCPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A1B3C405F67D8E9A0B1C2D /* SlateMCPClient.swift */; };
 		B9385874EAADC357F8D54E22 /* SidebarRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A2E39623063207485C60C1 /* SidebarRow.swift */; };
 		B9E59273CDE8060B252497A2 /* ProjectsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC37F181EBBBF8E1E7F7E4D /* ProjectsView.swift */; };
 		BC90A33899359007E8F65EC1 /* FocusDismissal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00DB08B2B0C6ACC8AEA864AE /* FocusDismissal.swift */; };
@@ -257,6 +258,7 @@
 		ABB935F4B84FA0030048EC33 /* LinkPresentation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = LinkPresentation.framework; path = System/Library/Frameworks/LinkPresentation.framework; sourceTree = SDKROOT; };
 		AD3FA7A23D2010D975AB8C6D /* EditRecordModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditRecordModal.swift; sourceTree = "<group>"; };
 		B1AFC28C1F00D3700732A654 /* SlateToolGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlateToolGateway.swift; sourceTree = "<group>"; };
+		E2A1B3C405F67D8E9A0B1C2D /* SlateMCPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlateMCPClient.swift; sourceTree = "<group>"; };
 		B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectColumn.swift; sourceTree = "<group>"; };
 		B530330434B899D87B7F9D1D /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 		B53F847FAC96205C323B63B7 /* SettingsCalendarPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCalendarPage.swift; sourceTree = "<group>"; };
@@ -426,6 +428,7 @@
 				F93C81A0E693EB3D6CE616F2 /* LoopbackAuth.swift */,
 				7EAF9BCF07A6C20AF5CD7FA0 /* ProjectCodeWorkspace.swift */,
 				4ED0D31A8A2D0F3A0FC48424 /* ProjectWorkerProvider.swift */,
+				E2A1B3C405F67D8E9A0B1C2D /* SlateMCPClient.swift */,
 				B1AFC28C1F00D3700732A654 /* SlateToolGateway.swift */,
 				251C929D14566FDE88E32BD5 /* SourceConnections.swift */,
 			);
@@ -870,6 +873,7 @@
 				4E4575D43D714CD2473BFF9F /* SidebarSectionHeader.swift in Sources */,
 				9821685BF325DE132872A5E3 /* SidebarView.swift in Sources */,
 				777EF2FC8B39A970FAC7E1B4 /* SlateModal.swift in Sources */,
+				F3B2C4D516078E9F0B1C2D3E /* SlateMCPClient.swift in Sources */,
 				B8870ECA941ADC69B2339111 /* SlateToolGateway.swift in Sources */,
 				05FD064003B7CEADF8D13FE2 /* SourceChip.swift in Sources */,
 				1ACA211AEB62C15EB47941E1 /* SourceConnections.swift in Sources */,

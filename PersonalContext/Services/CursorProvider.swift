@@ -234,6 +234,7 @@ final class CursorConversationBridge {
     @ObservationIgnored private var activeCodeRoots: [ProjectCodeRoot] = []
     @ObservationIgnored private var startNewText = false
     let debugLog = ChatDebugLog()
+    let mcp = SlateMCPClient.shared
 
     var workedSeconds: Int {
         guard let startedAt else { return 0 }
@@ -321,9 +322,7 @@ final class CursorConversationBridge {
             conversation.title = conversationTitle(from: userText)
         }
         let focused = conversation.thread
-        let context = project.map { current in
-            opening ? ContextBuilder.package(for: current) : ContextBuilder.identity(for: current)
-        } ?? ""
+        let context = project.map(ContextBuilder.identity(for:)) ?? ""
         if opening {
             conversation.contextSnapshot = context
         }
@@ -379,7 +378,11 @@ final class CursorConversationBridge {
         if conversation.title == "New chat" || conversation.title.isEmpty {
             conversation.title = conversationTitle(from: userText)
         }
-        let context = project.map(ContextBuilder.package(for:)) ?? ""
+        let opening = conversation.contextSnapshot.isEmpty
+        let context = project.map(ContextBuilder.identity(for:)) ?? ""
+        if opening {
+            conversation.contextSnapshot = context
+        }
         conversation.updatedAt = .now
         project?.touch()
         try? conversation.modelContext?.save()
@@ -387,7 +390,7 @@ final class CursorConversationBridge {
             return ContextBuilder.prompt(
                 userText: "",
                 context: context,
-                opening: true,
+                opening: opening,
                 focusedThread: conversation.thread
             )
         }

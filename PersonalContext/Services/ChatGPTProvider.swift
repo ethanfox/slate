@@ -59,7 +59,8 @@ struct ChatGPTProvider: ChatProvider {
                                 : nil,
                             consult: includeSlateTools && ProjectWorker.isConfigured(on: bridge.project)
                                 ? { brief in try await ProjectWorker.consult(brief: brief, reportingTo: bridge, options: options) }
-                                : nil
+                                : nil,
+                            mcp: includeSlateTools ? bridge.mcp : nil
                         )
                         return (instructions, gateway, messages.map(Self.responseInput))
                     }
@@ -67,6 +68,9 @@ struct ChatGPTProvider: ChatProvider {
                     let gateway = prepared.1
                     var input = prepared.2
                     let tools = try await gateway.definitions()
+                    await MainActor.run {
+                        bridge.debugLog.add("chatgpt tools=\(tools.count)")
+                    }
                     var emitted = false
                     for round in 0..<8 {
                         let payload = Self.inferenceBody(

@@ -2,26 +2,27 @@ import Foundation
 
 @MainActor
 final class SlateToolGateway {
-    private let mcpCommand: String?
     private var roots: [ProjectCodeRoot]
     private let includeSlateTools: Bool
     private let includeProjectTools: Bool
     private let prepareRoots: (() async throws -> [ProjectCodeRoot])?
     private let consult: ((String) async throws -> String)?
+    private let mcp: SlateMCPClient?
 
     init(
         roots: [ProjectCodeRoot] = [],
         includeSlateTools: Bool = true,
         includeProjectTools: Bool = true,
         prepareRoots: (() async throws -> [ProjectCodeRoot])? = nil,
-        consult: ((String) async throws -> String)? = nil
+        consult: ((String) async throws -> String)? = nil,
+        mcp: SlateMCPClient? = nil
     ) {
-        mcpCommand = Bundle.main.url(forAuxiliaryExecutable: "slate-mcp")?.path
         self.roots = roots
         self.includeSlateTools = includeSlateTools
         self.includeProjectTools = includeProjectTools
         self.prepareRoots = prepareRoots
         self.consult = consult
+        self.mcp = mcp ?? (includeSlateTools ? .shared : nil)
     }
 
     func definitions() async throws -> [[String: Any]] {
@@ -29,23 +30,16 @@ final class SlateToolGateway {
         if consult != nil {
             tools.append(Self.consultDefinition)
         }
-        if includeSlateTools, let mcpCommand {
-            let data = try await Self.invokeMCP(
-                command: mcpCommand,
-                method: "tools/list",
-                params: [:]
-            )
-            if let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let listed = object["tools"] as? [[String: Any]] {
-                tools += listed.compactMap { tool in
-                    guard let name = tool["name"] as? String else { return nil }
-                    return [
-                        "type": "function",
-                        "name": name,
-                        "description": tool["description"] as? String ?? "",
-                        "parameters": tool["inputSchema"] as? [String: Any] ?? ["type": "object", "properties": [:]]
-                    ]
-                }
+        if includeSlateTools, let mcp {
+            let listed = try await mcp.toolDefinitions()
+            tools += listed.compactMap { tool in
+                guard let name = tool["name"] as? String else { return nil }
+                return [
+                    "type": "function",
+                    "name": name,
+                    "description": tool["description"] as? String ?? "",
+                    "parameters": tool["inputSchema"] as? [String: Any] ?? ["type": "object", "properties": [:]]
+                ]
             }
         }
         return tools
@@ -82,11 +76,10 @@ final class SlateToolGateway {
             let brief = (arguments["brief"] as? String) ?? (arguments["question"] as? String) ?? ""
             return try await consult(brief)
         default:
-            guard let mcpCommand else {
+            guard let mcp else {
                 throw ProjectWorkspaceError("The Slate tool service is unavailable.")
             }
-            let data = try await Self.invokeMCP(
-                command: mcpCommand,
+            let data = try await mcp.invoke(
                 method: "tools/call",
                 params: ["name": name, "arguments": arguments]
             )
@@ -286,61 +279,4 @@ final class SlateToolGateway {
         ]
     ]
 
-    private static func invokeMCP(
-        command: String,
-        method: String,
-        params: [String: Any]
-    ) async throws -> Data {
-        let requestData = try JSONSerialization.data(withJSONObject: params)
-        return try await Task.detached {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: command)
-            let input = Pipe()
-            let output = Pipe()
-            let errors = Pipe()
-            process.standardInput = input
-            process.standardOutput = output
-            process.standardError = errors
-            try process.run()
-
-            let initialize: [String: Any] = [
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": [
-                    "protocolVersion": "2025-06-18",
-                    "capabilities": [:],
-                    "clientInfo": ["name": "slate-app", "version": "1.0"]
-                ]
-            ]
-            let decodedParams = try JSONSerialization.jsonObject(with: requestData)
-            let call: [String: Any] = [
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": method,
-                "params": decodedParams
-            ]
-            for message in [initialize, call] {
-                try input.fileHandleForWriting.write(contentsOf: JSONSerialization.data(withJSONObject: message))
-                try input.fileHandleForWriting.write(contentsOf: Data([0x0A]))
-            }
-            try input.fileHandleForWriting.close()
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else {
-                let detail = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                throw ProjectWorkspaceError(detail.isEmpty ? "The Slate tool service stopped." : detail)
-            }
-            for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
-                guard let lineData = String(line).data(using: .utf8),
-                      let response = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
-                      response["id"] as? Int == 2 else { continue }
-                if let error = response["error"] as? [String: Any] {
-                    throw ProjectWorkspaceError(error["message"] as? String ?? "A Slate tool failed.")
-                }
-                return try JSONSerialization.data(withJSONObject: response["result"] ?? [:])
-            }
-            throw ProjectWorkspaceError("The Slate tool service returned no result.")
-        }.value
-    }
 }

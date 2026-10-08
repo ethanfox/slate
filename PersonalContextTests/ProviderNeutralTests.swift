@@ -19,6 +19,36 @@ final class ProviderNeutralTests: XCTestCase {
     }
 
     @MainActor
+    func testProviderTurnIsIdentityOnly() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let project = Project(name: "Harbor", symbol: "folder", summary: "A marina app.")
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test", project: project)
+        container.mainContext.insert(project)
+        container.mainContext.insert(conversation)
+        container.mainContext.insert(Decision(
+            title: "Use Swift",
+            decision: "Ship the Mac app in Swift, not Electron.",
+            project: project
+        ))
+        try container.mainContext.save()
+
+        let bridge = CursorConversationBridge(conversation: conversation, project: project)
+        let first = bridge.prepareProviderTurn(userText: "hi")
+        XCTAssertTrue(first.contains("You are the assistant inside Slate"))
+        XCTAssertTrue(first.contains("Harbor"))
+        XCTAssertTrue(first.contains("<project-context>"))
+        XCTAssertFalse(first.contains("Active decisions"))
+        XCTAssertFalse(first.contains("Ship the Mac app in Swift"))
+
+        let later = bridge.prepareProviderTurn(userText: "again")
+        XCTAssertFalse(later.contains("You are the assistant inside Slate"))
+        XCTAssertTrue(later.contains("Harbor"))
+        XCTAssertFalse(later.contains("Active decisions"))
+        XCTAssertFalse(later.contains("Ship the Mac app in Swift"))
+    }
+
+    @MainActor
     func testIdentityListsAttachedCodeAndRequiresTools() throws {
         let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Store.schema, configurations: configuration)
@@ -69,6 +99,37 @@ final class ProviderNeutralTests: XCTestCase {
         let text = ContextBuilder.identity(for: project)
         XCTAssertTrue(text.contains("consult_code"))
         XCTAssertFalse(ContextBuilder.identity(for: Project(name: "Bare", symbol: "folder", summary: "")).contains("consult_code"))
+    }
+
+    func testSlateMCPClientCachesToolList() async throws {
+        let client = SlateMCPClient(command: nil)
+        await client.useListProvider {
+            [["name": "get_note", "description": "Read a note.", "inputSchema": ["type": "object"]]]
+        }
+        let first = try await client.toolDefinitions()
+        let second = try await client.toolDefinitions()
+        XCTAssertEqual(first.first?["name"] as? String, "get_note")
+        XCTAssertEqual(second.first?["name"] as? String, "get_note")
+        let calls = await client.listCalls
+        XCTAssertEqual(calls, 1)
+    }
+
+    @MainActor
+    func testGatewayUsesCachedSlateTools() async throws {
+        let client = SlateMCPClient(command: nil)
+        await client.useListProvider {
+            [["name": "get_note", "description": "Read a note.", "inputSchema": ["type": "object"]]]
+        }
+        let gateway = SlateToolGateway(
+            includeSlateTools: true,
+            includeProjectTools: false,
+            mcp: client
+        )
+        let tools = try await gateway.definitions()
+        XCTAssertTrue(tools.contains { $0["name"] as? String == "get_note" })
+        _ = try await gateway.definitions()
+        let calls = await client.listCalls
+        XCTAssertEqual(calls, 1)
     }
 
     @MainActor
