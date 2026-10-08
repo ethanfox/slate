@@ -502,7 +502,10 @@ private struct UserMessageBubble: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 8) {
-            SelectableText(text: message.text, hugsWidth: true)
+            Text(message.text)
+                .font(CraftFont.chatBody)
+                .lineSpacing(7)
+                .textSelection(.enabled)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -510,6 +513,8 @@ private struct UserMessageBubble: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(CraftColor.hairline)
                 )
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: layout.userMaxWidth, alignment: .trailing)
                 .opacity(message.isCancelled || message.isFailed ? 0.55 : 1)
             if message.isCancelled || message.isFailed {
                 Text(message.isCancelled ? "Cancelled" : "Not answered")
@@ -524,7 +529,6 @@ private struct UserMessageBubble: View {
                 }
             }
         }
-        .frame(maxWidth: layout.userMaxWidth, alignment: .trailing)
         .frame(maxWidth: .infinity, alignment: .trailing)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityLabel)

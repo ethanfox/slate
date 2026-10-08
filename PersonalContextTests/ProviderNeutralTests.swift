@@ -167,6 +167,13 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: cloned.appendingPathComponent(".slate-commits.json").path))
     }
 
+    func testUserBubbleWrapCapIgnoresInfiniteProposal() {
+        XCTAssertEqual(ChatSelectableTextView.wrapWidth(proposed: .greatestFiniteMagnitude, cap: 456), 456)
+        XCTAssertEqual(ChatSelectableTextView.wrapWidth(proposed: 900, cap: 456), 456)
+        XCTAssertEqual(ChatSelectableTextView.wrapWidth(proposed: 300, cap: 456), 300)
+        XCTAssertEqual(ChatSelectableTextView.wrapWidth(proposed: nil, cap: nil), 456)
+    }
+
     func testChatMarkdownRendersTableCells() {
         let markdown = """
         | Target | What it is |

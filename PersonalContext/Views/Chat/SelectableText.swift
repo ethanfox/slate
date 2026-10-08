@@ -5,6 +5,7 @@ struct SelectableText: NSViewRepresentable {
     var text: String
     var markdown = false
     var hugsWidth = false
+    var capWidth: CGFloat? = nil
     var fontSize: CGFloat = 15
     var lineSpacing: CGFloat = 7
     var color: NSColor = .labelColor
@@ -20,7 +21,7 @@ struct SelectableText: NSViewRepresentable {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: ChatSelectableTextView, context: Context) -> CGSize? {
-        nsView.fittedSize(for: proposal.width, hugging: hugsWidth)
+        nsView.fittedSize(for: proposal.width, hugging: hugsWidth, cap: capWidth)
     }
 }
 
@@ -77,25 +78,36 @@ final class ChatSelectableTextView: NSTextView {
         invalidateIntrinsicContentSize()
     }
 
-    func fittedSize(for proposed: CGFloat?, hugging: Bool) -> CGSize {
-        let maxWidth = proposed.map { $0 > 1 ? $0.rounded() : 680 } ?? 680
+    func fittedSize(for proposed: CGFloat?, hugging: Bool, cap: CGFloat? = nil) -> CGSize {
+        let wrap = Self.wrapWidth(proposed: proposed, cap: cap)
         if !hugging {
-            return CGSize(width: maxWidth, height: height(forWidth: maxWidth))
+            return CGSize(width: wrap, height: height(forWidth: wrap))
         }
-        let natural = widthThatFits() + 8
-        let width = min(max(natural, 1), maxWidth)
+        let natural = ceil(widthThatFits())
+        let width = natural > 1 ? min(natural, wrap) : wrap
         return CGSize(width: width, height: height(forWidth: width))
     }
 
+    static func wrapWidth(proposed: CGFloat?, cap: CGFloat?) -> CGFloat {
+        let limits = [proposed, cap].compactMap { value -> CGFloat? in
+            guard let value, value.isFinite, value > 1 else { return nil }
+            return value.rounded()
+        }
+        return limits.min() ?? 456
+    }
+
     func height(forWidth width: CGFloat) -> CGFloat {
-        let width = width.rounded()
+        let width = max(width.rounded(), 1)
         if width <= 1 { return fittedHeight }
         if abs(width - fittedWidth) < 0.5 { return fittedHeight }
         guard let layoutManager, let textContainer else { return 22 }
         textContainer.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
         layoutManager.ensureLayout(for: textContainer)
+        let used = layoutManager.usedRect(for: textContainer)
+        let glyphs = layoutManager.glyphRange(for: textContainer)
+        let bounds = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
         fittedWidth = width
-        fittedHeight = ceil(max(layoutManager.usedRect(for: textContainer).height, 22))
+        fittedHeight = ceil(max(used.height, bounds.height, 22))
         return fittedHeight
     }
 
