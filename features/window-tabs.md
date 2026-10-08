@@ -12,7 +12,7 @@ This is not native window tabbing, not a second bar, and not Craft’s tab strip
 - Two or more: icon + title at 15. Current tab is `CraftColor.selection`, radius 8, semibold, primary. Idle is regular, secondary, no fill.
 - Every tab has an icon.
 - Close is an × on the tab, always visible while the strip is showing. No motion on hover or press.
-- Overflow scrolls horizontally. No visible scroller. Current tab stays in view. A clipped end gets a short blur; a fully visible first or last tab does not.
+- Overflow scrolls horizontally. No visible scroller. Current tab stays in view. At a clipped end the tab pixels themselves blur away; a fully visible first or last tab does not.
 - Back and forward sit before the first tab. Each tab keeps its own history. Navigating inside a tab pushes that stack; switching tabs does not. Closing a tab discards its history.
 - Trailing page actions stay pinned. Empty space after the tabs still drags the window.
 - Drag a tab to reorder. Other tabs slide into the new order while the drag is still down.

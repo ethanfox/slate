@@ -89,7 +89,7 @@ One row. It names the page and holds the actions for that page. When more than o
   - Every tab has an icon and a title. Try 15 first (`CraftFont` body / summary-card size). Fall back to 13 only if the bar feels tight.
   - Current tab: `CraftColor.selection` fill, radius 8, semibold, primary. Idle: no fill, regular, secondary. Not a bordered capsule. Not glass. Not Craft’s tab strip.
   - Close is an × on the tab. Always visible while the strip is showing. Do not animate the tab when the × is hovered or pressed.
-  - Overflow scrolls horizontally. No visible scroller. Keep the current tab in view. A clipped end gets a short blur; a fully visible first or last tab does not.
+  - Overflow scrolls horizontally. No visible scroller. Keep the current tab in view. A clipped end dissipates with a blurred copy of the same tabs, masked to the viewport edge (scroll-into-blur). A fully visible first or last tab does not blur.
   - Hovering a tab shows a small elevated pane with the full title, and the project (icon + name) underneath when the tab belongs to one. Not the system tooltip.
   - Trailing page actions stay pinned. The leftover gap after the tabs is the window-drag region. A scroll view must not eat drag-to-move for the whole bar.
 - Trailing: at most one primary button, then view switches (grid, list) if the page has them.

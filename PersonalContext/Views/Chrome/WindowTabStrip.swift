@@ -25,6 +25,8 @@ struct WindowTabStrip: View {
     @State private var hoverWait: Task<Void, Never>?
     @State private var overflowLeading = false
     @State private var overflowTrailing = false
+    @State private var stripWidth: CGFloat = 0
+    @State private var scrollX: CGFloat = 0
 
     var body: some View {
         HStack(spacing: 8) {
@@ -63,61 +65,86 @@ struct WindowTabStrip: View {
         reduceMotion ? nil : Motion.snappy
     }
 
+    private var showingEdgeBlur: Bool {
+        !reduceMotion && stripWidth > 0 && (overflowLeading || overflowTrailing)
+    }
+
+    @ViewBuilder
+    private func tabRow(interactive: Bool) -> some View {
+        HStack(spacing: 8) {
+            ForEach(displayedTabs) { tab in
+                tabChip(tab, drag: interactive)
+                    .id(tab.id)
+                    .opacity(interactive && draggingID == tab.id ? 0.35 : 1)
+                    .onGeometryChange(for: CGRect.self) { geo in
+                        geo.frame(in: .named(TabDragSpace.name))
+                    } action: { frame in
+                        guard interactive else { return }
+                        frames[tab.id] = frame
+                    }
+            }
+        }
+    }
+
     private var strip: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    ForEach(displayedTabs) { tab in
-                        WindowTabChip(
-                            title: label(for: tab).title,
-                            symbol: label(for: tab).symbol,
-                            isSelected: tab.id == app.selectedTabID,
-                            isGenerating: isGenerating(tab),
-                            allowsDrag: true,
-                            onSelect: { app.selectTab(tab.id) },
-                            onClose: { app.closeTab(tab.id) },
-                            onDrag: { dragMoved(tab.id, $0) },
-                            onDragEnd: commitDrag,
-                            onHoverChange: { setHover(tab.id, $0) }
-                        )
-                        .id(tab.id)
-                        .opacity(draggingID == tab.id ? 0.35 : 1)
-                        .onGeometryChange(for: CGRect.self) { geo in
-                            geo.frame(in: .named(TabDragSpace.name))
-                        } action: { frames[tab.id] = $0 }
-                    }
-                }
+                tabRow(interactive: true)
             }
             .scrollIndicators(.hidden)
             .scrollDisabled(draggingID != nil)
             .coordinateSpace(name: TabDragSpace.name)
-            .onScrollGeometryChange(for: TabOverflow.self) { geometry in
+            .frame(height: TabDragSpace.chip.height)
+            .mask {
+                TabScrollViewportMask(
+                    mode: .sharp,
+                    stripWidth: stripWidth,
+                    overflowLeading: overflowLeading,
+                    overflowTrailing: overflowTrailing,
+                    active: showingEdgeBlur
+                )
+            }
+            .overlay(alignment: .topLeading) {
+                if showingEdgeBlur {
+                    tabRow(interactive: false)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, TabScrollBlur.radius)
+                        .padding(.vertical, TabScrollBlur.radius)
+                        .offset(x: -scrollX)
+                        .compositingGroup()
+                        .blur(radius: TabScrollBlur.radius)
+                        .padding(.horizontal, -TabScrollBlur.radius)
+                        .padding(.vertical, -TabScrollBlur.radius)
+                        .frame(width: stripWidth, height: TabDragSpace.chip.height, alignment: .leading)
+                        .mask {
+                            TabScrollViewportMask(
+                                mode: .blur,
+                                stripWidth: stripWidth,
+                                overflowLeading: overflowLeading,
+                                overflowTrailing: overflowTrailing,
+                                active: true
+                            )
+                        }
+                        .allowsHitTesting(false)
+                }
+            }
+            .onScrollGeometryChange(for: TabScrollMetrics.self) { geometry in
                 let leadingInset = geometry.contentInsets.leading
                 let trailingInset = geometry.contentInsets.trailing
-                return TabOverflow(
+                return TabScrollMetrics(
                     leading: geometry.contentOffset.x + leadingInset > 0.5,
-                    trailing: geometry.contentOffset.x + geometry.containerSize.width < geometry.contentSize.width - trailingInset - 0.5
+                    trailing: geometry.contentOffset.x + geometry.containerSize.width < geometry.contentSize.width - trailingInset - 0.5,
+                    width: geometry.containerSize.width,
+                    scrollX: geometry.visibleRect.minX
                 )
-            } action: { _, overflow in
-                overflowLeading = overflow.leading
-                overflowTrailing = overflow.trailing
-            }
-            .overlay(alignment: .leading) {
-                if overflowLeading {
-                    TabEdgeBlur(edge: .leading)
-                        .transition(.opacity)
-                }
-            }
-            .overlay(alignment: .trailing) {
-                if overflowTrailing {
-                    TabEdgeBlur(edge: .trailing)
-                        .transition(.opacity)
-                }
+            } action: { _, metrics in
+                overflowLeading = metrics.leading
+                overflowTrailing = metrics.trailing
+                stripWidth = metrics.width
+                scrollX = metrics.scrollX
             }
             .overlay(alignment: .topLeading) { lift }
             .overlay(alignment: .topLeading) { hoverPane }
-            .animation(reduceMotion ? nil : Motion.quick, value: overflowLeading)
-            .animation(reduceMotion ? nil : Motion.quick, value: overflowTrailing)
             .onAppear { scroll(proxy) }
             .onChange(of: app.selectedTabID) { _, _ in
                 guard draggingID == nil else { return }
@@ -222,6 +249,21 @@ struct WindowTabStrip: View {
         proxy.scrollTo(app.selectedTabID, anchor: .center)
     }
 
+    private func tabChip(_ tab: WindowTab, drag: Bool) -> WindowTabChip {
+        WindowTabChip(
+            title: label(for: tab).title,
+            symbol: label(for: tab).symbol,
+            isSelected: tab.id == app.selectedTabID,
+            isGenerating: isGenerating(tab),
+            allowsDrag: drag,
+            onSelect: { app.selectTab(tab.id) },
+            onClose: { app.closeTab(tab.id) },
+            onDrag: { dragMoved(tab.id, $0) },
+            onDragEnd: commitDrag,
+            onHoverChange: { setHover(tab.id, $0) }
+        )
+    }
+
     private func isGenerating(_ tab: WindowTab) -> Bool {
         guard let id = tab.generatingID else { return false }
         return app.runningChats.contains { $0.id == id }
@@ -304,9 +346,91 @@ private struct TabLabel {
     var projectSymbol: String?
 }
 
-private struct TabOverflow: Equatable {
+private struct TabScrollMetrics: Equatable {
     var leading: Bool
     var trailing: Bool
+    var width: CGFloat
+    var scrollX: CGFloat
+}
+
+private enum TabScrollBlur {
+    static let fade: CGFloat = 56
+    static let radius: CGFloat = 10
+}
+
+private enum TabScrollViewportMaskMode {
+    case sharp
+    case blur
+}
+
+private struct TabScrollViewportMask: View {
+    var mode: TabScrollViewportMaskMode
+    var stripWidth: CGFloat
+    var overflowLeading: Bool
+    var overflowTrailing: Bool
+    var active: Bool
+
+    var body: some View {
+        if active, stripWidth > 0 {
+            Rectangle()
+                .fill(.linearGradient(stops: stops, startPoint: .leading, endPoint: .trailing))
+        } else {
+            Color.white
+        }
+    }
+
+    private var fade: CGFloat {
+        min(TabScrollBlur.fade / stripWidth, 0.5)
+    }
+
+    private var stops: [Gradient.Stop] {
+        let f = fade
+        let peak = f * 0.42
+
+        switch mode {
+        case .sharp:
+            var s: [Gradient.Stop] = []
+            if overflowLeading {
+                s += [
+                    .init(color: .clear, location: 0),
+                    .init(color: .white, location: f),
+                ]
+            } else {
+                s.append(.init(color: .white, location: 0))
+            }
+            if overflowTrailing {
+                s += [
+                    .init(color: .white, location: 1 - f),
+                    .init(color: .clear, location: 1),
+                ]
+            } else {
+                s.append(.init(color: .white, location: 1))
+            }
+            return s.sorted { $0.location < $1.location }
+
+        case .blur:
+            var s: [Gradient.Stop] = []
+            if overflowLeading {
+                s += [
+                    .init(color: .clear, location: 0),
+                    .init(color: .white, location: peak),
+                    .init(color: .clear, location: f),
+                ]
+            } else {
+                s.append(.init(color: .clear, location: 0))
+            }
+            if overflowTrailing {
+                s += [
+                    .init(color: .clear, location: 1 - f),
+                    .init(color: .white, location: 1 - peak),
+                    .init(color: .clear, location: 1),
+                ]
+            } else {
+                s.append(.init(color: .clear, location: 1))
+            }
+            return s.sorted { $0.location < $1.location }
+        }
+    }
 }
 
 private struct TabHistoryControls: View {
@@ -350,29 +474,6 @@ private struct TabHistoryButton: View {
         .help(title)
         .accessibilityLabel(title)
         .onHover { hovering = $0 }
-    }
-}
-
-private struct TabEdgeBlur: View {
-    var edge: HorizontalEdge
-
-    var body: some View {
-        Rectangle()
-            .fill(.ultraThinMaterial)
-            .mask {
-                LinearGradient(
-                    stops: [
-                        .init(color: .black, location: 0),
-                        .init(color: .black.opacity(0.55), location: 0.35),
-                        .init(color: .clear, location: 1),
-                    ],
-                    startPoint: edge == .leading ? .leading : .trailing,
-                    endPoint: edge == .leading ? .trailing : .leading
-                )
-            }
-            .frame(width: 28)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
     }
 }
 
