@@ -6,6 +6,7 @@ enum ProjectColumnMetrics {
     static let railWidth: CGFloat = 52
     static let subtrackIndent: CGFloat = 28
     static let hoverOpenDelay: Duration = .milliseconds(100)
+    static let chatPreviewLimit = 10
     static let openMotion = Animation.easeOut(duration: 0.22)
     static let closeMotion = Animation.easeOut(duration: 0.14)
 }
@@ -17,9 +18,16 @@ struct ProjectColumn: View {
     @Environment(\.modelContext) private var context
     @State private var collapsed: Set<UUID> = []
     @State private var expandedCompleted: Set<UUID> = []
+    @State private var showingAllChats = false
     @State private var pendingThreadDelete: ProjectThread?
     @State private var pendingNoteDelete: Note?
     @State private var pendingDecisionDelete: Decision?
+
+    init(project: Project, compact: Bool) {
+        self.project = project
+        self.compact = compact
+        _collapsed = State(initialValue: Set(project.threads.filter { !$0.children.isEmpty }.map(\.id)))
+    }
 
     private var tab: ProjectTab { app.tab(for: project.id) }
 
@@ -100,6 +108,16 @@ struct ProjectColumn: View {
             }
             Button("Cancel", role: .cancel) { pendingDecisionDelete = nil }
         }
+        .onChange(of: project.id, initial: true) { _, _ in
+            showingAllChats = false
+            revealTracks(reset: true)
+        }
+        .onChange(of: app.selectedThread) { _, id in
+            expandTrackPath(to: id)
+        }
+        .onChange(of: app.selectedConversation) { _, id in
+            revealSelectedChat(id)
+        }
     }
 
     private var rail: some View {
@@ -159,8 +177,8 @@ struct ProjectColumn: View {
 
                     if !conversations.isEmpty {
                         header(.chats, add: newChat)
-                        if app.isProjectSectionOpen(.chats) {
-                            ForEach(conversations) { conversation in
+                        if isSectionOpen(.chats) {
+                            ForEach(visibleConversations) { conversation in
                                 ConversationRow(
                                     conversation: conversation,
                                     isSelected: tab == .chat && app.selectedConversation == conversation.id,
@@ -169,11 +187,19 @@ struct ProjectColumn: View {
                                     app.open(conversation)
                                 }
                             }
+                            if conversations.count > ProjectColumnMetrics.chatPreviewLimit {
+                                ColumnShowMoreButton(
+                                    expanded: showingAllChats,
+                                    remaining: conversations.count - ProjectColumnMetrics.chatPreviewLimit
+                                ) {
+                                    showingAllChats.toggle()
+                                }
+                            }
                         }
                     }
 
                     header(.tracks, add: { createThread(parent: nil) })
-                    if app.isProjectSectionOpen(.tracks) {
+                    if isSectionOpen(.tracks) {
                         ForEach(project.rootThreads) { thread in
                             ThreadBranch(
                                 thread: thread,
@@ -195,7 +221,7 @@ struct ProjectColumn: View {
                     }
 
                     header(.notes, add: createNote)
-                    if app.isProjectSectionOpen(.notes) {
+                    if isSectionOpen(.notes) {
                         ForEach(notes) { note in
                             Button {
                                 app.open(note)
@@ -237,7 +263,7 @@ struct ProjectColumn: View {
                     }
 
                     header(.decisions, add: createDecision)
-                    if app.isProjectSectionOpen(.decisions) {
+                    if isSectionOpen(.decisions) {
                         ForEach(decisions) { decision in
                             Button {
                                 app.open(decision)
@@ -285,8 +311,8 @@ struct ProjectColumn: View {
     private func header(_ section: ProjectColumnSection, add: @escaping () -> Void) -> some View {
         SidebarSectionHeader(
             title: section.title,
-            isExpanded: app.isProjectSectionOpen(section),
-            onToggle: { app.toggleProjectSection(section) }
+            isExpanded: isSectionOpen(section),
+            onToggle: { app.toggleProjectSection(section, tab: tab) }
         ) {
             SectionAddButton(title: String(section.title.dropLast()), action: add)
         }
@@ -294,6 +320,41 @@ struct ProjectColumn: View {
 
     private func show(_ tab: ProjectTab) {
         app.open(project, tab: tab)
+        if let section = ProjectColumnSection.allCases.first(where: { $0.tab == tab }) {
+            app.openProjectSection(section)
+        }
+    }
+
+    private func isSectionOpen(_ section: ProjectColumnSection) -> Bool {
+        app.isProjectSectionOpen(section, tab: tab)
+    }
+
+    private var visibleConversations: [Conversation] {
+        if showingAllChats { return conversations }
+        return Array(conversations.prefix(ProjectColumnMetrics.chatPreviewLimit))
+    }
+
+    private func revealTracks(reset: Bool) {
+        if reset {
+            collapsed = Set(project.threads.filter { !$0.children.isEmpty }.map(\.id))
+        }
+        expandTrackPath(to: tab == .threads ? app.selectedThread : nil)
+    }
+
+    private func expandTrackPath(to id: UUID?) {
+        var current = project.threads.first { $0.id == id }
+        while let thread = current {
+            collapsed.remove(thread.id)
+            current = thread.parent
+        }
+    }
+
+    private func revealSelectedChat(_ id: UUID?) {
+        guard let id else { return }
+        let preview = conversations.prefix(ProjectColumnMetrics.chatPreviewLimit)
+        if !preview.contains(where: { $0.id == id }) {
+            showingAllChats = true
+        }
     }
 
     private func newChat() {
@@ -401,6 +462,34 @@ private struct ColumnIconButton: View {
         .help(label)
         .accessibilityLabel(label)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private struct ColumnShowMoreButton: View {
+    var expanded: Bool
+    var remaining: Int
+    var action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(expanded ? "Show less" : "Show more")
+                .font(CraftFont.sidebar)
+                .foregroundStyle(hovering ? .primary : .secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .frame(height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(hovering ? CraftColor.hover : Color.clear)
+                        .animation(Motion.hover, value: hovering)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityLabel(expanded ? "Show less" : "Show more")
+        .accessibilityHint(expanded ? "Hides older chats" : "Shows \(remaining) more chats")
     }
 }
 

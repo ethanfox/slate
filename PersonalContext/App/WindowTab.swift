@@ -119,6 +119,7 @@ extension AppModel {
 
     func open(_ thread: ProjectThread, newTab: Bool = false) {
         guard let project = thread.project else { return }
+        openProjectSection(.tracks)
         reveal(
             WindowTab(
                 id: UUID(),
@@ -135,6 +136,7 @@ extension AppModel {
 
     func open(_ note: Note, newTab: Bool = false) {
         guard let project = note.project else { return }
+        openProjectSection(.notes)
         reveal(
             WindowTab(
                 id: UUID(),
@@ -151,6 +153,7 @@ extension AppModel {
 
     func open(_ decision: Decision, newTab: Bool = false) {
         guard let project = decision.project else { return }
+        openProjectSection(.decisions)
         reveal(
             WindowTab(
                 id: UUID(),
@@ -167,6 +170,7 @@ extension AppModel {
 
     func open(_ conversation: Conversation, newTab: Bool = false) {
         if let project = conversation.project {
+            openProjectSection(.chats)
             reveal(
                 WindowTab(
                     id: UUID(),

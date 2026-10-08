@@ -86,6 +86,9 @@ final class AppModel {
     var collapsedProjectSections: Set<String> {
         didSet { defaults.set(Array(collapsedProjectSections), forKey: Keys.collapsedProjectSections) }
     }
+    var expandedProjectSections: Set<String> {
+        didSet { defaults.set(Array(expandedProjectSections), forKey: Keys.expandedProjectSections) }
+    }
     var settingsSection: SettingsSection {
         didSet { defaults.set(settingsSection.rawValue, forKey: Keys.settingsSection) }
     }
@@ -123,20 +126,25 @@ final class AppModel {
         }
     }
 
-    func isProjectSectionOpen(_ section: ProjectColumnSection) -> Bool {
-        !collapsedProjectSections.contains(section.rawValue)
+    func isProjectSectionOpen(_ section: ProjectColumnSection, tab: ProjectTab) -> Bool {
+        if collapsedProjectSections.contains(section.rawValue) { return false }
+        if expandedProjectSections.contains(section.rawValue) { return true }
+        return section.tab == tab
     }
 
-    func toggleProjectSection(_ section: ProjectColumnSection) {
-        if collapsedProjectSections.contains(section.rawValue) {
-            collapsedProjectSections.remove(section.rawValue)
-        } else {
+    func toggleProjectSection(_ section: ProjectColumnSection, tab: ProjectTab) {
+        if isProjectSectionOpen(section, tab: tab) {
+            expandedProjectSections.remove(section.rawValue)
             collapsedProjectSections.insert(section.rawValue)
+        } else {
+            collapsedProjectSections.remove(section.rawValue)
+            expandedProjectSections.insert(section.rawValue)
         }
     }
 
     func openProjectSection(_ section: ProjectColumnSection) {
         collapsedProjectSections.remove(section.rawValue)
+        expandedProjectSections.insert(section.rawValue)
     }
 
     func toggleInspector() {
@@ -210,7 +218,13 @@ final class AppModel {
         projectsLayout = storedLayout == "list" ? .card : (ProjectsLayout(rawValue: storedLayout) ?? .table)
         sidebarCollapsed = UserDefaults.standard.bool(forKey: Keys.sidebarCollapsed)
         projectColumnCollapsed = UserDefaults.standard.bool(forKey: Keys.projectColumnCollapsed)
-        collapsedProjectSections = Set(UserDefaults.standard.stringArray(forKey: Keys.collapsedProjectSections) ?? [])
+        if UserDefaults.standard.object(forKey: Keys.expandedProjectSections) == nil {
+            collapsedProjectSections = []
+            expandedProjectSections = []
+        } else {
+            collapsedProjectSections = Set(UserDefaults.standard.stringArray(forKey: Keys.collapsedProjectSections) ?? [])
+            expandedProjectSections = Set(UserDefaults.standard.stringArray(forKey: Keys.expandedProjectSections) ?? [])
+        }
         settingsSection = SettingsSection(rawValue: UserDefaults.standard.string(forKey: Keys.settingsSection) ?? "") ?? .model
         if UserDefaults.standard.object(forKey: Keys.openChatLinksInNewTab) == nil {
             openChatLinksInNewTab = true
@@ -612,6 +626,7 @@ enum Keys {
     static let sidebarCollapsed = "sidebarCollapsed"
     static let projectColumnCollapsed = "projectColumnCollapsed"
     static let collapsedProjectSections = "collapsedProjectSections"
+    static let expandedProjectSections = "expandedProjectSections"
     static let settingsSection = "settingsSection"
     static let orbPalette = "orbPalette"
     static let windowTabs = "windowTabs"

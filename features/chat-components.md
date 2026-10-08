@@ -25,7 +25,7 @@ It does not create, select, or persist a conversation. The caller supplies the m
 
 The shared conversation history.
 
-It renders user messages, assistant responses, the work accordion, tool rows in time order, source chips, object cards, errors, and message actions. Wait-state, sources, and object cards are specified in [`chat-wait-state.md`](chat-wait-state.md). It reads entries from one `ChatSession` plus the current turn on `ChatRuntime`.
+It renders user messages, assistant responses, the work control (live title or past `Worked for Ns`), source chips, object cards, errors, and message actions. Wait-state, sources, and object cards are specified in [`chat-wait-state.md`](chat-wait-state.md). It reads entries from one `ChatSession` plus the current turn on `ChatRuntime`.
 
 It does not send messages, create conversations, or persist history.
 

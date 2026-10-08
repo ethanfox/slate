@@ -208,13 +208,12 @@ private struct ChatMessageList: View {
                     waitState: waitState,
                     seconds: workedSeconds,
                     thinking: thinking,
-                    tools: [],
-                    liveTitle: tools.last(where: { $0.status == .running })?.title
+                    tools: tools,
+                    sources: sources
                 )
             }
             ForEach(liveTurn) { item in
-                switch item.kind {
-                case .text(let text):
+                if case .text(let text) = item.kind {
                     AssistantMarkdown(
                         text: text,
                         sources: sources,
@@ -222,8 +221,6 @@ private struct ChatMessageList: View {
                         streaming: session.isGenerating && item.id == lastTextID
                     )
                     .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
-                case .tool(let tool):
-                    ChatToolRow(tool: tool, sources: sources)
                 }
             }
             if !session.isGenerating, !liveTurnText.isEmpty {
@@ -355,43 +352,30 @@ private struct WorkAccordion: View {
     var thinking: String
     var tools: [ChatToolActivity]
     var sources: [ChatSource] = []
-    var liveTitle: String?
-    @State private var opened: Bool?
+    @State private var opened = false
 
-    private var expanded: Bool { opened ?? isGenerating }
+    private var canOpen: Bool { !isGenerating && hasBody }
+    private var expanded: Bool { opened && canOpen }
+    private var currentTool: ChatToolActivity? {
+        tools.last(where: { $0.status == .running }) ?? tools.last
+    }
 
     private var label: String {
         if isGenerating {
-            if let liveTitle, !liveTitle.isEmpty { return liveTitle }
-            return waitState.label
+            return waitState == .starting ? ChatWaitState.starting.label : ChatWaitState.thinking.label
         }
         return seconds <= 0 ? "Worked" : "Worked for \(seconds)s"
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button(action: toggle) {
-                HStack(spacing: 6) {
-                    if isGenerating {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                    Text(label)
-                        .font(CraftFont.body)
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
-                }
-                .contentShape(Rectangle())
+            header
+            if isGenerating, let currentTool {
+                ChatToolRow(tool: currentTool, sources: sources)
+                    .padding(.leading, 22)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(label)
-            .accessibilityAddTraits(expanded ? [.isSelected] : [])
-
-            if expanded, hasBody {
-                VStack(alignment: .leading, spacing: 10) {
+            if expanded {
+                VStack(alignment: .leading, spacing: 8) {
                     if !thinking.isEmpty {
                         Text(thinking)
                             .font(.system(size: 12))
@@ -401,13 +385,50 @@ private struct WorkAccordion: View {
                         ChatToolRow(tool: tool, sources: sources)
                     }
                 }
+                .padding(.leading, 22)
             }
         }
         .onChange(of: isGenerating) { _, generating in
-            opened = generating
+            if generating { opened = false }
         }
         .animation(Motion.quick, value: expanded)
+        .animation(Motion.quick, value: currentTool?.id)
         .animation(Motion.quick, value: label)
+    }
+
+    @ViewBuilder
+    private var header: some View {
+        if canOpen {
+            Button(action: toggle) {
+                line(showsChevron: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(expanded ? [.isSelected] : [])
+            .accessibilityHint(expanded ? "Hides the tools that ran" : "Shows the tools that ran")
+        } else {
+            line(showsChevron: false)
+        }
+    }
+
+    private func line(showsChevron: Bool) -> some View {
+        HStack(spacing: 6) {
+            if isGenerating {
+                ProgressView()
+                    .controlSize(.small)
+            }
+            Text(label)
+                .font(CraftFont.body)
+                .foregroundStyle(.secondary)
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(label)
     }
 
     private var hasBody: Bool {
@@ -415,7 +436,7 @@ private struct WorkAccordion: View {
     }
 
     private func toggle() {
-        opened = !expanded
+        opened.toggle()
     }
 }
 
@@ -566,8 +587,7 @@ private struct AssistantMessageBlock: View {
                         seconds: work.seconds,
                         thinking: work.thinking,
                         tools: work.tools,
-                        sources: answer.sources,
-                        liveTitle: nil
+                        sources: answer.sources
                     )
                 }
                 AssistantMarkdown(text: answer.text, sources: answer.sources, pinUnused: true)

@@ -31,23 +31,15 @@ That renders as a card in the reply. Click opens the object. Source chips stay f
 
 Persist the title and the URL (or the KB id). Do not save favicon files. Resolve the site icon at display time from the host, in memory. Offline or a failed fetch uses a generic mark.
 
-## Tool row in the stream
+## Work control (one component, two states)
 
-While a tool is running, a single line sits in the transcript, in order, not in a pile at the bottom:
+`WorkAccordion` in `ChatMessages` is the only wait-state control. Use it for the live turn and for past replies. Do not add a second view.
 
-- The tool’s icon (Gmail logo in the reference; Slate: glasses for notes, globe for search, placeholder `C` for Cursor-as-source)
-- A live title (`Searching Gmail…`, `Reading notes`)
-- Optional chevron if there is more to open
+**Active (generating):** header stays `Thinking` (`Starting` only before the first event). One tool line sits under it and changes as the current tool changes. Do not grow a list. Do not replace the Thinking label. No chevron while live.
 
-When that tool finishes, the same line stays where it is and the verb goes past tense (`Searched Gmail for …`). Then the model may write, then another tool may run under that. Stack in time. Do not hoist every tool to the top.
+**Past (closed):** `Worked for 38s` (`Worked` if the clock is 0). Chevron if there is a tool list or thinking. This is history, not the live wait. Keep this look.
 
-## Work accordion
-
-The top of the turn is one disclosure:
-
-**While waiting (open):** label is `Thinking` (or the current live title). Body is the live log: thinking, tool rows, and any interim “here is what I have so far” text. The user watches this.
-
-**When the turn ends (closed):** the label becomes `Worked for 38s`. The body is the same log. The final answer sits below, outside the accordion.
+**Past (open):** the same control. Body is thinking (if any) plus the tool rows (icon + title + optional detail). Answer stays below, outside the control.
 
 Time is wall clock from send to last token. Do not invent a vendor duration if we already have one.
 
@@ -56,17 +48,18 @@ The final answer is not hidden in the accordion. The accordion is how they waite
 ## Order in one turn
 
 1. User message
-2. Work accordion opens (`Thinking`)
-3. First tool row (icon + live title)
+2. Work control shows `Thinking` (or Starting)
+3. One tool line under Thinking updates as the current tool changes
 4. Interim text if the model speaks before it is done
-5. Next tool row, more text, as they happen
-6. Accordion closes and renames to `Worked for Ns`
-7. Final answer, with source chips on the claims
+5. Control closes and renames to `Worked for Ns`
+6. Final answer, with source chips on the claims
+7. Chevron opens the tool list on that past control
 
 ## Not this
 
 - The orb
-- A checklist of `Listed notes` dumped above or below the reply
+- A checklist of `Listed notes` dumped in the live stream
+- A second wait-state component for live vs past
 - “Writing…” / “Thinking…” with no tool or source
 - Rebuilding ChatGPT’s message bubble, pill composer, or action bar
 

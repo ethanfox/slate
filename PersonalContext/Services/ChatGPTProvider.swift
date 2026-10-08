@@ -120,18 +120,20 @@ struct ChatGPTProvider: ChatProvider {
                                 }
                             case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
                                 await MainActor.run { bridge.markThinking(event["delta"] as? String) }
-                            case "response.output_item.done":
-                                if let item = event["item"] as? [String: Any] {
+                            case "response.output_item.added", "response.output_item.done":
+                                guard let item = event["item"] as? [String: Any] else { continue }
+                                if type == "response.output_item.done" {
                                     replay.append(Self.replayItem(item))
-                                    if item["type"] as? String == "function_call",
-                                       let name = item["name"] as? String,
-                                       let callID = item["call_id"] as? String {
-                                        calls.append(FunctionCall(
-                                            id: callID,
-                                            name: name,
-                                            arguments: Self.arguments(from: item["arguments"])
-                                        ))
-                                    }
+                                }
+                                guard let call = Self.functionCall(from: item) else { continue }
+                                if let index = calls.firstIndex(where: { $0.id == call.id }) {
+                                    if type == "response.output_item.done" { calls[index] = call }
+                                } else {
+                                    calls.append(call)
+                                }
+                                await MainActor.run {
+                                    bridge.applyTool(name: call.name, status: "running", id: call.id)
+                                    bridge.debugLog.add("chatgpt tool \(call.name)")
                                 }
                             case "response.failed", "error":
                                 throw ChatGPTAuthError(Self.apiError(from: event) ?? "ChatGPT could not complete the response.")
@@ -302,6 +304,14 @@ struct ChatGPTProvider: ChatProvider {
         if let code, !code.isEmpty, message?.contains(code) != true { parts.append(code) }
         if let param, !param.isEmpty { parts.append("param: \(param)") }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
+    private static func functionCall(from item: [String: Any]) -> FunctionCall? {
+        guard item["type"] as? String == "function_call",
+              let name = item["name"] as? String,
+              let callID = item["call_id"] as? String
+        else { return nil }
+        return FunctionCall(id: callID, name: name, arguments: arguments(from: item["arguments"]))
     }
 
     private static func arguments(from raw: Any?) -> [String: Any] {

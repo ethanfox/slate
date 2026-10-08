@@ -181,8 +181,9 @@ Threads, notes, and decisions are a source list on the solid page, not a second 
 - Same row metrics as the sidebar (28 tall, 8 inset, radius 8) so it feels like a list and not a new component.
 - The document to the right keeps the 32 inset and the 680 measure.
 - **Collapse (locked).** An icon-only `sidebar.leading` control sits on the Overview row. It does not hide the column the way the main sidebar does. Collapsed width is 52: Overview plus section icons (Chats, Tracks, Notes, Decisions) stay visible. Hovering the rail for 0.1s slides the full 250 column in from the leading edge, over the document. A quicker pass does not open it. Leaving slides it back out the same way, a little quicker (open 0.22 easeOut, close 0.14 easeOut). The page does not reflow on hover. Clicking the control is the only action that pins the column open or closed and shifts the layout. Reduce Motion: opacity only, no slide.
-- **Sections.** Chats, Tracks, Notes, and Decisions are collapsible. The section label is the control; the plus stays for create.
-- **Tracks.** Subtracks indent 28 per level. Completed children of a track sit in a Completed group under that track, collapsed by default, and use `checkmark.circle` instead of the kind icon.
+- **Sections.** Chats, Tracks, Notes, and Decisions are collapsible. The section label is the control; the plus stays for create. A section opens when it matches the current tab or the user opens it. The others stay closed. This is reveal-in-sidebar, not expand-all.
+- **Tracks.** Subtracks indent 28 per level. Trees start collapsed. Opening a track expands only the path to that track. Completed children of a track sit in a Completed group under that track, collapsed by default, and use `checkmark.circle` instead of the kind icon.
+- **Chats.** Newest first. Show 10, then Show more. Show less folds it back. Opening a chat past the first 10 expands the list.
 - **Marked for deletion.** A marked chat, track, note, or decision swaps its leading icon for `xmark.octagon` in red. The title stays primary. This is a status exception, not a decorative color.
 
 ## Hero views
