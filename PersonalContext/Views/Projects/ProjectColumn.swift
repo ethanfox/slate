@@ -5,6 +5,7 @@ enum ProjectColumnMetrics {
     static let expandedWidth: CGFloat = 250
     static let railWidth: CGFloat = 52
     static let subtrackIndent: CGFloat = 28
+    static let hoverOpenDelay: Duration = .milliseconds(100)
     static let openMotion = Animation.easeOut(duration: 0.22)
     static let closeMotion = Animation.easeOut(duration: 0.14)
 }
