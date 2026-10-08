@@ -110,6 +110,10 @@ final class AppModel {
     var selectedOverviewPlate: UUID?
     let objectFind = ObjectFindSession()
 
+    var isObjectPage: Bool {
+        selectedNote != nil || selectedDecision != nil || selectedThread != nil
+    }
+
     func selectOverviewPlate(_ id: UUID?) {
         selectedOverviewPlate = id
         guard id != nil, !inspectorOpen else { return }
@@ -286,6 +290,10 @@ final class AppModel {
         refreshChatGPTModels()
         refreshUsage()
         restoreWindowTabs()
+        objectFind.installShortcuts { [weak self] in
+            guard let self else { return false }
+            return self.isObjectPage || self.objectFind.isOpen
+        }
     }
 
     func refreshUsage(force: Bool = false) {

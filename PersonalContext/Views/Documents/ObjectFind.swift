@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum ObjectFind {
@@ -76,14 +77,34 @@ enum ObjectFind {
 final class ObjectFindSession {
     var isOpen = false
     var query = ""
-    var wantsFocus = false
     private(set) var objectID: UUID?
     private(set) var matches: [ObjectFind.Match] = []
     private(set) var currentIndex = 0
     private(set) var revealToken = 0
     private var fields: [(ObjectFind.Field, String)] = []
+    private(set) var focusNonce = 0
+    @ObservationIgnored private var shortcutMonitor: Any?
+    @ObservationIgnored private var canHandleShortcut: () -> Bool = { false }
 
     var isAvailable: Bool { objectID != nil }
+
+    func installShortcuts(canHandle: @escaping () -> Bool) {
+        canHandleShortcut = canHandle
+        guard shortcutMonitor == nil else { return }
+        shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            var consumed = false
+            let apply = {
+                consumed = self.consumeShortcut(event)
+            }
+            if Thread.isMainThread {
+                apply()
+            } else {
+                DispatchQueue.main.sync(execute: apply)
+            }
+            return consumed ? nil : event
+        }
+    }
 
     var current: ObjectFind.Match? {
         matches.indices.contains(currentIndex) ? matches[currentIndex] : nil
@@ -96,9 +117,9 @@ final class ObjectFindSession {
     }
 
     func open() {
-        guard isAvailable else { return }
+        guard canHandleShortcut() || isAvailable else { return }
         isOpen = true
-        wantsFocus = true
+        focusNonce += 1
         reveal()
     }
 
@@ -115,7 +136,6 @@ final class ObjectFindSession {
         query = ""
         matches = []
         currentIndex = 0
-        wantsFocus = false
     }
 
     func setQuery(_ text: String) {
@@ -177,6 +197,25 @@ final class ObjectFindSession {
         return current?.range
     }
 
+    private func consumeShortcut(_ event: NSEvent) -> Bool {
+        guard canHandleShortcut() else { return false }
+        if event.window?.title == "Settings" { return false }
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        switch (event.keyCode, modifiers) {
+        case (3, .command):
+            toggle()
+            return true
+        case (5, .command):
+            next()
+            return true
+        case (5, [.command, .shift]):
+            previous()
+            return true
+        default:
+            return false
+        }
+    }
+
     private func recompute(resetIndex: Bool) {
         let previous = current
         matches = ObjectFind.matches(query: query, in: fields)
@@ -210,19 +249,18 @@ extension EnvironmentValues {
 struct ObjectFindAttach: ViewModifier {
     var id: UUID
     var fields: [(ObjectFind.Field, String)]
-    @Environment(\.objectFind) private var find
+    @Environment(AppModel.self) private var app
 
     func body(content: Content) -> some View {
         content
-            .onAppear { sync(attach: true) }
-            .onDisappear { find?.detach(id) }
-            .onChange(of: id) { oldID, newID in
-                find?.detach(oldID)
-                find?.attach(newID)
-                find?.setFields(fields)
+            .onAppear { sync() }
+            .onDisappear { scheduleDetach() }
+            .onChange(of: id) { _, newID in
+                app.objectFind.attach(newID)
+                app.objectFind.setFields(fields)
             }
             .onChange(of: signature) { _, _ in
-                find?.setFields(fields)
+                app.objectFind.setFields(fields)
             }
     }
 
@@ -230,9 +268,18 @@ struct ObjectFindAttach: ViewModifier {
         fields.map { "\($0.0.id):\($0.1)" }.joined(separator: "\u{1e}")
     }
 
-    private func sync(attach: Bool) {
-        if attach { find?.attach(id) }
-        find?.setFields(fields)
+    private func sync() {
+        app.objectFind.attach(id)
+        app.objectFind.setFields(fields)
+    }
+
+    private func scheduleDetach() {
+        let leaving = id
+        DispatchQueue.main.async {
+            let selected = app.selectedNote ?? app.selectedDecision ?? app.selectedThread
+            guard selected != leaving else { return }
+            app.objectFind.detach(leaving)
+        }
     }
 }
 

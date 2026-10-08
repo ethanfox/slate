@@ -16,7 +16,7 @@ Case and diacritic insensitive. Literal text, not regex.
 
 ## Chrome
 
-⌘F shows a system search field in the existing 52pt toolbar. ⌘F again hides it. Not a second bar. Not a field in the document scroll.
+⌘F works while the caret is in the title or the body. The editor does not eat the shortcut. The field appears focused so you can type. ⌘F again hides it. Not a second bar. Not a field in the document scroll.
 
 The field says which hit you are on (`Tags · 2 of 5` or `Text · 1 of 3`). ⌘G / ⇧⌘G and the chevrons walk hits. Return is next. Escape or the field’s cancel also closes it.
 

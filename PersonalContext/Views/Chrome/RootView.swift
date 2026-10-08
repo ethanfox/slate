@@ -141,7 +141,7 @@ struct RootView: View {
                         .frame(maxWidth: app.windowTabs.count < 2 ? .infinity : 24)
                         .contentShape(Rectangle())
                         .gesture(WindowDragGesture())
-                    if app.objectFind.isOpen, app.objectFind.isAvailable {
+                    if app.objectFind.isOpen {
                         ObjectFindBar(session: app.objectFind)
                     }
                     paneAction

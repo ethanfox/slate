@@ -35,19 +35,27 @@ struct ProjectTasksBoard: View {
     }
 
     private var boardScroll: some View {
-        ScrollView([.horizontal, .vertical]) {
-            PageBody {
-                HStack(alignment: .top, spacing: 16) {
-                    ForEach(TaskWorkflowStatus.allCases) { status in
-                        column(status)
+        GeometryReader { geo in
+            let width = columnWidth(in: geo.size.width)
+            ScrollView([.horizontal, .vertical]) {
+                PageBody {
+                    HStack(alignment: .top, spacing: BoardMetrics.gap) {
+                        ForEach(TaskWorkflowStatus.allCases) { status in
+                            column(status)
+                                .frame(width: width, alignment: .topLeading)
+                        }
                     }
+                    .padding(BoardMetrics.inset)
+                    .frame(minHeight: geo.size.height, alignment: .topLeading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(32)
-            .frame(minWidth: 920, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity, alignment: .topLeading)
+            .scrollContentBackground(.hidden)
         }
-        .scrollContentBackground(.hidden)
+    }
+
+    private func columnWidth(in container: CGFloat) -> CGFloat {
+        let usable = container - BoardMetrics.inset * 2 - BoardMetrics.gap * 3
+        return max(BoardMetrics.minColumn, usable / 4)
     }
 
     private var listScroll: some View {
@@ -78,12 +86,9 @@ struct ProjectTasksBoard: View {
         let rows = rows(for: status)
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Circle()
-                    .fill(status.tint)
-                    .frame(width: 6, height: 6)
+                StatusPip(status: status)
                 Text(status.label)
                     .font(CraftFont.section)
-                    .foregroundStyle(status.tint)
                 Text("\(rows.count)")
                     .font(CraftFont.caption)
                     .foregroundStyle(.tertiary)
@@ -113,40 +118,61 @@ struct ProjectTasksBoard: View {
 
     private func column(_ status: TaskWorkflowStatus) -> some View {
         let rows = rows(for: status)
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
+                StatusPip(status: status)
                 Text(status.label)
                     .font(CraftFont.section)
-                    .foregroundStyle(status.tint)
+                    .lineLimit(1)
                 Text("\(rows.count)")
                     .font(CraftFont.caption)
                     .foregroundStyle(.tertiary)
+                Spacer(minLength: 4)
+                Button {
+                    app.present(.newTask(project))
+                } label: {
+                    Image(systemName: "plus")
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("New Task")
+                .accessibilityLabel("New Task")
             }
-            if rows.isEmpty {
-                Text("No tasks.")
-                    .font(CraftFont.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 8)
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(rows) { row in
-                        switch row {
-                        case .task(let item):
-                            TaskBoardCard(item: item)
-                        case .completion(let completion):
-                            CompletionBoardCard(completion: completion) {
-                                inspectCompletion = completion
-                            }
-                        }
+            .frame(height: 28)
+            ForEach(rows) { row in
+                switch row {
+                case .task(let item):
+                    TaskBoardCard(item: item)
+                case .completion(let completion):
+                    CompletionBoardCard(completion: completion) {
+                        inspectCompletion = completion
                     }
                 }
             }
         }
-        .padding(12)
-        .frame(minWidth: 210, maxWidth: .infinity, minHeight: 360, alignment: .topLeading)
-        .background(status.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(status.label), \(rows.count)")
+    }
+}
+
+private enum BoardMetrics {
+    static let minColumn: CGFloat = 220
+    static let gap: CGFloat = 20
+    static let inset: CGFloat = 32
+}
+
+private struct StatusPip: View {
+    var status: TaskWorkflowStatus
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+            .fill(status.tint)
+            .frame(width: 3, height: 12)
+            .accessibilityHidden(true)
     }
 }
 
@@ -166,7 +192,6 @@ private struct TaskBoardCard: View {
     var item: AgendaItem
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @State private var hovering = false
     @State private var confirmDelete = false
 
     var body: some View {
@@ -225,10 +250,9 @@ private struct TaskBoardCard: View {
         .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(hovering ? CraftColor.hairline : Color.clear)
+                .strokeBorder(CraftColor.hairline)
         }
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .onHover { hovering = $0 }
         .onTapGesture { app.present(.editTask(item)) }
         .contextMenu { menu }
         .confirmationDialog("Delete this task?", isPresented: $confirmDelete, titleVisibility: .visible) {
@@ -415,7 +439,6 @@ private struct CompletionBoardCard: View {
     var onOpen: () -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @State private var hovering = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -449,10 +472,9 @@ private struct CompletionBoardCard: View {
         .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(hovering ? CraftColor.hairline : Color.clear)
+                .strokeBorder(CraftColor.hairline)
         }
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .onHover { hovering = $0 }
         .onTapGesture(perform: onOpen)
         .contextMenu {
             if !TaskStore.isLatest(completion) {

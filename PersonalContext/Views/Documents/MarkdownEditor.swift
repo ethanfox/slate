@@ -7,7 +7,7 @@ struct MarkdownEditor: NSViewRepresentable {
     var fontSize: CGFloat = 15
     var minHeight: CGFloat = 0
     var findField: ObjectFind.Field? = nil
-    @Environment(\.objectFind) private var find
+    @Environment(AppModel.self) private var app
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -24,11 +24,15 @@ struct MarkdownEditor: NSViewRepresentable {
     func updateNSView(_ view: MarkdownTextView, context: Context) {
         context.coordinator.parent = self
         view.placeholder = placeholder
-        let ranges = findField.flatMap { find?.isOpen == true ? find?.ranges(in: $0) : [] } ?? []
-        let current = find?.isOpen == true ? findField.flatMap { find?.currentRange(in: $0) } : nil
+        let find = app.objectFind
+        let ranges = findField.flatMap { find.isOpen ? find.ranges(in: $0) : [] } ?? []
+        let current = find.isOpen ? findField.flatMap { find.currentRange(in: $0) } : nil
         let findChanged = view.findRanges != ranges || view.findCurrent != current
         view.findRanges = ranges
         view.findCurrent = current
+        view.onFind = { find.toggle() }
+        view.onFindNext = { find.next() }
+        view.onFindPrevious = { find.previous() }
         if view.string != text, !view.hasMarkedText() {
             view.string = text
         } else if findChanged {
@@ -96,6 +100,9 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
     }
     var findRanges: [NSRange] = []
     var findCurrent: NSRange?
+    var onFind: (() -> Void)?
+    var onFindNext: (() -> Void)?
+    var onFindPrevious: (() -> Void)?
 
     private var formatPopover: NSPopover?
     private var pendingFormatBar: DispatchWorkItem?
@@ -242,21 +249,51 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard window?.firstResponder === self,
-              event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command else {
+        guard window?.firstResponder === self else {
+            return super.performKeyEquivalent(with: event)
+        }
+        let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        guard mods.contains(.command), !mods.contains(.option), !mods.contains(.control) else {
+            return super.performKeyEquivalent(with: event)
+        }
+        switch event.keyCode {
+        case 3 where !mods.contains(.shift):
+            onFind?()
+            return true
+        case 5 where mods.contains(.shift):
+            onFindPrevious?()
+            return true
+        case 5:
+            onFindNext?()
+            return true
+        default: break
+        }
+        guard mods == .command else {
             return super.performKeyEquivalent(with: event)
         }
         switch event.charactersIgnoringModifiers {
         case "b": apply(.bold)
         case "i": apply(.italic)
         case "k": apply(.link)
-        case "f", "g": return false
         default: return super.performKeyEquivalent(with: event)
         }
         return true
     }
 
-    override func performFindPanelAction(_ sender: Any?) {}
+    override func performFindPanelAction(_ sender: Any?) {
+        switch NSTextFinder.Action(rawValue: (sender as? NSMenuItem)?.tag ?? 1) {
+        case .showFindInterface, .setSearchString:
+            onFind?()
+        case .hideFindInterface:
+            if onFind != nil { onFind?() }
+        case .nextMatch:
+            onFindNext?()
+        case .previousMatch:
+            onFindPrevious?()
+        default:
+            break
+        }
+    }
 
     override func insertNewline(_ sender: Any?) {
         let text = string as NSString

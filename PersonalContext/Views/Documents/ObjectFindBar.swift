@@ -3,18 +3,16 @@ import SwiftUI
 
 struct ObjectFindBar: View {
     var session: ObjectFindSession
-    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         HStack(spacing: 8) {
             ObjectFindSearchField(
                 text: Binding(get: { session.query }, set: session.setQuery),
-                focused: fieldFocused,
+                focusNonce: session.focusNonce,
                 onSubmit: session.next,
                 onCancel: session.close
             )
             .frame(width: 188, height: 28)
-            .focused($fieldFocused)
 
             if !session.status.isEmpty {
                 Text(session.status)
@@ -47,23 +45,18 @@ struct ObjectFindBar: View {
             .help("Find Next (⌘G)")
             .accessibilityLabel("Find Next")
         }
-        .onChange(of: session.wantsFocus) { _, wants in
-            guard wants else { return }
-            fieldFocused = true
-            session.wantsFocus = false
-        }
     }
 }
 
 private struct ObjectFindSearchField: NSViewRepresentable {
     @Binding var text: String
-    var focused: Bool
+    var focusNonce: Int
     var onSubmit: () -> Void
     var onCancel: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    func makeNSView(context: Context) -> NSSearchField {
+    func makeNSView(context: Context) -> FindSearchField {
         let field = FindSearchField()
         field.placeholderString = "Find"
         field.delegate = context.coordinator
@@ -74,25 +67,33 @@ private struct ObjectFindSearchField: NSViewRepresentable {
         field.font = .systemFont(ofSize: 13)
         field.target = context.coordinator
         field.action = #selector(Coordinator.submit)
+        context.coordinator.focus(field, nonce: 0)
         return field
     }
 
-    func updateNSView(_ field: NSSearchField, context: Context) {
+    func updateNSView(_ field: FindSearchField, context: Context) {
         context.coordinator.parent = self
         if field.stringValue != text {
             field.stringValue = text
         }
-        if focused, field.window?.firstResponder !== field.currentEditor() {
-            field.window?.makeFirstResponder(field)
-            field.currentEditor()?.selectAll(nil)
-        }
+        context.coordinator.focus(field, nonce: focusNonce)
     }
 
     final class Coordinator: NSObject, NSSearchFieldDelegate {
         var parent: ObjectFindSearchField
+        private var lastFocusNonce = -1
 
         init(_ parent: ObjectFindSearchField) {
             self.parent = parent
+        }
+
+        func focus(_ field: NSSearchField, nonce: Int) {
+            guard lastFocusNonce != nonce else { return }
+            lastFocusNonce = nonce
+            DispatchQueue.main.async {
+                field.window?.makeFirstResponder(field)
+                field.currentEditor()?.selectAll(nil)
+            }
         }
 
         func controlTextDidChange(_ notification: Notification) {
@@ -115,6 +116,14 @@ private struct ObjectFindSearchField: NSViewRepresentable {
 }
 
 private final class FindSearchField: NSSearchField {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.window?.makeFirstResponder(self)
+        }
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if modifiers == .command, event.charactersIgnoringModifiers == "f" {

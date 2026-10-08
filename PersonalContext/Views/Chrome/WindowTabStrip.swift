@@ -252,6 +252,13 @@ struct WindowTabStrip: View {
                     projectName: projectName,
                     projectSymbol: projectSymbol
                 )
+            case .projectTasks:
+                return TabLabel(
+                    title: "\(projectName): Tasks",
+                    symbol: "checklist",
+                    projectName: projectName,
+                    projectSymbol: projectSymbol
+                )
             default:
                 return TabLabel(title: projectName, symbol: projectSymbol)
             }
