@@ -478,10 +478,16 @@ async function prepareCodeRoots(request: Request): Promise<Request["codeRoots"]>
   return roots;
 }
 
-function projectCodeTools(request: Request): Record<string, SDKCustomTool> {
+function projectCodeTools(session: { request: Request }): Record<string, SDKCustomTool> {
   let prepared: Promise<Request["codeRoots"]> | undefined;
+  let preparedFor = "";
   const rootsFor = () => {
-    prepared ??= prepareCodeRoots(request);
+    const key = JSON.stringify(session.request.codeSnapshots ?? []);
+    if (preparedFor !== key) {
+      prepared = undefined;
+      preparedFor = key;
+    }
+    prepared ??= prepareCodeRoots(session.request);
     return prepared;
   };
   return {
@@ -619,15 +625,30 @@ function readStdinLine(): Promise<string> {
   return new Promise((resolve) => lineWaiters.push(resolve));
 }
 
-async function readRequest(): Promise<Request> {
-  return JSON.parse(await readStdinLine()) as Request;
+async function readJSON(): Promise<Record<string, unknown>> {
+  return JSON.parse(await readStdinLine()) as Record<string, unknown>;
 }
 
 async function readHostReply(id: string): Promise<{ text?: string; error?: string }> {
   for (;;) {
-    const message = JSON.parse(await readStdinLine()) as { id?: string; text?: string; error?: string };
-    if (message.id === id) return message;
+    const message = await readJSON();
+    if (message.type === "turn" || message.type === "shutdown") {
+      lineQueue.unshift(JSON.stringify(message));
+      throw new Error("The host ended the tool call.");
+    }
+    if (message.id === id) {
+      return {
+        text: typeof message.text === "string" ? message.text : undefined,
+        error: typeof message.error === "string" ? message.error : undefined,
+      };
+    }
   }
+}
+
+function asRequest(message: Record<string, unknown>): Request | undefined {
+  if (message.type === "host_tool_result" || message.type === "shutdown") return undefined;
+  if (message.type === "turn" || message.apiKey || message.text) return message as unknown as Request;
+  return undefined;
 }
 
 function workerTool(): Record<string, SDKCustomTool> {
@@ -655,16 +676,21 @@ function workerTool(): Record<string, SDKCustomTool> {
   };
 }
 
-async function main() {
-  const request = await readRequest();
-  Object.assign(process.env, request.env);
+type Session = {
+  agent: SDKAgent;
+  request: Request;
+  run?: Run;
+};
+
+const idleMs = 8 * 60 * 1000;
+
+async function createSession(request: Request): Promise<Session> {
   const apiKey = request.apiKey;
   if (!apiKey) throw new Error("Add a Cursor API key in Settings.");
-
-  let agent: SDKAgent;
+  const session: Session = { agent: undefined as unknown as SDKAgent, request };
   if (request.runtime === "cloud") {
     if (!request.cloudRepos?.length) throw new Error("Attach a GitHub or GitLab repository before using a cloud worker.");
-    const options = {
+    session.agent = await Agent.create({
       apiKey,
       model: { id: request.model || "auto" },
       cloud: {
@@ -672,12 +698,12 @@ async function main() {
         autoCreatePR: false,
       },
       tools: ["webSearch", "webFetch"],
-    };
-    agent = await Agent.create({ ...options, name: request.name.slice(0, 100) });
+      name: request.name.slice(0, 100),
+    });
   } else {
     const customTools = {
       ...(request.includeSlateTools ? await slateTools(request.mcpCommand) : {}),
-      ...(request.includeProjectTools ? projectCodeTools(request) : {}),
+      ...(request.includeProjectTools ? projectCodeTools(session) : {}),
       ...(request.includeWorkerTool ? workerTool() : {}),
     };
     const options = {
@@ -686,28 +712,27 @@ async function main() {
       local: { cwd: request.cwd, settingSources: [], customTools },
       tools: ["mcp", "webSearch", "webFetch"],
     };
-    agent = request.agentId
+    session.agent = request.agentId
       ? await Agent.resume(request.agentId, options)
       : await Agent.create({ ...options, name: request.name.slice(0, 100) });
   }
-  emit({ type: "agent", agentId: agent.agentId });
-  log("agent", { agentId: agent.agentId, resumed: Boolean(request.agentId), model: request.model, runtime: request.runtime, cwd: request.cwd });
+  emit({ type: "agent", agentId: session.agent.agentId });
+  log("agent", {
+    agentId: session.agent.agentId,
+    resumed: Boolean(request.agentId),
+    model: request.model,
+    runtime: request.runtime,
+    cwd: request.cwd,
+  });
+  return session;
+}
 
-  let run: Run | undefined;
-  const stop = async () => {
-    try {
-      if (run?.supports("cancel")) await run.cancel();
-    } finally {
-      process.exit(130);
-    }
-  };
-  process.on("SIGTERM", stop);
-  process.on("SIGINT", stop);
-
-  run = await startRun(agent, request);
-  log("run", { runId: run.id });
+async function handleTurn(session: Session, request: Request) {
+  session.request = { ...session.request, ...request };
+  session.run = await startRun(session.agent, session.request);
+  log("run", { runId: session.run.id });
   let lastAssistant = "";
-  for await (const message of run.stream()) {
+  for await (const message of session.run.stream()) {
     if (message.type !== "assistant" && message.type !== "thinking") log(message.type, message);
     switch (message.type) {
       case "assistant": {
@@ -739,10 +764,53 @@ async function main() {
       }
     }
   }
-  const result = await run.wait();
+  const result = await session.run.wait();
+  session.run = undefined;
   if (result.status !== "finished") log("result", result);
   emit({ type: "result", status: result.status, text: result.result, error: result.error?.message });
-  agent.close();
+}
+
+async function main() {
+  const first = asRequest(await readJSON());
+  if (!first) throw new Error("The runner expected a turn.");
+  if (first.env) Object.assign(process.env, first.env);
+  const session = await createSession(first);
+
+  const stop = async () => {
+    try {
+      if (session.run?.supports("cancel")) await session.run.cancel();
+    } finally {
+      session.agent.close();
+      process.exit(130);
+    }
+  };
+  process.on("SIGTERM", stop);
+  process.on("SIGINT", stop);
+
+  await handleTurn(session, first);
+
+  let idle = setTimeout(() => {
+    log("idle stop", {});
+    session.agent.close();
+    process.exit(0);
+  }, idleMs);
+
+  for (;;) {
+    const message = await readJSON();
+    if (message.type === "shutdown") break;
+    const request = asRequest(message);
+    if (!request) continue;
+    clearTimeout(idle);
+    await handleTurn(session, request);
+    idle = setTimeout(() => {
+      log("idle stop", {});
+      session.agent.close();
+      process.exit(0);
+    }, idleMs);
+  }
+
+  clearTimeout(idle);
+  session.agent.close();
 }
 
 main().then(

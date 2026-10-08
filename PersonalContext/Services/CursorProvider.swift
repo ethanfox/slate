@@ -31,6 +31,21 @@ struct RunnerCodeSnapshot: Encodable, Sendable {
     var commitsURL: String?
 }
 
+extension RunnerRequest {
+    var reuseKey: String {
+        [
+            runtime,
+            cwd,
+            model,
+            includeSlateTools ? "slate" : "",
+            includeProjectTools ? "code" : "",
+            includeWorkerTool ? "worker" : "",
+            mcpCommand,
+            apiKey
+        ].joined(separator: "\u{1e}")
+    }
+}
+
 struct RunnerCloudRepo: Encodable, Sendable {
     var url: String
     var startingRef: String?
@@ -231,6 +246,12 @@ final class CursorConversationBridge {
     private(set) var finishedAt: Date?
     @ObservationIgnored private var process: Process?
     @ObservationIgnored private var processInput: FileHandle?
+    @ObservationIgnored private var runnerFingerprint = ""
+    @ObservationIgnored private var runnerBooted = false
+    @ObservationIgnored private var keepRunnerHot = false
+    @ObservationIgnored private var idleTask: Task<Void, Never>?
+    @ObservationIgnored private var readerTask: Task<Void, Never>?
+    @ObservationIgnored private var turnEvents: AsyncThrowingStream<RunnerEvent, Error>.Continuation?
     @ObservationIgnored private var activeCodeRoots: [ProjectCodeRoot] = []
     @ObservationIgnored private var startNewText = false
     let debugLog = ChatDebugLog()
@@ -398,63 +419,20 @@ final class CursorConversationBridge {
     }
 
     func run(_ request: RunnerRequest) throws -> AsyncThrowingStream<RunnerEvent, Error> {
-        guard let node = Bundle.main.url(forAuxiliaryExecutable: "slate-node"),
-              let runner = Bundle.main.url(forResource: "runner", withExtension: "mjs", subdirectory: "runner") else {
-            throw CursorAPIError(status: 0, message: "The agent runner is missing from the app.")
-        }
-        let process = Process()
-        process.executableURL = node
-        process.arguments = [runner.path]
-        let input = Pipe()
-        let output = Pipe()
-        let errors = Pipe()
-        process.standardInput = input
-        process.standardOutput = output
-        process.standardError = errors
-        errors.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            guard !data.isEmpty else {
-                handle.readabilityHandler = nil
+        keepRunnerHot = request.includeSlateTools
+        try ensureRunner(request)
+        return AsyncThrowingStream { continuation in
+            if turnEvents != nil {
+                continuation.finish(throwing: CursorAPIError(status: 0, message: "This conversation already has a run."))
                 return
             }
-            ChatTrace.event("runner stderr: \(ChatTrace.clip(String(decoding: data, as: UTF8.self), 8000))")
-        }
-        let exits = AsyncStream<Int32> { continuation in
-            process.terminationHandler = { finished in
-                continuation.yield(finished.terminationStatus)
-                continuation.finish()
+            turnEvents = continuation
+            do {
+                try writeTurn(request)
+            } catch {
+                turnEvents = nil
+                continuation.finish(throwing: error)
             }
-        }
-        try process.run()
-        self.process = process
-        self.processInput = input.fileHandleForWriting
-        ChatTrace.event("runner started pid=\(process.processIdentifier) resume=\(request.agentId != nil)")
-        var payload = try JSONEncoder().encode(request)
-        payload.append(0x0A)
-        try input.fileHandleForWriting.write(contentsOf: payload)
-
-        let reader = output.fileHandleForReading
-        return AsyncThrowingStream { continuation in
-            let task = Task.detached {
-                do {
-                    var sawEnd = false
-                    for try await line in reader.bytes.lines {
-                        guard let event = try? JSONDecoder().decode(RunnerEvent.self, from: Data(line.utf8)) else { continue }
-                        if event.type == "result" || event.type == "error" { sawEnd = true }
-                        continuation.yield(event)
-                    }
-                    var status: Int32 = 0
-                    for await code in exits { status = code }
-                    ChatTrace.event("runner exited status=\(status)")
-                    if !sawEnd, status != 0, status != 130 {
-                        throw CursorAPIError(status: 0, message: "The agent stopped unexpectedly (exit \(status)).")
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-            continuation.onTermination = { _ in task.cancel() }
         }
     }
 
@@ -543,23 +521,21 @@ final class CursorConversationBridge {
     func stop() {
         markRunning(as: .failed)
         if finishedAt == nil { finishedAt = .now }
-        closeProcessInput()
-        guard let process, process.isRunning else { return }
-        ChatTrace.event("runner stop pid=\(process.processIdentifier)")
-        process.terminate()
+        closeRunner()
     }
 
     func finished() {
         if finishedAt == nil { finishedAt = .now }
-        closeProcessInput()
-        process = nil
-        ProjectCodeWorkspace.stopAccessing(activeCodeRoots)
-        activeCodeRoots = []
+        if keepRunnerHot, process?.isRunning == true {
+            bumpIdle()
+            return
+        }
+        closeRunner()
     }
 
     func replyToHostTool(id: String, text: String? = nil, error: String? = nil) {
         guard let processInput else { return }
-        var payload: [String: String] = ["id": id]
+        var payload: [String: String] = ["type": "host_tool_result", "id": id]
         if let text { payload["text"] = text }
         if let error { payload["error"] = error }
         guard var data = try? JSONSerialization.data(withJSONObject: payload) else { return }
@@ -567,9 +543,147 @@ final class CursorConversationBridge {
         try? processInput.write(contentsOf: data)
     }
 
-    private func closeProcessInput() {
+    private func ensureRunner(_ request: RunnerRequest) throws {
+        let key = request.reuseKey
+        if process?.isRunning == true, runnerFingerprint == key, readerTask != nil, processInput != nil {
+            idleTask?.cancel()
+            idleTask = nil
+            ChatTrace.event("runner reuse pid=\(process?.processIdentifier ?? 0)")
+            debugLog.add("runner reuse pid=\(process?.processIdentifier ?? 0)")
+            return
+        }
+        closeRunner()
+        guard let node = Bundle.main.url(forAuxiliaryExecutable: "slate-node"),
+              let runner = Bundle.main.url(forResource: "runner", withExtension: "mjs", subdirectory: "runner") else {
+            throw CursorAPIError(status: 0, message: "The agent runner is missing from the app.")
+        }
+        let process = Process()
+        process.executableURL = node
+        process.arguments = [runner.path]
+        let input = Pipe()
+        let output = Pipe()
+        let errors = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        process.standardError = errors
+        errors.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+            ChatTrace.event("runner stderr: \(ChatTrace.clip(String(decoding: data, as: UTF8.self), 8000))")
+        }
+        let exits = AsyncStream<Int32> { continuation in
+            process.terminationHandler = { finished in
+                continuation.yield(finished.terminationStatus)
+                continuation.finish()
+            }
+        }
+        try process.run()
+        self.process = process
+        self.processInput = input.fileHandleForWriting
+        self.runnerFingerprint = key
+        self.runnerBooted = false
+        ChatTrace.event("runner started pid=\(process.processIdentifier) resume=\(request.agentId != nil)")
+        startReader(output.fileHandleForReading, exits: exits)
+    }
+
+    private func writeTurn(_ request: RunnerRequest) throws {
+        guard let processInput else {
+            throw CursorAPIError(status: 0, message: "The agent runner is not running.")
+        }
+        let payload: Data
+        if runnerBooted {
+            payload = try JSONEncoder().encode(RunnerTurnMessage(text: request.text, model: request.model))
+        } else {
+            runnerBooted = true
+            payload = try JSONEncoder().encode(request)
+        }
+        var line = payload
+        line.append(0x0A)
+        try processInput.write(contentsOf: line)
+    }
+
+    private func startReader(_ reader: FileHandle, exits: AsyncStream<Int32>) {
+        readerTask = Task.detached { [weak self] in
+            var sawEnd = false
+            do {
+                for try await line in reader.bytes.lines {
+                    guard let event = try? JSONDecoder().decode(RunnerEvent.self, from: Data(line.utf8)) else { continue }
+                    if event.type == "result" || event.type == "error" { sawEnd = true }
+                    await self?.deliver(event)
+                }
+            } catch {
+                await self?.failTurn(error)
+            }
+            var status: Int32 = 0
+            for await code in exits { status = code }
+            await self?.runnerDied(status: status, sawEnd: sawEnd)
+        }
+    }
+
+    private func deliver(_ event: RunnerEvent) {
+        turnEvents?.yield(event)
+        if event.type == "result" || event.type == "error" {
+            turnEvents?.finish()
+            turnEvents = nil
+        }
+    }
+
+    private func failTurn(_ error: Error) {
+        turnEvents?.finish(throwing: error)
+        turnEvents = nil
+    }
+
+    private func runnerDied(status: Int32, sawEnd: Bool) {
+        ChatTrace.event("runner exited status=\(status)")
+        if turnEvents != nil, !sawEnd, status != 0, status != 130 {
+            failTurn(CursorAPIError(status: 0, message: "The agent stopped unexpectedly (exit \(status))."))
+        } else {
+            turnEvents?.finish()
+            turnEvents = nil
+        }
+        processInput = nil
+        process = nil
+        runnerBooted = false
+        runnerFingerprint = ""
+        readerTask = nil
+    }
+
+    private func bumpIdle() {
+        idleTask?.cancel()
+        idleTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(8 * 60))
+            guard !Task.isCancelled else { return }
+            self?.closeRunner()
+        }
+    }
+
+    private func closeRunner() {
+        idleTask?.cancel()
+        idleTask = nil
+        turnEvents?.finish()
+        turnEvents = nil
+        readerTask?.cancel()
+        readerTask = nil
         try? processInput?.close()
         processInput = nil
+        if let process, process.isRunning {
+            ChatTrace.event("runner stop pid=\(process.processIdentifier)")
+            process.terminate()
+        }
+        process = nil
+        runnerBooted = false
+        runnerFingerprint = ""
+        ProjectCodeWorkspace.stopAccessing(activeCodeRoots)
+        activeCodeRoots = []
+    }
+
+    private struct RunnerTurnMessage: Encodable {
+        var type = "turn"
+        var text: String
+        var model: String
     }
 
     func completeRunningTools() {

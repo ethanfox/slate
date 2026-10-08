@@ -101,6 +101,29 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertFalse(ContextBuilder.identity(for: Project(name: "Bare", symbol: "folder", summary: "")).contains("consult_code"))
     }
 
+    func testRunnerReuseKeyIgnoresPromptText() {
+        let left = RunnerRequest(
+            apiKey: "k",
+            env: [:],
+            name: "Chat",
+            text: "hi",
+            model: "auto",
+            cwd: "/tmp",
+            mcpCommand: "/mcp",
+            codeRoots: [],
+            includeSlateTools: true,
+            includeProjectTools: true,
+            runtime: "local",
+            cloudRepos: []
+        )
+        var right = left
+        right.text = "later"
+        right.agentId = "agent-1"
+        XCTAssertEqual(left.reuseKey, right.reuseKey)
+        right.model = "other"
+        XCTAssertNotEqual(left.reuseKey, right.reuseKey)
+    }
+
     func testSlateMCPClientCachesToolList() async throws {
         let client = SlateMCPClient(command: nil)
         await client.useListProvider {
