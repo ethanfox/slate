@@ -14,6 +14,7 @@ struct RunnerRequest: Encodable, Sendable {
     var codeRoots: [ProjectCodeRoot]
     var includeSlateTools: Bool
     var includeProjectTools: Bool
+    var includeWorkerTool: Bool = false
     var runtime: String
     var cloudRepos: [RunnerCloudRepo]
     var codeSnapshots: [RunnerCodeSnapshot] = []
@@ -229,6 +230,7 @@ final class CursorConversationBridge {
     private(set) var startedAt: Date?
     private(set) var finishedAt: Date?
     @ObservationIgnored private var process: Process?
+    @ObservationIgnored private var processInput: FileHandle?
     @ObservationIgnored private var activeCodeRoots: [ProjectCodeRoot] = []
     @ObservationIgnored private var startNewText = false
     let debugLog = ChatDebugLog()
@@ -345,6 +347,7 @@ final class CursorConversationBridge {
             codeRoots: codeRoots,
             includeSlateTools: includeSlateTools,
             includeProjectTools: includeProjectTools,
+            includeWorkerTool: includeSlateTools && ProjectWorker.isConfigured(on: project),
             runtime: runtime.rawValue,
             cloudRepos: cloudRepositories(),
             codeSnapshots: includeProjectTools && runtime == .local
@@ -421,9 +424,11 @@ final class CursorConversationBridge {
         }
         try process.run()
         self.process = process
+        self.processInput = input.fileHandleForWriting
         ChatTrace.event("runner started pid=\(process.processIdentifier) resume=\(request.agentId != nil)")
-        try input.fileHandleForWriting.write(contentsOf: JSONEncoder().encode(request))
-        try input.fileHandleForWriting.close()
+        var payload = try JSONEncoder().encode(request)
+        payload.append(0x0A)
+        try input.fileHandleForWriting.write(contentsOf: payload)
 
         let reader = output.fileHandleForReading
         return AsyncThrowingStream { continuation in
@@ -535,6 +540,7 @@ final class CursorConversationBridge {
     func stop() {
         markRunning(as: .failed)
         if finishedAt == nil { finishedAt = .now }
+        closeProcessInput()
         guard let process, process.isRunning else { return }
         ChatTrace.event("runner stop pid=\(process.processIdentifier)")
         process.terminate()
@@ -542,9 +548,25 @@ final class CursorConversationBridge {
 
     func finished() {
         if finishedAt == nil { finishedAt = .now }
+        closeProcessInput()
         process = nil
         ProjectCodeWorkspace.stopAccessing(activeCodeRoots)
         activeCodeRoots = []
+    }
+
+    func replyToHostTool(id: String, text: String? = nil, error: String? = nil) {
+        guard let processInput else { return }
+        var payload: [String: String] = ["id": id]
+        if let text { payload["text"] = text }
+        if let error { payload["error"] = error }
+        guard var data = try? JSONSerialization.data(withJSONObject: payload) else { return }
+        data.append(0x0A)
+        try? processInput.write(contentsOf: data)
+    }
+
+    private func closeProcessInput() {
+        try? processInput?.close()
+        processInput = nil
     }
 
     func completeRunningTools() {
@@ -752,6 +774,36 @@ struct CursorChatProvider: ChatProvider {
                             await MainActor.run {
                                 if let status = event.status { bridge.applyStatus(status) }
                                 bridge.debugLog.add("event status \(event.status ?? "")")
+                            }
+                        case "host_tool":
+                            await flushText()
+                            let toolID = event.id ?? UUID().uuidString
+                            let toolName = event.name ?? "consult_code"
+                            let brief = event.text ?? event.detail ?? ""
+                            await MainActor.run {
+                                bridge.applyTool(name: toolName, status: "running", id: toolID)
+                                bridge.debugLog.add("event host_tool \(toolName) \(ChatTrace.clip(brief, 80))")
+                            }
+                            do {
+                                let output = try await ProjectWorker.consult(
+                                    brief: brief,
+                                    reportingTo: bridge,
+                                    options: options
+                                )
+                                await MainActor.run {
+                                    bridge.applyTool(name: toolName, status: "completed", id: toolID)
+                                    bridge.replyToHostTool(id: toolID, text: output)
+                                }
+                            } catch {
+                                await MainActor.run {
+                                    bridge.applyTool(
+                                        name: toolName,
+                                        status: "error",
+                                        id: toolID,
+                                        detail: error.localizedDescription
+                                    )
+                                    bridge.replyToHostTool(id: toolID, error: error.localizedDescription)
+                                }
                             }
                         case "tool":
                             await flushText()

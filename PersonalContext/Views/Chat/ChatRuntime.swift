@@ -231,36 +231,23 @@ final class ChatRuntime {
         return sent
     }
 
-    private static func makeSession(bridge: CursorConversationBridge, conversation: Conversation) -> ChatSession {
-        let provider: any ChatProvider
-        if let project = bridge.project, !project.workerProviderID.isEmpty {
-            let path = WorkerPath(rawValue: project.workerPath) ?? .local
-            let workerModel = project.workerModelID.isEmpty && project.workerProviderID == conversation.providerID
-                ? conversation.modelID
-                : project.workerModelID
-            provider = ProjectWorkerChatProvider(
+    static func makeChatProvider(bridge: CursorConversationBridge, conversation: Conversation) -> any ChatProvider {
+        switch TalkProvider(rawValue: conversation.providerID) {
+        case .cursor:
+            return CursorChatProvider(bridge: bridge)
+        case .chatgpt:
+            return ChatGPTProvider(bridge: bridge)
+        case .unconfigured, .none:
+            return UnavailableChatProvider(
                 id: conversation.providerID,
-                name: TalkProvider(rawValue: conversation.providerID)?.title ?? "Chat",
-                bridge: bridge,
-                chatProviderID: conversation.providerID,
-                workerProviderID: project.workerProviderID,
-                workerModelID: workerModel,
-                workerPath: path
+                name: "Not configured",
+                message: "Choose a chat provider in Settings, then start a new chat."
             )
-        } else {
-            switch TalkProvider(rawValue: conversation.providerID) {
-            case .cursor:
-                provider = CursorChatProvider(bridge: bridge)
-            case .chatgpt:
-                provider = ChatGPTProvider(bridge: bridge)
-            case .unconfigured, .none:
-                provider = UnavailableChatProvider(
-                    id: conversation.providerID,
-                    name: "Not configured",
-                    message: "Choose a chat provider in Settings, then start a new chat."
-                )
-            }
         }
+    }
+
+    private static func makeSession(bridge: CursorConversationBridge, conversation: Conversation) -> ChatSession {
+        let provider = makeChatProvider(bridge: bridge, conversation: conversation)
         let session = ChatSession(provider: provider, model: conversation.modelID)
         var entries: [ChatSession.Entry] = []
         var history: [AIChatCore.ChatMessage] = []

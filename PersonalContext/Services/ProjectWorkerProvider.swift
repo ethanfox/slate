@@ -1,74 +1,38 @@
 import AIChatCore
 import Foundation
 
-struct ProjectWorkerChatProvider: ChatProvider {
-    let id: String
-    let name: String
-    let bridge: CursorConversationBridge
-    let chatProviderID: String
-    let workerProviderID: String
-    let workerModelID: String
-    let workerPath: WorkerPath
-
-    var zeroResponseMessage: String { "The chat provider didn’t return a reply." }
-
-    func stream(
-        messages: [AIChatCore.ChatMessage],
-        model: String,
-        options: ChatRequestOptions
-    ) -> AsyncThrowingStream<ChatStreamEvent, Error> {
-        let bridge = bridge
-        return AsyncThrowingStream { continuation in
-            let task = Task { @MainActor in
-                do {
-                    let question = Self.text(from: messages.last(where: { $0.role == .user }))
-                    let workerContext = try await consult(question: question, options: options)
-                    let augmented = Self.augment(messages: messages, context: workerContext)
-                    let chatProvider = Self.provider(
-                        id: chatProviderID,
-                        bridge: bridge,
-                        includeSlateTools: true,
-                        includeProjectTools: false,
-                        resumeConversation: true,
-                        path: .local
-                    )
-                    for try await event in chatProvider.stream(messages: augmented, model: model, options: options) {
-                        continuation.yield(event)
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-            continuation.onTermination = { termination in
-                guard case .cancelled = termination else { return }
-                task.cancel()
-            }
-        }
-    }
-
-    func complete(
-        messages: [AIChatCore.ChatMessage],
-        model: String,
-        options: ChatRequestOptions
-    ) async throws -> ChatCompletionResult {
-        throw ProjectWorkspaceError("Project Worker conversations stream only.")
+enum ProjectWorker {
+    static func isConfigured(on project: Project?) -> Bool {
+        guard let project else { return false }
+        return !project.workerProviderID.isEmpty
     }
 
     @MainActor
-    private func consult(question: String, options: ChatRequestOptions) async throws -> String {
+    static func consult(
+        brief: String,
+        reportingTo bridge: CursorConversationBridge,
+        options: ChatRequestOptions
+    ) async throws -> String {
+        let question = brief.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !question.isEmpty else {
+            throw ProjectWorkspaceError("brief is required")
+        }
+        guard let project = bridge.project, isConfigured(on: project) else {
+            throw ProjectWorkspaceError("This project has no Worker. Set one in Project Settings.")
+        }
         let workerBridge = CursorConversationBridge(
             conversation: bridge.conversation,
-            project: bridge.project
+            project: project
         )
-        let provider = Self.provider(
-            id: workerProviderID,
+        let provider = chatProvider(
+            id: project.workerProviderID,
             bridge: workerBridge,
             includeSlateTools: false,
             includeProjectTools: true,
             resumeConversation: false,
-            path: workerPath
+            path: WorkerPath(rawValue: project.workerPath) ?? .local
         )
+        let model = modelID(project: project, conversation: bridge.conversation)
         let prompt = """
         Inspect the attached project code to answer the question below. This is read-only consultation: do not edit files, create commits, or change Slate records. Return concise findings with repository-relative file paths and line numbers.
 
@@ -76,7 +40,7 @@ struct ProjectWorkerChatProvider: ChatProvider {
         """
         let message = AIChatCore.ChatMessage(id: UUID(), role: .user, content: prompt)
         var output = ""
-        for try await event in provider.stream(messages: [message], model: workerModelID, options: options) {
+        for try await event in provider.stream(messages: [message], model: model, options: options) {
             if case .text(let text) = event {
                 output += text
             }
@@ -95,13 +59,13 @@ struct ProjectWorkerChatProvider: ChatProvider {
         return output
     }
 
-    private static func provider(
+    static func chatProvider(
         id: String,
         bridge: CursorConversationBridge,
-        includeSlateTools: Bool,
-        includeProjectTools: Bool,
-        resumeConversation: Bool,
-        path: WorkerPath
+        includeSlateTools: Bool = true,
+        includeProjectTools: Bool = true,
+        resumeConversation: Bool = true,
+        path: WorkerPath = .local
     ) -> any ChatProvider {
         switch TalkProvider(rawValue: id) {
         case .cursor:
@@ -127,36 +91,10 @@ struct ProjectWorkerChatProvider: ChatProvider {
         }
     }
 
-    private static func augment(
-        messages: [AIChatCore.ChatMessage],
-        context: String
-    ) -> [AIChatCore.ChatMessage] {
-        guard let last = messages.lastIndex(where: { $0.role == .user }) else { return messages }
-        var output = messages
-        let request = text(from: messages[last])
-        output[last] = AIChatCore.ChatMessage(
-            id: messages[last].id,
-            role: .user,
-            content: """
-            A Worker selected in this Slate project inspected the attached code. Use its findings as code context, then answer the original request yourself.
-
-            <worker-context>
-            \(context)
-            </worker-context>
-
-            <user-request>
-            \(request)
-            </user-request>
-            """
-        )
-        return output
-    }
-
-    private static func text(from message: AIChatCore.ChatMessage?) -> String {
-        guard let message else { return "" }
-        return message.content.compactMap { block -> String? in
-            if case .text(let text) = block { return text }
-            return nil
-        }.joined(separator: "\n")
+    private static func modelID(project: Project, conversation: Conversation) -> String {
+        if project.workerModelID.isEmpty, project.workerProviderID == conversation.providerID {
+            return conversation.modelID
+        }
+        return project.workerModelID
     }
 }

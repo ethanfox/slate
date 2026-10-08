@@ -21,6 +21,7 @@ type Request = {
   codeRoots: { title: string; locator?: string; path: string }[];
   includeSlateTools: boolean;
   includeProjectTools: boolean;
+  includeWorkerTool?: boolean;
   runtime: "local" | "cloud";
   cloudRepos: { url: string; startingRef?: string }[];
   codeSnapshots: {
@@ -45,6 +46,7 @@ type Event =
   | { type: "status"; status: string }
   | { type: "tool"; name: string; status: string; id?: string; detail?: string; sources?: Source[] }
   | { type: "result"; status: string; text?: string; error?: string }
+  | { type: "host_tool"; name: string; id: string; text?: string }
   | { type: "error"; message: string };
 
 function log(label: string, value: unknown) {
@@ -602,10 +604,55 @@ function projectCodeTools(request: Request): Record<string, SDKCustomTool> {
   };
 }
 
+const stdinLines = createInterface({ input: process.stdin });
+const lineQueue: string[] = [];
+const lineWaiters: ((line: string) => void)[] = [];
+stdinLines.on("line", (line) => {
+  const waiter = lineWaiters.shift();
+  if (waiter) waiter(line);
+  else lineQueue.push(line);
+});
+
+function readStdinLine(): Promise<string> {
+  const queued = lineQueue.shift();
+  if (queued !== undefined) return Promise.resolve(queued);
+  return new Promise((resolve) => lineWaiters.push(resolve));
+}
+
 async function readRequest(): Promise<Request> {
-  let raw = "";
-  for await (const chunk of process.stdin) raw += chunk;
-  return JSON.parse(raw) as Request;
+  return JSON.parse(await readStdinLine()) as Request;
+}
+
+async function readHostReply(id: string): Promise<{ text?: string; error?: string }> {
+  for (;;) {
+    const message = JSON.parse(await readStdinLine()) as { id?: string; text?: string; error?: string };
+    if (message.id === id) return message;
+  }
+}
+
+function workerTool(): Record<string, SDKCustomTool> {
+  return {
+    consult_code: {
+      description:
+        "Ask the project's Worker to inspect attached code. Pass a brief. Do not use this for decisions, tracks, or notes — those are Slate tools.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          brief: { type: "string", description: "What the Worker should inspect in the attached code." },
+        },
+        required: ["brief"],
+      },
+      execute: async (args) => {
+        const brief = field(asRecord(args), "brief", "question") ?? "";
+        if (!brief) throw new Error("brief is required");
+        const id = randomUUID();
+        emit({ type: "host_tool", name: "consult_code", id, text: brief });
+        const reply = await readHostReply(id);
+        if (reply.error) throw new Error(reply.error);
+        return toolText(reply.text ?? "");
+      },
+    },
+  };
 }
 
 async function main() {
@@ -631,6 +678,7 @@ async function main() {
     const customTools = {
       ...(request.includeSlateTools ? await slateTools(request.mcpCommand) : {}),
       ...(request.includeProjectTools ? projectCodeTools(request) : {}),
+      ...(request.includeWorkerTool ? workerTool() : {}),
     };
     const options = {
       apiKey,

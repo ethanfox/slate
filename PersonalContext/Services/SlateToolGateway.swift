@@ -7,22 +7,28 @@ final class SlateToolGateway {
     private let includeSlateTools: Bool
     private let includeProjectTools: Bool
     private let prepareRoots: (() async throws -> [ProjectCodeRoot])?
+    private let consult: ((String) async throws -> String)?
 
     init(
         roots: [ProjectCodeRoot] = [],
         includeSlateTools: Bool = true,
         includeProjectTools: Bool = true,
-        prepareRoots: (() async throws -> [ProjectCodeRoot])? = nil
+        prepareRoots: (() async throws -> [ProjectCodeRoot])? = nil,
+        consult: ((String) async throws -> String)? = nil
     ) {
         mcpCommand = Bundle.main.url(forAuxiliaryExecutable: "slate-mcp")?.path
         self.roots = roots
         self.includeSlateTools = includeSlateTools
         self.includeProjectTools = includeProjectTools
         self.prepareRoots = prepareRoots
+        self.consult = consult
     }
 
     func definitions() async throws -> [[String: Any]] {
         var tools: [[String: Any]] = includeProjectTools ? Self.projectDefinitions : []
+        if consult != nil {
+            tools.append(Self.consultDefinition)
+        }
         if includeSlateTools, let mcpCommand {
             let data = try await Self.invokeMCP(
                 command: mcpCommand,
@@ -69,6 +75,12 @@ final class SlateToolGateway {
             )
         case "project_git_log":
             return try gitLog(rootTitle: arguments["root"] as? String)
+        case "consult_code":
+            guard let consult else {
+                throw ProjectWorkspaceError("This project has no Worker. Set one in Project Settings.")
+            }
+            let brief = (arguments["brief"] as? String) ?? (arguments["question"] as? String) ?? ""
+            return try await consult(brief)
         default:
             guard let mcpCommand else {
                 throw ProjectWorkspaceError("The Slate tool service is unavailable.")
@@ -208,6 +220,19 @@ final class SlateToolGateway {
     private func jsonString(_ object: Any) throws -> String {
         String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
     }
+
+    private static let consultDefinition: [String: Any] = [
+        "type": "function",
+        "name": "consult_code",
+        "description": "Ask the project's Worker to inspect attached code. Pass a brief. Do not use this for decisions, tracks, or notes — those are Slate tools.",
+        "parameters": [
+            "type": "object",
+            "properties": [
+                "brief": ["type": "string", "description": "What the Worker should inspect in the attached code."]
+            ],
+            "required": ["brief"]
+        ]
+    ]
 
     private static let projectDefinitions: [[String: Any]] = [
         [

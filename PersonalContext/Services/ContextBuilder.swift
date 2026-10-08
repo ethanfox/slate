@@ -20,6 +20,9 @@ enum ContextBuilder {
             }
             lines.append("The attached code is available now. Before you say you cannot see the repo, call project_list_files, project_search_code, project_read_file, or project_git_log. Do not use a shell or invent missing attachments.")
         }
+        if !project.workerProviderID.isEmpty {
+            lines.append("A project Worker can inspect the attached code. Call consult_code with a brief when you need a repo pass. Do not call it for decisions, tracks, or notes — use the Slate tools.")
+        }
         return lines.joined(separator: "\n")
     }
 

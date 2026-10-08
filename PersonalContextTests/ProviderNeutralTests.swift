@@ -43,6 +43,51 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertEqual(project.workerProviderID, "")
         XCTAssertEqual(project.workerModelID, "")
         XCTAssertEqual(project.workerPath, "")
+        XCTAssertFalse(ProjectWorker.isConfigured(on: project))
+    }
+
+    @MainActor
+    func testChatUsesPickedProviderWhenWorkerIsSet() {
+        let project = Project(name: "Harbor", symbol: "folder", summary: "")
+        project.workerProviderID = TalkProvider.cursor.rawValue
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        conversation.project = project
+        let bridge = CursorConversationBridge(conversation: conversation, project: project)
+        let provider = ChatRuntime.makeChatProvider(bridge: bridge, conversation: conversation)
+        XCTAssertTrue(provider is ChatGPTProvider)
+        XCTAssertEqual(provider.id, TalkProvider.chatgpt.rawValue)
+    }
+
+    @MainActor
+    func testIdentityMentionsConsultCodeWhenWorkerIsSet() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let project = Project(name: "Harbor", symbol: "folder", summary: "")
+        project.workerProviderID = TalkProvider.cursor.rawValue
+        container.mainContext.insert(project)
+        try container.mainContext.save()
+        let text = ContextBuilder.identity(for: project)
+        XCTAssertTrue(text.contains("consult_code"))
+        XCTAssertFalse(ContextBuilder.identity(for: Project(name: "Bare", symbol: "folder", summary: "")).contains("consult_code"))
+    }
+
+    @MainActor
+    func testGatewayConsultCodeIsOnDemand() async throws {
+        var briefs: [String] = []
+        let gateway = SlateToolGateway(
+            includeSlateTools: false,
+            includeProjectTools: false,
+            consult: { brief in
+                briefs.append(brief)
+                return "found \(brief)"
+            }
+        )
+        let tools = try await gateway.definitions()
+        XCTAssertTrue(tools.contains { $0["name"] as? String == "consult_code" })
+        XCTAssertTrue(briefs.isEmpty)
+        let result = try await gateway.execute(name: "consult_code", arguments: ["brief": "auth flow"])
+        XCTAssertEqual(result, "found auth flow")
+        XCTAssertEqual(briefs, ["auth flow"])
     }
 
     func testCodeRootMatchesLocatorOrShortName() {
