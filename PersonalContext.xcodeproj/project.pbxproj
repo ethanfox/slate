@@ -32,6 +32,7 @@
 		9B2D3F4A5C6E708192A3B4C5 /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1C2E3F4B5D6E708192A3B4 /* TaskStore.swift */; };
 		AC3E4F5B6D708192A3B4C5D6 /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1C2E3F4B5D6E708192A3B4 /* TaskStore.swift */; };
 		CE5A6B7D8192A3B4C5D6E7F8 /* ProjectTasksBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD4F5A6C708192A3B4C5D6E7 /* ProjectTasksBoard.swift */; };
+		D5E6F708192A3B4C5D6E7F80 /* TaskInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4D5E6F708192A3B4C5D6E7F /* TaskInspector.swift */; };
 		F18A2B3C4D5E6F708192A3B4 /* ChromeChoiceDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A1B2C3D4E5F60718293A4 /* ChromeChoiceDialog.swift */; };
 		E07C8D9F3A4B5C6D7E8F901A /* TaskStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */; };
 		27EFEA7479970E75FC4AB694 /* Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD732A03D4885370CA6EC0EB /* Inspector.swift */; };
@@ -224,6 +225,7 @@
 		5077C7D2C8E53970BDE445D0 /* AssociationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssociationService.swift; sourceTree = "<group>"; };
 		8A1C2E3F4B5D6E708192A3B4 /* TaskStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStore.swift; sourceTree = "<group>"; };
 		BD4F5A6C708192A3B4C5D6E7 /* ProjectTasksBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectTasksBoard.swift; sourceTree = "<group>"; };
+		C4D5E6F708192A3B4C5D6E7F /* TaskInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskInspector.swift; sourceTree = "<group>"; };
 		E07A1B2C3D4E5F60718293A4 /* ChromeChoiceDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeChoiceDialog.swift; sourceTree = "<group>"; };
 		DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStoreTests.swift; sourceTree = "<group>"; };
 		509E6F9E705BA7F4A6F2184F /* WindowTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTab.swift; sourceTree = "<group>"; };
@@ -592,6 +594,7 @@
 				77F4B6484C6BED0CADABAF2B /* ProjectLine.swift */,
 				8DC37F181EBBBF8E1E7F7E4D /* ProjectsView.swift */,
 				BD4F5A6C708192A3B4C5D6E7 /* ProjectTasksBoard.swift */,
+				C4D5E6F708192A3B4C5D6E7F /* TaskInspector.swift */,
 				C15F7AD6019E54818996ACF5 /* ProjectView.swift */,
 				D8B9A9D93886D56BA6078212 /* SymbolPicker.swift */,
 			);
@@ -805,6 +808,7 @@
 				25C4BD4D7FD810C6EFF76195 /* AssociationService.swift in Sources */,
 				9B2D3F4A5C6E708192A3B4C5 /* TaskStore.swift in Sources */,
 				CE5A6B7D8192A3B4C5D6E7F8 /* ProjectTasksBoard.swift in Sources */,
+				D5E6F708192A3B4C5D6E7F80 /* TaskInspector.swift in Sources */,
 				F18A2B3C4D5E6F708192A3B4 /* ChromeChoiceDialog.swift in Sources */,
 				9665D488425D5973C2F14AF3 /* AttachCodeViews.swift in Sources */,
 				243486DBC4096A0FF300FA65 /* BrandMark.swift in Sources */,

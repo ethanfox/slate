@@ -32,6 +32,16 @@ struct ProjectTasksBoard: View {
         .popover(item: $inspectCompletion, arrowEdge: .bottom) { completion in
             CompletionPopover(completion: completion)
         }
+        .background {
+            Button("Close task") { app.selectTask(nil) }
+                .keyboardShortcut(.escape, modifiers: [])
+                .disabled(!app.inspectorOpen && app.selectedTaskID == nil)
+                .opacity(0)
+                .accessibilityHidden(true)
+        }
+        .onChange(of: app.inspectorOpen) { _, open in
+            if !open { app.selectedTaskID = nil }
+        }
     }
 
     private var boardScroll: some View {
@@ -50,6 +60,11 @@ struct ProjectTasksBoard: View {
                 }
             }
             .scrollContentBackground(.hidden)
+            .background {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { app.selectTask(nil) }
+            }
         }
     }
 
@@ -72,6 +87,11 @@ struct ProjectTasksBoard: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .background {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { app.selectTask(nil) }
+        }
     }
 
     private func rows(for status: TaskWorkflowStatus) -> [BoardRow] {
@@ -225,7 +245,7 @@ private struct TaskBoardCard: View {
             }
             ForEach(item.unresolvedBlockers, id: \.id) { blocker in
                 Button {
-                    app.present(.editTask(blocker))
+                    app.selectTask(blocker.id)
                 } label: {
                     HStack(spacing: 4) {
                         Text("Blocked by \(blocker.displayTitle)")
@@ -247,13 +267,18 @@ private struct TaskBoardCard: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(
+            app.selectedTaskID == item.id ? CraftColor.selection : CraftColor.elevated,
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(CraftColor.hairline)
         }
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .onTapGesture { app.present(.editTask(item)) }
+        .onTapGesture {
+            app.selectTask(app.selectedTaskID == item.id ? nil : item.id)
+        }
         .contextMenu { menu }
         .confirmationDialog("Delete this task?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete Task", role: .destructive) { TaskStore.delete(item, in: context) }
@@ -282,7 +307,7 @@ private struct TaskBoardCard: View {
             }
         }
         Divider()
-        Button("Edit…") { app.present(.editTask(item)) }
+        Button("Edit…") { app.selectTask(item.id) }
         Button("Delete…", role: .destructive) { confirmDelete = true }
     }
 }
@@ -309,7 +334,7 @@ private struct TaskListRow: View {
             .help(item.workflowStatus == .done ? "Mark incomplete" : "Mark complete")
 
             Button {
-                app.present(.editTask(item))
+                app.selectTask(app.selectedTaskID == item.id ? nil : item.id)
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
@@ -339,7 +364,7 @@ private struct TaskListRow: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(hovering ? CraftColor.hover : Color.clear)
+                .fill(app.selectedTaskID == item.id ? CraftColor.selection : (hovering ? CraftColor.hover : Color.clear))
         )
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .padding(.horizontal, -8)
@@ -368,7 +393,7 @@ private struct TaskListRow: View {
             }
         }
         Divider()
-        Button("Edit…") { app.present(.editTask(item)) }
+        Button("Edit…") { app.selectTask(item.id) }
         Button("Delete…", role: .destructive) { confirmDelete = true }
     }
 }
@@ -502,7 +527,7 @@ private struct CompletionPopover: View {
                 .foregroundStyle(.secondary)
             if let parent = completion.parentTask {
                 Button(parent.displayTitle) {
-                    app.present(.editTask(parent))
+                    app.selectTask(parent.id)
                 }
                 .buttonStyle(.plain)
                 .font(CraftFont.caption)

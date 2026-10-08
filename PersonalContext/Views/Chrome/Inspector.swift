@@ -8,6 +8,7 @@ struct InspectorTab<ID: Hashable>: Identifiable {
 struct InspectorTabBar<ID: Hashable>: View {
     var tabs: [InspectorTab<ID>]
     @Binding var selection: ID
+    var onClose: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -21,6 +22,18 @@ struct InspectorTabBar<ID: Hashable>: View {
                     .foregroundStyle(selection == tab.id ? .primary : .tertiary)
                 }
                 Spacer(minLength: 0)
+                if let onClose {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Close")
+                    .accessibilityLabel("Close")
+                }
             }
             Hairline()
         }
@@ -34,11 +47,12 @@ struct InspectorTabBar<ID: Hashable>: View {
 struct InspectorPanel<Tab: Hashable, Content: View>: View {
     var tabs: [InspectorTab<Tab>]
     @Binding var selection: Tab
+    var onClose: (() -> Void)? = nil
     @ViewBuilder var content: (Tab) -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            InspectorTabBar(tabs: tabs, selection: $selection)
+            InspectorTabBar(tabs: tabs, selection: $selection, onClose: onClose)
             ScrollView {
                 content(selection)
                     .padding(.horizontal, 16)

@@ -21,7 +21,7 @@ enum ContextBuilder {
             lines.append("The attached code is available now. Before you say you cannot see the repo, call project_list_files, project_search_code, project_read_file, or project_git_log. Do not use a shell or invent missing attachments.")
         }
         if !project.workerProviderID.isEmpty {
-            lines.append("A project Worker can inspect the attached code. Call consult_code with a brief when you need a repo pass. Do not call it for decisions, tracks, or notes — use the Slate tools.")
+            lines.append("A project Worker can inspect the attached code. Call consult_code with a brief when you need a repo pass. Do not call it for decisions, tracks, notes, or tasks — use the Slate tools.")
         }
         return lines.joined(separator: "\n")
     }
@@ -81,6 +81,21 @@ enum ContextBuilder {
             }
         }
 
+        let tasks = project.agendaItems.filter { $0.kind == .task }.sorted(by: TaskStore.boardSort)
+        if !tasks.isEmpty {
+            lines.append("")
+            lines.append("Tasks:")
+            if let next = TaskStore.nextTask(in: project) {
+                lines.append("Next: \(next.displayTitle) (id \(next.id.uuidString))")
+            }
+            for task in tasks.prefix(20) {
+                var line = "- \(task.displayTitle) (id \(task.id.uuidString), \(task.workflowStatus.rawValue)"
+                if task.isNext { line += ", next" }
+                line += ")"
+                lines.append(line)
+            }
+        }
+
         let marks = project.deletionMarks.sorted { $0.createdAt > $1.createdAt }
         if !marks.isEmpty {
             lines.append("")
@@ -102,11 +117,11 @@ enum ContextBuilder {
             parts.append("""
             You are the assistant inside Slate, the user's knowledge base for their projects. You have the Slate MCP tools, which read and change that knowledge base.
 
-            When the user tells you something that should last (a fact, a decision, a change of direction, a new line of work), save it yourself with those tools right away, then say in one short line what you saved. Never ask the user to save anything. Update an existing decision, track, note, or project when it covers the same thing instead of adding a duplicate. When a new decision replaces an old one, pass supersedes_id. Use the ids from the tools.
+            When the user tells you something that should last (a fact, a decision, a change of direction, a new line of work, a task), save it yourself with those tools right away, then say in one short line what you saved. Never ask the user to save anything. Update an existing decision, track, note, task, or project when it covers the same thing instead of adding a duplicate. When a new decision replaces an old one, pass supersedes_id. Use the ids from the tools. Use the task tools to list, create, update, and complete Slate tasks. complete_task records repeat history; do not set status to done on a repeating task.
 
             You cannot delete records. If something should go away, call mark_for_deletion with a required reason. Optionally pass replacement_type and replacement_id when another record replaces it. The user decides Keep or Delete. Archive is only for chats the user hides, not a substitute for delete.
 
-            Look up decisions, tracks, and notes with the tools. Treat those records as the source of truth and weight active decisions above tracks and notes. Do not invent project facts. Do not create or edit files unless the user explicitly asks. If the project lists attached code, inspect it with the project_* tools instead of claiming you cannot see the repository.
+            Look up decisions, tracks, notes, and tasks with the tools. Treat those records as the source of truth and weight active decisions above tracks and notes. Do not invent project facts. Do not create or edit files unless the user explicitly asks. If the project lists attached code, inspect it with the project_* tools instead of claiming you cannot see the repository. Fetch only what this message needs. Batch those calls. Do not walk the whole project. After a few tool rounds, answer.
 
             When you point the user at a note, track, decision, or other Slate record, put a markdown link on its own line using the id from the tools: [Title](slate://note/UUID), slate://thread/UUID, slate://decision/UUID, slate://project/UUID, or slate://conversation/UUID. The app turns that into a card they can open. Do not paste raw ids. Do not invent ids.
             """)

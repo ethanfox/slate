@@ -36,6 +36,7 @@ final class ProviderNeutralTests: XCTestCase {
         let bridge = CursorConversationBridge(conversation: conversation, project: project)
         let first = bridge.prepareProviderTurn(userText: "hi")
         XCTAssertTrue(first.contains("You are the assistant inside Slate"))
+        XCTAssertTrue(first.contains("Do not walk the whole project"))
         XCTAssertTrue(first.contains("Harbor"))
         XCTAssertTrue(first.contains("<project-context>"))
         XCTAssertFalse(first.contains("Active decisions"))
@@ -241,6 +242,19 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertNil(body["previous_response_id"])
         XCTAssertEqual((body["tools"] as? [[String: Any]])?.count, 1)
         XCTAssertEqual(body["tool_choice"] as? String, "auto")
+
+        XCTAssertEqual(ChatGPTProvider.toolsForRound(0, tools: [["name": "list_projects"]]).count, 1)
+        XCTAssertEqual(ChatGPTProvider.toolsForRound(ChatGPTProvider.maxToolRounds - 1, tools: [["name": "list_projects"]]).count, 1)
+        XCTAssertTrue(ChatGPTProvider.toolsForRound(ChatGPTProvider.maxToolRounds, tools: [["name": "list_projects"]]).isEmpty)
+
+        let forced = ChatGPTProvider.inferenceBody(
+            model: "gpt-5.5",
+            instructions: "Use Slate tools.",
+            input: [["role": "user", "content": ChatGPTProvider.answerNowMessage]],
+            tools: []
+        )
+        XCTAssertNil(forced["tools"])
+        XCTAssertNil(forced["tool_choice"])
     }
 
     func testChatGPTAPIErrorReadsDetailAndStructuredFields() {
@@ -261,6 +275,43 @@ final class ProviderNeutralTests: XCTestCase {
 
         let sse = ChatGPTProvider.apiError(from: Data("data: {\"detail\":\"Instructions are required\"}\n".utf8))
         XCTAssertEqual(sse, "Instructions are required")
+    }
+
+    func testChatGPTTokenExpiryUsesJWTAndRetriesExpiredAuth() {
+        let exp = Date().addingTimeInterval(30).timeIntervalSince1970
+        let payload = Data("{\"exp\":\(Int(exp))}".utf8).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        let token = "eyJhbGciOiJub25lIn0.\(payload).sig"
+        var session = ChatGPTSession(
+            email: "a@b.c",
+            subject: "sub",
+            clientID: "client",
+            hostID: "host",
+            idToken: "id",
+            accessToken: token,
+            refreshToken: "refresh",
+            expiresAt: Date().addingTimeInterval(3600),
+            scopes: ["chatgpt.tokens.use.direct"],
+            usingPlan: true
+        )
+        XCTAssertEqual(ChatGPTSignIn.jwtExpiration(token)?.timeIntervalSince1970 ?? 0, exp, accuracy: 1)
+        XCTAssertLessThan(ChatGPTSignIn.remainingLifetime(session), 60)
+        XCTAssertTrue(ChatGPTSignIn.needsRefresh(session))
+
+        session.accessToken = "opaque"
+        session.expiresAt = Date().addingTimeInterval(3600)
+        XCTAssertFalse(ChatGPTSignIn.needsRefresh(session))
+        XCTAssertTrue(ChatGPTSignIn.needsRefresh(session, refreshing: "opaque"))
+        XCTAssertFalse(ChatGPTSignIn.needsRefresh(session, refreshing: "other"))
+
+        XCTAssertTrue(ChatGPTSignIn.isExpiredTokenError(status: 401, detail: nil))
+        XCTAssertTrue(ChatGPTSignIn.isExpiredTokenError(
+            status: 403,
+            detail: "Provided authentication token is expired. Please try signing in again. token_expired"
+        ))
+        XCTAssertFalse(ChatGPTSignIn.isExpiredTokenError(status: 400, detail: "Unsupported parameter: store"))
     }
 
     func testChatGPTCatalogUsesAccountSlugsAndDisplayNames() {
@@ -413,5 +464,21 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertTrue(text.contains("What it is"))
         XCTAssertTrue(text.contains("PersonalContext"))
         XCTAssertFalse(text.contains("|---"))
+    }
+
+    func testChatMarkdownCollapsesBlankLinesToParagraphSpacing() {
+        let paragraphs = ChatMarkdown.attributed("One\n\n\nTwo")
+        XCTAssertEqual(paragraphs.string, "One\nTwo")
+        let breakRange = (paragraphs.string as NSString).range(of: "\n")
+        let style = paragraphs.attribute(.paragraphStyle, at: breakRange.location, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertEqual(style?.paragraphSpacing, 8)
+
+        let tight = ChatMarkdown.attributed("- a\n- b")
+        let tightBreak = (tight.string as NSString).range(of: "\n")
+        let tightStyle = tight.attribute(.paragraphStyle, at: tightBreak.location, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertEqual(tightStyle?.paragraphSpacing, 4)
+
+        let fenced = ChatMarkdown.attributed("```\nline\n\nline\n```")
+        XCTAssertTrue(fenced.string.contains("line\n\nline"))
     }
 }

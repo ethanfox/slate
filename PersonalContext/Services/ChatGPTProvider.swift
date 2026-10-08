@@ -44,7 +44,7 @@ struct ChatGPTProvider: ChatProvider {
                     guard !model.isEmpty else {
                         throw ChatGPTAuthError("Choose a ChatGPT model in Settings.")
                     }
-                    let session = try await ChatGPTSignIn.validSession()
+                    var session = try await ChatGPTSignIn.validSession()
                     let prepared = try await MainActor.run { () throws -> (String, SlateToolGateway, [[String: Any]]) in
                         let userText = Self.text(from: messages.last(where: { $0.role == .user }))
                         let instructions = bridge.prepareProviderTurn(
@@ -72,34 +72,21 @@ struct ChatGPTProvider: ChatProvider {
                         bridge.debugLog.add("chatgpt tools=\(tools.count)")
                     }
                     var emitted = false
-                    for round in 0..<8 {
+                    for round in 0...Self.maxToolRounds {
+                        let roundTools = Self.toolsForRound(round, tools: tools)
                         let payload = Self.inferenceBody(
                             model: model,
                             instructions: instructions,
                             input: input,
-                            tools: tools
+                            tools: roundTools
                         )
-                        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
-                        request.httpMethod = "POST"
-                        request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
-                        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-                        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-                        ChatTrace.event("chatgpt request model=\(model) tools=\(tools.count) input=\(input.count)")
+                        ChatTrace.event("chatgpt request model=\(model) tools=\(roundTools.count) input=\(input.count)")
                         if pace.preparedAt == nil {
                             pace.markPrepared()
                             await MainActor.run { bridge.debugLog.pace = pace }
                         }
 
-                        let (bytes, response) = try await URLSession.shared.bytes(for: request)
-                        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                        guard (200..<300).contains(status) else {
-                            var data = Data()
-                            for try await byte in bytes { data.append(byte) }
-                            let detail = Self.apiError(from: data)
-                            ChatTrace.event("chatgpt http \(status): \(ChatTrace.clip(detail ?? String(data: data, encoding: .utf8) ?? "", 800))")
-                            throw ChatGPTAuthError(detail ?? "ChatGPT request failed (\(status)).")
-                        }
+                        let bytes = try await Self.openAuthorizedStream(session: &session, payload: payload)
 
                         var calls: [FunctionCall] = []
                         var replay: [[String: Any]] = []
@@ -142,7 +129,7 @@ struct ChatGPTProvider: ChatProvider {
                             }
                         }
                         await flushText()
-                        if calls.isEmpty { break }
+                        if calls.isEmpty || roundTools.isEmpty { break }
                         input.append(contentsOf: replay)
                         for call in calls {
                             await MainActor.run {
@@ -172,8 +159,14 @@ struct ChatGPTProvider: ChatProvider {
                                 "output": output
                             ])
                         }
-                        if round == 7 {
-                            throw ChatGPTAuthError("ChatGPT exceeded the tool-call limit.")
+                        if round == Self.maxToolRounds - 1 {
+                            input.append([
+                                "role": "user",
+                                "content": Self.answerNowMessage
+                            ])
+                            await MainActor.run {
+                                bridge.debugLog.add("chatgpt tool budget used; forcing answer")
+                            }
                         }
                     }
                     await flushText()
@@ -216,6 +209,45 @@ struct ChatGPTProvider: ChatProvider {
         options: ChatRequestOptions
     ) async throws -> ChatCompletionResult {
         throw ChatGPTAuthError("ChatGPT conversations stream only.")
+    }
+
+    static let maxToolRounds = 8
+    static let answerNowMessage = "Answer now from the tool results you already have. Do not call more tools."
+
+    static func toolsForRound(_ round: Int, tools: [[String: Any]]) -> [[String: Any]] {
+        round < maxToolRounds ? tools : []
+    }
+
+    static func openAuthorizedStream(
+        session: inout ChatGPTSession,
+        payload: [String: Any]
+    ) async throws -> URLSession.AsyncBytes {
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        var expired: String?
+        while true {
+            session = try await ChatGPTSignIn.validSession(refreshing: expired)
+            var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+            request.httpBody = body
+            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200..<300).contains(status) else {
+                var data = Data()
+                for try await byte in bytes { data.append(byte) }
+                let detail = apiError(from: data)
+                if expired == nil && ChatGPTSignIn.isExpiredTokenError(status: status, detail: detail) {
+                    ChatTrace.event("chatgpt token expired; refreshing")
+                    expired = session.accessToken
+                    continue
+                }
+                ChatTrace.event("chatgpt http \(status): \(ChatTrace.clip(detail ?? String(data: data, encoding: .utf8) ?? "", 800))")
+                throw ChatGPTAuthError(detail ?? "ChatGPT request failed (\(status)).")
+            }
+            return bytes
+        }
     }
 
     static func inferenceBody(

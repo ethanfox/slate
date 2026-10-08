@@ -23,16 +23,17 @@ private enum LayoutMetrics {
     static let chatMin: CGFloat = 300
     static let chatMax: CGFloat = 450
     static let inspectorWidth: CGFloat = 250
+    static let taskPaneWidth: CGFloat = 400
     static let gap: CGFloat = 8
     static let edgePad: CGFloat = 10
     static let chatMotionDuration = 0.3
     static let chatMotion = Animation.easeInOut(duration: chatMotionDuration)
 
-    static func windowMin(sidebar: Bool, chat: Bool, inspector: Bool = false) -> CGFloat {
+    static func windowMin(sidebar: Bool, chat: Bool, trailing: CGFloat = 0) -> CGFloat {
         (sidebar ? sidebarWidth : edgePad)
             + detailMinWidth
             + (chat ? gap + chatMin : 0)
-            + (inspector ? gap + inspectorWidth : 0)
+            + (trailing > 0 ? gap + trailing : 0)
             + edgePad
     }
 }
@@ -171,9 +172,9 @@ struct RootView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                    SlideInspector(isOpen: showingInspector) {
+                    SlideInspector(isOpen: showingInspector, width: trailingPaneWidth) {
                         if let project = openProject {
-                            OverviewInspector(project: project)
+                            inspectorContent(for: project)
                                 .id(app.storeGeneration)
                         }
                     }
@@ -213,7 +214,7 @@ struct RootView: View {
         }
         .onChange(of: app.inspectorOpen) { _, open in
             if open {
-                growWindow(to: LayoutMetrics.windowMin(sidebar: !sidebarHidden, chat: showingTrackChat, inspector: true))
+                growWindow(to: LayoutMetrics.windowMin(sidebar: !sidebarHidden, chat: showingTrackChat, trailing: trailingPaneWidth))
             }
         }
         .containerBackground(for: .window) {
@@ -310,6 +311,15 @@ struct RootView: View {
                         },
                         selection: Bindable(app).projectTasksLayout
                     )
+                    Button(action: toggleInspector) {
+                        Image(systemName: "sidebar.trailing")
+                            .frame(width: 28, height: 28)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular, in: Circle())
+                    .help(app.inspectorOpen ? "Hide Inspector" : "Show Inspector")
+                    .accessibilityLabel(app.inspectorOpen ? "Hide Inspector" : "Show Inspector")
                 }
             }
         } else if focusedThread != nil {
@@ -363,18 +373,39 @@ struct RootView: View {
 
     private var showingInspector: Bool {
         guard let project = openProject else { return false }
-        return app.inspectorOpen && app.tab(for: project.id) == .overview
+        let tab = app.tab(for: project.id)
+        return app.inspectorOpen && (tab == .overview || tab == .tasks)
+    }
+
+    private var showingTaskPane: Bool {
+        guard let project = openProject else { return false }
+        return app.tab(for: project.id) == .tasks
+    }
+
+    private var trailingPaneWidth: CGFloat {
+        guard showingInspector else { return 0 }
+        return showingTaskPane ? LayoutMetrics.taskPaneWidth : LayoutMetrics.inspectorWidth
+    }
+
+    @ViewBuilder
+    private func inspectorContent(for project: Project) -> some View {
+        if showingTaskPane {
+            TaskInspector()
+                .modifier(PaneChrome())
+        } else {
+            OverviewInspector(project: project)
+        }
     }
 
     /// The sidebar hides when the user collapsed it or the window is too narrow to fit it beside the panes' minimums.
     private var sidebarHidden: Bool {
         app.sidebarCollapsed
-            || (windowWidth > 0 && windowWidth < LayoutMetrics.windowMin(sidebar: true, chat: showingTrackChat, inspector: showingInspector))
+            || (windowWidth > 0 && windowWidth < LayoutMetrics.windowMin(sidebar: true, chat: showingTrackChat, trailing: trailingPaneWidth))
     }
 
     /// The window can shrink to the panes' minimums with the sidebar hidden. Chat counts once it has finished opening.
     private var windowMinimum: CGFloat {
-        LayoutMetrics.windowMin(sidebar: false, chat: chatSettled, inspector: showingInspector)
+        LayoutMetrics.windowMin(sidebar: false, chat: chatSettled, trailing: trailingPaneWidth)
     }
 
     private func presentNewEvent() async {
@@ -390,7 +421,8 @@ struct RootView: View {
 
     private func toggleInspector() {
         if !app.inspectorOpen {
-            growWindow(to: LayoutMetrics.windowMin(sidebar: !sidebarHidden, chat: showingTrackChat, inspector: true))
+            let width = showingTaskPane ? LayoutMetrics.taskPaneWidth : LayoutMetrics.inspectorWidth
+            growWindow(to: LayoutMetrics.windowMin(sidebar: !sidebarHidden, chat: showingTrackChat, trailing: width))
         }
         app.toggleInspector()
     }
@@ -398,7 +430,7 @@ struct RootView: View {
     private func toggleSidebar() {
         if sidebarHidden {
             if app.sidebarCollapsed { app.toggleSidebar() }
-            growWindow(to: LayoutMetrics.windowMin(sidebar: true, chat: showingTrackChat, inspector: showingInspector))
+            growWindow(to: LayoutMetrics.windowMin(sidebar: true, chat: showingTrackChat, trailing: trailingPaneWidth))
         } else {
             app.toggleSidebar()
         }
@@ -406,7 +438,7 @@ struct RootView: View {
 
     private func openChat() {
         chatMounted = true
-        growWindow(to: LayoutMetrics.windowMin(sidebar: false, chat: true, inspector: showingInspector))
+        growWindow(to: LayoutMetrics.windowMin(sidebar: false, chat: true, trailing: trailingPaneWidth))
         withAnimation(reduceMotion ? nil : LayoutMetrics.chatMotion) {
             chatProgress = 1
         } completion: {

@@ -538,6 +538,10 @@ enum ChatMarkdown {
                 index = table.end
                 continue
             }
+            if !inFence && line.trimmingCharacters(in: .whitespaces).isEmpty {
+                index += 1
+                continue
+            }
             if inFence {
                 result.append(NSAttributedString(string: line, attributes: attributes(
                     fontSize: fontSize, code: true, empty: line.isEmpty
@@ -546,11 +550,16 @@ enum ChatMarkdown {
                 result.append(renderLine(line, fontSize: fontSize))
             }
             if index < lines.count - 1 {
-                result.append(breakLine(fontSize: fontSize, empty: line.isEmpty))
+                let paragraphBreak = !inFence && isBlank(lines[index + 1])
+                result.append(breakLine(fontSize: fontSize, empty: paragraphBreak))
             }
             index += 1
         }
         return result
+    }
+
+    private static func isBlank(_ line: Substring) -> Bool {
+        line.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private static func takeTable(

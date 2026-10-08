@@ -178,24 +178,32 @@ enum ChatGPTSignIn {
         return try JSONDecoder().decode(TokenResponse.self, from: data)
     }
 
-    static func models(session: ChatGPTSession) async throws -> [ChatGPTModel] {
-        let session = try await validSession(session)
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/models")!)
-        request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else {
-            throw ChatGPTAuthError("ChatGPT would not list models.")
+    static func models(session _: ChatGPTSession) async throws -> [ChatGPTModel] {
+        var expired: String?
+        while true {
+            let session = try await validSession(refreshing: expired)
+            var request = URLRequest(url: URL(string: "https://api.openai.com/v1/models")!)
+            request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if !(200..<300).contains(status) {
+                let detail = String(data: data, encoding: .utf8)
+                if expired == nil && isExpiredTokenError(status: status, detail: detail) {
+                    expired = session.accessToken
+                    continue
+                }
+                throw ChatGPTAuthError("ChatGPT would not list models.")
+            }
+            guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw ChatGPTAuthError("ChatGPT returned an unreadable model list.")
+            }
+            let items = catalog(from: payload)
+            if items.isEmpty {
+                throw ChatGPTAuthError("ChatGPT returned no usable models.")
+            }
+            return items
         }
-        guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw ChatGPTAuthError("ChatGPT returned an unreadable model list.")
-        }
-        let items = catalog(from: payload)
-        if items.isEmpty {
-            throw ChatGPTAuthError("ChatGPT returned no usable models.")
-        }
-        return items
     }
 
     static func catalog(from payload: [String: Any]) -> [ChatGPTModel] {
@@ -220,14 +228,61 @@ enum ChatGPTSignIn {
         .map { ChatGPTModel(id: $0, displayName: $0) }
     }
 
-    static func validSession(_ supplied: ChatGPTSession? = nil) async throws -> ChatGPTSession {
-        guard var session = supplied ?? load() else {
+    static func remainingLifetime(_ session: ChatGPTSession) -> TimeInterval {
+        var remaining = session.expiresAt.timeIntervalSinceNow
+        if let expiration = jwtExpiration(session.accessToken) {
+            remaining = min(remaining, expiration.timeIntervalSinceNow)
+        }
+        return remaining
+    }
+
+    static func jwtExpiration(_ token: String) -> Date? {
+        let parts = token.split(separator: ".")
+        guard parts.count >= 2 else { return nil }
+        var encoded = parts[1].replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while encoded.count % 4 != 0 { encoded.append("=") }
+        guard let data = Data(base64Encoded: encoded),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        if let exp = object["exp"] as? NSNumber {
+            return Date(timeIntervalSince1970: exp.doubleValue)
+        }
+        return nil
+    }
+
+    static func needsRefresh(_ session: ChatGPTSession, refreshing token: String? = nil, leeway: TimeInterval = 60) -> Bool {
+        if let token, session.accessToken == token { return true }
+        return remainingLifetime(session) < leeway
+    }
+
+    static func isExpiredTokenError(status: Int, detail: String?) -> Bool {
+        if status == 401 { return true }
+        guard let detail else { return false }
+        let lower = detail.lowercased()
+        return lower.contains("token_expired") || lower.contains("authentication token is expired")
+    }
+
+    static func validSession(refreshing token: String? = nil) async throws -> ChatGPTSession {
+        guard let session = load() else {
             throw ChatGPTAuthError("Connect ChatGPT in Settings.")
         }
         guard session.usingPlan else {
             throw ChatGPTAuthError("ChatGPT plan use was not granted. Reconnect ChatGPT in Settings.")
         }
-        guard session.expiresAt.timeIntervalSinceNow < 60 else { return session }
+        if !needsRefresh(session, refreshing: token) { return session }
+        return try await ChatGPTTokenRefresh.shared.run {
+            try await refreshIfNeeded(refreshing: token)
+        }
+    }
+
+    private static func refreshIfNeeded(refreshing token: String?) async throws -> ChatGPTSession {
+        guard var session = load() else {
+            throw ChatGPTAuthError("Connect ChatGPT in Settings.")
+        }
+        guard session.usingPlan else {
+            throw ChatGPTAuthError("ChatGPT plan use was not granted. Reconnect ChatGPT in Settings.")
+        }
+        if !needsRefresh(session, refreshing: token) { return session }
         guard !session.refreshToken.isEmpty else {
             throw ChatGPTAuthError("ChatGPT sign-in expired. Reconnect in Settings.")
         }
@@ -243,6 +298,7 @@ enum ChatGPTSignIn {
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
+            ChatTrace.event("chatgpt refresh failed status=\(status) \(ChatTrace.clip(String(data: data, encoding: .utf8) ?? ""))")
             throw ChatGPTAuthError("ChatGPT sign-in expired. Reconnect in Settings.")
         }
         let tokens = try JSONDecoder().decode(TokenResponse.self, from: data)
@@ -250,6 +306,9 @@ enum ChatGPTSignIn {
         session.refreshToken = tokens.refreshToken ?? session.refreshToken
         session.idToken = tokens.idToken ?? session.idToken
         session.expiresAt = Date().addingTimeInterval(TimeInterval(tokens.expiresIn ?? 3600))
+        if let expiration = jwtExpiration(tokens.accessToken) {
+            session.expiresAt = min(session.expiresAt, expiration)
+        }
         if !tokens.scope.isEmpty {
             session.scopes = tokens.scope.split(whereSeparator: \.isWhitespace).map(String.init)
             session.usingPlan = session.scopes.contains("chatgpt.tokens.use.direct")
@@ -319,6 +378,14 @@ enum IDToken {
             throw ChatGPTAuthError("ChatGPT identity token was malformed.")
         }
         return try JSONDecoder().decode(Claims.self, from: data)
+    }
+}
+
+private actor ChatGPTTokenRefresh {
+    static let shared = ChatGPTTokenRefresh()
+
+    func run<T: Sendable>(_ operation: @Sendable () async throws -> T) async throws -> T {
+        try await operation()
     }
 }
 

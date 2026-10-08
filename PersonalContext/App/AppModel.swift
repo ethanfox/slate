@@ -112,6 +112,7 @@ final class AppModel {
     var trackChatOpen = false
     var inspectorOpen = false
     var selectedOverviewPlate: UUID?
+    var selectedTaskID: UUID?
     let objectFind = ObjectFindSession()
 
     var isObjectPage: Bool {
@@ -121,6 +122,21 @@ final class AppModel {
     func selectOverviewPlate(_ id: UUID?) {
         selectedOverviewPlate = id
         guard id != nil, !inspectorOpen else { return }
+        withAnimation(.easeInOut(duration: 0.22)) {
+            inspectorOpen = true
+        }
+    }
+
+    func selectTask(_ id: UUID?) {
+        selectedTaskID = id
+        if id == nil {
+            guard inspectorOpen else { return }
+            withAnimation(.easeInOut(duration: 0.22)) {
+                inspectorOpen = false
+            }
+            return
+        }
+        guard !inspectorOpen else { return }
         withAnimation(.easeInOut(duration: 0.22)) {
             inspectorOpen = true
         }

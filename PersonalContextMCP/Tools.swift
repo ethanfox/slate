@@ -171,6 +171,9 @@ enum Tools {
             shape["decisions"] = project.decisions.sorted { $0.createdAt > $1.createdAt }.map(JSONShape.decision)
             shape["threads"] = project.threads.sorted { $0.createdAt < $1.createdAt }.map { JSONShape.thread($0, full: false) }
             shape["notes"] = project.notes.sorted { $0.updatedAt > $1.updatedAt }.map { JSONShape.note($0, full: false) }
+            shape["tasks"] = TaskStore.tasks(in: context, project: project)
+                .sorted(by: TaskStore.boardSort)
+                .map { JSONShape.task($0, full: false) }
             shape["deletion_marks"] = project.deletionMarks
                 .sorted { $0.createdAt > $1.createdAt }
                 .map(JSONShape.deletionMark)
@@ -262,7 +265,8 @@ enum Tools {
                 "is_next": flag("Mark this task Next for its project."),
                 "track_ids": ["type": "array", "items": ["type": "string"], "description": "Track ids to link."],
                 "blocked_reason": text("Free-text blocked reason."),
-                "blocker_ids": ["type": "array", "items": ["type": "string"], "description": "Task ids that block this one."]
+                "blocker_ids": ["type": "array", "items": ["type": "string"], "description": "Task ids that block this one."],
+                "repeat": options(TaskRepeat.self, "Repeat rule. Defaults to none. custom is not settable.")
             ],
             required: ["title"], readOnly: false
         ) { args, context in
@@ -284,12 +288,29 @@ enum Tools {
                 "project_id": text("Move to this project. Empty string clears it."),
                 "track_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement track ids."],
                 "blocked_reason": text("Free-text blocked reason."),
-                "blocker_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement blocker task ids."]
+                "blocker_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement blocker task ids."],
+                "repeat": options(TaskRepeat.self, "Repeat rule. custom is not settable.")
             ],
             required: ["task_id"], readOnly: false
         ) { args, context in
             let item = try Lookup.task(try args.uuid("task_id"), in: context)
             try TaskMutations.apply(args, to: item, creating: false, in: context)
+            return JSONShape.task(item, full: true)
+        },
+        Tool(
+            name: "complete_task",
+            description: "Complete a Slate task. Repeating tasks write a completion and advance the due date. Non-repeating tasks move to Done. Already-done tasks are returned unchanged.",
+            properties: ["task_id": text("Task id.")],
+            required: ["task_id"], readOnly: false
+        ) { args, context in
+            let item = try Lookup.task(try args.uuid("task_id"), in: context)
+            if !item.isCompleted {
+                if item.repeatRule.advances, item.due != nil {
+                    TaskStore.completeRepeating(item, in: context)
+                } else {
+                    TaskStore.setStatus(.done, on: item, in: context)
+                }
+            }
             return JSONShape.task(item, full: true)
         },
         Tool(
@@ -633,6 +654,10 @@ enum TaskMutations {
                 try TaskStore.addBlocker(try Lookup.task(id, in: context), to: item, in: context)
             }
         }
+        if let repeatRule = try args.choice("repeat", as: TaskRepeat.self) {
+            if repeatRule == .custom { throw ToolError("repeat cannot be custom.") }
+            item.repeatRule = repeatRule
+        }
         if let isNext = args.bool("is_next") {
             if isNext {
                 try TaskStore.setNext(item, in: context)
@@ -794,6 +819,7 @@ enum JSONShape {
             "is_next": item.isNext,
             "project_id": item.project?.id.uuidString ?? "",
             "project_name": item.project?.name ?? "",
+            "repeat": item.repeatRule.rawValue,
             "blocked_reason": item.blockedReason,
             "tracks": item.liveTracks.map { ["id": $0.id.uuidString, "title": $0.title] },
             "blockers": item.unresolvedBlockers.map {

@@ -2,7 +2,7 @@
 
 Problem from 8 Oct 2026. Direction is locked.
 
-ChatGPT has no Node agent to keep warm. The delay is work Slate does *before* `URLSession.bytes`: validate the session, `prepareCodeRoots()`, spawn `slate-mcp` just to list tools, then POST. If the model calls tools, up to eight sequential rounds follow. That is fine. Paying clone + process spawn on “what did we decide” is not.
+ChatGPT has no Node agent to keep warm. The delay is work Slate does *before* `URLSession.bytes`: validate the session, `prepareCodeRoots()`, spawn `slate-mcp` just to list tools, then POST. If the model calls tools, rounds stay sequential. That is the API. Paying clone + process spawn on “what did we decide” is not. After the tool budget, force an answer — see [`chatgpt-tool-budget.md`](chatgpt-tool-budget.md).
 
 ## What to do
 
@@ -11,7 +11,7 @@ ChatGPT has no Node agent to keep warm. The delay is work Slate does *before* `U
 | POST `/v1/responses` | `tools/list` (cache on the bridge) |
 | | One long-lived MCP process for the chat |
 | | `prepareCodeRoots()` when a `project_*` tool actually runs |
-| | Token refresh (already skipped if more than 60s left) |
+| | Token refresh (skipped if more than 60s left; retry on `token_expired` — see [`chatgpt-token-refresh.md`](chatgpt-token-refresh.md)) |
 
 Tool-call rounds stay sequential. That is the API. First token should not wait on a repo or a fresh MCP child.
 
