@@ -84,11 +84,12 @@ One row. It names the page and holds the actions for that page. When more than o
 
 - Leading: sidebar toggle, then the title slot.
 - **One page open:** today’s title. Icon + 20 semibold. No box. No close.
+- Back and forward sit before the first tab (or the single-page title). Each tab keeps its own history. Switching tabs does not push. Closing a tab discards that tab’s history. ⌘[ back, ⌘] forward. Each control is 28×28. The whole square is the hit target, not the chevron. Put the frame and `contentShape` on the button’s label — on macOS, applying them after `Button` leaves only the icon clickable.
 - **Two or more:** a horizontal tab strip in that same slot.
   - Every tab has an icon and a title. Try 15 first (`CraftFont` body / summary-card size). Fall back to 13 only if the bar feels tight.
   - Current tab: `CraftColor.selection` fill, radius 8, semibold, primary. Idle: no fill, regular, secondary. Not a bordered capsule. Not glass. Not Craft’s tab strip.
   - Close is an × on the tab. Always visible while the strip is showing. Do not animate the tab when the × is hovered or pressed.
-  - Overflow scrolls horizontally. No visible scroller. Keep the current tab in view.
+  - Overflow scrolls horizontally. No visible scroller. Keep the current tab in view. A clipped end gets a short blur; a fully visible first or last tab does not.
   - Hovering a tab shows a small elevated pane with the full title, and the project (icon + name) underneath when the tab belongs to one. Not the system tooltip.
   - Trailing page actions stay pinned. The leftover gap after the tabs is the window-drag region. A scroll view must not eat drag-to-move for the whole bar.
 - Trailing: at most one primary button, then view switches (grid, list) if the page has them.
@@ -99,7 +100,7 @@ One row. It names the page and holds the actions for that page. When more than o
 
 The toolbar scrolls away only if the page is a long document and the title is already in the document. Settings, lists, and home keep the toolbar fixed.
 
-A tab is one main-column view. Sidebar and other clicks navigate the current tab. A project in the main sidebar always opens that project’s overview — it does not switch to a chat or other inner view already open for that project. Chat object links open in a new tab (setting, default on). ⌘T is a new chat. Same view already open: switch to it. Last tab closed: Home. A generating chat shows a spinner on its tab. Tabs restore on launch and can be dragged. Sidebar follows the current tab. Spec: `features/window-tabs.md`.
+A tab is one main-column view. Sidebar and other clicks navigate the current tab. A project in the main sidebar always opens that project’s overview — it does not switch to a chat or other inner view already open for that project. Chat object links open in a new tab (setting, default on). ⌘T is a new chat. Same view already open: switch to it. Last tab closed: Home. A generating chat shows a spinner on its tab. Tabs restore on launch and can be dragged. Each tab keeps back/forward history; closing a tab drops it. Sidebar follows the current tab. Spec: `features/window-tabs.md`.
 
 ## Content
 
@@ -273,7 +274,7 @@ Use the system control. A custom draw is allowed only when no system control exi
 - Text fields: plain field inside the elevated fill, radius 8, padding 10, hairline border. Placeholder is tertiary. The focused field shows the system focus ring in the accent.
 - Press feedback is the system highlight. Do not scale the window’s contents.
 
-Hit targets are at least 28 on a side. Sidebar rows already are. Icon-only toolbar buttons use the system toolbar item size, not a 16pt glyph with no padding. When a control has a painted shape (capsule, row, card), that shape is the hit target, not the label.
+Hit targets are at least 28 on a side. Sidebar rows already are. Icon-only toolbar buttons are 28×28; the whole square is clickable, not the glyph. Put the frame and `contentShape` on the button’s label. Do not apply them after `Button` — on macOS that leaves only the icon clickable. When a control has a painted shape (capsule, row, card), that shape is the hit target, not the label.
 
 ## Context menus
 

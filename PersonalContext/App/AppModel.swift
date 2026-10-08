@@ -21,6 +21,10 @@ final class AppModel {
     var chromeDestination: Destination = .home
     var windowTabs: [WindowTab] = [AppModel.launchTab]
     var selectedTabID = AppModel.launchTab.id
+    var tabHistories: [UUID: TabHistory] = [:]
+    var canGoBack = false
+    var canGoForward = false
+    @ObservationIgnored var historyLocked = false
     var tabs: [UUID: ProjectTab] = [:]
     var selectedThread: UUID?
     var selectedNote: UUID?

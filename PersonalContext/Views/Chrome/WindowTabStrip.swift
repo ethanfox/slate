@@ -23,15 +23,21 @@ struct WindowTabStrip: View {
     @State private var dragX: CGFloat = 0
     @State private var hoveredID: UUID?
     @State private var hoverWait: Task<Void, Never>?
+    @State private var overflowLeading = false
+    @State private var overflowTrailing = false
 
     var body: some View {
-        if app.windowTabs.count < 2 {
-            single
-        } else {
-            strip
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(height: TabDragSpace.chip.height)
+        HStack(spacing: 8) {
+            TabHistoryControls()
+            if app.windowTabs.count < 2 {
+                single
+            } else {
+                strip
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: TabDragSpace.chip.height)
+            }
         }
+        .frame(maxWidth: app.windowTabs.count < 2 ? nil : .infinity, alignment: .leading)
     }
 
     private var single: some View {
@@ -85,8 +91,33 @@ struct WindowTabStrip: View {
             .scrollIndicators(.hidden)
             .scrollDisabled(draggingID != nil)
             .coordinateSpace(name: TabDragSpace.name)
+            .onScrollGeometryChange(for: TabOverflow.self) { geometry in
+                let leadingInset = geometry.contentInsets.leading
+                let trailingInset = geometry.contentInsets.trailing
+                return TabOverflow(
+                    leading: geometry.contentOffset.x + leadingInset > 0.5,
+                    trailing: geometry.contentOffset.x + geometry.containerSize.width < geometry.contentSize.width - trailingInset - 0.5
+                )
+            } action: { _, overflow in
+                overflowLeading = overflow.leading
+                overflowTrailing = overflow.trailing
+            }
+            .overlay(alignment: .leading) {
+                if overflowLeading {
+                    TabEdgeBlur(edge: .leading)
+                        .transition(.opacity)
+                }
+            }
+            .overlay(alignment: .trailing) {
+                if overflowTrailing {
+                    TabEdgeBlur(edge: .trailing)
+                        .transition(.opacity)
+                }
+            }
             .overlay(alignment: .topLeading) { lift }
             .overlay(alignment: .topLeading) { hoverPane }
+            .animation(reduceMotion ? nil : Motion.quick, value: overflowLeading)
+            .animation(reduceMotion ? nil : Motion.quick, value: overflowTrailing)
             .onAppear { scroll(proxy) }
             .onChange(of: app.selectedTabID) { _, _ in
                 guard draggingID == nil else { return }
@@ -271,6 +302,78 @@ private struct TabLabel {
     var symbol: String
     var projectName: String?
     var projectSymbol: String?
+}
+
+private struct TabOverflow: Equatable {
+    var leading: Bool
+    var trailing: Bool
+}
+
+private struct TabHistoryControls: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        HStack(spacing: 0) {
+            TabHistoryButton(title: "Back", symbol: "chevron.backward", enabled: app.canGoBack) {
+                app.goBack()
+            }
+            TabHistoryButton(title: "Forward", symbol: "chevron.forward", enabled: app.canGoForward) {
+                app.goForward()
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+
+private struct TabHistoryButton: View {
+    var title: String
+    var symbol: String
+    var enabled: Bool
+    var action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(CraftFont.tabIcon)
+                .foregroundStyle(enabled ? .secondary : .tertiary)
+                .frame(width: 28, height: 28)
+                .background {
+                    Circle()
+                        .fill(hovering && enabled ? CraftColor.hover : Color.clear)
+                        .animation(Motion.hover, value: hovering)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .help(title)
+        .accessibilityLabel(title)
+        .onHover { hovering = $0 }
+    }
+}
+
+private struct TabEdgeBlur: View {
+    var edge: HorizontalEdge
+
+    var body: some View {
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black.opacity(0.55), location: 0.35),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: edge == .leading ? .leading : .trailing,
+                    endPoint: edge == .leading ? .trailing : .leading
+                )
+            }
+            .frame(width: 28)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
 }
 
 private struct WindowTabChip: View {

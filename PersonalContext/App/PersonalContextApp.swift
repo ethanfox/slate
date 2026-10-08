@@ -29,6 +29,17 @@ struct SlateApp: App {
                 .keyboardShortcut("t")
             }
             CommandMenu("Tabs") {
+                Button("Back") {
+                    app.goBack()
+                }
+                .keyboardShortcut("[")
+                .disabled(!app.canGoBack)
+                Button("Forward") {
+                    app.goForward()
+                }
+                .keyboardShortcut("]")
+                .disabled(!app.canGoForward)
+                Divider()
                 Button("Close Tab") {
                     app.closeSelectedTab()
                 }

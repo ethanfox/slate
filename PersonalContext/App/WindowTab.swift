@@ -37,11 +37,11 @@ struct WindowTab: Identifiable, Hashable, Codable {
             case .overview: .projectOverview(id)
             case .tasks: .projectTasks(id)
             case .threads:
-                selectedThread.map { .thread($0) } ?? .projectChat(id)
+                selectedThread.map { .thread($0) } ?? .projectThreads(id)
             case .notes:
-                selectedNote.map { .note($0) } ?? .projectChat(id)
+                selectedNote.map { .note($0) } ?? .projectNotes(id)
             case .decisions:
-                selectedDecision.map { .decision($0) } ?? .projectChat(id)
+                selectedDecision.map { .decision($0) } ?? .projectDecisions(id)
             case .chat:
                 selectedConversation.map { .conversation($0) } ?? .projectChat(id)
             }
@@ -61,15 +61,33 @@ enum TabViewKey: Hashable {
     case projectOverview(UUID)
     case projectTasks(UUID)
     case projectChat(UUID)
+    case projectThreads(UUID)
+    case projectNotes(UUID)
+    case projectDecisions(UUID)
     case thread(UUID)
     case note(UUID)
     case decision(UUID)
     case conversation(UUID)
 }
 
+struct TabHistory: Codable, Equatable {
+    var back: [WindowTab] = []
+    var forward: [WindowTab] = []
+
+    var canGoBack: Bool { !back.isEmpty }
+    var canGoForward: Bool { !forward.isEmpty }
+}
+
+private struct StoredTabHistory: Codable {
+    var tabID: UUID
+    var back: [WindowTab]
+    var forward: [WindowTab]
+}
+
 private struct StoredWindowTabs: Codable {
     var tabs: [WindowTab]
     var selectedID: UUID
+    var histories: [StoredTabHistory]?
 }
 
 extension AppModel {
@@ -220,12 +238,30 @@ extension AppModel {
         _ = makeConversation(in: nil, context: container.mainContext, newTab: true)
     }
 
+    func goBack() {
+        guard var history = tabHistories[selectedTabID], let previous = history.back.popLast() else { return }
+        persistCurrentIntoSelectedTab()
+        history.forward.append(currentWindowTab())
+        tabHistories[selectedTabID] = history
+        restoreHistory(previous)
+    }
+
+    func goForward() {
+        guard var history = tabHistories[selectedTabID], let next = history.forward.popLast() else { return }
+        persistCurrentIntoSelectedTab()
+        history.back.append(currentWindowTab())
+        tabHistories[selectedTabID] = history
+        restoreHistory(next)
+    }
+
     func selectTab(_ id: UUID) {
         guard id != selectedTabID, windowTabs.contains(where: { $0.id == id }) else { return }
         persistCurrentIntoSelectedTab()
         selectedTabID = id
         if let tab = windowTabs.first(where: { $0.id == id }) {
-            apply(tab, persist: true)
+            withoutHistory {
+                apply(tab, persist: true)
+            }
         }
     }
 
@@ -250,19 +286,25 @@ extension AppModel {
         guard let index = windowTabs.firstIndex(where: { $0.id == id }) else { return }
         let wasSelected = selectedTabID == id
         windowTabs.remove(at: index)
+        discardHistory(id)
         if windowTabs.isEmpty {
             let home = WindowTab.home()
             windowTabs = [home]
             selectedTabID = home.id
-            apply(home, persist: true)
+            withoutHistory {
+                apply(home, persist: true)
+            }
             return
         }
         if wasSelected {
             let next = index < windowTabs.count ? windowTabs[index] : windowTabs[index - 1]
             selectedTabID = next.id
-            apply(next, persist: true)
+            withoutHistory {
+                apply(next, persist: true)
+            }
         } else {
             persistWindowTabs()
+            syncHistoryButtons()
         }
     }
 
@@ -277,21 +319,29 @@ extension AppModel {
             return true
         }
         if remaining.count == windowTabs.count { return }
+        for tab in windowTabs where !remaining.contains(where: { $0.id == tab.id }) {
+            discardHistory(tab.id)
+        }
         windowTabs = remaining
         if windowTabs.isEmpty {
             let home = WindowTab.home()
             windowTabs = [home]
             selectedTabID = home.id
-            apply(home, persist: true)
+            withoutHistory {
+                apply(home, persist: true)
+            }
             return
         }
         if !windowTabs.contains(where: { $0.id == selectedTabID }) {
             selectedTabID = windowTabs[min(windowTabs.count - 1, 0)].id
             if let tab = windowTabs.first(where: { $0.id == selectedTabID }) {
-                apply(tab, persist: true)
+                withoutHistory {
+                    apply(tab, persist: true)
+                }
             }
         } else {
             persistWindowTabs()
+            syncHistoryButtons()
         }
     }
 
@@ -308,9 +358,12 @@ extension AppModel {
         if let existing = windowTabs.first(where: { $0.viewKey == incoming.viewKey }) {
             if newTab || existing.id == selectedTabID {
                 selectedTabID = existing.id
-                apply(existing, persist: true)
+                withoutHistory {
+                    apply(existing, persist: true)
+                }
                 return
             }
+            discardHistory(existing.id)
             windowTabs.removeAll { $0.id == existing.id }
         }
         if newTab, !windowTabs.isEmpty {
@@ -343,13 +396,22 @@ extension AppModel {
             selectedTabID = stored.tabs.contains(where: { $0.id == stored.selectedID })
                 ? stored.selectedID
                 : stored.tabs[0].id
+            tabHistories = Dictionary(
+                uniqueKeysWithValues: (stored.histories ?? []).compactMap { record in
+                    guard stored.tabs.contains(where: { $0.id == record.tabID }) else { return nil }
+                    return (record.tabID, TabHistory(back: record.back, forward: record.forward))
+                }
+            )
         } else {
             let home = WindowTab.home()
             windowTabs = [home]
             selectedTabID = home.id
+            tabHistories = [:]
         }
         if let tab = windowTabs.first(where: { $0.id == selectedTabID }) {
-            apply(tab, persist: false)
+            withoutHistory {
+                apply(tab, persist: false)
+            }
         }
     }
 
@@ -375,6 +437,7 @@ extension AppModel {
     }
 
     private func apply(_ tab: WindowTab, persist: Bool) {
+        let previous = currentWindowTab()
         chromeDestination = tab.destination
         if case .project(let id) = tab.destination {
             tabs[id] = tab.projectTab
@@ -383,11 +446,65 @@ extension AppModel {
         selectedNote = tab.selectedNote
         selectedDecision = tab.selectedDecision
         selectedConversation = tab.selectedConversation
+        if !historyLocked, previous.viewKey != tab.viewKey {
+            recordNavigation(from: previous, to: tab)
+        }
         if persist { persistWindowTabs() }
+        syncHistoryButtons()
     }
 
     private func persistWindowTabs() {
-        let stored = StoredWindowTabs(tabs: windowTabs, selectedID: selectedTabID)
+        tabHistories = tabHistories.filter { id, _ in windowTabs.contains { $0.id == id } }
+        let stored = StoredWindowTabs(
+            tabs: windowTabs,
+            selectedID: selectedTabID,
+            histories: tabHistories.map { id, history in
+                StoredTabHistory(tabID: id, back: history.back, forward: history.forward)
+            }
+        )
         defaults.set(try? JSONEncoder().encode(stored), forKey: Keys.windowTabs)
+    }
+
+    private func recordNavigation(from previous: WindowTab, to next: WindowTab) {
+        guard previous.viewKey != next.viewKey else { return }
+        var history = tabHistories[selectedTabID] ?? TabHistory()
+        history.back.append(previous)
+        if history.back.count > 50 {
+            history.back.removeFirst(history.back.count - 50)
+        }
+        history.forward = []
+        tabHistories[selectedTabID] = history
+    }
+
+    private func restoreHistory(_ snapshot: WindowTab) {
+        var tab = snapshot
+        tab.id = selectedTabID
+        if let other = windowTabs.first(where: { $0.id != selectedTabID && $0.viewKey == tab.viewKey }) {
+            discardHistory(other.id)
+            windowTabs.removeAll { $0.id == other.id }
+        }
+        if let index = windowTabs.firstIndex(where: { $0.id == selectedTabID }) {
+            windowTabs[index] = tab
+        }
+        withoutHistory {
+            apply(tab, persist: true)
+        }
+    }
+
+    private func discardHistory(_ id: UUID) {
+        tabHistories[id] = nil
+        syncHistoryButtons()
+    }
+
+    private func syncHistoryButtons() {
+        let history = tabHistories[selectedTabID]
+        canGoBack = history?.canGoBack ?? false
+        canGoForward = history?.canGoForward ?? false
+    }
+
+    private func withoutHistory(_ work: () -> Void) {
+        historyLocked = true
+        work()
+        historyLocked = false
     }
 }
