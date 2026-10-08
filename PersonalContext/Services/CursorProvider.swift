@@ -11,6 +11,16 @@ struct RunnerRequest: Encodable, Sendable {
     var model: String
     var cwd: String
     var mcpCommand: String
+    var codeRoots: [ProjectCodeRoot]
+    var includeSlateTools: Bool
+    var includeProjectTools: Bool
+    var runtime: String
+    var cloudRepos: [RunnerCloudRepo]
+}
+
+struct RunnerCloudRepo: Encodable, Sendable {
+    var url: String
+    var startingRef: String?
 }
 
 struct RunnerSource: Decodable, Sendable {
@@ -207,6 +217,7 @@ final class CursorConversationBridge {
     private(set) var startedAt: Date?
     private(set) var finishedAt: Date?
     @ObservationIgnored private var process: Process?
+    @ObservationIgnored private var activeCodeRoots: [ProjectCodeRoot] = []
     @ObservationIgnored private var startNewText = false
     let debugLog = ChatDebugLog()
 
@@ -256,7 +267,23 @@ final class CursorConversationBridge {
         debugLog.add("bindTurn user=\(userID.uuidString.prefix(8))")
     }
 
-    func prepare(userText: String, apiKey: String) throws -> RunnerRequest {
+    func prepareCodeRoots() async throws -> [ProjectCodeRoot] {
+        let store = conversation.modelContext?.container.configurations.first?.url
+        let roots = try await ProjectCodeWorkspace.prepare(for: project, storeURL: store)
+        activeCodeRoots = roots
+        return roots
+    }
+
+    func prepare(
+        userText: String,
+        apiKey: String,
+        model: String,
+        codeRoots: [ProjectCodeRoot],
+        includeSlateTools: Bool = true,
+        includeProjectTools: Bool = true,
+        resumeSession: Bool = true,
+        runtime: WorkerPath = .local
+    ) throws -> RunnerRequest {
         guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "slate-mcp") else {
             throw CursorAPIError(status: 0, message: "The Slate MCP is missing from the app.")
         }
@@ -269,29 +296,82 @@ final class CursorConversationBridge {
         let folder = store.deletingLastPathComponent().appendingPathComponent("Agent", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
-        let opening = conversation.cursorAgentId.isEmpty
-        ChatTrace.event("prepare conversation=\(conversation.id) opening=\(opening) agent=\(conversation.cursorAgentId) model=\(conversation.model) project=\(project?.name ?? "none") textChars=\(userText.count)")
+        let opening = !resumeSession || conversation.externalSessionID.isEmpty
+        ChatTrace.event("prepare conversation=\(conversation.id) opening=\(opening) agent=\(conversation.externalSessionID) model=\(conversation.modelID) project=\(project?.name ?? "none") roots=\(codeRoots.count) textChars=\(userText.count)")
         if conversation.title == "New chat" || conversation.title.isEmpty {
             conversation.title = conversationTitle(from: userText)
         }
         let focused = conversation.thread
-        let context = opening ? (project.map(ContextBuilder.identity(for:)) ?? "") : ""
+        let context = project.map { current in
+            opening ? ContextBuilder.package(for: current) : ContextBuilder.identity(for: current)
+        } ?? ""
         if opening {
             conversation.contextSnapshot = context
         }
         conversation.updatedAt = .now
         project?.touch()
         try? conversation.modelContext?.save()
+        if let project, !ProjectCodeWorkspace.attachments(on: project).isEmpty, includeProjectTools, codeRoots.isEmpty {
+            throw CursorAPIError(status: 0, message: "This project has attached code, but Slate could not open it.")
+        }
+        let workspace = codeRoots.count == 1
+            ? codeRoots[0].path
+            : (codeRoots.first.map { URL(fileURLWithPath: $0.path).deletingLastPathComponent().path } ?? folder.path)
         return RunnerRequest(
             apiKey: apiKey,
             env: ProcessInfo.processInfo.environment,
-            agentId: opening ? nil : conversation.cursorAgentId,
+            agentId: opening ? nil : conversation.externalSessionID,
             name: conversation.title,
-            text: ContextBuilder.prompt(userText: userText, context: context, opening: opening, focusedThread: focused),
-            model: conversation.model,
-            cwd: folder.path,
-            mcpCommand: mcp.path
+            text: includeSlateTools
+                ? ContextBuilder.prompt(userText: userText, context: context, opening: opening, focusedThread: focused)
+                : ContextBuilder.codeConsultationPrompt(userText: userText, context: context),
+            model: model,
+            cwd: workspace,
+            mcpCommand: mcp.path,
+            codeRoots: codeRoots,
+            includeSlateTools: includeSlateTools,
+            includeProjectTools: includeProjectTools,
+            runtime: runtime.rawValue,
+            cloudRepos: cloudRepositories()
         )
+    }
+
+    private func cloudRepositories() -> [RunnerCloudRepo] {
+        guard let project else { return [] }
+        return ProjectCodeWorkspace.attachments(on: project).compactMap { attachment in
+            let url: String
+            switch attachment.kind {
+            case .folder:
+                return nil
+            case .github:
+                url = GitHubRemote.url(forLocator: attachment.locator) + ".git"
+            case .gitlab:
+                return nil
+            }
+            return RunnerCloudRepo(
+                url: url,
+                startingRef: attachment.defaultBranch.isEmpty ? nil : attachment.defaultBranch
+            )
+        }
+    }
+
+    func prepareProviderTurn(userText: String, includeSlateTools: Bool = true) -> String {
+        if conversation.title == "New chat" || conversation.title.isEmpty {
+            conversation.title = conversationTitle(from: userText)
+        }
+        let context = project.map(ContextBuilder.package(for:)) ?? ""
+        conversation.updatedAt = .now
+        project?.touch()
+        try? conversation.modelContext?.save()
+        if includeSlateTools {
+            return ContextBuilder.prompt(
+                userText: "",
+                context: context,
+                opening: true,
+                focusedThread: conversation.thread
+            )
+        }
+        return ContextBuilder.codeConsultationPrompt(userText: "", context: context)
     }
 
     func run(_ request: RunnerRequest) throws -> AsyncThrowingStream<RunnerEvent, Error> {
@@ -355,9 +435,9 @@ final class CursorConversationBridge {
 
     func agentStarted(_ id: String) {
         guard conversation.modelContext != nil else { return }
-        guard conversation.cursorAgentId != id else { return }
+        guard conversation.externalSessionID != id else { return }
         ChatTrace.event("agent id=\(id)")
-        conversation.cursorAgentId = id
+        conversation.externalSessionID = id
         try? conversation.modelContext?.save()
     }
 
@@ -446,6 +526,8 @@ final class CursorConversationBridge {
     func finished() {
         if finishedAt == nil { finishedAt = .now }
         process = nil
+        ProjectCodeWorkspace.stopAccessing(activeCodeRoots)
+        activeCodeRoots = []
     }
 
     func completeRunningTools() {
@@ -543,6 +625,10 @@ struct CursorChatProvider: ChatProvider {
     let id = "cursor"
     let name = "Cursor"
     let bridge: CursorConversationBridge
+    var includeSlateTools = true
+    var includeProjectTools = true
+    var resumeConversation = true
+    var runtime: WorkerPath = .local
 
     var zeroResponseMessage: String { "Cursor didn’t return a reply." }
 
@@ -573,7 +659,17 @@ struct CursorChatProvider: ChatProvider {
                     guard let apiKey = KeychainStore.read(.cursorAPIKey) else {
                         throw CursorAPIError(status: 0, message: "Add a Cursor API key in Settings.")
                     }
-                    let request = try bridge.prepare(userText: userText, apiKey: apiKey)
+                    let roots = runtime == .local && includeProjectTools ? try await bridge.prepareCodeRoots() : []
+                    let request = try bridge.prepare(
+                        userText: userText,
+                        apiKey: apiKey,
+                        model: model,
+                        codeRoots: roots,
+                        includeSlateTools: includeSlateTools,
+                        includeProjectTools: includeProjectTools,
+                        resumeSession: resumeConversation,
+                        runtime: runtime
+                    )
                     bridge.debugLog.add("prepare opening=\(request.agentId == nil) model=\(request.model) promptChars=\(request.text.count)")
                     var emitted = false
                     var agentID: String?
@@ -622,7 +718,7 @@ struct CursorChatProvider: ChatProvider {
                             if event.status?.lowercased() == "error" {
                                 throw CursorAPIError(status: 0, message: event.error ?? "The run failed.")
                             }
-                            if let agentID { bridge.agentStarted(agentID) }
+                            if resumeConversation, let agentID { bridge.agentStarted(agentID) }
                         case "error":
                             bridge.debugLog.add("event error \(event.message ?? "")")
                             throw CursorAPIError(status: 0, message: event.message ?? "The run failed.")

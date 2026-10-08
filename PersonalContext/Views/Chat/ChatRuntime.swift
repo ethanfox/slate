@@ -72,6 +72,7 @@ final class ChatDebugLog {
 @Observable
 final class ChatRuntime {
     let conversationID: UUID
+    let providerID: String
     let bridge: CursorConversationBridge
     let session: ChatSession
     var modelID: String
@@ -82,10 +83,11 @@ final class ChatRuntime {
 
     init(conversation: Conversation, project: Project?) {
         conversationID = conversation.id
+        providerID = conversation.providerID
         self.conversation = conversation
         let bridge = CursorConversationBridge(conversation: conversation, project: project ?? conversation.project)
         self.bridge = bridge
-        modelID = conversation.model
+        modelID = conversation.modelID
         session = Self.makeSession(bridge: bridge, conversation: conversation)
         answers = Dictionary(uniqueKeysWithValues: conversation.orderedMessages.compactMap { message in
             guard message.role == .assistant else { return nil }
@@ -144,7 +146,7 @@ final class ChatRuntime {
     func applyModel() {
         session.model = modelID
         guard let conversation, conversation.modelContext != nil else { return }
-        conversation.model = modelID
+        conversation.modelID = modelID
         try? conversation.modelContext?.save()
     }
 
@@ -210,7 +212,36 @@ final class ChatRuntime {
     }
 
     private static func makeSession(bridge: CursorConversationBridge, conversation: Conversation) -> ChatSession {
-        let session = ChatSession(provider: CursorChatProvider(bridge: bridge), model: conversation.model)
+        let provider: any ChatProvider
+        if let project = bridge.project, !project.workerProviderID.isEmpty {
+            let path = WorkerPath(rawValue: project.workerPath) ?? .local
+            let workerModel = project.workerModelID.isEmpty && project.workerProviderID == conversation.providerID
+                ? conversation.modelID
+                : project.workerModelID
+            provider = ProjectWorkerChatProvider(
+                id: conversation.providerID,
+                name: TalkProvider(rawValue: conversation.providerID)?.title ?? "Chat",
+                bridge: bridge,
+                chatProviderID: conversation.providerID,
+                workerProviderID: project.workerProviderID,
+                workerModelID: workerModel,
+                workerPath: path
+            )
+        } else {
+            switch TalkProvider(rawValue: conversation.providerID) {
+            case .cursor:
+                provider = CursorChatProvider(bridge: bridge)
+            case .chatgpt:
+                provider = ChatGPTProvider(bridge: bridge)
+            case .unconfigured, .none:
+                provider = UnavailableChatProvider(
+                    id: conversation.providerID,
+                    name: "Not configured",
+                    message: "Choose a chat provider in Settings, then start a new chat."
+                )
+            }
+        }
+        let session = ChatSession(provider: provider, model: conversation.modelID)
         var entries: [ChatSession.Entry] = []
         var history: [AIChatCore.ChatMessage] = []
         for message in conversation.orderedMessages where !message.content.isEmpty {

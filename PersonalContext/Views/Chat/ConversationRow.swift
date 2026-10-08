@@ -33,9 +33,9 @@ struct ConversationRow: View {
             } label: {
                 Label(conversation.isArchived ? "Unarchive" : "Archive", systemImage: "archivebox")
             }
-            if !conversation.cursorAgentId.isEmpty {
+            if conversation.providerID == TalkProvider.cursor.rawValue, !conversation.externalSessionID.isEmpty {
                 Button {
-                    CraftClipboard.copy(conversation.cursorAgentId)
+                    CraftClipboard.copy(conversation.externalSessionID)
                 } label: {
                     Label("Copy Agent ID", systemImage: "doc.on.doc")
                 }
@@ -78,9 +78,15 @@ struct ConversationRow: View {
     }
 
     private var subtitle: String {
-        var parts = [conversation.updatedAt.relativeLabel, app.modelName(for: conversation.model)]
-        if app.showAgentIDs, !conversation.cursorAgentId.isEmpty {
-            parts.append(conversation.cursorAgentId)
+        var parts = [
+            conversation.updatedAt.relativeLabel,
+            TalkProvider(rawValue: conversation.providerID)?.title ?? "Unknown provider",
+            app.modelName(for: conversation.modelID, providerID: conversation.providerID)
+        ]
+        if app.showAgentIDs,
+           conversation.providerID == TalkProvider.cursor.rawValue,
+           !conversation.externalSessionID.isEmpty {
+            parts.append(conversation.externalSessionID)
         }
         return parts.joined(separator: " · ")
     }

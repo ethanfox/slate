@@ -11,7 +11,7 @@ enum KeychainAccount: String {
 enum KeychainStore {
     static let service = "com.ethanfox.PersonalContext"
 
-    static func read(_ account: KeychainAccount = .cursorAPIKey) -> String? {
+    static func read(_ account: KeychainAccount) -> String? {
         read(account: account.rawValue)
     }
 
@@ -33,7 +33,7 @@ enum KeychainStore {
         return value?.isEmpty == false ? value : nil
     }
 
-    static func save(_ value: String, account: KeychainAccount = .cursorAPIKey) throws {
+    static func save(_ value: String, account: KeychainAccount) throws {
         try save(value, account: account.rawValue)
     }
 
@@ -55,7 +55,7 @@ enum KeychainStore {
         guard status == errSecSuccess else { throw KeychainError(status: status) }
     }
 
-    static func delete(_ account: KeychainAccount = .cursorAPIKey) throws {
+    static func delete(_ account: KeychainAccount) throws {
         try delete(account: account.rawValue)
     }
 

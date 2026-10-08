@@ -134,7 +134,10 @@ final class SourceConnections {
 
     var hasGitHub: Bool { !githubTokens.isEmpty }
     var hasGitLab: Bool { !gitlabTokens.isEmpty }
-    var hasChatGPT: Bool { chatGPT.isPresent }
+    var hasChatGPT: Bool {
+        if case .connected = chatGPT { return true }
+        return false
+    }
 
     private func save(_ token: String, name: String, provider: ForgeProvider) async throws {
         let account = try await account(for: provider, secret: token)

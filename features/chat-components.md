@@ -87,3 +87,12 @@ Do not put page navigation, project selection, track selection, or screen-specif
 - Screen-specific navigation stays in the screen that hosts the chat.
 
 Do not add another chat text field directly to Home, Overview, project chat, or Ask Slate.
+
+Chat slowness is not one ticket. Each problem has its own spec:
+
+- [`code-roots-on-demand.md`](code-roots-on-demand.md)
+- [`hot-cursor-runner.md`](hot-cursor-runner.md)
+- [`chatgpt-lazy-prep.md`](chatgpt-lazy-prep.md)
+- [`worker-as-tool.md`](worker-as-tool.md)
+- [`provider-turn-context.md`](provider-turn-context.md)
+- [`stream-persist-and-markdown.md`](stream-persist-and-markdown.md)

@@ -99,6 +99,9 @@ final class Project: Identifiable {
 
     var overviewWidthRaw: String = "twoThirds"
     var overviewLayoutJSON: String = ""
+    var workerProviderID: String = ""
+    var workerModelID: String = ""
+    var workerPath: String = ""
 
     var status: ProjectStatus {
         get { ProjectStatus(rawValue: statusRaw) ?? .active }
@@ -450,9 +453,10 @@ enum DeletionMarks {
 @Model
 final class Conversation {
     var id: UUID
-    var cursorAgentId: String
+    var providerID: String = "cursor"
+    @Attribute(originalName: "cursorAgentId") var externalSessionID: String
     var title: String
-    var model: String
+    @Attribute(originalName: "model") var modelID: String
     var contextSnapshot: String
     var isArchived: Bool
     var createdAt: Date
@@ -470,11 +474,12 @@ final class Conversation {
         messages.sorted { $0.createdAt < $1.createdAt }
     }
 
-    init(title: String = "New chat", model: String = "", project: Project? = nil) {
+    init(title: String = "New chat", providerID: String, modelID: String = "", project: Project? = nil) {
         self.id = UUID()
-        self.cursorAgentId = ""
+        self.providerID = providerID
+        self.externalSessionID = ""
         self.title = title
-        self.model = model
+        self.modelID = modelID
         self.contextSnapshot = ""
         self.isArchived = false
         self.createdAt = .now
@@ -488,7 +493,7 @@ final class ChatMessage {
     var id: UUID
     var roleRaw: String
     var content: String
-    var cursorRunId: String
+    @Attribute(originalName: "cursorRunId") var externalRunID: String
     var createdAt: Date
     var conversation: Conversation?
 
@@ -501,7 +506,7 @@ final class ChatMessage {
         self.id = id
         self.roleRaw = role.rawValue
         self.content = content
-        self.cursorRunId = ""
+        self.externalRunID = ""
         self.createdAt = .now
     }
 }

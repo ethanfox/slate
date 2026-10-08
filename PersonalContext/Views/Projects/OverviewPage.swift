@@ -13,6 +13,7 @@ struct OverviewPage: View {
             Hairline()
             ChatInput(
                 modelID: Bindable(app).talkModelID,
+                providerID: Bindable(app).talkProviderID,
                 placeholder: "Message \(project.name)",
                 onSend: startChat
             )

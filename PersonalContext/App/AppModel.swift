@@ -39,7 +39,11 @@ final class AppModel {
     private(set) var storeGeneration = UUID()
     var chatGenerating = false {
         didSet {
-            if oldValue, !chatGenerating { refreshUsage(force: true) }
+            if oldValue, !chatGenerating,
+               let chatConversationID,
+               chatRuntimes[chatConversationID]?.providerID == TalkProvider.cursor.rawValue {
+                refreshUsage(force: true)
+            }
         }
     }
     var appearance: AppearancePreference {
@@ -57,21 +61,16 @@ final class AppModel {
     var talkProvider: TalkProvider {
         didSet { defaults.set(talkProvider.rawValue, forKey: Keys.talkProvider) }
     }
+    var talkProviderID: String {
+        get { talkProvider.rawValue }
+        set { talkProvider = TalkProvider(rawValue: newValue) ?? talkProvider }
+    }
     var chatGPTModelID: String {
         didSet { defaults.set(chatGPTModelID, forKey: Keys.chatGPTModel) }
     }
-    var readProvider: TalkProvider {
-        didSet { defaults.set(readProvider.rawValue, forKey: Keys.readProvider) }
-    }
-    var chatGPTReadModelID: String {
-        didSet { defaults.set(chatGPTReadModelID, forKey: Keys.chatGPTReadModel) }
-    }
-    var cursorReadModelID: String {
-        didSet { defaults.set(cursorReadModelID, forKey: Keys.cursorReadModel) }
-    }
     private(set) var cursorCloudRepositories: CursorCloudRepositoriesState = .idle
     @ObservationIgnored private var cursorCloudFetchStartedAt: Date?
-    private(set) var chatGPTModels: [ChatGPTModel] = ChatGPTModel.fallback
+    private(set) var chatGPTModels: [ChatGPTModel] = []
     var showAgentIDs: Bool {
         didSet { defaults.set(showAgentIDs, forKey: Keys.showAgentIDs) }
     }
@@ -200,11 +199,8 @@ final class AppModel {
         accent = AccentPreference(rawValue: UserDefaults.standard.string(forKey: Keys.accent) ?? "") ?? .system
         accentedViews = Set(UserDefaults.standard.stringArray(forKey: Keys.accentedViews) ?? [])
         defaultModelID = UserDefaults.standard.string(forKey: Keys.defaultModel) ?? ""
-        talkProvider = TalkProvider(rawValue: UserDefaults.standard.string(forKey: Keys.talkProvider) ?? "") ?? .cursor
+        talkProvider = TalkProvider(rawValue: UserDefaults.standard.string(forKey: Keys.talkProvider) ?? "") ?? .unconfigured
         chatGPTModelID = UserDefaults.standard.string(forKey: Keys.chatGPTModel) ?? ""
-        readProvider = TalkProvider(rawValue: UserDefaults.standard.string(forKey: Keys.readProvider) ?? "") ?? .cursor
-        chatGPTReadModelID = UserDefaults.standard.string(forKey: Keys.chatGPTReadModel) ?? ""
-        cursorReadModelID = UserDefaults.standard.string(forKey: Keys.cursorReadModel) ?? ""
         if let checkedAt = defaults.object(forKey: Keys.cursorCloudCheckedAt) as? TimeInterval,
            let urls = defaults.stringArray(forKey: Keys.cursorCloudRepoURLs) {
             cursorCloudRepositories = .ready(urls: urls, checkedAt: Date(timeIntervalSince1970: checkedAt))
@@ -215,7 +211,7 @@ final class AppModel {
         sidebarCollapsed = UserDefaults.standard.bool(forKey: Keys.sidebarCollapsed)
         projectColumnCollapsed = UserDefaults.standard.bool(forKey: Keys.projectColumnCollapsed)
         collapsedProjectSections = Set(UserDefaults.standard.stringArray(forKey: Keys.collapsedProjectSections) ?? [])
-        settingsSection = SettingsSection(rawValue: UserDefaults.standard.string(forKey: Keys.settingsSection) ?? "") ?? .cursor
+        settingsSection = SettingsSection(rawValue: UserDefaults.standard.string(forKey: Keys.settingsSection) ?? "") ?? .model
         if UserDefaults.standard.object(forKey: Keys.openChatLinksInNewTab) == nil {
             openChatLinksInNewTab = true
         } else {
@@ -371,7 +367,7 @@ final class AppModel {
     }
 
     func makeConversation(in project: Project?, context: ModelContext, newTab: Bool = false) -> Conversation {
-        let conversation = Conversation(model: talkModelID, project: project)
+        let conversation = Conversation(providerID: talkProvider.rawValue, modelID: talkModelID, project: project)
         context.insert(conversation)
         project?.touch()
         try? context.save()
@@ -386,7 +382,7 @@ final class AppModel {
             .first {
             return existing
         }
-        let conversation = Conversation(model: talkModelID, project: project)
+        let conversation = Conversation(providerID: talkProvider.rawValue, modelID: talkModelID, project: project)
         conversation.thread = thread
         conversation.title = thread.title.isEmpty ? "Track chat" : thread.title
         context.insert(conversation)
@@ -414,7 +410,6 @@ final class AppModel {
         defaults.removeObject(forKey: Keys.cursorCloudRepoURLs)
         defaults.removeObject(forKey: Keys.cursorCloudCheckedAt)
         normalizeTalkProvider()
-        normalizeReadProvider()
     }
 
     func refreshConnection() {
@@ -474,54 +469,72 @@ final class AppModel {
 
     var talkModelID: String {
         get {
-            if talkProvider == .chatgpt {
+            switch talkProvider {
+            case .chatgpt:
                 if !chatGPTModelID.isEmpty { return chatGPTModelID }
                 return talkModels.first?.id ?? ""
+            case .cursor:
+                return defaultModelID
+            case .unconfigured:
+                return ""
             }
-            return defaultModelID
         }
         set {
-            if talkProvider == .chatgpt {
+            switch talkProvider {
+            case .chatgpt:
                 chatGPTModelID = newValue
-            } else {
+            case .cursor:
                 defaultModelID = newValue
+            case .unconfigured:
+                break
             }
         }
     }
 
     var talkModels: [(id: String, name: String)] {
-        switch talkProvider {
+        models(for: talkProvider.rawValue)
+    }
+
+    func models(for providerID: String) -> [(id: String, name: String)] {
+        switch TalkProvider(rawValue: providerID) {
+        case .unconfigured:
+            return []
         case .chatgpt:
-            let list = chatGPTModels.isEmpty ? ChatGPTModel.fallback : chatGPTModels
-            return list.map { (id: $0.id, name: $0.displayName) }
+            return chatGPTModels.map { (id: $0.id, name: $0.displayName) }
         case .cursor:
             return models.map { (id: $0.id, name: $0.displayName) }
+        case .none:
+            return []
         }
     }
 
-    func modelName(for id: String) -> String {
+    func modelName(for id: String, providerID: String? = nil) -> String {
         if id.isEmpty { return "Account default" }
-        if let name = chatGPTModels.first(where: { $0.id == id })?.displayName { return name }
-        return models.first { $0.id == id }?.displayName ?? id
+        switch providerID.flatMap(TalkProvider.init(rawValue:)) {
+        case .chatgpt:
+            return chatGPTModels.first(where: { $0.id == id })?.displayName ?? id
+        case .cursor:
+            return models.first(where: { $0.id == id })?.displayName ?? id
+        default:
+            if let name = chatGPTModels.first(where: { $0.id == id })?.displayName { return name }
+            return models.first { $0.id == id }?.displayName ?? id
+        }
     }
 
     func refreshChatGPTModels() {
         guard let session = ChatGPTSignIn.load() else {
-            chatGPTModels = ChatGPTModel.fallback
+            chatGPTModels = []
             return
         }
         Task {
             do {
                 let fetched = try await ChatGPTSignIn.models(session: session)
-                chatGPTModels = fetched.isEmpty ? ChatGPTModel.fallback : fetched
+                chatGPTModels = fetched
                 if chatGPTModelID.isEmpty, let first = chatGPTModels.first {
                     chatGPTModelID = first.id
                 }
-                if chatGPTReadModelID.isEmpty, let first = chatGPTModels.first {
-                    chatGPTReadModelID = first.id
-                }
             } catch {
-                if chatGPTModels.isEmpty { chatGPTModels = ChatGPTModel.fallback }
+                chatGPTModels = []
                 ChatTrace.event("chatgpt models failed: \(error.localizedDescription)")
             }
         }
@@ -530,43 +543,7 @@ final class AppModel {
     func normalizeTalkProvider() {
         let available = availableTalkProviders
         if !available.contains(talkProvider) {
-            talkProvider = available.first ?? .cursor
-        }
-    }
-
-    var availableReadProviders: [TalkProvider] { availableTalkProviders }
-
-    var readModelID: String {
-        get {
-            if readProvider == .chatgpt {
-                if !chatGPTReadModelID.isEmpty { return chatGPTReadModelID }
-                return readModels.first?.id ?? ""
-            }
-            return cursorReadModelID
-        }
-        set {
-            if readProvider == .chatgpt {
-                chatGPTReadModelID = newValue
-            } else {
-                cursorReadModelID = newValue
-            }
-        }
-    }
-
-    var readModels: [(id: String, name: String)] {
-        switch readProvider {
-        case .chatgpt:
-            let list = chatGPTModels.isEmpty ? ChatGPTModel.fallback : chatGPTModels
-            return list.map { (id: $0.id, name: $0.displayName) }
-        case .cursor:
-            return models.map { (id: $0.id, name: $0.displayName) }
-        }
-    }
-
-    func normalizeReadProvider() {
-        let available = availableReadProviders
-        if !available.contains(readProvider) {
-            readProvider = available.first ?? .cursor
+            talkProvider = available.first ?? .unconfigured
         }
     }
 
@@ -592,19 +569,6 @@ final class AppModel {
             } catch {
                 cursorCloudRepositories = .failed(error.localizedDescription)
             }
-        }
-    }
-
-    func cursorCloudIncludesGitHubAttachment(_ attachment: CodeAttachment) -> Bool? {
-        guard attachment.kind == .github else { return nil }
-        let target = GitHubRemote.url(forLocator: attachment.locator)
-        switch cursorCloudRepositories {
-        case .ready(let urls, _):
-            return urls.contains { GitHubRemote.sameRepository($0, target) }
-        case .loading, .idle:
-            return nil
-        case .unavailable, .failed:
-            return false
         }
     }
 
@@ -641,9 +605,6 @@ enum Keys {
     static let defaultModel = "defaultModelID"
     static let talkProvider = "talkProvider"
     static let chatGPTModel = "chatGPTModelID"
-    static let readProvider = "readProvider"
-    static let chatGPTReadModel = "chatGPTReadModelID"
-    static let cursorReadModel = "cursorReadModelID"
     static let cursorCloudRepoURLs = "cursorCloudRepoURLs"
     static let cursorCloudCheckedAt = "cursorCloudCheckedAt"
     static let showAgentIDs = "showAgentIDs"

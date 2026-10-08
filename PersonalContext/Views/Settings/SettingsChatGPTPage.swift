@@ -58,6 +58,5 @@ struct SettingsChatGPTPage: View {
     private func removeChatGPT() {
         app.sources.removeChatGPT()
         app.normalizeTalkProvider()
-        app.normalizeReadProvider()
     }
 }

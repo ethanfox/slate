@@ -105,3 +105,17 @@ targets:
       properties:
         com.apple.security.application-groups:
           - $(TeamIdentifierPrefix)com.ethanfox.PersonalContext
+
+  PersonalContextTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: PersonalContextTests
+    dependencies:
+      - target: PersonalContext
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethanfox.PersonalContextTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Slate.app/Contents/MacOS/Slate
+        BUNDLE_LOADER: $(TEST_HOST)

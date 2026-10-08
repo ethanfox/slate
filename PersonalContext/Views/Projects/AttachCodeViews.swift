@@ -43,9 +43,6 @@ struct ProjectCodeSection: View {
                 repoPicker
             }
         }
-        .onAppear {
-            app.refreshCursorCloudRepositories()
-        }
     }
 
     @ViewBuilder
@@ -106,6 +103,12 @@ struct ProjectCodeSection: View {
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
+            Button("Open") {
+                open(attachment)
+            }
+            .buttonStyle(.plain)
+            .font(CraftFont.body)
+            .foregroundStyle(.secondary)
             Button("Remove") {
                 context.delete(attachment)
                 project.touch()
@@ -144,25 +147,35 @@ struct ProjectCodeSection: View {
         case .folder:
             parts.append(attachment.locator)
         case .github, .gitlab:
-            if attachment.locator == attachment.title {
-                parts.append(attachment.kind.title)
-            } else {
-                parts.append("\(attachment.kind.title) · \(attachment.locator)")
-            }
-            if let cloud = cursorCloudLabel(for: attachment) {
-                parts.append(cloud)
-            }
+            parts.append(attachment.kind.title)
+            parts.append(attachment.locator)
+            if !attachment.defaultBranch.isEmpty { parts.append(attachment.defaultBranch) }
+            parts.append(connectionLabel(for: attachment))
         }
         return parts.joined(separator: " · ")
     }
 
-    private func cursorCloudLabel(for attachment: CodeAttachment) -> String? {
-        guard attachment.kind == .github else { return nil }
-        switch app.cursorCloudIncludesGitHubAttachment(attachment) {
-        case .some(true): return "Cloud available"
-        case .some(false): return "Not in Cursor Cloud"
-        case .none: return nil
+    private func connectionLabel(for attachment: CodeAttachment) -> String {
+        guard let id = UUID(uuidString: attachment.tokenID) else { return "Credential missing" }
+        switch app.sources.tokenStatus[id] {
+        case .ready: return "Connected"
+        case .checking: return "Checking"
+        case .failed: return "Connection failed"
+        case .none: return "Credential missing"
         }
+    }
+
+    private func open(_ attachment: CodeAttachment) {
+        let url: URL?
+        switch attachment.kind {
+        case .folder:
+            url = URL(fileURLWithPath: attachment.locator)
+        case .github:
+            url = URL(string: GitHubRemote.url(forLocator: attachment.locator))
+        case .gitlab:
+            url = URL(string: "https://gitlab.com/\(attachment.locator)")
+        }
+        if let url { NSWorkspace.shared.open(url) }
     }
 
     private func attachmentIcon(_ kind: CodeAttachmentKind) -> some View {

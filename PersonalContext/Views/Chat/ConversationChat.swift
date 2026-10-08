@@ -108,6 +108,8 @@ private struct ConversationSessionView: View {
             )
             ChatInput(
                 modelID: Bindable(runtime).modelID,
+                providerID: .constant(runtime.providerID),
+                allowsProviderChange: false,
                 isGenerating: session.isGenerating,
                 changes: runtime.bridge.changes,
                 errorMessage: session.error?.localizedDescription,

@@ -4,6 +4,8 @@ import SwiftUI
 /// this view owns only the draft text and the controls' internal appearance.
 struct ChatInput: View {
     @Binding var modelID: String
+    @Binding var providerID: String
+    var allowsProviderChange = true
     var label: String?
     var placeholder = "Message"
     var lineLimit: ClosedRange<Int> = 1...6
@@ -26,9 +28,13 @@ struct ChatInput: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                ModelPicker(selection: $modelID)
+                ModelPicker(
+                    providerID: $providerID,
+                    modelID: $modelID,
+                    allowsProviderChange: allowsProviderChange
+                )
                 Spacer(minLength: 8)
-                if let usage = app.usage {
+                if providerID == TalkProvider.cursor.rawValue, let usage = app.usage {
                     ChatUsage(usage: usage)
                 }
                 #if DEBUG
@@ -90,12 +96,9 @@ struct ChatInput: View {
         .padding(12)
         .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(CraftColor.hairline))
-        .onAppear {
-            if app.hasAPIKey, app.models.isEmpty, app.connection != .checking {
-                app.refreshConnection()
-            }
-            app.refreshChatGPTModels()
-            app.refreshUsage()
+        .onAppear(perform: prepareProviders)
+        .onChange(of: providerID) { _, _ in
+            prepareProviders()
         }
     }
 
@@ -129,6 +132,22 @@ struct ChatInput: View {
                 .keyboardShortcut(.return, modifiers: .command)
             }
         }
+    }
+
+    private func prepareProviders() {
+        if uses(.chatgpt) {
+            app.refreshChatGPTModels()
+        }
+        if uses(.cursor) {
+            if app.hasAPIKey, app.models.isEmpty, app.connection != .checking {
+                app.refreshConnection()
+            }
+            app.refreshUsage()
+        }
+    }
+
+    private func uses(_ provider: TalkProvider) -> Bool {
+        providerID == provider.rawValue || (allowsProviderChange && app.availableTalkProviders.contains(provider))
     }
 
     private func send() {

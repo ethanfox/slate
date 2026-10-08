@@ -20,13 +20,6 @@ struct ChatGPTSession: Codable, Sendable {
 struct ChatGPTModel: Identifiable, Hashable, Sendable {
     var id: String
     var displayName: String
-
-    static let fallback: [ChatGPTModel] = [
-        .init(id: "gpt-5", displayName: "GPT-5"),
-        .init(id: "gpt-5-mini", displayName: "GPT-5 mini"),
-        .init(id: "gpt-4.1", displayName: "GPT-4.1"),
-        .init(id: "o4-mini", displayName: "o4-mini")
-    ]
 }
 
 enum ChatGPTSignIn {
@@ -130,7 +123,10 @@ enum ChatGPTSignIn {
             redirectURI: listener.redirectURI,
             clientID: clientID
         )
-        let claims = try IDToken.decode(tokens.idToken)
+        guard let idToken = tokens.idToken else {
+            throw ChatGPTAuthError("ChatGPT did not return an identity token.")
+        }
+        let claims = try IDToken.decode(idToken)
         if claims.nonce != nonce {
             throw ChatGPTAuthError("ChatGPT identity token nonce did not match.")
         }
@@ -143,7 +139,7 @@ enum ChatGPTSignIn {
             subject: claims.sub,
             clientID: clientID,
             hostID: hostID(),
-            idToken: tokens.idToken,
+            idToken: idToken,
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken ?? existing?.refreshToken ?? "",
             expiresAt: Date().addingTimeInterval(TimeInterval(tokens.expiresIn ?? 3600)),
@@ -183,6 +179,7 @@ enum ChatGPTSignIn {
     }
 
     static func models(session: ChatGPTSession) async throws -> [ChatGPTModel] {
+        let session = try await validSession(session)
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/models")!)
         request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -191,24 +188,80 @@ enum ChatGPTSignIn {
         guard (200..<300).contains(status) else {
             throw ChatGPTAuthError("ChatGPT would not list models.")
         }
-        struct Payload: Decodable {
-            var data: [Item]
-            struct Item: Decodable { var id: String }
+        guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw ChatGPTAuthError("ChatGPT returned an unreadable model list.")
         }
-        let items = try JSONDecoder().decode(Payload.self, from: data).data
-            .map(\.id)
-            .filter { id in
-                let lower = id.lowercased()
-                return lower.hasPrefix("gpt-") || lower.hasPrefix("o1") || lower.hasPrefix("o3") || lower.hasPrefix("o4") || lower.hasPrefix("chatgpt")
+        let items = catalog(from: payload)
+        if items.isEmpty {
+            throw ChatGPTAuthError("ChatGPT returned no usable models.")
+        }
+        return items
+    }
+
+    static func catalog(from payload: [String: Any]) -> [ChatGPTModel] {
+        if let models = payload["models"] as? [[String: Any]], !models.isEmpty {
+            return models.compactMap { item in
+                let visibility = item["visibility"] as? String ?? "list"
+                guard visibility == "list" else { return nil }
+                guard let slug = item["slug"] as? String ?? item["id"] as? String, !slug.isEmpty else {
+                    return nil
+                }
+                return ChatGPTModel(id: slug, displayName: item["display_name"] as? String ?? slug)
             }
-            .sorted()
-        return items.map { ChatGPTModel(id: $0, displayName: $0) }
+        }
+        let rawItems = (payload["data"] as? [[String: Any]]) ?? []
+        return rawItems.compactMap { item in
+            item["id"] as? String ?? item["model"] as? String ?? item["slug"] as? String
+        }
+        .filter { id in
+            let lower = id.lowercased()
+            return lower.hasPrefix("gpt-") || lower.hasPrefix("o1") || lower.hasPrefix("o3") || lower.hasPrefix("o4") || lower.hasPrefix("chatgpt")
+        }
+        .map { ChatGPTModel(id: $0, displayName: $0) }
+    }
+
+    static func validSession(_ supplied: ChatGPTSession? = nil) async throws -> ChatGPTSession {
+        guard var session = supplied ?? load() else {
+            throw ChatGPTAuthError("Connect ChatGPT in Settings.")
+        }
+        guard session.usingPlan else {
+            throw ChatGPTAuthError("ChatGPT plan use was not granted. Reconnect ChatGPT in Settings.")
+        }
+        guard session.expiresAt.timeIntervalSinceNow < 60 else { return session }
+        guard !session.refreshToken.isEmpty else {
+            throw ChatGPTAuthError("ChatGPT sign-in expired. Reconnect in Settings.")
+        }
+        var request = URLRequest(url: tokenURL)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = [
+            "grant_type": "refresh_token",
+            "client_id": session.clientID,
+            "refresh_token": session.refreshToken,
+            "resource": resource
+        ].formEncoded
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw ChatGPTAuthError("ChatGPT sign-in expired. Reconnect in Settings.")
+        }
+        let tokens = try JSONDecoder().decode(TokenResponse.self, from: data)
+        session.accessToken = tokens.accessToken
+        session.refreshToken = tokens.refreshToken ?? session.refreshToken
+        session.idToken = tokens.idToken ?? session.idToken
+        session.expiresAt = Date().addingTimeInterval(TimeInterval(tokens.expiresIn ?? 3600))
+        if !tokens.scope.isEmpty {
+            session.scopes = tokens.scope.split(whereSeparator: \.isWhitespace).map(String.init)
+            session.usingPlan = session.scopes.contains("chatgpt.tokens.use.direct")
+        }
+        try save(session)
+        return session
     }
 
     private struct TokenResponse: Decodable {
         var accessToken: String
         var refreshToken: String?
-        var idToken: String
+        var idToken: String?
         var expiresIn: Int?
         var scope: String
 
@@ -224,7 +277,7 @@ enum ChatGPTSignIn {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             accessToken = try container.decode(String.self, forKey: .accessToken)
             refreshToken = try container.decodeIfPresent(String.self, forKey: .refreshToken)
-            idToken = try container.decode(String.self, forKey: .idToken)
+            idToken = try container.decodeIfPresent(String.self, forKey: .idToken)
             expiresIn = try container.decodeIfPresent(Int.self, forKey: .expiresIn)
             scope = try container.decodeIfPresent(String.self, forKey: .scope) ?? ""
         }

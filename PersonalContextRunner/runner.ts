@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 import { writeSync } from "node:fs";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { resolve, relative, sep } from "node:path";
 import { createInterface } from "node:readline";
 import { Agent, type Run, type SDKAgent, type SDKCustomTool, type SDKCustomToolResult } from "@cursor/sdk";
 
@@ -12,6 +14,11 @@ type Request = {
   model?: string;
   cwd: string;
   mcpCommand: string;
+  codeRoots: { title: string; locator?: string; path: string }[];
+  includeSlateTools: boolean;
+  includeProjectTools: boolean;
+  runtime: "local" | "cloud";
+  cloudRepos: { url: string; startingRef?: string }[];
 };
 
 type Source = { id?: string; title: string; url?: string; kind: string; pin?: boolean };
@@ -71,6 +78,7 @@ async function expireActiveRuns(agentId: string, cwd: string) {
 }
 
 async function startRun(agent: SDKAgent, request: Request): Promise<Run> {
+  if (request.runtime === "cloud") return await agent.send(request.text);
   const options = { local: { force: true } };
   try {
     return await agent.send(request.text, options);
@@ -273,6 +281,182 @@ async function slateTools(command: string): Promise<Record<string, SDKCustomTool
   );
 }
 
+const ignoredDirectories = new Set([".git", ".build", "build", "DerivedData", "node_modules", ".swiftpm"]);
+
+async function projectFiles(roots: Request["codeRoots"], limit = 2000): Promise<{ root: string; absolute: string; relative: string }[]> {
+  const output: { root: string; absolute: string; relative: string }[] = [];
+  const visit = async (root: Request["codeRoots"][number], folder: string) => {
+    if (output.length >= limit) return;
+    let entries;
+    try {
+      entries = await readdir(folder, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (output.length >= limit || entry.name.startsWith(".") && entry.name !== ".github") continue;
+      const absolute = resolve(folder, entry.name);
+      if (entry.isDirectory()) {
+        if (!ignoredDirectories.has(entry.name)) await visit(root, absolute);
+      } else if (entry.isFile()) {
+        output.push({ root: root.title, absolute, relative: relative(root.path, absolute) });
+      }
+    }
+  };
+  for (const root of roots) await visit(root, root.path);
+  return output;
+}
+
+function rootMatches(root: { title: string; locator?: string; path: string }, requested: string): boolean {
+  const needle = requested.trim().toLowerCase();
+  if (!needle) return false;
+  const title = root.title.toLowerCase();
+  const locator = (root.locator ?? "").toLowerCase();
+  return title === needle || locator === needle || title.endsWith(`/${needle}`) || locator.endsWith(`/${needle}`);
+}
+
+function selectedRoots(roots: Request["codeRoots"], requested?: unknown) {
+  if (typeof requested === "string" && requested.trim()) {
+    const matches = roots.filter((root) => rootMatches(root, requested));
+    if (matches.length) return matches;
+    return roots.length === 1 ? roots : [];
+  }
+  return roots;
+}
+
+function selectedRoot(roots: Request["codeRoots"], requested?: unknown) {
+  return selectedRoots(roots, requested)[0];
+}
+
+function safeFile(root: Request["codeRoots"][number], requested: unknown): string {
+  if (typeof requested !== "string" || !requested.trim()) throw new Error("path is required");
+  const file = resolve(root.path, requested);
+  const rel = relative(resolve(root.path), file);
+  if (rel === ".." || rel.startsWith(`..${sep}`)) throw new Error("path is outside the attached repository");
+  return file;
+}
+
+function toolText(value: unknown): SDKCustomToolResult {
+  return { content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }] } as SDKCustomToolResult;
+}
+
+function projectCodeTools(roots: Request["codeRoots"]): Record<string, SDKCustomTool> {
+  return {
+    project_list_files: {
+      description: "List files in the Slate project's attached code. Read-only.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Optional case-insensitive path filter." },
+        },
+      },
+      execute: async (args) => {
+        emit(toolEvent("project_list_files", "running", args));
+        const query = field(asRecord(args), "query")?.toLowerCase() ?? "";
+        const files = (await projectFiles(roots))
+          .filter((file) => !query || file.relative.toLowerCase().includes(query))
+          .slice(0, 300)
+          .map((file) => ({ root: file.root, path: file.relative }));
+        const result = roots.length ? files : { error: "No code is attached to this Slate project." };
+        emit(toolEvent("project_list_files", "completed", args, result));
+        return toolText(result);
+      },
+    },
+    project_search_code: {
+      description: "Search text in the Slate project's attached code. Read-only.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Text to search for." },
+        },
+        required: ["query"],
+      },
+      execute: async (args) => {
+        emit(toolEvent("project_search_code", "running", args));
+        const query = field(asRecord(args), "query");
+        if (!query) throw new Error("query is required");
+        const matches: { root: string; path: string; line: number; text: string }[] = [];
+        for (const file of await projectFiles(roots, 1200)) {
+          if (matches.length >= 120) break;
+          let info;
+          try {
+            info = await stat(file.absolute);
+            if (info.size > 1_000_000) continue;
+            const text = await readFile(file.absolute, "utf8");
+            for (const [index, line] of text.split(/\r?\n/).entries()) {
+              if (line.toLowerCase().includes(query.toLowerCase())) {
+                matches.push({ root: file.root, path: file.relative, line: index + 1, text: line.trim().slice(0, 400) });
+                if (matches.length >= 120) break;
+              }
+            }
+          } catch {
+            continue;
+          }
+        }
+        const result = roots.length ? matches : { error: "No code is attached to this Slate project." };
+        emit(toolEvent("project_search_code", "completed", args, result));
+        return toolText(result);
+      },
+    },
+    project_read_file: {
+      description: "Read a line range from a file in the Slate project's attached code. Read-only.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          root: { type: "string", description: "Attachment title. Required when several code roots are attached." },
+          path: { type: "string", description: "Path relative to the selected attachment." },
+          start_line: { type: "number", description: "First line, starting at 1." },
+          end_line: { type: "number", description: "Last line, inclusive." },
+        },
+        required: ["path"],
+      },
+      execute: async (args) => {
+        emit(toolEvent("project_read_file", "running", args));
+        const fields = asRecord(args);
+        const root = selectedRoot(roots, fields?.root);
+        if (!root) throw new Error(roots.length ? "Specify root because this project has several code attachments." : "No code is attached to this Slate project.");
+        const file = safeFile(root, fields?.path);
+        const lines = (await readFile(file, "utf8")).split(/\r?\n/);
+        const start = Math.max(1, Number(fields?.start_line ?? 1));
+        const end = Math.min(lines.length, Number(fields?.end_line ?? start + 249));
+        const result = lines.slice(start - 1, end).map((line, index) => `${start + index}: ${line}`).join("\n");
+        emit(toolEvent("project_read_file", "completed", args, { root: root.title, path: fields?.path, start, end }));
+        return toolText(result);
+      },
+    },
+    project_git_log: {
+      description: "Read recent commits for the Slate project's attached remote repositories. Read-only.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          root: { type: "string", description: "Optional attachment title." },
+        },
+      },
+      execute: async (args) => {
+        emit(toolEvent("project_git_log", "running", args));
+        const requested = field(asRecord(args), "root");
+        const selected = selectedRoots(roots, requested);
+        const commits: Record<string, unknown>[] = [];
+        for (const root of selected) {
+          try {
+            const items = JSON.parse(await readFile(resolve(root.path, ".slate-commits.json"), "utf8"));
+            if (Array.isArray(items)) {
+              commits.push(...items.map((item) => ({ ...(asRecord(item) ?? {}), root: root.title })));
+            }
+          } catch {
+            continue;
+          }
+        }
+        if (!roots.length) throw new Error("No code is attached to this Slate project.");
+        if (!selected.length) throw new Error(`Unknown code root. Use one of: ${roots.map((root) => root.title).join(", ")}.`);
+        if (!commits.length) throw new Error("Git history is unavailable for this attachment.");
+        emit(toolEvent("project_git_log", "completed", args, commits.slice(0, 40)));
+        return toolText(commits.slice(0, 40));
+      },
+    },
+  };
+}
+
 async function readRequest(): Promise<Request> {
   let raw = "";
   for await (const chunk of process.stdin) raw += chunk;
@@ -285,18 +469,36 @@ async function main() {
   const apiKey = request.apiKey;
   if (!apiKey) throw new Error("Add a Cursor API key in Settings.");
 
-  const options = {
-    apiKey,
-    model: { id: request.model || "auto" },
-    local: { cwd: request.cwd, settingSources: [], customTools: await slateTools(request.mcpCommand) },
-    tools: ["mcp", "webSearch", "webFetch"],
-  };
-
-  const agent: SDKAgent = request.agentId
-    ? await Agent.resume(request.agentId, options)
-    : await Agent.create({ ...options, name: request.name.slice(0, 100) });
+  let agent: SDKAgent;
+  if (request.runtime === "cloud") {
+    if (!request.cloudRepos?.length) throw new Error("Attach a GitHub or GitLab repository before using a cloud worker.");
+    const options = {
+      apiKey,
+      model: { id: request.model || "auto" },
+      cloud: {
+        repos: request.cloudRepos,
+        autoCreatePR: false,
+      },
+      tools: ["webSearch", "webFetch"],
+    };
+    agent = await Agent.create({ ...options, name: request.name.slice(0, 100) });
+  } else {
+    const customTools = {
+      ...(request.includeSlateTools ? await slateTools(request.mcpCommand) : {}),
+      ...(request.includeProjectTools ? projectCodeTools(request.codeRoots ?? []) : {}),
+    };
+    const options = {
+      apiKey,
+      model: { id: request.model || "auto" },
+      local: { cwd: request.cwd, settingSources: [], customTools },
+      tools: ["mcp", "webSearch", "webFetch"],
+    };
+    agent = request.agentId
+      ? await Agent.resume(request.agentId, options)
+      : await Agent.create({ ...options, name: request.name.slice(0, 100) });
+  }
   emit({ type: "agent", agentId: agent.agentId });
-  log("agent", { agentId: agent.agentId, resumed: Boolean(request.agentId), model: options.model, cwd: request.cwd });
+  log("agent", { agentId: agent.agentId, resumed: Boolean(request.agentId), model: request.model, runtime: request.runtime, cwd: request.cwd });
 
   let run: Run | undefined;
   const stop = async () => {

@@ -86,6 +86,7 @@ struct HomeView: View {
     private var quickAsk: some View {
         ChatInput(
             modelID: Bindable(app).talkModelID,
+            providerID: Bindable(app).talkProviderID,
             label: "Quick Ask",
             placeholder: "Ask anything, not attached to a project",
             lineLimit: 1...8,

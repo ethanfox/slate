@@ -523,16 +523,26 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
 }
 
 /// Styles markers in the source text. Does not join lines or drop spaces.
-private enum ChatMarkdown {
+enum ChatMarkdown {
     static func attributed(_ source: String, fontSize: CGFloat = 15) -> NSMutableAttributedString {
         let result = NSMutableAttributedString()
         let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
         var inFence = false
-        for (index, raw) in lines.enumerated() {
-            let line = String(raw)
+        var index = 0
+        while index < lines.count {
+            let line = String(lines[index])
             if line.hasPrefix("```") {
                 inFence.toggle()
                 if index < lines.count - 1 { result.append(breakLine(fontSize: fontSize, empty: true)) }
+                index += 1
+                continue
+            }
+            if !inFence, let table = takeTable(lines, from: index) {
+                result.append(renderTable(table.rows, alignments: table.alignments, fontSize: fontSize))
+                if table.end < lines.count {
+                    result.append(breakLine(fontSize: fontSize, empty: true))
+                }
+                index = table.end
                 continue
             }
             if inFence {
@@ -544,6 +554,105 @@ private enum ChatMarkdown {
             }
             if index < lines.count - 1 {
                 result.append(breakLine(fontSize: fontSize, empty: line.isEmpty))
+            }
+            index += 1
+        }
+        return result
+    }
+
+    private static func takeTable(
+        _ lines: [Substring],
+        from start: Int
+    ) -> (rows: [[String]], alignments: [NSTextAlignment], end: Int)? {
+        guard start + 1 < lines.count, isTableRow(String(lines[start])) else { return nil }
+        let separator = tableCells(in: String(lines[start + 1]))
+        guard isSeparatorRow(separator) else { return nil }
+        var rows = [tableCells(in: String(lines[start]))]
+        var index = start + 2
+        while index < lines.count {
+            let line = String(lines[index])
+            guard isTableRow(line), !isSeparatorRow(tableCells(in: line)) else { break }
+            rows.append(tableCells(in: line))
+            index += 1
+        }
+        return (rows, alignments(from: separator), index)
+    }
+
+    private static func isTableRow(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        return trimmed.contains("|") && tableCells(in: trimmed).count >= 2
+    }
+
+    private static func tableCells(in line: String) -> [String] {
+        var raw = line.trimmingCharacters(in: .whitespaces)
+        if raw.hasPrefix("|") { raw.removeFirst() }
+        if raw.hasSuffix("|") { raw.removeLast() }
+        return raw.split(separator: "|", omittingEmptySubsequences: false).map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }
+    }
+
+    private static func isSeparatorRow(_ cells: [String]) -> Bool {
+        !cells.isEmpty && cells.allSatisfy { cell in
+            let marks = cell.filter { !$0.isWhitespace }
+            return marks.contains("-") && marks.allSatisfy { $0 == "-" || $0 == ":" }
+        }
+    }
+
+    private static func alignments(from cells: [String]) -> [NSTextAlignment] {
+        cells.map { cell in
+            let marks = cell.trimmingCharacters(in: .whitespaces)
+            let leading = marks.hasPrefix(":")
+            let trailing = marks.hasSuffix(":")
+            if leading && trailing { return .center }
+            if trailing { return .right }
+            return .left
+        }
+    }
+
+    private static func renderTable(
+        _ rows: [[String]],
+        alignments: [NSTextAlignment],
+        fontSize: CGFloat
+    ) -> NSAttributedString {
+        let columns = rows.map(\.count).max() ?? 0
+        guard columns > 0 else { return NSAttributedString() }
+        let table = NSTextTable()
+        table.numberOfColumns = columns
+        table.collapsesBorders = true
+        let result = NSMutableAttributedString()
+        for (row, cells) in rows.enumerated() {
+            for column in 0..<columns {
+                let block = NSTextTableBlock(
+                    table: table,
+                    startingRow: row,
+                    rowSpan: 1,
+                    startingColumn: column,
+                    columnSpan: 1
+                )
+                block.setWidth(0.5, type: .absoluteValueType, for: .border)
+                block.setBorderColor(NSColor.separatorColor)
+                block.setWidth(8, type: .absoluteValueType, for: .padding)
+                block.setValue(100 / CGFloat(columns), type: .percentageValueType, for: .width)
+                if row == 0 {
+                    block.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06)
+                }
+                let paragraph = NSMutableParagraphStyle()
+                paragraph.textBlocks = [block]
+                paragraph.lineSpacing = 3
+                paragraph.alignment = column < alignments.count ? alignments[column] : .left
+                let value = column < cells.count ? cells[column] : ""
+                let cell = NSMutableAttributedString(
+                    attributedString: renderInline(
+                        value.isEmpty ? " " : value,
+                        fontSize: fontSize - 1,
+                        header: row == 0 ? 6 : nil,
+                        list: false
+                    )
+                )
+                cell.append(breakLine(fontSize: fontSize - 1, empty: false))
+                cell.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: cell.length))
+                result.append(cell)
             }
         }
         return result

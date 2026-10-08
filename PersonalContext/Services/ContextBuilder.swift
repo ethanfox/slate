@@ -11,6 +11,15 @@ enum ContextBuilder {
         if !project.currentDirection.isEmpty {
             lines.append("Current direction: \(clip(project.currentDirection, 900))")
         }
+        let code = project.codeAttachments.sorted { $0.createdAt < $1.createdAt }
+        if !code.isEmpty {
+            lines.append("Attached code:")
+            for attachment in code {
+                let root = attachment.locator.isEmpty ? attachment.title : attachment.locator
+                lines.append("- \(attachment.kind.title): \(root)\(attachment.defaultBranch.isEmpty ? "" : " (\(attachment.defaultBranch))"). Use root \"\(root)\".")
+            }
+            lines.append("The attached code is available now. Before you say you cannot see the repo, call project_list_files, project_search_code, project_read_file, or project_git_log. Do not use a shell or invent missing attachments.")
+        }
         return lines.joined(separator: "\n")
     }
 
@@ -94,7 +103,7 @@ enum ContextBuilder {
 
             You cannot delete records. If something should go away, call mark_for_deletion with a required reason. Optionally pass replacement_type and replacement_id when another record replaces it. The user decides Keep or Delete. Archive is only for chats the user hides, not a substitute for delete.
 
-            Look up decisions, tracks, and notes with the tools. Treat those records as the source of truth and weight active decisions above tracks and notes. Do not invent project facts. Do not create or edit files unless the user explicitly asks.
+            Look up decisions, tracks, and notes with the tools. Treat those records as the source of truth and weight active decisions above tracks and notes. Do not invent project facts. Do not create or edit files unless the user explicitly asks. If the project lists attached code, inspect it with the project_* tools instead of claiming you cannot see the repository.
 
             When you point the user at a note, track, decision, or other Slate record, put a markdown link on its own line using the id from the tools: [Title](slate://note/UUID), slate://thread/UUID, slate://decision/UUID, slate://project/UUID, or slate://conversation/UUID. The app turns that into a card they can open. Do not paste raw ids. Do not invent ids.
             """)
@@ -111,6 +120,17 @@ enum ContextBuilder {
             \(context)
             </project-context>
             """)
+        }
+        parts.append(userText)
+        return parts.joined(separator: "\n\n")
+    }
+
+    static func codeConsultationPrompt(userText: String, context: String) -> String {
+        var parts = [
+            "Inspect the attached project code in read-only mode. Do not edit files, create commits, or change Slate records. Cite repository-relative paths and line numbers."
+        ]
+        if !context.isEmpty {
+            parts.append("<project-context>\n\(context)\n</project-context>")
         }
         parts.append(userText)
         return parts.joined(separator: "\n\n")

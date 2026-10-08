@@ -217,4 +217,5 @@ If no worker is connected: Work page is one tertiary line, “No workers connect
 - Treat a repo as the project.
 - Fake a live transcript for a cloud run.
 - Wire ChatGPT → Cursor MCP. Different plan.
+- Auto-run a worker consult before every project chat. The worker is a tool. See [`worker-as-tool.md`](worker-as-tool.md).
 - Ship Claude Code cloud or Codex Cloud as adapters until they publish a list/status API.

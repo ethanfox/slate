@@ -157,7 +157,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .calendar: "Calendar"
         case .tags: "Tags"
         case .appearance: "Appearance"
-        case .model: "Model"
+        case .model: "Chat model"
         case .orb: "Orb"
         case .developer: "Developer"
         }
@@ -187,6 +187,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 }
 
 enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
+    case unconfigured
     case chatgpt
     case cursor
 
@@ -194,13 +195,15 @@ enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
+        case .unconfigured: "Choose provider"
         case .chatgpt: "ChatGPT"
         case .cursor: "Cursor"
         }
     }
 
-    var mark: BrandMark {
+    var mark: BrandMark? {
         switch self {
+        case .unconfigured: nil
         case .chatgpt: .chatgpt
         case .cursor: .cursor
         }
