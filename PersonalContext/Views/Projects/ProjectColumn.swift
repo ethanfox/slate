@@ -129,6 +129,12 @@ struct ProjectColumn: View {
                 label: "Overview",
                 action: { show(.overview) }
             )
+            ColumnIconButton(
+                systemImage: "checklist",
+                isSelected: tab == .tasks,
+                label: "Tasks",
+                action: { show(.tasks) }
+            )
             if !conversations.isEmpty {
                 ColumnIconButton(
                     systemImage: ProjectColumnSection.chats.symbol,
@@ -173,6 +179,14 @@ struct ProjectColumn: View {
                         }
                         .buttonStyle(.plain)
                         ProjectColumnToggle(collapsed: app.projectColumnCollapsed, action: app.toggleProjectColumn)
+                    }
+
+                    HStack(spacing: 0) {
+                        Button { show(.tasks) } label: {
+                            SidebarRow(title: "Tasks", systemImage: "checklist", isSelected: tab == .tasks)
+                        }
+                        .buttonStyle(.plain)
+                        SectionAddButton(title: "Task") { createTask() }
                     }
 
                     if !conversations.isEmpty {
@@ -355,6 +369,11 @@ struct ProjectColumn: View {
         if !preview.contains(where: { $0.id == id }) {
             showingAllChats = true
         }
+    }
+
+    private func createTask() {
+        app.open(project, tab: .tasks)
+        app.present(.newTask(project))
     }
 
     private func newChat() {

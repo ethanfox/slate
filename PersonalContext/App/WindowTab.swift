@@ -35,6 +35,7 @@ struct WindowTab: Identifiable, Hashable, Codable {
         case .project(let id):
             switch projectTab {
             case .overview: .projectOverview(id)
+            case .tasks: .projectTasks(id)
             case .threads:
                 selectedThread.map { .thread($0) } ?? .projectChat(id)
             case .notes:
@@ -58,6 +59,7 @@ struct WindowTab: Identifiable, Hashable, Codable {
 enum TabViewKey: Hashable {
     case home, projects, tasks, calendar, chats, settings
     case projectOverview(UUID)
+    case projectTasks(UUID)
     case projectChat(UUID)
     case thread(UUID)
     case note(UUID)

@@ -76,6 +76,17 @@ private struct HoverTooltip: ViewModifier {
     }
 }
 
+extension TaskWorkflowStatus {
+    var tint: Color {
+        switch self {
+        case .ready: AccentPreference.blue.color
+        case .inProgress: AccentPreference.yellow.color
+        case .blocked: AccentPreference.red.color
+        case .done: AccentPreference.green.color
+        }
+    }
+}
+
 enum CraftFont {
     static let display = Font.system(size: 34, weight: .bold)
     static let dayNumber = Font.system(size: 15, weight: .medium).monospacedDigit()

@@ -28,6 +28,12 @@
 		243486DBC4096A0FF300FA65 /* BrandMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D8F3727FDE5E1A2896BBDC9 /* BrandMark.swift */; };
 		24B5E7082AB10FF1AB769BE0 /* OverviewGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE53F4C78E1C18D93C5785B9 /* OverviewGrid.swift */; };
 		25C4BD4D7FD810C6EFF76195 /* AssociationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5077C7D2C8E53970BDE445D0 /* AssociationService.swift */; };
+		1F2E3D4C5B6A798867564534 /* AssociationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5077C7D2C8E53970BDE445D0 /* AssociationService.swift */; };
+		9B2D3F4A5C6E708192A3B4C5 /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1C2E3F4B5D6E708192A3B4 /* TaskStore.swift */; };
+		AC3E4F5B6D708192A3B4C5D6 /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1C2E3F4B5D6E708192A3B4 /* TaskStore.swift */; };
+		CE5A6B7D8192A3B4C5D6E7F8 /* ProjectTasksBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD4F5A6C708192A3B4C5D6E7 /* ProjectTasksBoard.swift */; };
+		F18A2B3C4D5E6F708192A3B4 /* ChromeChoiceDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A1B2C3D4E5F60718293A4 /* ChromeChoiceDialog.swift */; };
+		E07C8D9F3A4B5C6D7E8F901A /* TaskStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */; };
 		27EFEA7479970E75FC4AB694 /* Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD732A03D4885370CA6EC0EB /* Inspector.swift */; };
 		29D44665FC2D878340D62760 /* ChatObjectLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCA29163C23868CA9F844257 /* ChatObjectLink.swift */; };
 		29EED17BD5A4994333989D73 /* ChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A174CA3B685C41C4ABCF1D54 /* ChatScreen.swift */; };
@@ -56,6 +62,9 @@
 		5607183847AB410FD65F258B /* AssistantMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4433E89BB7AF1A5C5E09EF95 /* AssistantMarkdown.swift */; };
 		5970F19FA847557162751BF3 /* ChatInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5991E95904B11AEBA3B96BDE /* ChatInput.swift */; };
 		5B69D4033AA633125A4A2FAB /* ObjectLinkCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E415EBBA67C5F2F8A3F3A20 /* ObjectLinkCard.swift */; };
+		B02D4F8C5E3091B27C6F5D4A /* ObjectFind.swift in Sources */ = {isa = PBXBuildFile; fileRef = A91C3E7B4D2F80A16B5E4C39 /* ObjectFind.swift */; };
+		D24F6BAE705213D49E817F6C /* ObjectFindBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13E5A9D6F4102C38D706E5B /* ObjectFindBar.swift */; };
+		F46B8DC0927435F6B0A3918E /* ObjectFindTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E35A7CBF816324E5AF92807D /* ObjectFindTests.swift */; };
 		5CEECB088156040C95489B64 /* SymbolPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8B9A9D93886D56BA6078212 /* SymbolPicker.swift */; };
 		5D1208CD41C73CB5813D80D5 /* DecisionPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D08ADD9A59836BBFCCEDA98 /* DecisionPage.swift */; };
 		5D4E315BC149BA93FB000D85 /* Slate.icon in Resources */ = {isa = PBXBuildFile; fileRef = DCDFDF327D4CF27E208C2DAA /* Slate.icon */; };
@@ -213,6 +222,10 @@
 		4ACAF5E092DAC75A07EC0875 /* ConnectAccountSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectAccountSheets.swift; sourceTree = "<group>"; };
 		4ED0D31A8A2D0F3A0FC48424 /* ProjectWorkerProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkerProvider.swift; sourceTree = "<group>"; };
 		5077C7D2C8E53970BDE445D0 /* AssociationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssociationService.swift; sourceTree = "<group>"; };
+		8A1C2E3F4B5D6E708192A3B4 /* TaskStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStore.swift; sourceTree = "<group>"; };
+		BD4F5A6C708192A3B4C5D6E7 /* ProjectTasksBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectTasksBoard.swift; sourceTree = "<group>"; };
+		E07A1B2C3D4E5F60718293A4 /* ChromeChoiceDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeChoiceDialog.swift; sourceTree = "<group>"; };
+		DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStoreTests.swift; sourceTree = "<group>"; };
 		509E6F9E705BA7F4A6F2184F /* WindowTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTab.swift; sourceTree = "<group>"; };
 		51AEE9771680CE63EEA8864D /* ChatRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRuntime.swift; sourceTree = "<group>"; };
 		C8E1A2B304F56D7E8A9B0C11 /* StreamTextCoalescer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamTextCoalescer.swift; sourceTree = "<group>"; };
@@ -254,7 +267,10 @@
 		A530004EEDCDC03762905AC4 /* PersonalContext.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PersonalContext.entitlements; sourceTree = "<group>"; };
 		A7F5DDBFDDE9BF6067DE5CCC /* DocumentPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPage.swift; sourceTree = "<group>"; };
 		A843C76D621958EDA8D94D61 /* ColorHex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorHex.swift; sourceTree = "<group>"; };
+		A91C3E7B4D2F80A16B5E4C39 /* ObjectFind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectFind.swift; sourceTree = "<group>"; };
 		AB3545DC169370BDB82CFAEB /* NotePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotePage.swift; sourceTree = "<group>"; };
+		C13E5A9D6F4102C38D706E5B /* ObjectFindBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectFindBar.swift; sourceTree = "<group>"; };
+		E35A7CBF816324E5AF92807D /* ObjectFindTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectFindTests.swift; sourceTree = "<group>"; };
 		ABB935F4B84FA0030048EC33 /* LinkPresentation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = LinkPresentation.framework; path = System/Library/Frameworks/LinkPresentation.framework; sourceTree = SDKROOT; };
 		AD3FA7A23D2010D975AB8C6D /* EditRecordModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditRecordModal.swift; sourceTree = "<group>"; };
 		B1AFC28C1F00D3700732A654 /* SlateToolGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlateToolGateway.swift; sourceTree = "<group>"; };
@@ -416,6 +432,7 @@
 			isa = PBXGroup;
 			children = (
 				5077C7D2C8E53970BDE445D0 /* AssociationService.swift */,
+				8A1C2E3F4B5D6E708192A3B4 /* TaskStore.swift */,
 				DF040EA1BCECFFBD441F0F91 /* ChatGPTProvider.swift */,
 				E8B24C96AAB593E09C71D659 /* ChatGPTSignIn.swift */,
 				55C705E6D771B0D57F792CD5 /* ContextBuilder.swift */,
@@ -470,6 +487,8 @@
 				DF0BEA4CDC6DFF8DC0FE081A /* MarkdownEditor.swift */,
 				06566D4B5F0858C10300294C /* MarkdownPreview.swift */,
 				AB3545DC169370BDB82CFAEB /* NotePage.swift */,
+				A91C3E7B4D2F80A16B5E4C39 /* ObjectFind.swift */,
+				C13E5A9D6F4102C38D706E5B /* ObjectFindBar.swift */,
 				85B462CAB65E38C9331F5F12 /* PropertyPill.swift */,
 				E177D53D62F208568F2DF9CE /* TagField.swift */,
 				1129E66453242DE81FC7B81C /* ThreadBranch.swift */,
@@ -482,6 +501,7 @@
 		A5D6A7757F01EBD09446260A /* Chrome */ = {
 			isa = PBXGroup;
 			children = (
+				E07A1B2C3D4E5F60718293A4 /* ChromeChoiceDialog.swift */,
 				83E0D6B8AACD8209B166936F /* Canvas.swift */,
 				AD3FA7A23D2010D975AB8C6D /* EditRecordModal.swift */,
 				1CD7C7DFD28E72C0A9D4AA41 /* EmptyLine.swift */,
@@ -571,6 +591,7 @@
 				B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */,
 				77F4B6484C6BED0CADABAF2B /* ProjectLine.swift */,
 				8DC37F181EBBBF8E1E7F7E4D /* ProjectsView.swift */,
+				BD4F5A6C708192A3B4C5D6E7 /* ProjectTasksBoard.swift */,
 				C15F7AD6019E54818996ACF5 /* ProjectView.swift */,
 				D8B9A9D93886D56BA6078212 /* SymbolPicker.swift */,
 			);
@@ -590,7 +611,9 @@
 		FB78A550D46064977F06D755 /* PersonalContextTests */ = {
 			isa = PBXGroup;
 			children = (
+				E35A7CBF816324E5AF92807D /* ObjectFindTests.swift */,
 				588C1D051000807F84657854 /* ProviderNeutralTests.swift */,
+				DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */,
 			);
 			path = PersonalContextTests;
 			sourceTree = "<group>";
@@ -750,9 +773,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1F2E3D4C5B6A798867564534 /* AssociationService.swift in Sources */,
 				D73D56957AE1419967DCB01B /* ContextBuilder.swift in Sources */,
 				7D9F8C63712BBB12934A5FDE /* Records.swift in Sources */,
 				C47AD6C7A2C240B194DCC9B1 /* Store.swift in Sources */,
+				AC3E4F5B6D708192A3B4C5D6 /* TaskStore.swift in Sources */,
 				53A38F15BD97D0A7F87DC464 /* TextFormat.swift in Sources */,
 				E07C1D18E64FA5C2D35EA795 /* Tools.swift in Sources */,
 				FA3EB0AB86C91248D9A40273 /* main.swift in Sources */,
@@ -763,7 +788,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F46B8DC0927435F6B0A3918E /* ObjectFindTests.swift in Sources */,
 				CA068E7D29AD93EE8C1E9CD7 /* ProviderNeutralTests.swift in Sources */,
+				E07C8D9F3A4B5C6D7E8F901A /* TaskStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -776,6 +803,9 @@
 				5607183847AB410FD65F258B /* AssistantMarkdown.swift in Sources */,
 				20F1B247DA79052068395E36 /* AssociationFields.swift in Sources */,
 				25C4BD4D7FD810C6EFF76195 /* AssociationService.swift in Sources */,
+				9B2D3F4A5C6E708192A3B4C5 /* TaskStore.swift in Sources */,
+				CE5A6B7D8192A3B4C5D6E7F8 /* ProjectTasksBoard.swift in Sources */,
+				F18A2B3C4D5E6F708192A3B4 /* ChromeChoiceDialog.swift in Sources */,
 				9665D488425D5973C2F14AF3 /* AttachCodeViews.swift in Sources */,
 				243486DBC4096A0FF300FA65 /* BrandMark.swift in Sources */,
 				88D51B6E75045B1424C83192 /* CalendarParts.swift in Sources */,
@@ -834,6 +864,8 @@
 				E0F0AD3A5316C7FBF1E1DD66 /* NewReminderSheet.swift in Sources */,
 				AD8746C5C6F6267B6E861E22 /* NotePage.swift in Sources */,
 				C24BE4C7FD47F1EF214C9B48 /* NotesWidget.swift in Sources */,
+				B02D4F8C5E3091B27C6F5D4A /* ObjectFind.swift in Sources */,
+				D24F6BAE705213D49E817F6C /* ObjectFindBar.swift in Sources */,
 				5B69D4033AA633125A4A2FAB /* ObjectLinkCard.swift in Sources */,
 				463C9AC124371E05CBFFECCC /* OrbPalette.swift in Sources */,
 				50EFEC7E7918114CAE89E3F4 /* OrbState.swift in Sources */,

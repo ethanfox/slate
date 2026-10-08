@@ -77,6 +77,9 @@ final class AppModel {
     var projectsLayout: ProjectsLayout {
         didSet { defaults.set(projectsLayout.rawValue, forKey: Keys.projectsLayout) }
     }
+    var projectTasksLayout: ProjectTasksLayout {
+        didSet { defaults.set(projectTasksLayout.rawValue, forKey: Keys.projectTasksLayout) }
+    }
     var sidebarCollapsed: Bool {
         didSet { defaults.set(sidebarCollapsed, forKey: Keys.sidebarCollapsed) }
     }
@@ -105,6 +108,7 @@ final class AppModel {
     var trackChatOpen = false
     var inspectorOpen = false
     var selectedOverviewPlate: UUID?
+    let objectFind = ObjectFindSession()
 
     func selectOverviewPlate(_ id: UUID?) {
         selectedOverviewPlate = id
@@ -216,6 +220,7 @@ final class AppModel {
         showAgentIDs = UserDefaults.standard.bool(forKey: Keys.showAgentIDs)
         let storedLayout = UserDefaults.standard.string(forKey: Keys.projectsLayout) ?? ""
         projectsLayout = storedLayout == "list" ? .card : (ProjectsLayout(rawValue: storedLayout) ?? .table)
+        projectTasksLayout = ProjectTasksLayout(rawValue: UserDefaults.standard.string(forKey: Keys.projectTasksLayout) ?? "") ?? .kanban
         sidebarCollapsed = UserDefaults.standard.bool(forKey: Keys.sidebarCollapsed)
         projectColumnCollapsed = UserDefaults.standard.bool(forKey: Keys.projectColumnCollapsed)
         if UserDefaults.standard.object(forKey: Keys.expandedProjectSections) == nil {
@@ -623,6 +628,7 @@ enum Keys {
     static let cursorCloudCheckedAt = "cursorCloudCheckedAt"
     static let showAgentIDs = "showAgentIDs"
     static let projectsLayout = "projectsLayout"
+    static let projectTasksLayout = "projectTasksLayout"
     static let sidebarCollapsed = "sidebarCollapsed"
     static let projectColumnCollapsed = "projectColumnCollapsed"
     static let collapsedProjectSections = "collapsedProjectSections"

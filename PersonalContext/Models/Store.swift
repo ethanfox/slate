@@ -17,6 +17,8 @@ enum Store {
         AgendaItem.self,
         AgendaTrackLink.self,
         AgendaNoteLink.self,
+        TaskCompletion.self,
+        TaskDependency.self,
         DeletionMark.self,
         CodeAttachment.self
     ])

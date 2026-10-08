@@ -37,11 +37,40 @@ struct Args {
 
     func choice<T: RawRepresentable & CaseIterable>(_ key: String, as type: T.Type) throws -> T? where T.RawValue == String {
         guard let value = string(key) else { return nil }
-        guard let parsed = T(rawValue: value.lowercased()) else {
-            let allowed = T.allCases.map(\.rawValue).joined(separator: ", ")
-            throw ToolError("\(key) must be one of: \(allowed).")
+        if let parsed = T(rawValue: value) { return parsed }
+        if let parsed = T(rawValue: value.lowercased()) { return parsed }
+        let allowed = T.allCases.map(\.rawValue).joined(separator: ", ")
+        throw ToolError("\(key) must be one of: \(allowed).")
+    }
+
+    func date(_ key: String) throws -> Date?? {
+        guard let value = string(key) else { return nil }
+        if value.isEmpty { return .some(nil) }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso.date(from: value) { return .some(date) }
+        iso.formatOptions = [.withInternetDateTime]
+        if let date = iso.date(from: value) { return .some(date) }
+        throw ToolError("\(key) must be an ISO-8601 date.")
+    }
+
+    func uuids(_ key: String) throws -> [UUID]? {
+        guard let raw = raw[key] else { return nil }
+        let strings: [String]
+        if let array = raw as? [String] {
+            strings = array
+        } else if let array = raw as? [Any] {
+            strings = array.compactMap { $0 as? String }
+        } else {
+            throw ToolError("\(key) must be an array of ids.")
         }
-        return parsed
+        return try strings.map { value in
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let id = UUID(uuidString: trimmed) else {
+                throw ToolError("\(key) contains an invalid id: \(value)")
+            }
+            return id
+        }
     }
 }
 
@@ -181,11 +210,125 @@ enum Tools {
             if let name = args.string("name"), !name.isEmpty { project.name = name }
             if let summary = args.string("summary") { project.summary = summary }
             if let direction = args.string("current_direction") { project.currentDirection = direction }
-            if let status = try args.choice("status", as: ProjectStatus.self) { project.status = status }
+            if let status = try args.choice("status", as: ProjectStatus.self) {
+                project.status = status
+                TaskStore.syncProjectStatus(project, in: context)
+            }
             if let pinned = args.bool("is_pinned") { project.isPinned = pinned }
             if let symbol = args.string("symbol"), !symbol.isEmpty { project.symbol = symbol }
             project.touch()
             return JSONShape.project(project)
+        },
+
+        Tool(
+            name: "list_tasks",
+            description: "List Slate tasks. Completions are not included. Use list_completions for repeat history.",
+            properties: [
+                "project_id": text("Optional project id. Omit to list every task."),
+                "status": options(TaskWorkflowStatus.self, "Only tasks with this workflow status."),
+                "next_only": flag("Only the Next task in each project.")
+            ],
+            required: [], readOnly: true
+        ) { args, context in
+            let project = try args.string("project_id").map { _ in try Lookup.project(try args.uuid("project_id"), in: context) }
+            let status = try args.choice("status", as: TaskWorkflowStatus.self)
+            let nextOnly = args.bool("next_only") ?? false
+            return TaskStore.tasks(in: context, project: project)
+                .filter { task in
+                    if let status, task.workflowStatus != status { return false }
+                    if nextOnly, !task.isNext { return false }
+                    return true
+                }
+                .sorted(by: TaskStore.boardSort)
+                .map { JSONShape.task($0, full: false) }
+        },
+        Tool(
+            name: "get_task",
+            description: "Get one Slate task, including blockers, dependents, and completion ids.",
+            properties: ["task_id": text("Task id.")],
+            required: ["task_id"], readOnly: true
+        ) { args, context in
+            JSONShape.task(try Lookup.task(try args.uuid("task_id"), in: context), full: true)
+        },
+        Tool(
+            name: "create_task",
+            description: "Create a Slate task. project_id is optional. is_next requires an active project.",
+            properties: [
+                "title": text("Task title."),
+                "project_id": text("Optional project id."),
+                "notes": text("Notes."),
+                "due": text("ISO-8601 due date."),
+                "status": options(TaskWorkflowStatus.self, "Workflow status. Defaults to ready."),
+                "is_next": flag("Mark this task Next for its project."),
+                "track_ids": ["type": "array", "items": ["type": "string"], "description": "Track ids to link."],
+                "blocked_reason": text("Free-text blocked reason."),
+                "blocker_ids": ["type": "array", "items": ["type": "string"], "description": "Task ids that block this one."]
+            ],
+            required: ["title"], readOnly: false
+        ) { args, context in
+            let item = AgendaItem(kind: .task, eventKitID: "", title: try args.required("title"))
+            context.insert(item)
+            try TaskMutations.apply(args, to: item, creating: true, in: context)
+            return JSONShape.task(item, full: true)
+        },
+        Tool(
+            name: "update_task",
+            description: "Change a Slate task. Only the fields you pass are changed. track_ids and blocker_ids replace the whole set.",
+            properties: [
+                "task_id": text("Task id."),
+                "title": text("New title."),
+                "notes": text("New notes."),
+                "due": text("ISO-8601 due date. Empty string clears it."),
+                "status": options(TaskWorkflowStatus.self, "Workflow status."),
+                "is_next": flag("Set or clear Next."),
+                "project_id": text("Move to this project. Empty string clears it."),
+                "track_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement track ids."],
+                "blocked_reason": text("Free-text blocked reason."),
+                "blocker_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement blocker task ids."]
+            ],
+            required: ["task_id"], readOnly: false
+        ) { args, context in
+            let item = try Lookup.task(try args.uuid("task_id"), in: context)
+            try TaskMutations.apply(args, to: item, creating: false, in: context)
+            return JSONShape.task(item, full: true)
+        },
+        Tool(
+            name: "list_completions",
+            description: "List immutable completion records for repeating tasks.",
+            properties: [
+                "project_id": text("Optional project id."),
+                "task_id": text("Optional parent task id.")
+            ],
+            required: [], readOnly: true
+        ) { args, context in
+            let projectID = try args.string("project_id").map { _ in try args.uuid("project_id") }
+            let taskID = try args.string("task_id").map { _ in try args.uuid("task_id") }
+            let descriptor = FetchDescriptor<TaskCompletion>(sortBy: [SortDescriptor(\.completedAt, order: .reverse)])
+            return try context.fetch(descriptor)
+                .filter { completion in
+                    if let projectID, completion.project?.id != projectID { return false }
+                    if let taskID, completion.parentTask?.id != taskID { return false }
+                    return true
+                }
+                .map(JSONShape.completion)
+        },
+        Tool(
+            name: "get_completion",
+            description: "Get one completion record.",
+            properties: ["completion_id": text("Completion id.")],
+            required: ["completion_id"], readOnly: true
+        ) { args, context in
+            JSONShape.completion(try Lookup.completion(try args.uuid("completion_id"), in: context))
+        },
+        Tool(
+            name: "delete_completion",
+            description: "Delete a completion. The latest one undoes the series due date. Older ones delete history only.",
+            properties: ["completion_id": text("Completion id.")],
+            required: ["completion_id"], readOnly: false
+        ) { args, context in
+            let completion = try Lookup.completion(try args.uuid("completion_id"), in: context)
+            try TaskStore.deleteCompletion(completion, in: context)
+            return ["deleted": true]
         },
 
         Tool(
@@ -457,6 +600,54 @@ enum Tools {
     ]
 }
 
+enum TaskMutations {
+    static func apply(_ args: Args, to item: AgendaItem, creating: Bool, in context: ModelContext) throws {
+        if let title = args.string("title"), !title.isEmpty { item.title = title }
+        if let notes = args.string("notes") { item.notes = notes }
+        if let due = try args.date("due") { item.due = due }
+        if let projectLink = try args.optionalUUID("project_id") {
+            if let id = projectLink {
+                AssociationService.assignUserProject(try Lookup.project(id, in: context), on: item)
+            } else {
+                AssociationService.clearProject(from: item)
+            }
+        }
+        if let trackIDs = try args.uuids("track_ids") {
+            AssociationService.clearTracks(from: item, in: context)
+            for id in trackIDs {
+                AssociationService.applyLink(thread: try Lookup.thread(id, in: context), onto: item)
+            }
+        }
+        if let status = try args.choice("status", as: TaskWorkflowStatus.self) {
+            TaskStore.setStatus(status, on: item, in: context)
+        }
+        if let reason = args.string("blocked_reason") {
+            TaskStore.setBlockedReason(reason, on: item, in: context)
+        }
+        if let blockerIDs = try args.uuids("blocker_ids") {
+            let current = item.blockerLinks.compactMap(\.blockingTask)
+            for blocker in current {
+                TaskStore.removeBlocker(blocker, from: item, in: context)
+            }
+            for id in blockerIDs {
+                try TaskStore.addBlocker(try Lookup.task(id, in: context), to: item, in: context)
+            }
+        }
+        if let isNext = args.bool("is_next") {
+            if isNext {
+                try TaskStore.setNext(item, in: context)
+            } else {
+                TaskStore.clearNext(on: item, in: context)
+            }
+        }
+        item.touch()
+        item.project?.touch()
+        if creating, item.workflowStatusRaw.isEmpty {
+            item.workflowStatusRaw = TaskWorkflowStatus.ready.rawValue
+        }
+    }
+}
+
 enum Lookup {
     static func project(_ id: UUID, in context: ModelContext) throws -> Project {
         guard let found = try context.fetch(FetchDescriptor<Project>(predicate: #Predicate { $0.id == id })).first else {
@@ -482,6 +673,21 @@ enum Lookup {
     static func thread(_ id: UUID, in context: ModelContext) throws -> ProjectThread {
         guard let found = try context.fetch(FetchDescriptor<ProjectThread>(predicate: #Predicate { $0.id == id })).first else {
             throw ToolError("No thread with id \(id.uuidString).")
+        }
+        return found
+    }
+
+    static func task(_ id: UUID, in context: ModelContext) throws -> AgendaItem {
+        guard let found = try context.fetch(FetchDescriptor<AgendaItem>(predicate: #Predicate { $0.id == id })).first else {
+            throw ToolError("No task with id \(id.uuidString).")
+        }
+        guard found.kind == .task else { throw ToolError("That id is not a Slate task.") }
+        return found
+    }
+
+    static func completion(_ id: UUID, in context: ModelContext) throws -> TaskCompletion {
+        guard let found = try context.fetch(FetchDescriptor<TaskCompletion>(predicate: #Predicate { $0.id == id })).first else {
+            throw ToolError("No completion with id \(id.uuidString).")
         }
         return found
     }
@@ -556,7 +762,7 @@ enum JSONShape {
     private static let iso = ISO8601DateFormatter()
 
     static func project(_ project: Project) -> [String: Any] {
-        [
+        var shape: [String: Any] = [
             "id": project.id.uuidString,
             "name": project.name,
             "symbol": project.symbol,
@@ -568,8 +774,52 @@ enum JSONShape {
             "counts": [
                 "decisions": project.decisions.count,
                 "threads": project.threads.count,
-                "notes": project.notes.count
+                "notes": project.notes.count,
+                "tasks": project.agendaItems.filter { $0.kind == .task }.count
             ]
+        ]
+        if let next = TaskStore.nextTask(in: project) {
+            shape["next_task"] = ["id": next.id.uuidString, "title": next.displayTitle]
+        }
+        return shape
+    }
+
+    static func task(_ item: AgendaItem, full: Bool) -> [String: Any] {
+        var shape: [String: Any] = [
+            "id": item.id.uuidString,
+            "title": item.displayTitle,
+            "notes": item.notes,
+            "due": item.due.map { iso.string(from: $0) } ?? "",
+            "status": item.workflowStatus.rawValue,
+            "is_next": item.isNext,
+            "project_id": item.project?.id.uuidString ?? "",
+            "project_name": item.project?.name ?? "",
+            "blocked_reason": item.blockedReason,
+            "tracks": item.liveTracks.map { ["id": $0.id.uuidString, "title": $0.title] },
+            "blockers": item.unresolvedBlockers.map {
+                [
+                    "id": $0.id.uuidString,
+                    "title": $0.displayTitle,
+                    "project_name": $0.project?.name ?? ""
+                ]
+            }
+        ]
+        if full {
+            shape["blocked_by_ids"] = item.blockerLinks.compactMap { $0.blockingTask?.id.uuidString }
+            shape["blocks"] = item.blockingLinks.compactMap { $0.blockedTask?.id.uuidString }
+            shape["completion_ids"] = item.completions.map(\.id.uuidString)
+        }
+        return shape
+    }
+
+    static func completion(_ completion: TaskCompletion) -> [String: Any] {
+        [
+            "id": completion.id.uuidString,
+            "title": completion.titleSnapshot,
+            "completed_at": iso.string(from: completion.completedAt),
+            "occurred_due": completion.occurredDue.map { iso.string(from: $0) } ?? "",
+            "project_id": completion.project?.id.uuidString ?? "",
+            "task_id": completion.parentTask?.id.uuidString ?? ""
         ]
     }
 

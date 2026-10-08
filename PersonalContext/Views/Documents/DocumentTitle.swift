@@ -11,5 +11,6 @@ struct DocumentTitle: View {
             .lineLimit(1...4)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+        .findHighlight(.title)
     }
 }

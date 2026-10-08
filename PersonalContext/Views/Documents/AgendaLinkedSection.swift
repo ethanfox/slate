@@ -64,7 +64,8 @@ struct AgendaLinkedSection: View {
                     RecordRow(
                         systemImage: item.kind == .event ? "calendar" : "checklist",
                         title: item.displayTitle,
-                        subtitle: subtitle(item)
+                        subtitle: subtitle(item),
+                        findField: .agenda(item.id)
                     ) {
                         AgendaMarks(item: item)
                     } action: {

@@ -12,6 +12,7 @@ enum Destination: Hashable, Codable {
 }
 enum ProjectTab: String, CaseIterable, Identifiable, Hashable, Codable {
     case overview
+    case tasks
     case threads
     case notes
     case decisions
@@ -22,6 +23,7 @@ enum ProjectTab: String, CaseIterable, Identifiable, Hashable, Codable {
     var title: String {
         switch self {
         case .overview: "Overview"
+        case .tasks: "Tasks"
         case .threads: "Tracks"
         case .notes: "Notes"
         case .decisions: "Decisions"
@@ -93,6 +95,27 @@ enum OverviewWidth: String, CaseIterable, Identifiable, Hashable {
         case .oneThird: "1/3"
         case .twoThirds: "2/3"
         case .full: "Full"
+        }
+    }
+}
+
+enum ProjectTasksLayout: String, CaseIterable, Identifiable, Hashable {
+    case kanban
+    case list
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .kanban: "Kanban"
+        case .list: "List"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .kanban: "rectangle.split.3x1"
+        case .list: "list.bullet"
         }
     }
 }

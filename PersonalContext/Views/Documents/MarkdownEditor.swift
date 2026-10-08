@@ -6,6 +6,8 @@ struct MarkdownEditor: NSViewRepresentable {
     var placeholder = "Start writing…"
     var fontSize: CGFloat = 15
     var minHeight: CGFloat = 0
+    var findField: ObjectFind.Field? = nil
+    @Environment(\.objectFind) private var find
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -22,8 +24,15 @@ struct MarkdownEditor: NSViewRepresentable {
     func updateNSView(_ view: MarkdownTextView, context: Context) {
         context.coordinator.parent = self
         view.placeholder = placeholder
+        let ranges = findField.flatMap { find?.isOpen == true ? find?.ranges(in: $0) : [] } ?? []
+        let current = find?.isOpen == true ? findField.flatMap { find?.currentRange(in: $0) } : nil
+        let findChanged = view.findRanges != ranges || view.findCurrent != current
+        view.findRanges = ranges
+        view.findCurrent = current
         if view.string != text, !view.hasMarkedText() {
             view.string = text
+        } else if findChanged {
+            view.applyFindHighlights(reveal: true)
         }
         let width = view.bounds.width
         if width > 0 {
@@ -73,6 +82,8 @@ struct MarkdownEditor: NSViewRepresentable {
         ) {
             guard editedMask.contains(.editedCharacters) else { return }
             MarkdownStyler.style(textStorage, font: .systemFont(ofSize: parent.fontSize))
+            (textStorage.layoutManagers.first?.firstTextView as? MarkdownTextView)?
+                .applyFindHighlights(restyle: false)
         }
     }
 }
@@ -83,6 +94,8 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
     var placeholder = "" {
         didSet { if string.isEmpty { needsDisplay = true } }
     }
+    var findRanges: [NSRange] = []
+    var findCurrent: NSRange?
 
     private var formatPopover: NSPopover?
     private var pendingFormatBar: DispatchWorkItem?
@@ -237,10 +250,13 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
         case "b": apply(.bold)
         case "i": apply(.italic)
         case "k": apply(.link)
+        case "f", "g": return false
         default: return super.performKeyEquivalent(with: event)
         }
         return true
     }
+
+    override func performFindPanelAction(_ sender: Any?) {}
 
     override func insertNewline(_ sender: Any?) {
         let text = string as NSString
@@ -286,6 +302,31 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
     @objc private func formatFromMenu(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let action = MarkdownAction(rawValue: raw) else { return }
         apply(action)
+    }
+
+    func applyFindHighlights(restyle: Bool = true, reveal: Bool = false) {
+        guard let storage = textStorage else { return }
+        if restyle {
+            MarkdownStyler.style(storage, font: baseFont)
+        }
+        let current = findCurrent
+        for range in findRanges {
+            let color = range == current ? NSColor.findHighlightColor : NSColor.findHighlightColor.withAlphaComponent(0.35)
+            guard range.location != NSNotFound, range.upperBound <= storage.length else { continue }
+            storage.addAttribute(.backgroundColor, value: color, range: range)
+        }
+        if reveal, let current, current.location != NSNotFound, current.upperBound <= storage.length {
+            self.reveal(current)
+        }
+    }
+
+    private func reveal(_ range: NSRange) {
+        guard let layoutManager, let textContainer else { return }
+        let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        var rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+        rect.origin.x += textContainerOrigin.x
+        rect.origin.y += textContainerOrigin.y
+        scrollToVisible(rect.insetBy(dx: -12, dy: -40))
     }
 
     func apply(_ action: MarkdownAction) {

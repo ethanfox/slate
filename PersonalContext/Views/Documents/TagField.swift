@@ -23,7 +23,7 @@ struct TagField: View {
     @State private var newName = ""
 
     var body: some View {
-        PropertyPill(title: label, systemImage: "tag") {
+        PropertyPill(title: label, systemImage: "tag", field: .tags) {
             if catalog.isEmpty {
                 Button("New Tag…") { creating = true }
             } else {

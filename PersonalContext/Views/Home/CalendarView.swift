@@ -7,6 +7,7 @@ struct CalendarView: View {
     @Environment(\.modelContext) private var context
     @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" })
     private var slateTasks: [AgendaItem]
+    @Query private var completions: [TaskCompletion]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedDay = Calendar.current.startOfDay(for: .now)
     @State private var weekStart = CalendarView.startOfWeek(containing: .now)
@@ -106,16 +107,21 @@ struct CalendarView: View {
                     app.present(.editEvent(event))
                 }
             }
-            if !selectedAllDay.isEmpty || !selectedReminders.isEmpty || !selectedTasks.isEmpty {
+            if !selectedAllDay.isEmpty || !selectedReminders.isEmpty || !selectedTasks.isEmpty || !selectedCompletions.isEmpty {
                 CalendarAllDaySection(
                     events: selectedAllDay,
                     reminders: selectedReminders,
                     tasks: selectedTasks,
+                    completions: selectedCompletions,
                     onOpenEvent: { app.present(.editEvent($0)) },
                     onOpenReminder: { app.present(.editReminder($0)) },
                     onOpenTask: { app.present(.editTask($0)) },
                     onToggleReminder: toggle,
-                    onToggleTask: { AgendaStore.toggleComplete($0, in: context) }
+                    onToggleTask: { AgendaStore.toggleComplete($0, in: context) },
+                    onToggleCompletion: { completion in
+                        do { try TaskStore.undoLatestCompletion(completion, in: context) }
+                        catch { app.flash(error.localizedDescription) }
+                    }
                 )
             }
             if !selectedTimed.isEmpty {
@@ -129,7 +135,7 @@ struct CalendarView: View {
                     onScrolledToNow: { didScrollToNow = true },
                     onOpen: { app.present(.editEvent($0)) }
                 )
-            } else if selectedAllDay.isEmpty && selectedReminders.isEmpty && selectedTasks.isEmpty {
+            } else if selectedAllDay.isEmpty && selectedReminders.isEmpty && selectedTasks.isEmpty && selectedCompletions.isEmpty {
                 EmptyLine(text: "Nothing scheduled.")
             }
         }
@@ -158,6 +164,13 @@ struct CalendarView: View {
     private var selectedTasks: [AgendaItem] {
         selectedItems.compactMap {
             if case .task(let item) = $0 { return item }
+            return nil
+        }
+    }
+
+    private var selectedCompletions: [TaskCompletion] {
+        selectedItems.compactMap {
+            if case .completion(let item) = $0 { return item }
             return nil
         }
     }
@@ -218,7 +231,11 @@ struct CalendarView: View {
             }
             .sorted { $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending }
             .map(DayItem.task)
-        return reminders + tasks + events
+        let done = completions
+            .filter { calendar.isDate($0.completedAt, inSameDayAs: day) }
+            .sorted { $0.completedAt > $1.completedAt }
+            .map(DayItem.completion)
+        return reminders + tasks + done + events
     }
 
     private func eventFalls(_ event: CalendarEvent, on day: Date) -> Bool {
@@ -316,12 +333,14 @@ private enum DayItem: Identifiable {
     case event(CalendarEvent)
     case reminder(ReminderItem)
     case task(AgendaItem)
+    case completion(TaskCompletion)
 
     var id: String {
         switch self {
         case .event(let event): "e-\(event.id)"
         case .reminder(let reminder): "r-\(reminder.id)"
         case .task(let task): "t-\(task.id.uuidString)"
+        case .completion(let completion): "c-\(completion.id.uuidString)"
         }
     }
 }

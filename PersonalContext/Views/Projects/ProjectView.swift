@@ -66,6 +66,8 @@ struct ProjectView: View {
         switch tab {
         case .overview:
             OverviewPage(project: project)
+        case .tasks:
+            ProjectTasksBoard(project: project)
         case .threads:
             if let thread = project.threads.first(where: { $0.id == app.selectedThread }) {
                 ThreadPage(thread: thread, project: project).id(thread.id)

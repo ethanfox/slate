@@ -273,11 +273,13 @@ struct CalendarAllDaySection: View {
     var events: [CalendarEvent]
     var reminders: [ReminderItem]
     var tasks: [AgendaItem]
+    var completions: [TaskCompletion]
     var onOpenEvent: (CalendarEvent) -> Void
     var onOpenReminder: (ReminderItem) -> Void
     var onOpenTask: (AgendaItem) -> Void
     var onToggleReminder: (ReminderItem) -> Void
     var onToggleTask: (AgendaItem) -> Void
+    var onToggleCompletion: (TaskCompletion) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -291,6 +293,9 @@ struct CalendarAllDaySection: View {
                     CalendarTaskRow(item: item, onToggle: { onToggleTask(item) }) {
                         onOpenTask(item)
                     }
+                }
+                ForEach(completions) { item in
+                    CalendarCompletionRow(item: item, onToggle: { onToggleCompletion(item) })
                 }
                 ForEach(reminders) { item in
                     CalendarReminderRow(item: item, onToggle: { onToggleReminder(item) }) {
@@ -381,6 +386,42 @@ private struct CalendarTaskRow: View {
             .help("Edit task")
         }
         .padding(.vertical, 5)
+    }
+}
+
+private struct CalendarCompletionRow: View {
+    var item: TaskCompletion
+    var onToggle: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            if TaskStore.isLatest(item) {
+                Button(action: onToggle) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Undo")
+                .accessibilityLabel("Undo latest completion")
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.titleSnapshot)
+                    .font(CraftFont.body)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(item.completedAt.formatted(date: .abbreviated, time: .omitted))
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 5)
+        .opacity(hovering ? 1 : 0.9)
+        .onHover { hovering = $0 }
     }
 }
 

@@ -91,6 +91,9 @@ final class Project: Identifiable {
     @Relationship(deleteRule: .nullify, inverse: \AgendaItem.project)
     var agendaItems: [AgendaItem] = []
 
+    @Relationship(deleteRule: .cascade, inverse: \TaskCompletion.project)
+    var taskCompletions: [TaskCompletion] = []
+
     @Relationship(deleteRule: .cascade, inverse: \DeletionMark.project)
     var deletionMarks: [DeletionMark] = []
 
@@ -584,6 +587,24 @@ enum TaskRepeat: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+enum TaskWorkflowStatus: String, Codable, CaseIterable, Identifiable, Hashable {
+    case ready
+    case inProgress
+    case blocked
+    case done
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .ready: "Ready"
+        case .inProgress: "In Progress"
+        case .blocked: "Blocked"
+        case .done: "Done"
+        }
+    }
+}
+
 enum TaskDue {
     static func isOutstanding(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> Bool {
         calendar.startOfDay(for: date) <= calendar.startOfDay(for: now)
@@ -635,6 +656,9 @@ final class AgendaItem {
     var projectIsInherited: Bool
     var createdAt: Date
     var updatedAt: Date
+    var workflowStatusRaw: String = TaskWorkflowStatus.ready.rawValue
+    var isNext: Bool = false
+    var blockedReason: String = ""
     var project: Project?
 
     @Relationship(inverse: \Tag.agendaItems)
@@ -646,6 +670,15 @@ final class AgendaItem {
     @Relationship(deleteRule: .cascade, inverse: \AgendaNoteLink.item)
     var noteLinks: [AgendaNoteLink] = []
 
+    @Relationship(deleteRule: .nullify, inverse: \TaskCompletion.parentTask)
+    var completions: [TaskCompletion] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \TaskDependency.blockedTask)
+    var blockerLinks: [TaskDependency] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \TaskDependency.blockingTask)
+    var blockingLinks: [TaskDependency] = []
+
     var kind: AgendaKind {
         get { AgendaKind(rawValue: kindRaw) ?? .reminder }
         set { kindRaw = newValue.rawValue }
@@ -654,6 +687,21 @@ final class AgendaItem {
     var repeatRule: TaskRepeat {
         get { TaskRepeat(rawValue: repeatRaw) ?? .none }
         set { repeatRaw = newValue == .custom ? TaskRepeat.none.rawValue : newValue.rawValue }
+    }
+
+    var workflowStatus: TaskWorkflowStatus {
+        if isCompleted { return .done }
+        return TaskWorkflowStatus(rawValue: workflowStatusRaw) ?? .ready
+    }
+
+    var unresolvedBlockers: [AgendaItem] {
+        blockerLinks.compactMap(\.blockingTask).filter { !$0.isCompleted }
+    }
+
+    var canBeNext: Bool {
+        guard kind == .task, let project, project.status == .active else { return false }
+        let status = workflowStatus
+        return status == .ready || status == .inProgress
     }
 
     var displayTitle: String {
@@ -679,6 +727,9 @@ final class AgendaItem {
         self.notes = ""
         self.repeatRaw = TaskRepeat.none.rawValue
         self.projectIsInherited = false
+        self.workflowStatusRaw = TaskWorkflowStatus.ready.rawValue
+        self.isNext = false
+        self.blockedReason = ""
         self.createdAt = .now
         self.updatedAt = .now
     }
@@ -717,5 +768,41 @@ final class AgendaNoteLink {
         self.id = UUID()
         self.noteID = note.id
         self.note = note
+    }
+}
+
+@Model
+final class TaskCompletion {
+    var id: UUID
+    var createdAt: Date
+    var completedAt: Date
+    var occurredDue: Date?
+    var titleSnapshot: String
+    var project: Project?
+    var parentTask: AgendaItem?
+
+    init(parent: AgendaItem, completedAt: Date = .now, occurredDue: Date?) {
+        self.id = UUID()
+        self.createdAt = .now
+        self.completedAt = completedAt
+        self.occurredDue = occurredDue
+        self.titleSnapshot = parent.displayTitle
+        self.project = parent.project
+        self.parentTask = parent
+    }
+}
+
+@Model
+final class TaskDependency {
+    var id: UUID
+    var createdAt: Date
+    var blockedTask: AgendaItem?
+    var blockingTask: AgendaItem?
+
+    init(blocked: AgendaItem, blocking: AgendaItem) {
+        self.id = UUID()
+        self.createdAt = .now
+        self.blockedTask = blocked
+        self.blockingTask = blocking
     }
 }

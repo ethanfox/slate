@@ -9,6 +9,7 @@ private enum OverviewInspectorTab: String, Hashable {
 struct OverviewInspector: View {
     @Bindable var project: Project
     @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
     @State private var tab = OverviewInspectorTab.subject
 
     private var selectedPlate: OverviewPlate? {
@@ -140,6 +141,7 @@ private struct OverviewInspectorWidget: View {
 private struct OverviewInspectorSettings: View {
     @Bindable var project: Project
     @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -236,7 +238,10 @@ private struct OverviewInspectorSettings: View {
         }
         .onChange(of: project.name) { _, _ in project.touch() }
         .onChange(of: project.symbol) { _, _ in project.touch() }
-        .onChange(of: project.statusRaw) { _, _ in project.touch() }
+        .onChange(of: project.statusRaw) { _, _ in
+            project.touch()
+            TaskStore.syncProjectStatus(project, in: context)
+        }
         .onChange(of: project.isPinned) { _, _ in project.touch() }
         .onChange(of: project.overviewWidthRaw) { _, _ in project.touch() }
         .onChange(of: project.workerProviderID) { _, _ in

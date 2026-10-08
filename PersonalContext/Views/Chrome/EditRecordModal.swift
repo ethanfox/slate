@@ -82,6 +82,7 @@ struct EditProjectModal: View {
         project.status = status
         project.isPinned = isPinned
         project.touch()
+        TaskStore.syncProjectStatus(project, in: context)
         try? context.save()
         modalDismiss()
     }

@@ -10,6 +10,7 @@ struct NewTaskSheet: View {
     var reminder: ReminderItem?
     var task: AgendaItem?
     var sourceNote: Note?
+    var project: Project?
 
     @FocusState private var focusTitle: Bool
     @State private var title = ""
@@ -26,6 +27,10 @@ struct NewTaskSheet: View {
     @State private var saved = false
     @State private var conflict: AssociationConflict?
     @State private var resolveConflict: (() -> Void)?
+    @State private var status: TaskWorkflowStatus = .ready
+    @State private var wantsNext = false
+    @State private var blockedReason = ""
+    @State private var blockerQuery = ""
 
     private var isEditing: Bool { reminder != nil || task != nil }
     private var allowsEditing: Bool { reminder?.allowsEditing ?? true }
@@ -75,14 +80,12 @@ struct NewTaskSheet: View {
         .onAppear {
             load()
             prepareAgenda()
+            if reminder != nil {
+                Task { await ensureReminderAccess() }
+            }
             focusTitle = true
         }
         .onDisappear { discardIfNeeded() }
-        .onChange(of: itemType) { _, newType in
-            if newType == .reminder {
-                Task { await ensureReminderAccess() }
-            }
-        }
         .onChange(of: hasDueDate) { _, on in
             if !on { repeatRule = .none }
         }
@@ -135,18 +138,7 @@ struct NewTaskSheet: View {
                     .focused($focusTitle)
             }
 
-            ModalControlRow("Type") {
-                Picker("Type", selection: $itemType) {
-                    Text("Task").tag(AgendaKind.task)
-                    Text("Reminder").tag(AgendaKind.reminder)
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .fixedSize()
-                .disabled(!allowsEditing)
-            }
-
-            if itemType == .reminder, !lists.isEmpty {
+            if isReminder, !lists.isEmpty {
                 ModalControlRow("List") {
                     Picker("List", selection: $listID) {
                         ForEach(lists) { list in
@@ -190,12 +182,56 @@ struct NewTaskSheet: View {
                     .lineLimit(3...6)
             }
 
+            if !isReminder {
+                taskWorkflowFields
+            }
+
             if let agenda {
                 AssociationFields(item: agenda) { incoming, apply in
                     conflict = incoming
                     resolveConflict = apply
                 }
             }
+        }
+    }
+
+    private var isReminder: Bool { reminder != nil }
+
+    private var canMarkNext: Bool {
+        guard let project = agenda?.project, project.status == .active else { return false }
+        return status == .ready || status == .inProgress
+    }
+
+    @ViewBuilder
+    private var taskWorkflowFields: some View {
+        ModalControlRow("Status") {
+            Picker("Status", selection: $status) {
+                ForEach(TaskWorkflowStatus.allCases) { value in
+                    Text(value.label).tag(value)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+        }
+
+        ModalControlRow("Next") {
+            Toggle("Next", isOn: $wantsNext)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .disabled(!canMarkNext)
+        }
+
+        if status == .blocked || !blockedReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            ModalField("Blocked reason") {
+                TextField("Optional", text: $blockedReason, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(2...4)
+            }
+        }
+
+        if let agenda {
+            BlockerPicker(item: agenda, query: $blockerQuery)
         }
     }
 
@@ -207,6 +243,9 @@ struct NewTaskSheet: View {
             due = task.due ?? .now
             notes = task.notes
             repeatRule = task.repeatRule
+            status = task.workflowStatus
+            wantsNext = task.isNext
+            blockedReason = task.blockedReason
             return
         }
         if let reminder {
@@ -241,6 +280,9 @@ struct NewTaskSheet: View {
         )
         context.insert(item)
         createdAgenda = true
+        if let project {
+            AssociationService.assignUserProject(project, on: item)
+        }
         if let sourceNote {
             if title.isEmpty { title = sourceNote.displayTitle }
             item.title = sourceNote.displayTitle
@@ -296,10 +338,10 @@ struct NewTaskSheet: View {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         do {
-            if itemType == .task {
-                try saveTask(title: trimmed)
-            } else {
+            if isReminder {
                 try saveReminder(title: trimmed)
+            } else {
+                try saveTask(title: trimmed)
             }
             saved = true
             modalDismiss()
@@ -309,18 +351,20 @@ struct NewTaskSheet: View {
     }
 
     private func saveTask(title: String) throws {
-        let completed = reminder?.isCompleted
-        if let reminder {
-            try app.eventKit.deleteReminder(reminder)
-        }
         guard let agenda else { return }
-        if let completed { agenda.isCompleted = completed }
         agenda.kind = .task
         agenda.eventKitID = ""
         agenda.title = title
         agenda.due = hasDueDate ? due : nil
         agenda.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         agenda.repeatRule = hasDueDate ? repeatRule : .none
+        TaskStore.setStatus(status, on: agenda, in: context)
+        TaskStore.setBlockedReason(blockedReason, on: agenda, in: context)
+        if wantsNext {
+            try TaskStore.setNext(agenda, in: context)
+        } else if agenda.isNext {
+            TaskStore.clearNext(on: agenda, in: context)
+        }
         agenda.touch()
         try context.save()
     }
@@ -354,8 +398,7 @@ struct NewTaskSheet: View {
 
     private func deleteItem() {
         if let task {
-            context.delete(task)
-            try? context.save()
+            TaskStore.delete(task, in: context)
             saved = true
             modalDismiss()
             return
@@ -372,5 +415,62 @@ struct NewTaskSheet: View {
         } catch {
             app.flash(error.localizedDescription)
         }
+    }
+}
+
+private struct BlockerPicker: View {
+    var item: AgendaItem
+    @Binding var query: String
+    @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
+    @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" }, sort: \AgendaItem.updatedAt, order: .reverse)
+    private var tasks: [AgendaItem]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ModalField("Blocked by") {
+                TextField("Search tasks", text: $query)
+                    .textFieldStyle(.plain)
+            }
+            ForEach(item.unresolvedBlockers, id: \.id) { blocker in
+                HStack {
+                    Button(blocker.displayTitle) { app.present(.editTask(blocker)) }
+                        .buttonStyle(.plain)
+                    Spacer()
+                    Button("Remove") { TaskStore.removeBlocker(blocker, from: item, in: context) }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                }
+                .font(CraftFont.caption)
+            }
+            ForEach(matches) { candidate in
+                Button {
+                    do { try TaskStore.addBlocker(candidate, to: item, in: context) }
+                    catch { app.flash(error.localizedDescription) }
+                    query = ""
+                } label: {
+                    HStack {
+                        Text(candidate.displayTitle)
+                        if let name = candidate.project?.displayName {
+                            Text(name)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .font(CraftFont.caption)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var matches: [AgendaItem] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return [] }
+        let linked = Set(item.blockerLinks.compactMap { $0.blockingTask?.id })
+        return Array(tasks.filter { candidate in
+            candidate.id != item.id
+                && !linked.contains(candidate.id)
+                && candidate.displayTitle.localizedCaseInsensitiveContains(needle)
+        }.prefix(8))
     }
 }

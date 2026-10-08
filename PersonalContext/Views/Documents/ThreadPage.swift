@@ -29,6 +29,7 @@ struct ThreadPage: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.bottom, 4)
+                .findHighlight(.parent)
             }
 
             DocumentTitle(text: $thread.title)
@@ -40,19 +41,20 @@ struct ThreadPage: View {
                 .lineLimit(1...4)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 4)
+                .findHighlight(.summary)
 
             HStack(spacing: 6) {
-                PropertyPill(title: thread.kind.label, systemImage: thread.kind.symbol) {
+                PropertyPill(title: thread.kind.label, systemImage: thread.kind.symbol, field: .kind) {
                     ForEach(ThreadKind.allCases) { kind in
                         Button(kind.label, systemImage: kind.symbol) { thread.kind = kind; touch() }
                     }
                 }
-                PropertyPill(title: thread.status.label, systemImage: thread.status.symbol) {
+                PropertyPill(title: thread.status.label, systemImage: thread.status.symbol, field: .status) {
                     ForEach(ThreadStatus.allCases) { status in
                         Button(status.label, systemImage: status.symbol) { thread.status = status; touch() }
                     }
                 }
-                PropertyPill(title: thread.parent.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No parent", systemImage: "arrow.turn.left.up") {
+                PropertyPill(title: thread.parent.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No parent", systemImage: "arrow.turn.left.up", field: .parent) {
                     Button("No parent") { thread.parent = nil; touch() }
                     ForEach(parentCandidates) { candidate in
                         Button(candidate.title.isEmpty ? "Untitled" : candidate.title) { thread.parent = candidate; touch() }
@@ -64,8 +66,9 @@ struct ThreadPage: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 8)
 
-            MarkdownEditor(text: $thread.body, minHeight: 360)
+            MarkdownEditor(text: $thread.body, minHeight: 360, findField: .body)
                 .padding(.top, 16)
+                .findAnchor(.body)
 
             AgendaLinkedSection(items: AgendaStore.items(on: thread, includingChildren: true)) { item in
                 item.liveTracks.first { $0.id != thread.id }?.title
@@ -78,7 +81,8 @@ struct ThreadPage: View {
                             systemImage: child.kind.symbol,
                             title: child.title.isEmpty ? "Untitled" : child.title,
                             subtitle: plainPreview(child.summary.isEmpty ? child.body : child.summary),
-                            meta: "\(child.status.label) · \(child.updatedAt.relativeLabel)"
+                            meta: "\(child.status.label) · \(child.updatedAt.relativeLabel)",
+                            findField: .child(child.id)
                         ) {
                             app.open(child)
                         }
@@ -87,6 +91,7 @@ struct ThreadPage: View {
             }
         }
         }
+        .objectFindable(id: thread.id, fields: findFields)
         .onChange(of: thread.title) { _, _ in touch() }
         .onChange(of: thread.summary) { _, _ in touch() }
         .onChange(of: thread.body) { _, _ in touch() }
@@ -95,7 +100,7 @@ struct ThreadPage: View {
     @ViewBuilder
     private var linked: some View {
         let count = thread.decisions.count + thread.notes.count + thread.conversations.count
-        PropertyPill(title: count == 0 ? "Link" : "\(count) linked", systemImage: "link") {
+        PropertyPill(title: count == 0 ? "Link" : "\(count) linked", systemImage: "link", field: .linked) {
             Button("New Sub-track", systemImage: "plus") { createChild() }
             if !thread.decisions.isEmpty {
                 Section("Decisions") {
@@ -131,6 +136,30 @@ struct ThreadPage: View {
                 }
             }
         }
+    }
+
+    private var findFields: [(ObjectFind.Field, String)] {
+        let parentTitle = thread.parent.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No parent"
+        let linkedCount = thread.decisions.count + thread.notes.count + thread.conversations.count
+        var fields: [(ObjectFind.Field, String)] = [
+            (.parent, parentTitle),
+            (.title, thread.title),
+            (.summary, thread.summary),
+            (.kind, thread.kind.label),
+            (.status, thread.status.label),
+            (.tags, thread.tags.map(\.displayName).joined(separator: ", ")),
+            (.linked, linkedCount == 0 ? "Link" : "\(linkedCount) linked"),
+            (.body, thread.body),
+        ]
+        for child in thread.orderedChildren {
+            let title = child.title.isEmpty ? "Untitled" : child.title
+            let preview = plainPreview(child.summary.isEmpty ? child.body : child.summary)
+            fields.append((.child(child.id), "\(title) \(preview) \(child.status.label) \(child.updatedAt.relativeLabel)"))
+        }
+        for item in AgendaStore.items(on: thread, includingChildren: true) {
+            fields.append((.agenda(item.id), item.displayTitle))
+        }
+        return fields
     }
 
     private var parentCandidates: [ProjectThread] {

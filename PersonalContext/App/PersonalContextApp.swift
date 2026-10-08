@@ -61,6 +61,23 @@ struct SlateApp: App {
                 }
                 .keyboardShortcut("9")
             }
+            CommandGroup(after: .textEditing) {
+                Button(app.objectFind.isOpen ? "Hide Find" : "Find…") {
+                    app.objectFind.toggle()
+                }
+                .keyboardShortcut("f")
+                .disabled(!app.objectFind.isAvailable)
+                Button("Find Next") {
+                    app.objectFind.next()
+                }
+                .keyboardShortcut("g")
+                .disabled(!app.objectFind.isAvailable)
+                Button("Find Previous") {
+                    app.objectFind.previous()
+                }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .disabled(!app.objectFind.isAvailable)
+            }
             CommandGroup(after: .sidebar) {
                 Button(app.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar") {
                     app.toggleSidebar()

@@ -6,7 +6,7 @@ enum AppModal: Identifiable {
     case newProject
     case newEvent
     case editEvent(CalendarEvent)
-    case newTask
+    case newTask(Project?)
     case newTaskFromNote(Note)
     case editReminder(ReminderItem)
     case editTask(AgendaItem)
@@ -26,7 +26,7 @@ enum AppModal: Identifiable {
         case .newProject: "new-project"
         case .newEvent: "new-event"
         case .editEvent(let event): "edit-event-\(event.id)"
-        case .newTask: "new-task"
+        case .newTask(let project): project.map { "new-task-\($0.id.uuidString)" } ?? "new-task"
         case .newTaskFromNote(let note): "new-task-note-\(note.id.uuidString)"
         case .editReminder(let reminder): "edit-reminder-\(reminder.id)"
         case .editTask(let task): "edit-task-\(task.id.uuidString)"

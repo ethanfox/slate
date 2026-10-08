@@ -17,7 +17,11 @@ struct NotePage: View {
         DocumentPage {
             DocumentTitle(text: $note.title)
             HStack(spacing: 6) {
-                PropertyPill(title: note.thread.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No track", systemImage: TrackStyle.symbol) {
+                PropertyPill(
+                    title: note.thread.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No track",
+                    systemImage: TrackStyle.symbol,
+                    field: .track
+                ) {
                     Button("No track") { note.thread = nil; touch() }
                     ForEach(project.threads.sorted { $0.title < $1.title }) { thread in
                         Button(thread.title.isEmpty ? "Untitled" : thread.title) { note.thread = thread; touch() }
@@ -30,22 +34,41 @@ struct NotePage: View {
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                         .padding(.leading, 4)
+                        .findHighlight(.source)
                 }
                 Spacer()
                 Text(note.updatedAt.relativeLabel)
                     .font(CraftFont.caption)
                     .foregroundStyle(.tertiary)
+                    .findHighlight(.date)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 8)
-            MarkdownEditor(text: $note.content)
+            MarkdownEditor(text: $note.content, findField: .body)
                 .padding(.top, 16)
+                .findAnchor(.body)
 
             AgendaLinkedSection(items: note.agendaNoteLinks.compactMap(\.item))
         }
         }
+        .objectFindable(id: note.id, fields: findFields)
         .onChange(of: note.title) { _, _ in touch() }
         .onChange(of: note.content) { _, _ in touch() }
+    }
+
+    private var findFields: [(ObjectFind.Field, String)] {
+        var fields: [(ObjectFind.Field, String)] = [
+            (.title, note.title),
+            (.track, note.thread.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No track"),
+            (.tags, note.tags.map(\.displayName).joined(separator: ", ")),
+            (.source, note.source),
+            (.date, "\(note.updatedAt.relativeLabel) \(note.updatedAt.formatted(date: .abbreviated, time: .omitted))"),
+            (.body, note.content),
+        ]
+        for item in note.agendaNoteLinks.compactMap(\.item) {
+            fields.append((.agenda(item.id), item.displayTitle))
+        }
+        return fields
     }
 
     private func touch() {

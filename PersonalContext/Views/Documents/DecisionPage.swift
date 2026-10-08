@@ -17,7 +17,7 @@ struct DecisionPage: View {
         DocumentPage {
             DocumentTitle(text: $decision.title)
             HStack(spacing: 6) {
-                PropertyPill(title: decision.status.label, systemImage: decision.status == .active ? "checkmark.seal" : "xmark.seal") {
+                PropertyPill(title: decision.status.label, systemImage: decision.status == .active ? "checkmark.seal" : "xmark.seal", field: .status) {
                     ForEach(DecisionStatus.allCases) { status in
                         Button(status.label) {
                             decision.status = status
@@ -27,14 +27,14 @@ struct DecisionPage: View {
                     }
                 }
                 if decision.status == .superseded {
-                    PropertyPill(title: supersededTitle, systemImage: "arrow.right") {
+                    PropertyPill(title: supersededTitle, systemImage: "arrow.right", field: .superseded) {
                         Button("None") { decision.supersededByID = nil }
                         ForEach(project.decisions.filter { $0.id != decision.id }) { other in
                             Button(other.title.isEmpty ? "Untitled" : other.title) { decision.supersededByID = other.id }
                         }
                     }
                 }
-                PropertyPill(title: decision.thread.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No track", systemImage: TrackStyle.symbol) {
+                PropertyPill(title: decision.thread.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No track", systemImage: TrackStyle.symbol, field: .track) {
                     Button("No track") { decision.thread = nil; project.touch() }
                     ForEach(project.threads.sorted { $0.title < $1.title }) { thread in
                         Button(thread.title.isEmpty ? "Untitled" : thread.title) { decision.thread = thread; project.touch() }
@@ -45,19 +45,36 @@ struct DecisionPage: View {
                 Text(decision.createdAt.formatted(date: .abbreviated, time: .omitted))
                     .font(CraftFont.caption)
                     .foregroundStyle(.tertiary)
+                    .findHighlight(.date)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 8)
-            MarkdownEditor(text: $decision.decision, placeholder: "What was decided")
+            MarkdownEditor(text: $decision.decision, placeholder: "What was decided", findField: .body)
                 .padding(.top, 16)
+                .findAnchor(.body)
             DocumentSection("Why") {
-                MarkdownEditor(text: $decision.rationale, placeholder: "The reasoning behind it")
+                MarkdownEditor(text: $decision.rationale, placeholder: "The reasoning behind it", findField: .rationale)
+                    .findAnchor(.rationale)
             }
         }
         }
+        .objectFindable(id: decision.id, fields: findFields)
         .onChange(of: decision.title) { _, _ in project.touch() }
         .onChange(of: decision.decision) { _, _ in project.touch() }
         .onChange(of: decision.rationale) { _, _ in project.touch() }
+    }
+
+    private var findFields: [(ObjectFind.Field, String)] {
+        [
+            (.title, decision.title),
+            (.status, decision.status.label),
+            (.superseded, decision.status == .superseded ? supersededTitle : ""),
+            (.track, decision.thread.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No track"),
+            (.tags, decision.tags.map(\.displayName).joined(separator: ", ")),
+            (.date, decision.createdAt.formatted(date: .abbreviated, time: .omitted)),
+            (.body, decision.decision),
+            (.rationale, decision.rationale),
+        ]
     }
 
     private func keepMark() {

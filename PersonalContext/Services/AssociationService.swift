@@ -62,6 +62,10 @@ enum AgendaStore {
     }
 
     static func toggleComplete(_ item: AgendaItem, in context: ModelContext) {
+        TaskStore.toggleComplete(item, in: context)
+    }
+
+    static func toggleCompleteLegacy(_ item: AgendaItem, in context: ModelContext) {
         if item.isCompleted {
             item.isCompleted = false
         } else if item.repeatRule.advances, let due = item.due {
@@ -128,6 +132,9 @@ enum AssociationService {
         item.project = project
         item.projectIsInherited = project != nil && !userSet
         item.touch()
+        if let context = item.modelContext {
+            TaskStore.didChangeProject(on: item, in: context)
+        }
     }
 
     static func assignUserProject(_ project: Project?, on item: AgendaItem) {

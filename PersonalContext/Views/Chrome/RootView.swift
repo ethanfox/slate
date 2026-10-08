@@ -141,6 +141,9 @@ struct RootView: View {
                         .frame(maxWidth: app.windowTabs.count < 2 ? .infinity : 24)
                         .contentShape(Rectangle())
                         .gesture(WindowDragGesture())
+                    if app.objectFind.isOpen, app.objectFind.isAvailable {
+                        ObjectFindBar(session: app.objectFind)
+                    }
                     paneAction
                 }
                 .padding(.leading, sidebarHidden ? 78 : 16)
@@ -180,6 +183,11 @@ struct RootView: View {
             .padding(.leading, sidebarHidden ? LayoutMetrics.edgePad : 0)
             .padding(.trailing, LayoutMetrics.edgePad)
             .padding(.bottom, LayoutMetrics.edgePad)
+        }
+        .environment(\.objectFind, app.objectFind)
+        .onExitCommand {
+            guard app.objectFind.isOpen else { return }
+            app.objectFind.close()
         }
         .ignoresSafeArea()
         .overlay {
@@ -270,7 +278,7 @@ struct RootView: View {
             .help("New Event")
         } else if case .tasks = app.destination {
             Button {
-                app.present(.newTask)
+                app.present(.newTask(nil))
             } label: {
                 Label("New Task", systemImage: "plus")
                     .padding(.horizontal, 10)
@@ -280,6 +288,30 @@ struct RootView: View {
             .buttonStyle(.plain)
             .glassEffect(.regular, in: Capsule())
             .help("New Task")
+        } else if let project = openProject, app.tab(for: project.id) == .tasks {
+            GlassEffectContainer {
+                HStack(spacing: 10) {
+                    Button {
+                        app.present(.newTask(project))
+                    } label: {
+                        Label("New Task", systemImage: "plus")
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular, in: Capsule())
+                    .help("New Task")
+                    ChromeChoiceControl(
+                        title: "View",
+                        subtitle: "Choose how you browse tasks.",
+                        options: ProjectTasksLayout.allCases.map {
+                            ChromeChoiceItem(value: $0, title: $0.label, symbol: $0.symbol)
+                        },
+                        selection: Bindable(app).projectTasksLayout
+                    )
+                }
+            }
         } else if focusedThread != nil {
             Button {
                 app.trackChatOpen.toggle()
@@ -444,8 +476,8 @@ struct RootView: View {
             NewEventSheet()
         case .editEvent(let event):
             NewEventSheet(event: event)
-        case .newTask:
-            NewTaskSheet()
+        case .newTask(let project):
+            NewTaskSheet(project: project)
         case .newTaskFromNote(let note):
             NewTaskSheet(sourceNote: note)
         case .editReminder(let reminder):

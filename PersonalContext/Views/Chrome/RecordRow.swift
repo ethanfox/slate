@@ -6,8 +6,10 @@ struct RecordRow<Marks: View>: View {
     var subtitle = ""
     var meta = ""
     var isBusy = false
+    var findField: ObjectFind.Field? = nil
     var marks: Marks
     var action: () -> Void
+    @Environment(\.objectFind) private var find
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
 
@@ -17,6 +19,7 @@ struct RecordRow<Marks: View>: View {
         subtitle: String = "",
         meta: String = "",
         isBusy: Bool = false,
+        findField: ObjectFind.Field? = nil,
         @ViewBuilder marks: () -> Marks,
         action: @escaping () -> Void
     ) {
@@ -25,6 +28,7 @@ struct RecordRow<Marks: View>: View {
         self.subtitle = subtitle
         self.meta = meta
         self.isBusy = isBusy
+        self.findField = findField
         self.marks = marks()
         self.action = action
     }
@@ -73,13 +77,21 @@ struct RecordRow<Marks: View>: View {
             .padding(8)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(hovering ? CraftColor.hover : Color.clear)
+                    .fill(rowFill)
             )
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .padding(.horizontal, -8)
         .onHover { hovering = $0 }
+        .modifier(FindAnchorIfNeeded(field: findField))
+    }
+
+    private var rowFill: Color {
+        if let findField, let mark = find?.mark(for: findField), mark != .none {
+            return mark.fill
+        }
+        return hovering ? CraftColor.hover : .clear
     }
 }
 
@@ -90,8 +102,18 @@ extension RecordRow where Marks == EmptyView {
         subtitle: String = "",
         meta: String = "",
         isBusy: Bool = false,
+        findField: ObjectFind.Field? = nil,
         action: @escaping () -> Void
     ) {
-        self.init(systemImage: systemImage, title: title, subtitle: subtitle, meta: meta, isBusy: isBusy, marks: { EmptyView() }, action: action)
+        self.init(
+            systemImage: systemImage,
+            title: title,
+            subtitle: subtitle,
+            meta: meta,
+            isBusy: isBusy,
+            findField: findField,
+            marks: { EmptyView() },
+            action: action
+        )
     }
 }
