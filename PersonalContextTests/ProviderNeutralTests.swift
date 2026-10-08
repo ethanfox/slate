@@ -235,6 +235,44 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertEqual(ChatSelectableTextView.wrapWidth(proposed: nil, cap: nil), 456)
     }
 
+    func testStreamPaceSummarySeparatesWaitFromPaint() {
+        var pace = StreamPace(startedAt: Date(timeIntervalSince1970: 100))
+        XCTAssertTrue(pace.summary(now: Date(timeIntervalSince1970: 101.5)).contains("waiting 1.50s"))
+
+        pace.markPrepared(at: Date(timeIntervalSince1970: 100.4))
+        pace.inbound(40, at: Date(timeIntervalSince1970: 101.2))
+        pace.inbound(40, at: Date(timeIntervalSince1970: 102.2))
+        pace.painted(80, applyMs: 3, at: Date(timeIntervalSince1970: 102.21))
+
+        let summary = pace.summary()
+        XCTAssertTrue(summary.contains("first token 1.20s"))
+        XCTAssertTrue(summary.contains("prepare 0.40s"))
+        XCTAssertTrue(summary.contains("in  80 ch/s"))
+        XCTAssertTrue(summary.contains("hold 10ms"))
+        XCTAssertTrue(summary.contains("apply 3ms"))
+    }
+
+    func testStreamTextCoalescerFlushesOnInterval() {
+        var coalescer = StreamTextCoalescer(interval: 0.04)
+        XCTAssertEqual(coalescer.push("Hel"), "Hel")
+        XCTAssertNil(coalescer.push("lo"))
+        XCTAssertEqual(coalescer.take(), "lo")
+    }
+
+    func testMarkdownIncompleteStartIsLastLineOrOpenFence() {
+        let line = "Hello world"
+        XCTAssertEqual(ChatMarkdown.incompleteStart(in: line), line.startIndex)
+
+        let partial = "Hello\nwor"
+        XCTAssertEqual(String(partial[ChatMarkdown.incompleteStart(in: partial)...]), "wor")
+
+        let fence = "```swift\nlet x = 1"
+        XCTAssertEqual(String(fence[ChatMarkdown.incompleteStart(in: fence)...]), fence)
+
+        let closed = "```swift\nlet x = 1\n```\nNext"
+        XCTAssertEqual(String(closed[ChatMarkdown.incompleteStart(in: closed)...]), "Next")
+    }
+
     func testChatMarkdownRendersTableCells() {
         let markdown = """
         | Target | What it is |

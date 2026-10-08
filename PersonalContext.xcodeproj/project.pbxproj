@@ -100,6 +100,7 @@
 		B2DC30A188D80F7277CE30E1 /* ModalDatePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5FFBDB290AFF05316BF8B75 /* ModalDatePicker.swift */; };
 		B80064D74D797D90F7831E9F /* SettingsCalendarPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B53F847FAC96205C323B63B7 /* SettingsCalendarPage.swift */; };
 		B814076A4605FE4B0593ADE7 /* ChatRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AEE9771680CE63EEA8864D /* ChatRuntime.swift */; };
+		D9F2B3C415067E8F9B0C1D22 /* StreamTextCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8E1A2B304F56D7E8A9B0C11 /* StreamTextCoalescer.swift */; };
 		B82FC40282ED31CF898CD9B1 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A5537B9B75008C51A4CCB08 /* HomeView.swift */; };
 		B8870ECA941ADC69B2339111 /* SlateToolGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1AFC28C1F00D3700732A654 /* SlateToolGateway.swift */; };
 		B9385874EAADC357F8D54E22 /* SidebarRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A2E39623063207485C60C1 /* SidebarRow.swift */; };
@@ -213,6 +214,7 @@
 		5077C7D2C8E53970BDE445D0 /* AssociationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssociationService.swift; sourceTree = "<group>"; };
 		509E6F9E705BA7F4A6F2184F /* WindowTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTab.swift; sourceTree = "<group>"; };
 		51AEE9771680CE63EEA8864D /* ChatRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRuntime.swift; sourceTree = "<group>"; };
+		C8E1A2B304F56D7E8A9B0C11 /* StreamTextCoalescer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamTextCoalescer.swift; sourceTree = "<group>"; };
 		5543E221A797F7A128F4D5B2 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		55C705E6D771B0D57F792CD5 /* ContextBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextBuilder.swift; sourceTree = "<group>"; };
 		588C1D051000807F84657854 /* ProviderNeutralTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderNeutralTests.swift; sourceTree = "<group>"; };
@@ -378,6 +380,7 @@
 				F65DEA7985A36C0955B7C5DA /* ChatMessages.swift */,
 				DCA29163C23868CA9F844257 /* ChatObjectLink.swift */,
 				51AEE9771680CE63EEA8864D /* ChatRuntime.swift */,
+				C8E1A2B304F56D7E8A9B0C11 /* StreamTextCoalescer.swift */,
 				A174CA3B685C41C4ABCF1D54 /* ChatScreen.swift */,
 				F7120B1061316E3E36F8B684 /* ChatSource.swift */,
 				2F537EBD24BAA7ACDCB5E193 /* ConversationChat.swift */,
@@ -782,6 +785,7 @@
 				29D44665FC2D878340D62760 /* ChatObjectLink.swift in Sources */,
 				DFC9713CB6427F745B10E2ED /* ChatOrb.swift in Sources */,
 				B814076A4605FE4B0593ADE7 /* ChatRuntime.swift in Sources */,
+				D9F2B3C415067E8F9B0C1D22 /* StreamTextCoalescer.swift in Sources */,
 				29EED17BD5A4994333989D73 /* ChatScreen.swift in Sources */,
 				B06BCB29CD7E4B73D6FA1067 /* ChatSource.swift in Sources */,
 				422993A513C26BB3E4358DBF /* ChatsView.swift in Sources */,

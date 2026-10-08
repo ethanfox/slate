@@ -206,6 +206,15 @@ private struct ChatDebugPopover: View {
             .buttonStyle(.plain)
             .font(CraftFont.caption)
 
+            if let pace = log.pace {
+                Text(pace.summary())
+                    .font(.system(size: 11, design: .monospaced))
+                    .textSelection(.enabled)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Divider()
+            }
+
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 3) {
                     ForEach(log.lines) { line in

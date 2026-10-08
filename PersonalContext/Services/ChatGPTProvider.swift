@@ -17,27 +17,53 @@ struct ChatGPTProvider: ChatProvider {
     ) -> AsyncThrowingStream<ChatStreamEvent, Error> {
         let bridge = bridge
         return AsyncThrowingStream { continuation in
-            let task = Task { @MainActor in
-                defer { bridge.finished() }
+            let task = Task {
+                var coalescer = StreamTextCoalescer()
+                var pace = await MainActor.run { bridge.debugLog.pace ?? StreamPace() }
+                func emitText(_ text: String) async {
+                    let snapshot = pace
+                    pace = await MainActor.run {
+                        var current = snapshot
+                        let applyStart = Date()
+                        bridge.appendText(text)
+                        continuation.yield(.text(text))
+                        current.painted(text.count, applyMs: Date().timeIntervalSince(applyStart) * 1000)
+                        bridge.debugLog.pace = current
+                        if current.paintEvents == 1 {
+                            bridge.debugLog.add("pace \(current.logLine)")
+                        }
+                        return current
+                    }
+                }
+                func flushText() async {
+                    if let leftover = coalescer.take() {
+                        await emitText(leftover)
+                    }
+                }
                 do {
                     guard !model.isEmpty else {
                         throw ChatGPTAuthError("Choose a ChatGPT model in Settings.")
                     }
                     let session = try await ChatGPTSignIn.validSession()
-                    let userText = Self.text(from: messages.last(where: { $0.role == .user }))
-                    let instructions = bridge.prepareProviderTurn(
-                        userText: userText,
-                        includeSlateTools: includeSlateTools
-                    )
-                    let gateway = SlateToolGateway(
-                        includeSlateTools: includeSlateTools,
-                        includeProjectTools: includeProjectTools,
-                        prepareRoots: includeProjectTools
-                            ? { try await bridge.prepareCodeRoots() }
-                            : nil
-                    )
+                    let prepared = try await MainActor.run { () throws -> (String, SlateToolGateway, [[String: Any]]) in
+                        let userText = Self.text(from: messages.last(where: { $0.role == .user }))
+                        let instructions = bridge.prepareProviderTurn(
+                            userText: userText,
+                            includeSlateTools: includeSlateTools
+                        )
+                        let gateway = SlateToolGateway(
+                            includeSlateTools: includeSlateTools,
+                            includeProjectTools: includeProjectTools,
+                            prepareRoots: includeProjectTools
+                                ? { try await bridge.prepareCodeRoots() }
+                                : nil
+                        )
+                        return (instructions, gateway, messages.map(Self.responseInput))
+                    }
+                    let instructions = prepared.0
+                    let gateway = prepared.1
+                    var input = prepared.2
                     let tools = try await gateway.definitions()
-                    var input: [[String: Any]] = messages.map(Self.responseInput)
                     var emitted = false
                     for round in 0..<8 {
                         let payload = Self.inferenceBody(
@@ -53,6 +79,10 @@ struct ChatGPTProvider: ChatProvider {
                         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
                         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
                         ChatTrace.event("chatgpt request model=\(model) tools=\(tools.count) input=\(input.count)")
+                        if pace.preparedAt == nil {
+                            pace.markPrepared()
+                            await MainActor.run { bridge.debugLog.pace = pace }
+                        }
 
                         let (bytes, response) = try await URLSession.shared.bytes(for: request)
                         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -77,11 +107,12 @@ struct ChatGPTProvider: ChatProvider {
                             case "response.output_text.delta":
                                 guard let delta = event["delta"] as? String, !delta.isEmpty else { continue }
                                 emitted = true
-                                bridge.appendText(delta)
-                                continuation.yield(.text(delta))
-                                await Task.yield()
+                                pace.inbound(delta.count)
+                                if let chunk = coalescer.push(delta) {
+                                    await emitText(chunk)
+                                }
                             case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
-                                bridge.markThinking(event["delta"] as? String)
+                                await MainActor.run { bridge.markThinking(event["delta"] as? String) }
                             case "response.output_item.done":
                                 if let item = event["item"] as? [String: Any] {
                                     replay.append(Self.replayItem(item))
@@ -101,48 +132,65 @@ struct ChatGPTProvider: ChatProvider {
                                 continue
                             }
                         }
+                        await flushText()
                         if calls.isEmpty { break }
                         input.append(contentsOf: replay)
                         for call in calls {
-                            bridge.applyTool(name: call.name, status: "running", id: call.id)
+                            await MainActor.run {
+                                bridge.applyTool(name: call.name, status: "running", id: call.id)
+                            }
+                            let output: String
                             do {
                                 let result = try await gateway.execute(name: call.name, arguments: call.arguments)
-                                bridge.applyTool(
-                                    name: call.name,
-                                    status: "completed",
-                                    id: call.id,
-                                    sources: Self.sources(tool: call.name, result: result)
-                                )
-                                input.append([
-                                    "type": "function_call_output",
-                                    "call_id": call.id,
-                                    "output": result
-                                ])
+                                await MainActor.run {
+                                    bridge.applyTool(
+                                        name: call.name,
+                                        status: "completed",
+                                        id: call.id,
+                                        sources: Self.sources(tool: call.name, result: result)
+                                    )
+                                }
+                                output = result
                             } catch {
-                                bridge.applyTool(name: call.name, status: "error", id: call.id, detail: error.localizedDescription)
-                                input.append([
-                                    "type": "function_call_output",
-                                    "call_id": call.id,
-                                    "output": "Error: \(error.localizedDescription)"
-                                ])
+                                await MainActor.run {
+                                    bridge.applyTool(name: call.name, status: "error", id: call.id, detail: error.localizedDescription)
+                                }
+                                output = "Error: \(error.localizedDescription)"
                             }
+                            input.append([
+                                "type": "function_call_output",
+                                "call_id": call.id,
+                                "output": output
+                            ])
                         }
                         if round == 7 {
                             throw ChatGPTAuthError("ChatGPT exceeded the tool-call limit.")
                         }
                     }
-                    bridge.completeRunningTools()
-                    if !emitted {
-                        bridge.debugLog.add("chatgpt stream completed without text")
+                    await flushText()
+                    await MainActor.run {
+                        bridge.debugLog.pace = pace
+                        bridge.debugLog.add("pace done \(pace.logLine)")
+                        bridge.completeRunningTools()
+                        if !emitted {
+                            bridge.debugLog.add("chatgpt stream completed without text")
+                        }
+                        bridge.finished()
                     }
                     continuation.yield(.done)
                     continuation.finish()
                 } catch is CancellationError {
-                    bridge.stop()
+                    await MainActor.run {
+                        bridge.stop()
+                        bridge.finished()
+                    }
                     continuation.finish()
                 } catch {
-                    bridge.failRunningTools()
-                    ChatTrace.event("chatgpt stream error: \(error.localizedDescription)")
+                    await MainActor.run {
+                        bridge.failRunningTools()
+                        ChatTrace.event("chatgpt stream error: \(error.localizedDescription)")
+                        bridge.finished()
+                    }
                     continuation.finish(throwing: error)
                 }
             }

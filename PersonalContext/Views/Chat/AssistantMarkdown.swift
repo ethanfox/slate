@@ -138,16 +138,11 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
     private var pendingPin = true
     private var pendingContext: ModelContext?
     private var tracking: NSTrackingArea?
-    private var fadeTimer: Timer?
-    private var fadeRange = NSRange(location: 0, length: 0)
-    private var fadeStarted: CFTimeInterval = 0
     private var sizing = false
     private var fittedWidth: CGFloat = 0
     private var fittedHeight: CGFloat = 22
-
-    deinit {
-        fadeTimer?.invalidate()
-    }
+    private var paintedPrefix = ""
+    private var paintedPrefixLength = 0
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         super.viewWillMove(toWindow: newWindow)
@@ -183,25 +178,53 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         sourceIDs = sources.map(\.id)
         if !streaming {
             if shown != text || !sameSources {
-                paint(text, fade: false)
+                paint(text)
             }
-            stopFade()
             return
         }
         if shown == text, sameSources { return }
-        let grew = !shown.isEmpty && text.hasPrefix(shown) && text.count > shown.count
-        paint(text, fade: grew)
+        if sameSources, paintIncremental(text) { return }
+        paint(text)
     }
 
-    private func paint(_ text: String, fade: Bool) {
-        let grew = text.hasPrefix(shown) && text.count > shown.count
-        let oldLength = textStorage?.length ?? 0
+    private func paintIncremental(_ text: String) -> Bool {
+        guard pendingSources.isEmpty else { return false }
+        guard text.hasPrefix(paintedPrefix) || paintedPrefix.isEmpty else { return false }
+        let start = ChatMarkdown.incompleteStart(in: text)
+        let prefix = String(text[..<start])
+        let tail = ChatMarkdown.attributed(String(text[start...]))
+        if prefix == paintedPrefix, let storage = textStorage {
+            let range = NSRange(location: paintedPrefixLength, length: max(0, storage.length - paintedPrefixLength))
+            storage.replaceCharacters(in: range, with: tail)
+            shown = text
+            fittedWidth = 0
+            invalidateIntrinsicContentSize()
+            return true
+        }
+        if prefix.hasPrefix(paintedPrefix), let storage = textStorage {
+            let rest = ChatMarkdown.attributed(String(text.dropFirst(paintedPrefix.count)))
+            let range = NSRange(location: paintedPrefixLength, length: max(0, storage.length - paintedPrefixLength))
+            storage.replaceCharacters(in: range, with: rest)
+            shown = text
+            paintedPrefix = prefix
+            paintedPrefixLength = storage.length - tail.length
+            fittedWidth = 0
+            invalidateIntrinsicContentSize()
+            return true
+        }
+        return false
+    }
+
+    private func paint(_ text: String) {
         shown = text
         fittedWidth = 0
         let selected = selectedRange()
-        textStorage?.setAttributedString(
-            Self.attributed(text, sources: pendingSources, pinUnused: pendingPin, context: pendingContext)
-        )
+        let rendered = Self.attributed(text, sources: pendingSources, pinUnused: pendingPin, context: pendingContext)
+        textStorage?.setAttributedString(rendered)
+        let start = ChatMarkdown.incompleteStart(in: text)
+        paintedPrefix = String(text[..<start])
+        let tailLength = ChatMarkdown.attributed(String(text[start...])).length
+        paintedPrefixLength = max(0, rendered.length - tailLength)
         let max = (string as NSString).length
         let location = min(selected.location, max)
         setSelectedRange(NSRange(location: location, length: min(selected.length, max - location)))
@@ -210,58 +233,6 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         if !pendingSources.isEmpty {
             loadChipIcons()
         }
-        if fade, grew, let storage = textStorage, storage.length > oldLength {
-            startFade(NSRange(location: oldLength, length: storage.length - oldLength))
-        } else if !fade {
-            stopFade()
-        }
-    }
-
-    private func startFade(_ range: NSRange) {
-        fadeRange = range
-        fadeStarted = CACurrentMediaTime()
-        tintFade(progress: 0)
-        if fadeTimer == nil {
-            let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-                self?.tickFade()
-            }
-            RunLoop.main.add(timer, forMode: .common)
-            fadeTimer = timer
-        }
-    }
-
-    private func tickFade() {
-        let progress = min((CACurrentMediaTime() - fadeStarted) / 0.28, 1)
-        tintFade(progress: progress)
-        if progress >= 1 { stopFade() }
-    }
-
-    private func tintFade(progress: CGFloat) {
-        guard let storage = textStorage else { return }
-        let end = storage.length
-        guard fadeRange.location < end else { return }
-        let range = NSRange(
-            location: fadeRange.location,
-            length: min(fadeRange.length, end - fadeRange.location)
-        )
-        let eased = 1 - (1 - progress) * (1 - progress)
-        let alpha = 0.1 + (0.9 * eased)
-        storage.addAttribute(.foregroundColor, value: NSColor.labelColor.withAlphaComponent(alpha), range: range)
-    }
-
-    private func stopFade() {
-        fadeTimer?.invalidate()
-        fadeTimer = nil
-        guard let storage = textStorage, fadeRange.length > 0, fadeRange.location < storage.length else {
-            fadeRange = NSRange(location: 0, length: 0)
-            return
-        }
-        let range = NSRange(
-            location: fadeRange.location,
-            length: min(fadeRange.length, storage.length - fadeRange.location)
-        )
-        storage.addAttribute(.foregroundColor, value: NSColor.labelColor, range: range)
-        fadeRange = NSRange(location: 0, length: 0)
     }
 
     func fittedSize(for proposed: CGFloat?) -> CGSize {
@@ -524,6 +495,28 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
 
 /// Styles markers in the source text. Does not join lines or drop spaces.
 enum ChatMarkdown {
+    static func incompleteStart(in source: String) -> String.Index {
+        var inFence = false
+        var fenceStart = source.startIndex
+        var lineStart = source.startIndex
+        var index = source.startIndex
+        while index < source.endIndex {
+            if source[index] == "\n" {
+                if source[lineStart..<index].hasPrefix("```") {
+                    if inFence {
+                        inFence = false
+                    } else {
+                        inFence = true
+                        fenceStart = lineStart
+                    }
+                }
+                lineStart = source.index(after: index)
+            }
+            index = source.index(after: index)
+        }
+        return inFence ? fenceStart : lineStart
+    }
+
     static func attributed(_ source: String, fontSize: CGFloat = 15) -> NSMutableAttributedString {
         let result = NSMutableAttributedString()
         let lines = source.split(separator: "\n", omittingEmptySubsequences: false)

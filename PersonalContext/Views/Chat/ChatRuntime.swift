@@ -15,11 +15,17 @@ final class ChatDebugLog {
 
     @ObservationIgnored private var stored: [Line] = []
     private(set) var lines: [Line] = []
+    var pace: StreamPace?
 
     var copyText: String {
         let clock = DateFormatter()
         clock.dateFormat = "HH:mm:ss.SSS"
-        return stored.map { "\(clock.string(from: $0.at)) \($0.text)" }.joined(separator: "\n")
+        var parts: [String] = []
+        if let pace {
+            parts.append(pace.summary())
+        }
+        parts.append(contentsOf: stored.map { "\(clock.string(from: $0.at)) \($0.text)" })
+        return parts.joined(separator: "\n")
     }
 
     func add(_ text: String) {
@@ -43,6 +49,7 @@ final class ChatDebugLog {
     func clear() {
         stored = []
         lines = []
+        pace = nil
     }
 
     private static func describe(_ entry: ChatSession.Entry) -> String {
@@ -79,6 +86,7 @@ final class ChatRuntime {
     var answers: [UUID: ChatTranscript.Unpacked] = [:]
     @ObservationIgnored private var conversation: Conversation?
     @ObservationIgnored private var ticks: AnyCancellable?
+    @ObservationIgnored private var persistTask: Task<Void, Never>?
     @ObservationIgnored var onTick: (() -> Void)?
 
     init(conversation: Conversation, project: Project?) {
@@ -150,7 +158,18 @@ final class ChatRuntime {
         try? conversation.modelContext?.save()
     }
 
+    func schedulePersist() {
+        persistTask?.cancel()
+        persistTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled else { return }
+            self?.persist()
+        }
+    }
+
     func persist() {
+        persistTask?.cancel()
+        persistTask = nil
         guard let conversation, conversation.modelContext != nil else { return }
         var known = Dictionary(uniqueKeysWithValues: conversation.messages.map { ($0.id, $0) })
         for entry in session.entries {
@@ -200,6 +219,7 @@ final class ChatRuntime {
         bridge.beginTurn()
         let sent = session.send(text)
         if sent {
+            persist()
             for entry in session.entries.reversed() {
                 if case .userMessage(let user) = entry {
                     bridge.bindTurn(to: user.id)

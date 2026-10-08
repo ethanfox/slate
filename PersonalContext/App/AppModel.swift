@@ -332,7 +332,7 @@ final class AppModel {
         let runtime = ChatRuntime(conversation: conversation, project: project)
         runtime.onTick = { [weak self, weak runtime] in
             guard let self, let runtime else { return }
-            runtime.persist()
+            runtime.schedulePersist()
             self.syncChrome(from: runtime)
             self.syncRunning()
         }

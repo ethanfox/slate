@@ -271,6 +271,7 @@ final class CursorConversationBridge {
         startedAt = .now
         finishedAt = nil
         startNewText = false
+        debugLog.pace = StreamPace()
         debugLog.add("beginTurn")
     }
 
@@ -661,99 +662,149 @@ struct CursorChatProvider: ChatProvider {
 
         ChatTrace.event("provider.stream model=\(model) messages=\(messages.count) userChars=\(userText.count)")
         return AsyncThrowingStream { continuation in
-            let task = Task { @MainActor in
-                defer { bridge.finished() }
+            let task = Task {
+                var coalescer = StreamTextCoalescer()
+                var pace = await MainActor.run { bridge.debugLog.pace ?? StreamPace() }
+                func emitText(_ text: String) async {
+                    let snapshot = pace
+                    pace = await MainActor.run {
+                        var current = snapshot
+                        let applyStart = Date()
+                        bridge.appendText(text)
+                        continuation.yield(.text(text))
+                        current.painted(text.count, applyMs: Date().timeIntervalSince(applyStart) * 1000)
+                        bridge.debugLog.pace = current
+                        if current.paintEvents == 1 {
+                            bridge.debugLog.add("pace \(current.logLine)")
+                        }
+                        return current
+                    }
+                }
+                func flushText() async {
+                    if let leftover = coalescer.take() {
+                        await emitText(leftover)
+                    }
+                }
                 do {
-                    bridge.debugLog.add("stream start model=\(model) messages=\(messages.count)")
-                    for (index, message) in messages.enumerated() {
-                        let text = message.content.compactMap { block -> String? in
-                            if case .text(let text) = block { return text }
-                            return nil
-                        }.joined()
-                        bridge.debugLog.add("  msg[\(index)] \(message.role) \(ChatTrace.clip(text, 80))")
+                    let request = try await MainActor.run {
+                        bridge.debugLog.add("stream start model=\(model) messages=\(messages.count)")
+                        for (index, message) in messages.enumerated() {
+                            let text = message.content.compactMap { block -> String? in
+                                if case .text(let text) = block { return text }
+                                return nil
+                            }.joined()
+                            bridge.debugLog.add("  msg[\(index)] \(message.role) \(ChatTrace.clip(text, 80))")
+                        }
+                        guard let apiKey = KeychainStore.read(.cursorAPIKey) else {
+                            throw CursorAPIError(status: 0, message: "Add a Cursor API key in Settings.")
+                        }
+                        let roots = runtime == .local && includeProjectTools
+                            ? ProjectCodeWorkspace.localRoots(for: bridge.project)
+                            : []
+                        bridge.keepAccess(to: roots)
+                        let request = try bridge.prepare(
+                            userText: userText,
+                            apiKey: apiKey,
+                            model: model,
+                            codeRoots: roots,
+                            includeSlateTools: includeSlateTools,
+                            includeProjectTools: includeProjectTools,
+                            resumeSession: resumeConversation,
+                            runtime: runtime
+                        )
+                        bridge.debugLog.add("prepare opening=\(request.agentId == nil) model=\(request.model) promptChars=\(request.text.count)")
+                        return request
                     }
-                    guard let apiKey = KeychainStore.read(.cursorAPIKey) else {
-                        throw CursorAPIError(status: 0, message: "Add a Cursor API key in Settings.")
-                    }
-                    let roots = runtime == .local && includeProjectTools
-                        ? ProjectCodeWorkspace.localRoots(for: bridge.project)
-                        : []
-                    bridge.keepAccess(to: roots)
-                    let request = try bridge.prepare(
-                        userText: userText,
-                        apiKey: apiKey,
-                        model: model,
-                        codeRoots: roots,
-                        includeSlateTools: includeSlateTools,
-                        includeProjectTools: includeProjectTools,
-                        resumeSession: resumeConversation,
-                        runtime: runtime
-                    )
-                    bridge.debugLog.add("prepare opening=\(request.agentId == nil) model=\(request.model) promptChars=\(request.text.count)")
+                    pace.markPrepared()
+                    await MainActor.run { bridge.debugLog.pace = pace }
                     var emitted = false
                     var agentID: String?
                     var textChars = 0
                     var lastTextLog = Date.distantPast
-                    for try await event in try bridge.run(request) {
+                    let events = try await MainActor.run { try bridge.run(request) }
+                    for try await event in events {
                         switch event.type {
                         case "agent":
                             agentID = event.agentId
-                            bridge.debugLog.add("event agent id=\(event.agentId ?? "")")
+                            await MainActor.run { bridge.debugLog.add("event agent id=\(event.agentId ?? "")") }
                         case "text":
                             if let text = event.text, !text.isEmpty {
                                 emitted = true
-                                bridge.appendText(text)
-                                continuation.yield(.text(text))
                                 textChars += text.count
+                                pace.inbound(text.count)
+                                if let chunk = coalescer.push(text) {
+                                    await emitText(chunk)
+                                }
                                 let now = Date()
                                 if textChars == text.count || now.timeIntervalSince(lastTextLog) > 0.4 {
-                                    bridge.debugLog.add("event text +\(text.count) total=\(textChars) \(ChatTrace.clip(text, 80))")
+                                    await MainActor.run {
+                                        bridge.debugLog.add("event text +\(text.count) total=\(textChars) \(ChatTrace.clip(text, 80))")
+                                    }
                                     lastTextLog = now
                                 }
-                                await Task.yield()
                             }
                         case "break":
-                            bridge.debugLog.add("event break")
+                            await flushText()
+                            await MainActor.run { bridge.debugLog.add("event break") }
                         case "thinking":
-                            bridge.markThinking(event.text)
+                            await MainActor.run { bridge.markThinking(event.text) }
                         case "status":
-                            if let status = event.status { bridge.applyStatus(status) }
-                            bridge.debugLog.add("event status \(event.status ?? "")")
+                            await MainActor.run {
+                                if let status = event.status { bridge.applyStatus(status) }
+                                bridge.debugLog.add("event status \(event.status ?? "")")
+                            }
                         case "tool":
-                            bridge.applyTool(
-                                name: event.name ?? "",
-                                status: event.status ?? "",
-                                id: event.id,
-                                detail: event.detail,
-                                sources: event.sources
-                            )
-                            bridge.debugLog.add("event tool \(event.name ?? "") \(event.status ?? "") \(ChatTrace.clip(event.detail ?? "", 80))")
+                            await flushText()
+                            await MainActor.run {
+                                bridge.applyTool(
+                                    name: event.name ?? "",
+                                    status: event.status ?? "",
+                                    id: event.id,
+                                    detail: event.detail,
+                                    sources: event.sources
+                                )
+                                bridge.debugLog.add("event tool \(event.name ?? "") \(event.status ?? "") \(ChatTrace.clip(event.detail ?? "", 80))")
+                            }
                         case "result":
-                            bridge.debugLog.add("event result status=\(event.status ?? "") emitted=\(emitted) textChars=\(textChars)")
+                            await flushText()
+                            await MainActor.run {
+                                bridge.debugLog.add("event result status=\(event.status ?? "") emitted=\(emitted) textChars=\(textChars)")
+                            }
                             if !emitted, let text = event.text, !text.isEmpty {
                                 emitted = true
-                                continuation.yield(.text(text))
+                                await emitText(text)
                             }
                             if event.status?.lowercased() == "error" {
                                 throw CursorAPIError(status: 0, message: event.error ?? "The run failed.")
                             }
-                            if resumeConversation, let agentID { bridge.agentStarted(agentID) }
+                            if resumeConversation, let agentID {
+                                await MainActor.run { bridge.agentStarted(agentID) }
+                            }
                         case "error":
-                            bridge.debugLog.add("event error \(event.message ?? "")")
+                            await MainActor.run { bridge.debugLog.add("event error \(event.message ?? "")") }
                             throw CursorAPIError(status: 0, message: event.message ?? "The run failed.")
                         default:
-                            bridge.debugLog.add("event \(event.type)")
+                            await MainActor.run { bridge.debugLog.add("event \(event.type)") }
                         }
                     }
+                    await flushText()
                     ChatTrace.event("provider.stream complete emitted=\(emitted)")
-                    bridge.debugLog.add("stream complete emitted=\(emitted) textChars=\(textChars) turn=\(bridge.turn.count) wait=\(bridge.waitState)")
-                    bridge.completeRunningTools()
+                    await MainActor.run {
+                        bridge.debugLog.pace = pace
+                        bridge.debugLog.add("pace done \(pace.logLine)")
+                        bridge.debugLog.add("stream complete emitted=\(emitted) textChars=\(textChars) turn=\(bridge.turn.count) wait=\(bridge.waitState)")
+                        bridge.completeRunningTools()
+                        bridge.finished()
+                    }
                     continuation.yield(.done)
                     continuation.finish()
                 } catch {
-                    bridge.failRunningTools()
-                    ChatTrace.event("provider.stream error: \(error.localizedDescription)")
-                    bridge.debugLog.add("stream error \(error.localizedDescription)")
+                    await MainActor.run {
+                        bridge.failRunningTools()
+                        ChatTrace.event("provider.stream error: \(error.localizedDescription)")
+                        bridge.debugLog.add("stream error \(error.localizedDescription)")
+                        bridge.finished()
+                    }
                     continuation.finish(throwing: error)
                 }
             }
