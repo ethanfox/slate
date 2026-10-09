@@ -99,6 +99,27 @@ final class MarkdownTableTests: XCTestCase {
         XCTAssertFalse(style?.textBlocks.isEmpty ?? true)
     }
 
+    func testRendersUnorderedListWithBullet() {
+        let rendered = ChatMarkdown.attributed("- One expiring key\n- URL/key setup")
+        XCTAssertTrue(rendered.string.contains("• One expiring key"))
+        XCTAssertTrue(rendered.string.contains("• URL/key setup"))
+        XCTAssertFalse(rendered.string.contains("- One"))
+    }
+
+    func testRendersOrderedListWithNumbers() {
+        let rendered = ChatMarkdown.attributed("1. Implement open object\n2. Finish widgets")
+        XCTAssertTrue(rendered.string.contains("1. Implement open object"))
+        XCTAssertTrue(rendered.string.contains("2. Finish widgets"))
+    }
+
+    func testKeepsInlineCodeInsideListItem() {
+        let rendered = ChatMarkdown.attributed("- Forward to `slate-mcp` while open")
+        let range = (rendered.string as NSString).range(of: "slate-mcp")
+        XCTAssertNotEqual(range.location, NSNotFound)
+        let font = rendered.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont
+        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.monoSpace) == true)
+    }
+
     func testDoesNotStyleMarkdownInsideFence() {
         let storage = NSTextStorage(string: "```\n**bold**\n```")
         MarkdownStyler.style(storage, font: .systemFont(ofSize: 15))

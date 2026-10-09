@@ -562,6 +562,14 @@ enum ChatMarkdown {
                 index = table.end
                 continue
             }
+            if let list = takeList(lines, from: index) {
+                result.append(renderList(list, fontSize: fontSize))
+                if list.end < lines.count {
+                    result.append(breakLine(fontSize: fontSize, empty: isBlank(lines[list.end])))
+                }
+                index = list.end
+                continue
+            }
             if line.trimmingCharacters(in: .whitespaces).isEmpty {
                 index += 1
                 continue
@@ -780,6 +788,79 @@ enum ChatMarkdown {
                 cell.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: cell.length))
                 result.append(cell)
             }
+        }
+        return result
+    }
+
+    private static func takeList(
+        _ lines: [String],
+        from start: Int
+    ) -> (ordered: Bool, number: Int, items: [String], end: Int)? {
+        guard start < lines.count, let first = listItem(lines[start]) else { return nil }
+        var items = [first.text]
+        var index = start + 1
+        while index < lines.count {
+            if isBlank(lines[index]) {
+                if let next = nextListItem(lines, after: index), next.ordered == first.ordered {
+                    index += 1
+                    continue
+                }
+                break
+            }
+            guard let item = listItem(lines[index]), item.ordered == first.ordered else { break }
+            items.append(item.text)
+            index += 1
+        }
+        return (first.ordered, first.number, items, index)
+    }
+
+    private static func nextListItem(_ lines: [String], after index: Int) -> (ordered: Bool, number: Int, text: String)? {
+        var cursor = index + 1
+        while cursor < lines.count {
+            if isBlank(lines[cursor]) {
+                cursor += 1
+                continue
+            }
+            return listItem(lines[cursor])
+        }
+        return nil
+    }
+
+    private static func listItem(_ line: String) -> (ordered: Bool, number: Int, text: String)? {
+        let trimmed = line.drop(while: \.isWhitespace)
+        if trimmed.hasPrefix("- ") { return (false, 1, String(trimmed.dropFirst(2))) }
+        if trimmed.hasPrefix("* ") { return (false, 1, String(trimmed.dropFirst(2))) }
+        if trimmed.hasPrefix("+ ") { return (false, 1, String(trimmed.dropFirst(2))) }
+        let digits = trimmed.prefix(while: \.isNumber)
+        guard !digits.isEmpty else { return nil }
+        let after = trimmed.dropFirst(digits.count)
+        guard after.hasPrefix(". ") else { return nil }
+        return (true, Int(digits) ?? 1, String(after.dropFirst(2)))
+    }
+
+    private static func renderList(
+        _ list: (ordered: Bool, number: Int, items: [String], end: Int),
+        fontSize: CGFloat
+    ) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        for (offset, item) in list.items.enumerated() {
+            let marker = list.ordered ? "\(list.number + offset). " : "• "
+            let indent = list.ordered ? 28 : 22
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.headIndent = CGFloat(indent)
+            paragraph.firstLineHeadIndent = 0
+            paragraph.lineSpacing = 4
+            paragraph.paragraphSpacing = 6
+            let body = NSMutableAttributedString(
+                attributedString: piece(marker, fontSize: fontSize, header: nil, list: true)
+            )
+            body.append(renderInline(item, fontSize: fontSize, header: nil, list: true))
+            if item.isEmpty {
+                body.append(NSAttributedString(string: "\u{00a0}"))
+            }
+            body.append(breakLine(fontSize: fontSize, empty: false))
+            body.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: body.length))
+            result.append(body)
         }
         return result
     }

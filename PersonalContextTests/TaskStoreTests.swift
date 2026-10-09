@@ -100,7 +100,8 @@ final class TaskStoreTests: XCTestCase {
         try context.save()
         XCTAssertEqual(Set(item.liveNotes.map(\.id)), [spec.id, runtime.id])
         AssociationService.unlink(noteID: spec.id, from: item, in: context)
-        XCTAssertEqual(item.liveNotes.map(\.id), [runtime.id])
+        try context.save()
+        XCTAssertEqual(Set(item.liveNotes.map(\.id)), [runtime.id])
     }
 
     func testDeleteTaskLeavesCompletions() throws {
