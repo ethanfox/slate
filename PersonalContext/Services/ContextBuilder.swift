@@ -1,6 +1,8 @@
 import Foundation
 
 enum ContextBuilder {
+    static let knowledgeRules = "Feature and problem specs, and evolving work, belong in track bodies. Notes hold reference material. A task links to its governing tracks through track_ids; linked notes are supplementary. Whether work is done lives only on the task. Never write built, not built, shipped, or pending into a note, a thread summary, or the task notes field."
+
     static func identity(for project: Project) -> String {
         var lines: [String] = []
         lines.append("Project: \(project.name) (id \(project.id.uuidString))")
@@ -75,9 +77,9 @@ enum ContextBuilder {
         let notes = project.notes.sorted { $0.updatedAt > $1.updatedAt }
         if !notes.isEmpty {
             lines.append("")
-            lines.append("Recent notes:")
+            lines.append("Recent notes (reference material):")
             for note in notes.prefix(8) {
-                lines.append("- \(note.displayTitle) (id \(note.id.uuidString)): \(clip(note.content, 400))")
+                lines.append("- \(note.displayTitle) (id \(note.id.uuidString))")
             }
         }
 
@@ -89,14 +91,7 @@ enum ContextBuilder {
                 lines.append("Next: \(next.displayTitle) (id \(next.id.uuidString))")
             }
             for task in tasks.prefix(20) {
-                var line = "- \(task.displayTitle) (id \(task.id.uuidString), \(task.workflowStatus.rawValue)"
-                if task.isNext { line += ", next" }
-                line += ")"
-                let linked = task.liveNotes.map(\.displayTitle)
-                if !linked.isEmpty {
-                    line += " notes: \(linked.joined(separator: ", "))"
-                }
-                lines.append(line)
+                lines.append("- \(taskLine(task))")
             }
         }
 
@@ -121,20 +116,17 @@ enum ContextBuilder {
             parts.append("""
             You are the assistant inside Slate, the user's knowledge base for their projects. You have the Slate MCP tools, which read and change that knowledge base.
 
-            When the user tells you something that should last (a fact, a decision, a change of direction, a new line of work, a task), save it yourself with those tools right away, then say in one short line what you saved. Never ask the user to save anything. Update an existing decision, track, note, task, or project when it covers the same thing instead of adding a duplicate. When a new decision replaces an old one, pass supersedes_id. Use the ids from the tools. Use the task tools to list, create, update, and complete Slate tasks. complete_task records repeat history; do not set status to done on a repeating task. A task can link many notes with note_ids. Notes are specs and facts. Whether work is done lives only on the task. Never write built, not built, shipped, or pending into a note, a thread summary, or the task notes field.
+            When the user tells you something that should last (a fact, a decision, a change of direction, a new line of work, a task), save it yourself with those tools right away, then say in one short line what you saved. Never ask the user to save anything. Update an existing decision, track, note, task, or project when it covers the same thing instead of adding a duplicate. When a new decision replaces an old one, pass supersedes_id. Use the ids from the tools. Use the task tools to list, create, update, and complete Slate tasks. complete_task records repeat history; do not set status to done on a repeating task. \(knowledgeRules)
 
             You cannot delete records. If something should go away, call mark_for_deletion with a required reason. Optionally pass replacement_type and replacement_id when another record replaces it. The user decides Keep or Delete. Archive is only for chats the user hides, not a substitute for delete.
 
-            Look up decisions, tracks, notes, and tasks with the tools. Treat those records as the source of truth and weight active decisions above tracks and notes. Do not invent project facts. Do not create or edit files unless the user explicitly asks. If the project lists attached code, inspect it with the project_* tools instead of claiming you cannot see the repository. Fetch only what this message needs. Batch those calls. Do not walk the whole project. After a few tool rounds, answer.
+            Look up decisions, tracks, notes, and tasks with the tools. Treat those records as the source of truth and weight active decisions above tracks and notes. get_project is lean; open a track with get_thread and list tasks with track_id. Do not invent project facts. Do not create or edit files unless the user explicitly asks. If the project lists attached code, inspect it with the project_* tools instead of claiming you cannot see the repository. Fetch only what this message needs. Batch those calls. Do not walk the whole project. After a few tool rounds, answer.
 
             When you point the user at a note, track, decision, or other Slate record, put a markdown link on its own line using the id from the tools: [Title](slate://note/UUID), slate://thread/UUID, slate://decision/UUID, slate://project/UUID, or slate://conversation/UUID. The app turns that into a card they can open. Do not paste raw ids. Do not invent ids.
             """)
-            if let thread = focusedThread {
-                let title = thread.title.isEmpty ? "Untitled" : thread.title
-                parts.append("""
-                You are in the side chat on track "\(title)" (id \(thread.id.uuidString)). When the user asks you to write, draft, rewrite, or add to this track, call update_thread on that id immediately (body or append_to_body). Answer questions and look up other project records with the tools. Do not create a new track for work that belongs here.
-                """)
-            }
+        }
+        if let thread = focusedThread {
+            parts.append(focusedTrackPrompt(for: thread))
         }
         if !context.isEmpty {
             parts.append("""
@@ -147,6 +139,52 @@ enum ContextBuilder {
         return parts.joined(separator: "\n\n")
     }
 
+    static func focusedTrack(for thread: ProjectThread) -> String {
+        var lines: [String] = []
+        let title = thread.title.isEmpty ? "Untitled" : thread.title
+        lines.append("Track: \(title) (id \(thread.id.uuidString))")
+        lines.append("Kind: \(thread.kind.label)")
+        lines.append("Status: \(thread.status.label)")
+        if !thread.summary.isEmpty {
+            lines.append("Summary: \(clip(thread.summary, 400))")
+        }
+        if !thread.body.isEmpty {
+            lines.append("Body:")
+            lines.append(clipPreservingBreaks(thread.body, 4000))
+        }
+
+        let decisions = thread.decisions
+            .filter { $0.status == .active }
+            .sorted { $0.createdAt > $1.createdAt }
+        if !decisions.isEmpty {
+            lines.append("Decisions:")
+            for decision in decisions.prefix(8) {
+                lines.append("- \(decision.title) (id \(decision.id.uuidString)): \(clip(decision.decision, 400))")
+            }
+        }
+
+        let tasks = TaskStore.tasks(on: thread, includingDescendants: true)
+        if !tasks.isEmpty {
+            lines.append("Tasks:")
+            for task in tasks.prefix(20) {
+                lines.append("- \(taskLine(task))")
+            }
+        }
+
+        let children = thread.orderedChildren
+        if !children.isEmpty {
+            lines.append("Child tracks:")
+            for child in children {
+                let childTitle = child.title.isEmpty ? "Untitled" : child.title
+                lines.append("- [\(child.kind.label)] \(childTitle) (\(child.status.label), id \(child.id.uuidString))")
+                if !child.summary.isEmpty {
+                    lines.append("  \(clip(child.summary, 200))")
+                }
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
     static func codeConsultationPrompt(userText: String, context: String) -> String {
         var parts = [
             "Inspect the attached project code in read-only mode. Do not edit files, create commits, or change Slate records. Cite repository-relative paths and line numbers."
@@ -156,6 +194,38 @@ enum ContextBuilder {
         }
         parts.append(userText)
         return parts.joined(separator: "\n\n")
+    }
+
+    private static func focusedTrackPrompt(for thread: ProjectThread) -> String {
+        let title = thread.title.isEmpty ? "Untitled" : thread.title
+        return """
+        You are in the side chat on track "\(title)" (id \(thread.id.uuidString)). When the user asks you to write, draft, rewrite, or add to this track, call update_thread on that id immediately (body or append_to_body). Answer questions and look up other project records with the tools. Do not create a new track for work that belongs here.
+
+        <focused-track>
+        \(focusedTrack(for: thread))
+        </focused-track>
+        """
+    }
+
+    private static func taskLine(_ task: AgendaItem) -> String {
+        var line = "\(task.displayTitle) (id \(task.id.uuidString), \(task.workflowStatus.rawValue)"
+        if task.isNext { line += ", next" }
+        line += ")"
+        let tracks = task.liveTracks.map { $0.title.isEmpty ? "Untitled" : $0.title }
+        if !tracks.isEmpty {
+            line += " tracks: \(tracks.joined(separator: ", "))"
+        }
+        let notes = task.liveNotes.map(\.displayTitle)
+        if !notes.isEmpty {
+            line += " notes: \(notes.joined(separator: ", "))"
+        }
+        return line
+    }
+
+    private static func clipPreservingBreaks(_ text: String, _ limit: Int) -> String {
+        guard text.count > limit else { return text }
+        let index = text.index(text.startIndex, offsetBy: limit)
+        return String(text[..<index]).trimmingCharacters(in: .whitespacesAndNewlines) + "\n…"
     }
 
     private static func depth(of thread: ProjectThread) -> Int {

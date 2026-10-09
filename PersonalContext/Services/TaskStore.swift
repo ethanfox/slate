@@ -36,6 +36,12 @@ enum TaskStore {
         return (try? context.fetch(descriptor)) ?? []
     }
 
+    static func tasks(on track: ProjectThread, includingDescendants: Bool) -> [AgendaItem] {
+        AgendaStore.items(on: track, includingChildren: includingDescendants)
+            .filter { $0.kind == .task }
+            .sorted(by: boardSort)
+    }
+
     static func nextTask(in project: Project) -> AgendaItem? {
         project.agendaItems.first { $0.kind == .task && $0.isNext }
     }

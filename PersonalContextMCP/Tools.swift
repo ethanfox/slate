@@ -54,6 +54,20 @@ struct Args {
         throw ToolError("\(key) must be an ISO-8601 date.")
     }
 
+    func strings(_ key: String) throws -> [String]? {
+        guard let raw = raw[key] else { return nil }
+        if let array = raw as? [String] { return array }
+        if let array = raw as? [Any] {
+            return try array.map { value in
+                guard let string = value as? String else {
+                    throw ToolError("\(key) must be an array of strings.")
+                }
+                return string
+            }
+        }
+        throw ToolError("\(key) must be an array of strings.")
+    }
+
     func uuids(_ key: String) throws -> [UUID]? {
         guard let raw = raw[key] else { return nil }
         let strings: [String]
@@ -71,6 +85,25 @@ struct Args {
             }
             return id
         }
+    }
+}
+
+enum ProjectExpand: String, CaseIterable {
+    case decisions
+    case threads
+    case notes
+    case tasks
+    case deletionMarks = "deletion_marks"
+
+    static func parse(_ values: [String]?) throws -> Set<ProjectExpand> {
+        guard let values else { return [] }
+        return Set(try values.map { value in
+            guard let parsed = ProjectExpand(rawValue: value) else {
+                let allowed = ProjectExpand.allCases.map(\.rawValue).joined(separator: ", ")
+                throw ToolError("include must be one of: \(allowed).")
+            }
+            return parsed
+        })
     }
 }
 
@@ -162,21 +195,52 @@ enum Tools {
         },
         Tool(
             name: "get_project",
-            description: "Get one project: its fields, a context summary, and every decision, thread, and note with ids.",
-            properties: ["project_id": projectID], required: ["project_id"], readOnly: true
+            description: "Get one project: fields, identity context, and counts. Pass include for bounded lists. Use get_thread for a track body and get_note for reference material.",
+            properties: [
+                "project_id": projectID,
+                "include": [
+                    "type": "array",
+                    "items": ["type": "string", "enum": ["decisions", "threads", "notes", "tasks", "deletion_marks"]],
+                    "description": "Record lists to add. Omit for a lean project record. Lists are bounded; use list_* and get_thread for the rest."
+                ]
+            ],
+            required: ["project_id"],
+            readOnly: true
         ) { args, context in
             let project = try Lookup.project(try args.uuid("project_id"), in: context)
+            let include = try ProjectExpand.parse(args.strings("include"))
             var shape = JSONShape.project(project)
-            shape["context"] = ContextBuilder.package(for: project)
-            shape["decisions"] = project.decisions.sorted { $0.createdAt > $1.createdAt }.map(JSONShape.decision)
-            shape["threads"] = project.threads.sorted { $0.createdAt < $1.createdAt }.map { JSONShape.thread($0, full: false) }
-            shape["notes"] = project.notes.sorted { $0.updatedAt > $1.updatedAt }.map { JSONShape.note($0, full: false) }
-            shape["tasks"] = TaskStore.tasks(in: context, project: project)
-                .sorted(by: TaskStore.boardSort)
-                .map { JSONShape.task($0, full: false) }
-            shape["deletion_marks"] = project.deletionMarks
-                .sorted { $0.createdAt > $1.createdAt }
-                .map(JSONShape.deletionMark)
+            shape["context"] = ContextBuilder.identity(for: project)
+            if include.contains(.decisions) {
+                shape["decisions"] = project.decisions
+                    .sorted { $0.createdAt > $1.createdAt }
+                    .prefix(20)
+                    .map(JSONShape.decision)
+            }
+            if include.contains(.threads) {
+                shape["threads"] = project.threads
+                    .sorted { $0.createdAt < $1.createdAt }
+                    .prefix(24)
+                    .map { JSONShape.thread($0, full: false) }
+            }
+            if include.contains(.notes) {
+                shape["notes"] = project.notes
+                    .sorted { $0.updatedAt > $1.updatedAt }
+                    .prefix(8)
+                    .map { JSONShape.note($0, full: false) }
+            }
+            if include.contains(.tasks) {
+                shape["tasks"] = TaskStore.tasks(in: context, project: project)
+                    .sorted(by: TaskStore.boardSort)
+                    .prefix(20)
+                    .map { JSONShape.task($0, full: false) }
+            }
+            if include.contains(.deletionMarks) {
+                shape["deletion_marks"] = project.deletionMarks
+                    .sorted { $0.createdAt > $1.createdAt }
+                    .prefix(20)
+                    .map(JSONShape.deletionMark)
+            }
             return shape
         },
         Tool(
@@ -225,19 +289,26 @@ enum Tools {
 
         Tool(
             name: "list_tasks",
-            description: "List Slate tasks. Completions are not included. Use list_completions for repeat history.",
+            description: "List Slate tasks. Completions are not included. Use list_completions for repeat history. Pass track_id to list work on a track.",
             properties: [
                 "project_id": text("Optional project id. Omit to list every task."),
+                "track_id": text("Only tasks linked to this track."),
+                "include_descendants": flag("When track_id is set, also include tasks on child tracks. Defaults to false."),
                 "status": options(TaskWorkflowStatus.self, "Only tasks with this workflow status."),
                 "next_only": flag("Only the Next task in each project.")
             ],
             required: [], readOnly: true
         ) { args, context in
             let project = try args.string("project_id").map { _ in try Lookup.project(try args.uuid("project_id"), in: context) }
+            let track = try args.string("track_id").map { _ in try Lookup.thread(try args.uuid("track_id"), in: context) }
+            let includeDescendants = args.bool("include_descendants") ?? false
             let status = try args.choice("status", as: TaskWorkflowStatus.self)
             let nextOnly = args.bool("next_only") ?? false
-            return TaskStore.tasks(in: context, project: project)
+            let items = track.map { TaskStore.tasks(on: $0, includingDescendants: includeDescendants) }
+                ?? TaskStore.tasks(in: context, project: project)
+            return items
                 .filter { task in
+                    if let project, track != nil, task.project?.id != project.id { return false }
                     if let status, task.workflowStatus != status { return false }
                     if nextOnly, !task.isNext { return false }
                     return true
@@ -255,7 +326,7 @@ enum Tools {
         },
         Tool(
             name: "create_task",
-            description: "Create a Slate task. project_id is optional. is_next requires an active project. Link spec notes with note_ids; do not put built/not-built in notes.",
+            description: "Create a Slate task. project_id is optional. is_next requires an active project. Link governing tracks with track_ids. Reference notes are supplementary via note_ids. Do not put built/not-built in notes.",
             properties: [
                 "title": text("Task title."),
                 "project_id": text("Optional project id."),
@@ -263,8 +334,8 @@ enum Tools {
                 "due": text("ISO-8601 due date."),
                 "status": options(TaskWorkflowStatus.self, "Workflow status. Defaults to ready."),
                 "is_next": flag("Mark this task Next for its project."),
-                "track_ids": ["type": "array", "items": ["type": "string"], "description": "Track ids to link."],
-                "note_ids": ["type": "array", "items": ["type": "string"], "description": "Note ids to link. A task can have many."],
+                "track_ids": ["type": "array", "items": ["type": "string"], "description": "Governing track ids. Feature and problem work lives on these tracks."],
+                "note_ids": ["type": "array", "items": ["type": "string"], "description": "Optional reference note ids. Notes are not the spec."],
                 "blocked_reason": text("Free-text blocked reason."),
                 "blocker_ids": ["type": "array", "items": ["type": "string"], "description": "Task ids that block this one."],
                 "repeat": options(TaskRepeat.self, "Repeat rule. Defaults to none. custom is not settable.")
@@ -287,8 +358,8 @@ enum Tools {
                 "status": options(TaskWorkflowStatus.self, "Workflow status."),
                 "is_next": flag("Set or clear Next."),
                 "project_id": text("Move to this project. Empty string clears it."),
-                "track_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement track ids."],
-                "note_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement linked note ids. A task can have many."],
+                "track_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement governing track ids."],
+                "note_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement reference note ids. Notes are not the spec."],
                 "blocked_reason": text("Free-text blocked reason."),
                 "blocker_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement blocker task ids."],
                 "repeat": options(TaskRepeat.self, "Repeat rule. custom is not settable.")
@@ -442,25 +513,27 @@ enum Tools {
         },
         Tool(
             name: "get_thread",
-            description: "Get one thread with its full body and linked decisions and notes.",
+            description: "Get one track with its full body, linked decisions, note previews, tasks including child-track tasks, and child-track summaries.",
             properties: ["thread_id": text("Thread id.")], required: ["thread_id"], readOnly: true
         ) { args, context in
             let thread = try Lookup.thread(try args.uuid("thread_id"), in: context)
             var shape = JSONShape.thread(thread, full: true)
             shape["decisions"] = thread.decisions.map(JSONShape.decision)
             shape["notes"] = thread.notes.map { JSONShape.note($0, full: false) }
+            shape["tasks"] = TaskStore.tasks(on: thread, includingDescendants: true)
+                .map { JSONShape.task($0, full: false) }
             return shape
         },
         Tool(
             name: "create_thread",
-            description: "Start a thread: a line of work such as a direction, feature, problem, experiment, or topic.",
+            description: "Start a track: a line of work such as a direction, feature, problem, experiment, or topic. Put the spec and evolving work in the body.",
             properties: [
                 "project_id": projectID,
                 "title": text("Thread title."),
                 "kind": options(ThreadKind.self, "Kind of thread. Defaults to topic."),
                 "status": options(ThreadStatus.self, "Defaults to exploring."),
                 "summary": text("One or two sentences."),
-                "body": text("Markdown body."),
+                "body": text("Markdown spec and evolving work."),
                 "parent_id": text("Parent thread id, to nest this thread.")
             ],
             required: ["project_id", "title"], readOnly: false
@@ -489,8 +562,8 @@ enum Tools {
                 "kind": options(ThreadKind.self, "Kind of thread."),
                 "status": options(ThreadStatus.self, "Thread status."),
                 "summary": text("New summary."),
-                "body": text("Replaces the whole markdown body."),
-                "append_to_body": text("Markdown appended to the end of the body."),
+                "body": text("Replaces the whole markdown spec."),
+                "append_to_body": text("Markdown appended to the end of the spec."),
                 "parent_id": text("New parent thread id. Empty string makes it a top-level thread.")
             ],
             required: ["thread_id"], readOnly: false
@@ -929,7 +1002,15 @@ enum JSONShape {
         ]
         if full {
             shape["body"] = thread.body
-            shape["children"] = thread.orderedChildren.map { ["id": $0.id.uuidString, "title": $0.title] }
+            shape["children"] = thread.orderedChildren.map { child in
+                [
+                    "id": child.id.uuidString,
+                    "title": child.title,
+                    "kind": child.kind.rawValue,
+                    "status": child.status.rawValue,
+                    "summary": child.summary
+                ]
+            }
         }
         attachMark(&shape, id: thread.id, project: thread.project)
         return shape

@@ -47,6 +47,79 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertTrue(later.contains("Harbor"))
         XCTAssertFalse(later.contains("Active decisions"))
         XCTAssertFalse(later.contains("Ship the Mac app in Swift"))
+        XCTAssertFalse(first.contains("Notes are specs and facts"))
+        XCTAssertTrue(first.contains("track bodies"))
+    }
+
+    @MainActor
+    func testPackageKeepsNoteTitlesAndTaskTracks() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let project = Project(name: "Harbor", symbol: "folder", summary: "A marina app.")
+        let track = ProjectThread(title: "Auth", kind: .feature, project: project)
+        track.summary = "Sign-in work"
+        let note = Note(content: "Secret spec text that must not dump", project: project, title: "OAuth notes")
+        let task = AgendaItem(kind: .task, eventKitID: "", title: "Ship sign-in")
+        container.mainContext.insert(project)
+        container.mainContext.insert(track)
+        container.mainContext.insert(note)
+        container.mainContext.insert(task)
+        AssociationService.assignUserProject(project, on: task)
+        AssociationService.applyLink(thread: track, onto: task)
+        try container.mainContext.save()
+
+        let text = ContextBuilder.package(for: project)
+        XCTAssertTrue(text.contains("OAuth notes"))
+        XCTAssertFalse(text.contains("Secret spec text that must not dump"))
+        XCTAssertTrue(text.contains("Ship sign-in"))
+        XCTAssertTrue(text.contains("tracks: Auth"))
+    }
+
+    @MainActor
+    func testFocusedTrackContextIsCurrentEachTurn() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let project = Project(name: "Harbor", symbol: "folder", summary: "A marina app.")
+        let child = ProjectThread(title: "Tokens", kind: .problem, project: project)
+        child.summary = "Refresh is flaky"
+        let track = ProjectThread(title: "Auth", kind: .feature, project: project)
+        track.summary = "Users can sign in"
+        track.body = "Use the existing session store.\nDo not invent a second token."
+        child.parent = track
+        let decision = Decision(
+            title: "Keep the Mac session",
+            decision: "Reuse ChatGPTSignIn, do not mint Slate tokens.",
+            project: project,
+            thread: track
+        )
+        let task = AgendaItem(kind: .task, eventKitID: "", title: "Wire refresh")
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test", project: project)
+        conversation.thread = track
+        container.mainContext.insert(project)
+        container.mainContext.insert(track)
+        container.mainContext.insert(child)
+        container.mainContext.insert(decision)
+        container.mainContext.insert(task)
+        container.mainContext.insert(conversation)
+        AssociationService.assignUserProject(project, on: task)
+        AssociationService.applyLink(thread: child, onto: task)
+        try container.mainContext.save()
+
+        let bridge = CursorConversationBridge(conversation: conversation, project: project)
+        let first = bridge.prepareProviderTurn(userText: "hi")
+        XCTAssertTrue(first.contains("You are the assistant inside Slate"))
+        XCTAssertTrue(first.contains("<focused-track>"))
+        XCTAssertTrue(first.contains("Use the existing session store."))
+        XCTAssertTrue(first.contains("Keep the Mac session"))
+        XCTAssertTrue(first.contains("Wire refresh"))
+        XCTAssertTrue(first.contains("Tokens"))
+        XCTAssertFalse(first.contains("Notes are specs and facts"))
+
+        let later = bridge.prepareProviderTurn(userText: "again")
+        XCTAssertFalse(later.contains("You are the assistant inside Slate"))
+        XCTAssertTrue(later.contains("<focused-track>"))
+        XCTAssertTrue(later.contains("Do not invent a second token."))
+        XCTAssertTrue(later.contains("Wire refresh"))
     }
 
     @MainActor

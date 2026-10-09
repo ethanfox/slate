@@ -116,6 +116,25 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertNil(project.taskCompletions.first?.parentTask)
     }
 
+    func testTasksOnTrackIncludeDescendantsWhenAsked() throws {
+        let project = Project(name: "Harbor", symbol: "folder", summary: "")
+        let parent = ProjectThread(title: "Auth", kind: .feature, project: project)
+        let child = ProjectThread(title: "Tokens", kind: .problem, project: project, parent: parent)
+        let onParent = task("Parent work", in: project)
+        let onChild = task("Child work", in: project)
+        let other = task("Other", in: project)
+        AssociationService.applyLink(thread: parent, onto: onParent)
+        AssociationService.applyLink(thread: child, onto: onChild)
+        try context.save()
+
+        let direct = TaskStore.tasks(on: parent, includingDescendants: false)
+        XCTAssertEqual(Set(direct.map(\.title)), ["Parent work"])
+
+        let withChildren = TaskStore.tasks(on: parent, includingDescendants: true)
+        XCTAssertEqual(Set(withChildren.map(\.title)), ["Parent work", "Child work"])
+        XCTAssertFalse(withChildren.contains { $0.id == other.id })
+    }
+
     private func task(_ title: String, in project: Project) -> AgendaItem {
         let item = AgendaItem(kind: .task, eventKitID: "", title: title)
         context.insert(project)

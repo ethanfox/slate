@@ -11,9 +11,9 @@ asking them to save it. Read before you write so you update an existing record r
 When a decision replaces an older one, create the new decision with supersedes_id. \
 Use the task tools to list, create, update, and complete Slate tasks. complete_task records repeat history; \
 do not set status to done on a repeating task. \
-A task can link many notes with note_ids. Notes are specs and facts. \
-Whether work is done lives only on the task. Never write built, not built, shipped, or pending \
-into a note, a thread summary, or the task notes field. \
+\(ContextBuilder.knowledgeRules) \
+get_project is lean. Use get_thread for a track body and its linked work, list_tasks with track_id for tasks, \
+and get_note for reference material. \
 Agents cannot delete. To propose removing a note, track, decision, or chat, call mark_for_deletion \
 with a reason. Optionally link a replacement. The user Keeps or Deletes.
 """
