@@ -493,8 +493,31 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
     }
 }
 
+struct MarkdownTableBlock: Equatable {
+    var range: NSRange
+    var source: String
+}
+
+struct MarkdownFenceBlock: Equatable {
+    var range: NSRange
+    var open: NSRange
+    var body: NSRange
+    var close: NSRange?
+}
+
 /// Styles markers in the source text. Does not join lines or drop spaces.
 enum ChatMarkdown {
+    static let inlineFill = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 1, alpha: 0.14)
+            : NSColor(white: 0, alpha: 0.08)
+    }
+
+    static let blockFill = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 1, alpha: 0.06)
+            : NSColor(white: 0, alpha: 0.045)
+    }
     static func incompleteStart(in source: String) -> String.Index {
         var inFence = false
         var fenceStart = source.startIndex
@@ -519,18 +542,19 @@ enum ChatMarkdown {
 
     static func attributed(_ source: String, fontSize: CGFloat = 15) -> NSMutableAttributedString {
         let result = NSMutableAttributedString()
-        let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
-        var inFence = false
+        let lines = source.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         var index = 0
         while index < lines.count {
-            let line = String(lines[index])
-            if line.hasPrefix("```") {
-                inFence.toggle()
-                if index < lines.count - 1 { result.append(breakLine(fontSize: fontSize, empty: true)) }
-                index += 1
+            let line = lines[index]
+            if let fence = takeFence(lines, from: index) {
+                result.append(renderFence(fence.lines, fontSize: fontSize))
+                if fence.end < lines.count {
+                    result.append(breakLine(fontSize: fontSize, empty: true))
+                }
+                index = fence.end
                 continue
             }
-            if !inFence, let table = takeTable(lines, from: index) {
+            if let table = takeTable(lines, from: index) {
                 result.append(renderTable(table.rows, alignments: table.alignments, fontSize: fontSize))
                 if table.end < lines.count {
                     result.append(breakLine(fontSize: fontSize, empty: true))
@@ -538,41 +562,141 @@ enum ChatMarkdown {
                 index = table.end
                 continue
             }
-            if !inFence && line.trimmingCharacters(in: .whitespaces).isEmpty {
+            if line.trimmingCharacters(in: .whitespaces).isEmpty {
                 index += 1
                 continue
             }
-            if inFence {
-                result.append(NSAttributedString(string: line, attributes: attributes(
-                    fontSize: fontSize, code: true, empty: line.isEmpty
-                )))
-            } else {
-                result.append(renderLine(line, fontSize: fontSize))
-            }
+            result.append(renderLine(line, fontSize: fontSize))
             if index < lines.count - 1 {
-                let paragraphBreak = !inFence && isBlank(lines[index + 1])
-                result.append(breakLine(fontSize: fontSize, empty: paragraphBreak))
+                result.append(breakLine(fontSize: fontSize, empty: isBlank(lines[index + 1])))
             }
             index += 1
         }
         return result
     }
 
-    private static func isBlank(_ line: Substring) -> Bool {
+    static func tableBlocks(in source: String) -> [MarkdownTableBlock] {
+        let parsed = lines(in: source)
+        var blocks: [MarkdownTableBlock] = []
+        var inFence = false
+        var index = 0
+        while index < parsed.texts.count {
+            if parsed.texts[index].hasPrefix("```") {
+                inFence.toggle()
+                index += 1
+                continue
+            }
+            if !inFence, let table = takeTable(parsed.texts, from: index) {
+                let start = parsed.ranges[index].location
+                let last = parsed.ranges[table.end - 1]
+                let range = NSRange(location: start, length: last.upperBound - start)
+                blocks.append(MarkdownTableBlock(range: range, source: (source as NSString).substring(with: range)))
+                index = table.end
+                continue
+            }
+            index += 1
+        }
+        return blocks
+    }
+
+    static func fenceBlocks(in source: String) -> [MarkdownFenceBlock] {
+        let parsed = lines(in: source)
+        var blocks: [MarkdownFenceBlock] = []
+        var index = 0
+        while index < parsed.texts.count {
+            guard parsed.texts[index].hasPrefix("```"),
+                  let fence = takeFence(parsed.texts, from: index) else {
+                index += 1
+                continue
+            }
+            let open = parsed.ranges[index]
+            let close = fence.closed ? parsed.ranges[fence.end - 1] : nil
+            let bodyStart = open.upperBound
+            let bodyEnd = close?.location ?? parsed.ranges[fence.end - 1].upperBound
+            let body = NSRange(location: bodyStart, length: max(0, bodyEnd - bodyStart))
+            let end = close?.upperBound ?? body.upperBound
+            blocks.append(MarkdownFenceBlock(
+                range: NSRange(location: open.location, length: end - open.location),
+                open: open,
+                body: body,
+                close: close
+            ))
+            index = fence.end
+        }
+        return blocks
+    }
+
+    private static func isBlank(_ line: String) -> Bool {
         line.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    private static func lines(in source: String) -> (ranges: [NSRange], texts: [String]) {
+        let ns = source as NSString
+        var ranges: [NSRange] = []
+        var texts: [String] = []
+        var cursor = 0
+        while cursor < ns.length {
+            let line = ns.lineRange(for: NSRange(location: cursor, length: 0))
+            ranges.append(line)
+            var text = line
+            if text.length > 0, ns.substring(with: NSRange(location: text.upperBound - 1, length: 1)) == "\n" {
+                text.length -= 1
+            }
+            texts.append(ns.substring(with: text))
+            cursor = line.upperBound
+        }
+        return (ranges, texts)
+    }
+
+    private static func takeFence(
+        _ lines: [String],
+        from start: Int
+    ) -> (lines: [String], end: Int, closed: Bool)? {
+        guard start < lines.count, lines[start].hasPrefix("```") else { return nil }
+        var body: [String] = []
+        var index = start + 1
+        while index < lines.count {
+            if lines[index].hasPrefix("```") {
+                return (body, index + 1, true)
+            }
+            body.append(lines[index])
+            index += 1
+        }
+        return (body, index, false)
+    }
+
+    private static func renderFence(_ lines: [String], fontSize: CGFloat) -> NSAttributedString {
+        let table = NSTextTable()
+        table.numberOfColumns = 1
+        table.collapsesBorders = true
+        let block = NSTextTableBlock(table: table, startingRow: 0, rowSpan: 1, startingColumn: 0, columnSpan: 1)
+        block.backgroundColor = blockFill
+        block.setWidth(10, type: .absoluteValueType, for: .padding)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.textBlocks = [block]
+        paragraph.lineSpacing = 3
+        let text = lines.joined(separator: "\n")
+        let cell = NSMutableAttributedString(string: text.isEmpty ? " " : text, attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: fontSize - 1, weight: .regular),
+            .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: paragraph
+        ])
+        cell.append(breakLine(fontSize: fontSize - 1, empty: false))
+        cell.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: cell.length))
+        return cell
+    }
+
     private static func takeTable(
-        _ lines: [Substring],
+        _ lines: [String],
         from start: Int
     ) -> (rows: [[String]], alignments: [NSTextAlignment], end: Int)? {
-        guard start + 1 < lines.count, isTableRow(String(lines[start])) else { return nil }
-        let separator = tableCells(in: String(lines[start + 1]))
+        guard start + 1 < lines.count, isTableRow(lines[start]) else { return nil }
+        let separator = tableCells(in: lines[start + 1])
         guard isSeparatorRow(separator) else { return nil }
-        var rows = [tableCells(in: String(lines[start]))]
+        var rows = [tableCells(in: lines[start])]
         var index = start + 2
         while index < lines.count {
-            let line = String(lines[index])
+            let line = lines[index]
             guard isTableRow(line), !isSeparatorRow(tableCells(in: line)) else { break }
             rows.append(tableCells(in: line))
             index += 1
@@ -831,6 +955,9 @@ enum ChatMarkdown {
             .foregroundColor: url == nil ? NSColor.labelColor : NSColor.linkColor,
             .paragraphStyle: paragraph
         ]
+        if code {
+            attrs[.backgroundColor] = inlineFill
+        }
         if let url {
             attrs[.link] = url
             attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue

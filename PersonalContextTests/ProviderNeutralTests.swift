@@ -480,5 +480,20 @@ final class ProviderNeutralTests: XCTestCase {
 
         let fenced = ChatMarkdown.attributed("```\nline\n\nline\n```")
         XCTAssertTrue(fenced.string.contains("line\n\nline"))
+        XCTAssertFalse(fenced.string.contains("```"))
+        let fenceStyle = fenced.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertFalse(fenceStyle?.textBlocks.isEmpty ?? true)
+        let fenceFont = fenced.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        XCTAssertTrue(fenceFont?.fontDescriptor.symbolicTraits.contains(.monoSpace) == true)
+    }
+
+    func testChatMarkdownRendersInlineCode() {
+        let rendered = ChatMarkdown.attributed("Use `this` here")
+        let inner = (rendered.string as NSString).range(of: "this")
+        XCTAssertNotEqual(inner.location, NSNotFound)
+        let font = rendered.attribute(.font, at: inner.location, effectiveRange: nil) as? NSFont
+        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.monoSpace) == true)
+        XCTAssertNotNil(rendered.attribute(.backgroundColor, at: inner.location, effectiveRange: nil))
+        XCTAssertFalse(rendered.string.contains("`"))
     }
 }

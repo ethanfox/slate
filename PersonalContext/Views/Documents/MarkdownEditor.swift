@@ -85,9 +85,7 @@ struct MarkdownEditor: NSViewRepresentable {
             changeInLength delta: Int
         ) {
             guard editedMask.contains(.editedCharacters) else { return }
-            MarkdownStyler.style(textStorage, font: .systemFont(ofSize: parent.fontSize))
-            (textStorage.layoutManagers.first?.firstTextView as? MarkdownTextView)?
-                .applyFindHighlights(restyle: false)
+            (textStorage.layoutManagers.first?.firstTextView as? MarkdownTextView)?.restyle()
         }
     }
 }
@@ -107,6 +105,7 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
     private var formatPopover: NSPopover?
     private var pendingFormatBar: DispatchWorkItem?
     private var revealed = NSRange(location: NSNotFound, length: 0)
+    private var tableFaces: [String: MarkdownTableFace] = [:]
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
         super.init(frame: frameRect, textContainer: container)
@@ -143,9 +142,7 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
         textContainerInset = .zero
         font = baseFont
         typingAttributes = MarkdownStyler.baseAttributes(baseFont)
-        if let storage = textStorage {
-            MarkdownStyler.style(storage, font: baseFont)
-        }
+        restyle()
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
@@ -175,11 +172,56 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
+        drawTables()
         guard string.isEmpty, !placeholder.isEmpty else { return }
         (placeholder as NSString).draw(
             at: textContainerOrigin,
             withAttributes: [.font: baseFont, .foregroundColor: NSColor.placeholderTextColor]
         )
+    }
+
+    private func drawTables() {
+        guard let storage = textStorage, let layoutManager else { return }
+        let full = NSRange(location: 0, length: storage.length)
+        storage.enumerateAttribute(.markdownTable, in: full) { value, range, _ in
+            guard let source = value as? String else { return }
+            let face = tableFace(for: source)
+            let probe = range.length > 0
+                ? NSRange(location: range.upperBound - 1, length: 1)
+                : range
+            let glyphs = layoutManager.glyphRange(forCharacterRange: probe, actualCharacterRange: nil)
+            guard glyphs.location != NSNotFound, glyphs.length > 0 else { return }
+            var rect = layoutManager.lineFragmentRect(
+                forGlyphAt: glyphs.location,
+                effectiveRange: nil,
+                withoutAdditionalLayout: true
+            )
+            rect.origin.x += textContainerOrigin.x
+            rect.origin.y += textContainerOrigin.y
+            face.draw(in: rect)
+        }
+    }
+
+    func restyle() {
+        guard let storage = textStorage else { return }
+        tableFaces.removeAll()
+        MarkdownStyler.style(storage, font: baseFont, sourceRanges: sourceDisplayRanges)
+        paintFindHighlights()
+    }
+
+    private func tableFace(for source: String) -> MarkdownTableFace {
+        if let face = tableFaces[source] { return face }
+        let face = MarkdownTableFace(source: source, fontSize: baseFont.pointSize)
+        tableFaces[source] = face
+        return face
+    }
+
+    private var sourceDisplayRanges: [NSRange] {
+        var ranges = findRanges
+        if revealed.location != NSNotFound {
+            ranges.append(revealed)
+        }
+        return ranges
     }
 
     override func becomeFirstResponder() -> Bool {
@@ -197,17 +239,22 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
 
     func updateRevealed() {
         let text = string as NSString
-        let next = window?.firstResponder === self
+        var next = window?.firstResponder === self
             ? text.paragraphRange(for: selectedRange())
             : NSRange(location: NSNotFound, length: 0)
-        guard next != revealed else { return }
-        let previous = revealed
-        revealed = next
-        for range in [previous, next] where range.location != NSNotFound {
-            let clamped = NSIntersectionRange(range, NSRange(location: 0, length: text.length))
-            layoutManager?.invalidateGlyphs(forCharacterRange: clamped, changeInLength: 0, actualCharacterRange: nil)
-            layoutManager?.invalidateLayout(forCharacterRange: clamped, actualCharacterRange: nil)
+        if next.location != NSNotFound {
+            for table in ChatMarkdown.tableBlocks(in: string) where NSIntersectionRange(next, table.range).length > 0 {
+                next = table.range
+                break
+            }
+            for fence in ChatMarkdown.fenceBlocks(in: string) where NSIntersectionRange(next, fence.range).length > 0 {
+                next = fence.range
+                break
+            }
         }
+        guard next != revealed else { return }
+        revealed = next
+        restyle()
         invalidateIntrinsicContentSize()
     }
 
@@ -234,6 +281,34 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
         guard var modified else { return 0 }
         layoutManager.setGlyphs(glyphs, properties: &modified, characterIndexes: characterIndexes, font: font, forGlyphRange: glyphRange)
         return glyphRange.length
+    }
+
+    func layoutManager(
+        _ layoutManager: NSLayoutManager,
+        shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<NSRect>,
+        lineFragmentUsedRect: UnsafeMutablePointer<NSRect>,
+        baselineOffset: UnsafeMutablePointer<CGFloat>,
+        in textContainer: NSTextContainer,
+        forGlyphRange glyphRange: NSRange
+    ) -> Bool {
+        guard let storage = layoutManager.textStorage else { return false }
+        let characters = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+        guard characters.location < storage.length else { return false }
+        if storage.attribute(.markdownCollapsed, at: characters.location, effectiveRange: nil) != nil {
+            lineFragmentRect.pointee.size.height = 0
+            lineFragmentUsedRect.pointee.size.height = 0
+            return true
+        }
+        guard let source = storage.attribute(.markdownTable, at: characters.location, effectiveRange: nil) as? String else {
+            return false
+        }
+        let height = tableFace(for: source).height(forWidth: textContainer.containerSize.width)
+        lineFragmentRect.pointee.size.width = textContainer.containerSize.width
+        lineFragmentRect.pointee.size.height = height
+        lineFragmentUsedRect.pointee.size.width = textContainer.containerSize.width
+        lineFragmentUsedRect.pointee.size.height = height
+        baselineOffset.pointee = baseFont.ascender
+        return true
     }
 
     override func cancelOperation(_ sender: Any?) {
@@ -296,8 +371,12 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
     }
 
     override func insertNewline(_ sender: Any?) {
-        let text = string as NSString
         let caret = selectedRange().location
+        if ChatMarkdown.fenceBlocks(in: string).contains(where: { NSLocationInRange(caret, $0.range) }) {
+            super.insertNewline(sender)
+            return
+        }
+        let text = string as NSString
         let line = text.lineRange(for: NSRange(location: caret, length: 0))
         let before = text.substring(with: NSRange(location: line.location, length: caret - line.location))
         guard selectedRange().length == 0,
@@ -342,18 +421,23 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
     }
 
     func applyFindHighlights(restyle: Bool = true, reveal: Bool = false) {
-        guard let storage = textStorage else { return }
         if restyle {
-            MarkdownStyler.style(storage, font: baseFont)
+            self.restyle()
+        } else {
+            paintFindHighlights()
         }
+        if reveal, let current = findCurrent, current.location != NSNotFound, current.upperBound <= (textStorage?.length ?? 0) {
+            self.reveal(current)
+        }
+    }
+
+    private func paintFindHighlights() {
+        guard let storage = textStorage else { return }
         let current = findCurrent
         for range in findRanges {
             let color = range == current ? NSColor.findHighlightColor : NSColor.findHighlightColor.withAlphaComponent(0.35)
             guard range.location != NSNotFound, range.upperBound <= storage.length else { continue }
             storage.addAttribute(.backgroundColor, value: color, range: range)
-        }
-        if reveal, let current, current.location != NSNotFound, current.upperBound <= storage.length {
-            self.reveal(current)
         }
     }
 
@@ -535,6 +619,53 @@ private struct FormatBar: View {
 }
 extension NSAttributedString.Key {
     static let markdownMarker = NSAttributedString.Key("PCMarkdownMarker")
+    static let markdownTable = NSAttributedString.Key("PCMarkdownTable")
+    static let markdownCollapsed = NSAttributedString.Key("PCMarkdownCollapsed")
+}
+
+final class MarkdownTableFace {
+    let attributed: NSAttributedString
+    private var measuredWidth: CGFloat = 0
+    private var measuredHeight: CGFloat = 0
+
+    init(source: String, fontSize: CGFloat) {
+        attributed = ChatMarkdown.attributed(source, fontSize: fontSize)
+    }
+
+    func height(forWidth width: CGFloat) -> CGFloat {
+        let width = max(width, 1)
+        if abs(width - measuredWidth) < 0.5 { return measuredHeight }
+        measuredWidth = width
+        measuredHeight = Self.measure(attributed, width: width)
+        return measuredHeight
+    }
+
+    func draw(in rect: NSRect) {
+        guard rect.width > 1, rect.height > 1 else { return }
+        let storage = NSTextStorage(attributedString: attributed)
+        let layout = NSLayoutManager()
+        storage.addLayoutManager(layout)
+        let container = NSTextContainer(size: NSSize(width: rect.width, height: max(rect.height, 1)))
+        container.lineFragmentPadding = 0
+        container.widthTracksTextView = false
+        layout.addTextContainer(container)
+        layout.ensureLayout(for: container)
+        let glyphs = layout.glyphRange(for: container)
+        layout.drawBackground(forGlyphRange: glyphs, at: rect.origin)
+        layout.drawGlyphs(forGlyphRange: glyphs, at: rect.origin)
+    }
+
+    private static func measure(_ attributed: NSAttributedString, width: CGFloat) -> CGFloat {
+        let storage = NSTextStorage(attributedString: attributed)
+        let layout = NSLayoutManager()
+        storage.addLayoutManager(layout)
+        let container = NSTextContainer(size: NSSize(width: width, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        container.widthTracksTextView = false
+        layout.addTextContainer(container)
+        layout.ensureLayout(for: container)
+        return ceil(max(layout.usedRect(for: container).height, 22))
+    }
 }
 enum MarkdownStyler {
     static let lineSpacing: CGFloat = 5
@@ -549,51 +680,165 @@ enum MarkdownStyler {
     private static let code = try! NSRegularExpression(pattern: #"(`)([^`\n]+)(`)"#)
     private static let link = try! NSRegularExpression(pattern: #"(\[)([^\]\n]+)(\]\([^)\n]*\))"#)
 
-    private static let codeFill = NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(white: 1, alpha: 0.08)
-            : NSColor(white: 0, alpha: 0.06)
-    }
-
     static func baseAttributes(_ font: NSFont) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = lineSpacing
         return [.font: font, .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph]
     }
 
-    static func style(_ storage: NSTextStorage, font: NSFont) {
+    static func style(_ storage: NSTextStorage, font: NSFont, sourceRanges: [NSRange] = []) {
         let full = NSRange(location: 0, length: storage.length)
         let text = storage.string
         storage.setAttributes(baseAttributes(font), range: full)
+        let fences = ChatMarkdown.fenceBlocks(in: text)
+        let fenceRanges = fences.map(\.range)
 
-        for match in heading.matches(in: text, range: full) {
+        for match in heading.matches(in: text, range: full) where !intersects(match.range, fenceRanges) {
             add(.boldFontMask, to: match.range(at: 2), in: storage)
             dim(match.range(at: 1), in: storage)
         }
-        for match in quote.matches(in: text, range: full) {
+        for match in quote.matches(in: text, range: full) where !intersects(match.range, fenceRanges) {
             storage.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: match.range(at: 2))
             dim(match.range(at: 1), in: storage)
         }
-        for match in bullet.matches(in: text, range: full) {
+        for match in bullet.matches(in: text, range: full) where !intersects(match.range, fenceRanges) {
             storage.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: match.range(at: 1))
         }
-        for match in bold.matches(in: text, range: full) {
+        for match in bold.matches(in: text, range: full) where !intersects(match.range, fenceRanges) {
             add(.boldFontMask, to: match.range(at: 2), in: storage)
             dimMarkers(match, in: storage)
         }
-        for match in italic.matches(in: text, range: full) {
+        for match in italic.matches(in: text, range: full) where !intersects(match.range, fenceRanges) {
             add(.italicFontMask, to: match.range(at: 2), in: storage)
             dimMarkers(match, in: storage)
         }
-        for match in code.matches(in: text, range: full) {
-            storage.addAttribute(.backgroundColor, value: codeFill, range: match.range)
+        for match in code.matches(in: text, range: full) where !intersects(match.range, fenceRanges) {
+            let inner = match.range(at: 2)
+            storage.addAttribute(
+                .font,
+                value: NSFont.monospacedSystemFont(ofSize: font.pointSize - 1, weight: .regular),
+                range: inner
+            )
+            storage.addAttribute(.backgroundColor, value: ChatMarkdown.inlineFill, range: inner)
             dim(match.range(at: 1), in: storage)
             dim(match.range(at: 3), in: storage)
         }
-        for match in link.matches(in: text, range: full) {
+        for match in link.matches(in: text, range: full) where !intersects(match.range, fenceRanges) {
             storage.addAttribute(.foregroundColor, value: NSColor.linkColor, range: match.range(at: 2))
             dim(match.range(at: 1), in: storage)
             dim(match.range(at: 3), in: storage)
+        }
+        styleFences(fences, in: storage, font: font, sourceRanges: sourceRanges)
+        styleTables(storage, font: font, sourceRanges: sourceRanges)
+    }
+
+    private static func styleFences(
+        _ fences: [MarkdownFenceBlock],
+        in storage: NSTextStorage,
+        font: NSFont,
+        sourceRanges: [NSRange]
+    ) {
+        for fence in fences {
+            let editing = intersects(fence.range, sourceRanges)
+            styleFenceLine(fence.open, in: storage, collapse: !editing)
+            if let close = fence.close {
+                styleFenceLine(close, in: storage, collapse: !editing)
+            }
+            styleFenceBody(fence.body, in: storage, font: font)
+        }
+    }
+
+    private static func styleFenceLine(_ range: NSRange, in storage: NSTextStorage, collapse: Bool) {
+        if collapse {
+            hideSource(range, in: storage)
+            storage.addAttribute(.markdownCollapsed, value: true, range: range)
+            return
+        }
+        let ns = storage.string as NSString
+        var line = range
+        if line.length > 0, ns.substring(with: NSRange(location: line.upperBound - 1, length: 1)) == "\n" {
+            line.length -= 1
+        }
+        let text = ns.substring(with: line)
+        let ticks = (text as NSString).range(of: "```")
+        if ticks.location != NSNotFound {
+            dim(NSRange(location: line.location + ticks.location, length: 3), in: storage)
+        }
+    }
+
+    private static func styleFenceBody(_ range: NSRange, in storage: NSTextStorage, font: NSFont) {
+        guard range.length > 0 else { return }
+        let ns = storage.string as NSString
+        let table = NSTextTable()
+        table.numberOfColumns = 1
+        table.collapsesBorders = true
+        let mono = NSFont.monospacedSystemFont(ofSize: font.pointSize - 1, weight: .regular)
+        var row = 0
+        var cursor = range.location
+        while cursor < range.upperBound {
+            var line = ns.lineRange(for: NSRange(location: cursor, length: 0))
+            if line.upperBound > range.upperBound {
+                line = NSRange(location: line.location, length: range.upperBound - line.location)
+            }
+            let block = NSTextTableBlock(table: table, startingRow: row, rowSpan: 1, startingColumn: 0, columnSpan: 1)
+            block.backgroundColor = ChatMarkdown.blockFill
+            block.setWidth(10, type: .absoluteValueType, for: .padding)
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineSpacing = lineSpacing
+            paragraph.textBlocks = [block]
+            storage.addAttribute(.paragraphStyle, value: paragraph, range: line)
+            storage.addAttribute(.font, value: mono, range: line)
+            row += 1
+            cursor = line.upperBound
+        }
+    }
+
+    private static func styleTables(_ storage: NSTextStorage, font: NSFont, sourceRanges: [NSRange]) {
+        let ns = storage.string as NSString
+        for table in ChatMarkdown.tableBlocks(in: storage.string) {
+            if intersects(table.range, sourceRanges) {
+                styleTableSource(table.range, in: storage)
+                continue
+            }
+            let first = ns.lineRange(for: NSRange(location: table.range.location, length: 0))
+            let rest = NSRange(location: first.upperBound, length: table.range.upperBound - first.upperBound)
+            hideSource(table.range, in: storage)
+            storage.addAttribute(.markdownTable, value: table.source, range: first)
+            if rest.length > 0 {
+                storage.addAttribute(.markdownCollapsed, value: true, range: rest)
+            }
+        }
+    }
+
+    private static func styleTableSource(_ range: NSRange, in storage: NSTextStorage) {
+        let ns = storage.string as NSString
+        var index = range.location
+        while index < range.upperBound {
+            if ns.substring(with: NSRange(location: index, length: 1)) == "|" {
+                dim(NSRange(location: index, length: 1), in: storage)
+            }
+            index += 1
+        }
+    }
+
+    private static func hideSource(_ range: NSRange, in storage: NSTextStorage) {
+        let ns = storage.string as NSString
+        var index = range.location
+        while index < range.upperBound {
+            if ns.substring(with: NSRange(location: index, length: 1)) != "\n" {
+                dim(NSRange(location: index, length: 1), in: storage)
+            }
+            index += 1
+        }
+    }
+
+    private static func intersects(_ range: NSRange, _ others: [NSRange]) -> Bool {
+        others.contains { other in
+            guard other.location != NSNotFound else { return false }
+            if other.length == 0 {
+                return NSLocationInRange(other.location, range)
+            }
+            return NSIntersectionRange(range, other).length > 0
         }
     }
 
