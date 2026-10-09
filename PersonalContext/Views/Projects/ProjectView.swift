@@ -88,6 +88,12 @@ struct ProjectView: View {
             }
         case .chat:
             ProjectChatCenter(project: project)
+        case .runs:
+            if let run = project.runs.first(where: { $0.id == app.selectedRun }) {
+                RunPage(run: run).id(run.id)
+            } else {
+                ProjectRunsEmpty(project: project)
+            }
         }
     }
 

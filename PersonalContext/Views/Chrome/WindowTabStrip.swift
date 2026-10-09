@@ -16,6 +16,7 @@ struct WindowTabStrip: View {
     @Query private var threads: [ProjectThread]
     @Query private var decisions: [Decision]
     @Query private var conversations: [Conversation]
+    @Query private var runs: [AgentRun]
     @State private var draggingID: UUID?
     @State private var previewIDs: [UUID]?
     @State private var frames: [UUID: CGRect] = [:]
@@ -266,7 +267,12 @@ struct WindowTabStrip: View {
 
     private func isGenerating(_ tab: WindowTab) -> Bool {
         guard let id = tab.generatingID else { return false }
-        return app.runningChats.contains { $0.id == id }
+        if app.runningChats.contains(where: { $0.id == id }) { return true }
+        return app.runCoordinator.running.contains { $0.id == id }
+    }
+
+    private func runTitle(_ id: UUID) -> String {
+        runs.first { $0.id == id }?.displayTitle ?? "New run"
     }
 
     private func label(for tab: WindowTab) -> TabLabel {
@@ -281,6 +287,10 @@ struct WindowTabStrip: View {
             return TabLabel(title: "Calendar", symbol: "calendar")
         case .chats:
             return TabLabel(title: "Chats", symbol: "bubble.left.and.bubble.right")
+        case .runs:
+            return TabLabel(title: "Runs", symbol: "play.circle")
+        case .run(let id):
+            return TabLabel(title: runTitle(id), symbol: "play.circle")
         case .settings:
             return TabLabel(title: "Settings", symbol: "gearshape")
         case .quickAsk(let id):
@@ -322,6 +332,20 @@ struct WindowTabStrip: View {
                 return TabLabel(
                     title: title?.isEmpty == false ? title! : "Chat",
                     symbol: "bubble.left",
+                    projectName: projectName,
+                    projectSymbol: projectSymbol
+                )
+            case .run(let runID):
+                return TabLabel(
+                    title: runTitle(runID),
+                    symbol: "play.circle",
+                    projectName: projectName,
+                    projectSymbol: projectSymbol
+                )
+            case .projectRuns:
+                return TabLabel(
+                    title: "\(projectName): Runs",
+                    symbol: "play.circle",
                     projectName: projectName,
                     projectSymbol: projectSymbol
                 )

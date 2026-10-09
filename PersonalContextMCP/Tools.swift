@@ -247,7 +247,7 @@ enum Tools {
         },
         Tool(
             name: "get_task",
-            description: "Get one Slate task, including blockers, dependents, and completion ids.",
+            description: "Get one Slate task, including linked notes, blockers, dependents, and completion ids.",
             properties: ["task_id": text("Task id.")],
             required: ["task_id"], readOnly: true
         ) { args, context in
@@ -255,15 +255,16 @@ enum Tools {
         },
         Tool(
             name: "create_task",
-            description: "Create a Slate task. project_id is optional. is_next requires an active project.",
+            description: "Create a Slate task. project_id is optional. is_next requires an active project. Link spec notes with note_ids; do not put built/not-built in notes.",
             properties: [
                 "title": text("Task title."),
                 "project_id": text("Optional project id."),
-                "notes": text("Notes."),
+                "notes": text("Short working comment. Not status. Do not write built or not-built here."),
                 "due": text("ISO-8601 due date."),
                 "status": options(TaskWorkflowStatus.self, "Workflow status. Defaults to ready."),
                 "is_next": flag("Mark this task Next for its project."),
                 "track_ids": ["type": "array", "items": ["type": "string"], "description": "Track ids to link."],
+                "note_ids": ["type": "array", "items": ["type": "string"], "description": "Note ids to link. A task can have many."],
                 "blocked_reason": text("Free-text blocked reason."),
                 "blocker_ids": ["type": "array", "items": ["type": "string"], "description": "Task ids that block this one."],
                 "repeat": options(TaskRepeat.self, "Repeat rule. Defaults to none. custom is not settable.")
@@ -277,16 +278,17 @@ enum Tools {
         },
         Tool(
             name: "update_task",
-            description: "Change a Slate task. Only the fields you pass are changed. track_ids and blocker_ids replace the whole set.",
+            description: "Change a Slate task. Only the fields you pass are changed. track_ids, note_ids, and blocker_ids replace the whole set.",
             properties: [
                 "task_id": text("Task id."),
                 "title": text("New title."),
-                "notes": text("New notes."),
+                "notes": text("Short working comment. Not status. Do not write built or not-built here."),
                 "due": text("ISO-8601 due date. Empty string clears it."),
                 "status": options(TaskWorkflowStatus.self, "Workflow status."),
                 "is_next": flag("Set or clear Next."),
                 "project_id": text("Move to this project. Empty string clears it."),
                 "track_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement track ids."],
+                "note_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement linked note ids. A task can have many."],
                 "blocked_reason": text("Free-text blocked reason."),
                 "blocker_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement blocker task ids."],
                 "repeat": options(TaskRepeat.self, "Repeat rule. custom is not settable.")
@@ -617,6 +619,41 @@ enum Tools {
             )
             target.project.touch()
             return JSONShape.deletionMark(mark)
+        },
+        Tool(
+            name: "list_runs",
+            description: "List Slate agent Runs. Newest first. Filter by project, task, status, or origin.",
+            properties: [
+                "project_id": text("Optional project id."),
+                "task_id": text("Optional task id."),
+                "status": options(RunStatus.self, "Optional status."),
+                "origin": options(RunOrigin.self, "Optional origin door.")
+            ],
+            required: [],
+            readOnly: true
+        ) { args, context in
+            let projectID = try args.string("project_id").map { _ in try args.uuid("project_id") }
+            let taskID = try args.string("task_id").map { _ in try args.uuid("task_id") }
+            let status = try args.choice("status", as: RunStatus.self)
+            let origin = try args.choice("origin", as: RunOrigin.self)
+            return RunStore.runs(in: context)
+                .filter { run in
+                    if let projectID, run.project?.id != projectID { return false }
+                    if let taskID, run.task?.id != taskID { return false }
+                    if let status, run.status != status { return false }
+                    if let origin, run.origin != origin { return false }
+                    return true
+                }
+                .map { JSONShape.run($0, full: false) }
+        },
+        Tool(
+            name: "get_run",
+            description: "Get one Run: origin, history, receipt, and snapshots.",
+            properties: ["run_id": text("Run id.")],
+            required: ["run_id"],
+            readOnly: true
+        ) { args, context in
+            JSONShape.run(try Lookup.run(try args.uuid("run_id"), in: context), full: true)
         }
     ]
 }
@@ -637,6 +674,12 @@ enum TaskMutations {
             AssociationService.clearTracks(from: item, in: context)
             for id in trackIDs {
                 AssociationService.applyLink(thread: try Lookup.thread(id, in: context), onto: item)
+            }
+        }
+        if let noteIDs = try args.uuids("note_ids") {
+            AssociationService.clearNotes(from: item, in: context)
+            for id in noteIDs {
+                AssociationService.applyLink(note: try Lookup.note(id, in: context), onto: item)
             }
         }
         if let status = try args.choice("status", as: TaskWorkflowStatus.self) {
@@ -713,6 +756,13 @@ enum Lookup {
     static func completion(_ id: UUID, in context: ModelContext) throws -> TaskCompletion {
         guard let found = try context.fetch(FetchDescriptor<TaskCompletion>(predicate: #Predicate { $0.id == id })).first else {
             throw ToolError("No completion with id \(id.uuidString).")
+        }
+        return found
+    }
+
+    static func run(_ id: UUID, in context: ModelContext) throws -> AgentRun {
+        guard let found = RunStore.run(id, in: context) else {
+            throw ToolError("No run with id \(id.uuidString).")
         }
         return found
     }
@@ -822,6 +872,7 @@ enum JSONShape {
             "repeat": item.repeatRule.rawValue,
             "blocked_reason": item.blockedReason,
             "tracks": item.liveTracks.map { ["id": $0.id.uuidString, "title": $0.title] },
+            "linked_notes": item.liveNotes.map { ["id": $0.id.uuidString, "title": $0.displayTitle] },
             "blockers": item.unresolvedBlockers.map {
                 [
                     "id": $0.id.uuidString,
@@ -899,6 +950,44 @@ enum JSONShape {
             shape["preview"] = clip(note.content, 240)
         }
         attachMark(&shape, id: note.id, project: note.project)
+        return shape
+    }
+
+    static func run(_ run: AgentRun, full: Bool) -> [String: Any] {
+        var shape: [String: Any] = [
+            "id": run.id.uuidString,
+            "title": run.displayTitle,
+            "status": run.status.rawValue,
+            "origin": run.origin.rawValue,
+            "project_id": run.project?.id.uuidString ?? "",
+            "task_id": run.task?.id.uuidString ?? "",
+            "origin_chat_id": run.originChat?.id.uuidString ?? "",
+            "provider": run.providerID,
+            "model": run.modelID,
+            "created_at": iso.string(from: run.createdAt),
+            "updated_at": iso.string(from: run.updatedAt)
+        ]
+        if full {
+            shape["brief"] = run.brief
+            shape["title_snapshot"] = run.titleSnapshot
+            shape["status_detail"] = run.statusDetail
+            shape["result_summary"] = run.resultSummary
+            shape["result_links"] = run.resultLinks.map {
+                ["id": $0.id.uuidString, "label": $0.label, "url": $0.url, "kind": $0.kindRaw]
+            }
+            shape["history"] = run.history.map {
+                [
+                    "id": $0.id.uuidString,
+                    "at": iso.string(from: $0.at),
+                    "kind": $0.kind.rawValue,
+                    "detail": $0.detail
+                ]
+            }
+            shape["repository_locators"] = run.repositoryLocators
+            shape["retry_of"] = run.retryOf?.id.uuidString ?? ""
+        } else {
+            shape["preview"] = clip(run.brief, 240)
+        }
         return shape
     }
 

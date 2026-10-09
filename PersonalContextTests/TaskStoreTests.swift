@@ -88,6 +88,21 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(item.completions.count, 1)
     }
 
+    func testTaskLinksManyNotes() throws {
+        let project = Project(name: "Harbor", symbol: "folder", summary: "")
+        let item = task("Ship Runs", in: project)
+        let spec = Note(content: "Product spec", project: project, title: "Spec")
+        let runtime = Note(content: "Runtime spec", project: project, title: "Runtime")
+        context.insert(spec)
+        context.insert(runtime)
+        AssociationService.applyLink(note: spec, onto: item)
+        AssociationService.applyLink(note: runtime, onto: item)
+        try context.save()
+        XCTAssertEqual(Set(item.liveNotes.map(\.id)), [spec.id, runtime.id])
+        AssociationService.unlink(noteID: spec.id, from: item, in: context)
+        XCTAssertEqual(item.liveNotes.map(\.id), [runtime.id])
+    }
+
     func testDeleteTaskLeavesCompletions() throws {
         let project = Project(name: "Harbor", symbol: "folder", summary: "")
         let item = task("Weekly", in: project)

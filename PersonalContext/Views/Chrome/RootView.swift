@@ -277,6 +277,32 @@ struct RootView: View {
             .buttonStyle(.plain)
             .glassEffect(.regular, in: Capsule())
             .help("New Event")
+        } else if case .runs = app.destination {
+            Button {
+                app.presentNewRun(origin: .workspace)
+            } label: {
+                Label("New Run", systemImage: "plus")
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular, in: Capsule())
+            .help("New Run")
+        } else if case .run = app.destination {
+            EmptyView()
+        } else if let project = openProject, app.tab(for: project.id) == .runs {
+            Button {
+                app.presentNewRun(origin: .project, project: project)
+            } label: {
+                Label("New Run", systemImage: "plus")
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular, in: Capsule())
+            .help("New Run")
         } else if case .tasks = app.destination {
             Button {
                 app.present(.newTask(nil))
@@ -543,6 +569,10 @@ struct RootView: View {
             EditDecisionModal(decision: decision)
         case .editNote(let note):
             EditNoteModal(note: note)
+        case .newRun(let draft):
+            NewRunSheet(draft: draft)
+        case .editRun(let run):
+            EditRunModal(run: run)
         }
     }
 
@@ -572,6 +602,10 @@ struct RootView: View {
             CalendarView()
         case .chats:
             ChatsView()
+        case .runs:
+            RunsView()
+        case .run(let id):
+            RunHost(id: id)
         case .settings:
             SettingsView()
         case .project(let id):

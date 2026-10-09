@@ -22,6 +22,8 @@ type Request = {
   includeSlateTools: boolean;
   includeProjectTools: boolean;
   includeWorkerTool?: boolean;
+  includeFinishRun?: boolean;
+  allowedTools?: string[];
   runtime: "local" | "cloud";
   cloudRepos: { url: string; startingRef?: string }[];
   codeSnapshots: {
@@ -249,7 +251,7 @@ function toolEvent(name: string, status: string, args?: unknown, result?: unknow
 type McpTool = { name: string; description?: string; inputSchema?: SDKCustomTool["inputSchema"]; annotations?: SDKCustomTool["annotations"] };
 
 /** Runs the Slate MCP as a child and exposes its tools in-process, since MCP server calls need an approval a headless run can't give. */
-async function slateTools(command: string): Promise<Record<string, SDKCustomTool>> {
+async function slateTools(command: string, allowed?: string[]): Promise<Record<string, SDKCustomTool>> {
   const child = spawn(command, [], { stdio: ["pipe", "pipe", "inherit"] });
   const pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
   let nextId = 1;
@@ -274,26 +276,32 @@ async function slateTools(command: string): Promise<Record<string, SDKCustomTool
 
   await call("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "slate-runner", version: "1.0" } });
   const { tools } = (await call("tools/list", {})) as { tools: McpTool[] };
+  const allow = allowed?.length ? new Set(allowed) : null;
   return Object.fromEntries(
-    tools.map((tool) => [
-      tool.name,
-      {
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-        annotations: tool.annotations,
-        execute: async (args) => {
-          emit(toolEvent(tool.name, "running", args));
-          try {
-            const result = (await call("tools/call", { name: tool.name, arguments: args })) as SDKCustomToolResult;
-            emit(toolEvent(tool.name, "completed", args, result));
-            return result;
-          } catch (error) {
-            emit(toolEvent(tool.name, "error", args));
-            throw error;
-          }
-        },
-      } satisfies SDKCustomTool,
-    ]),
+    tools
+      .filter((tool) => !allow || allow.has(tool.name))
+      .map((tool) => [
+        tool.name,
+        {
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          annotations: tool.annotations,
+          execute: async (args) => {
+            if (allow && !allow.has(tool.name)) {
+              throw new Error(`This run cannot use ${tool.name}.`);
+            }
+            emit(toolEvent(tool.name, "running", args));
+            try {
+              const result = (await call("tools/call", { name: tool.name, arguments: args })) as SDKCustomToolResult;
+              emit(toolEvent(tool.name, "completed", args, result));
+              return result;
+            } catch (error) {
+              emit(toolEvent(tool.name, "error", args));
+              throw error;
+            }
+          },
+        } satisfies SDKCustomTool,
+      ]),
   );
 }
 
@@ -651,6 +659,39 @@ function asRequest(message: Record<string, unknown>): Request | undefined {
   return undefined;
 }
 
+function finishRunTool(): Record<string, SDKCustomTool> {
+  return {
+    finish_run: {
+      description: "Stock the run receipt with a short summary and optional links. Do not complete the assigned task.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          summary: { type: "string", description: "What was done." },
+          links: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                label: { type: "string" },
+                url: { type: "string" },
+              },
+              required: ["url"],
+            },
+          },
+        },
+        required: ["summary"],
+      },
+      execute: async (args) => {
+        const id = randomUUID();
+        emit({ type: "host_tool", name: "finish_run", id, text: JSON.stringify(args ?? {}) });
+        const reply = await readHostReply(id);
+        if (reply.error) throw new Error(reply.error);
+        return toolText(reply.text ?? "{\"ok\":true}");
+      },
+    },
+  };
+}
+
 function workerTool(): Record<string, SDKCustomTool> {
   return {
     consult_code: {
@@ -702,9 +743,10 @@ async function createSession(request: Request): Promise<Session> {
     });
   } else {
     const customTools = {
-      ...(request.includeSlateTools ? await slateTools(request.mcpCommand) : {}),
+      ...(request.includeSlateTools ? await slateTools(request.mcpCommand, request.allowedTools) : {}),
       ...(request.includeProjectTools ? projectCodeTools(session) : {}),
       ...(request.includeWorkerTool ? workerTool() : {}),
+      ...(request.includeFinishRun ? finishRunTool() : {}),
     };
     const options = {
       apiKey,

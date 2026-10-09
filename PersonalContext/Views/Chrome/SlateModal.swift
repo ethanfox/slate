@@ -20,6 +20,8 @@ enum AppModal: Identifiable {
     case editThread(ProjectThread)
     case editDecision(Decision)
     case editNote(Note)
+    case newRun(NewRunDraft)
+    case editRun(AgentRun)
 
     var id: String {
         switch self {
@@ -40,6 +42,9 @@ enum AppModal: Identifiable {
         case .editThread(let thread): "edit-thread-\(thread.id.uuidString)"
         case .editDecision(let decision): "edit-decision-\(decision.id.uuidString)"
         case .editNote(let note): "edit-note-\(note.id.uuidString)"
+        case .newRun(let draft):
+            "new-run-\(draft.origin.rawValue)-\(draft.retryOfID?.uuidString ?? draft.taskID?.uuidString ?? draft.projectID?.uuidString ?? "none")"
+        case .editRun(let run): "edit-run-\(run.id.uuidString)"
         }
     }
 

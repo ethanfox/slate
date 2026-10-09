@@ -68,7 +68,34 @@ private struct TaskDocument: View {
                     }
                     .padding(.top, 6)
 
-                    MarkdownEditor(text: $item.notes, placeholder: "Notes", minHeight: 120)
+                    if !item.liveNotes.isEmpty {
+                        DocumentSection("Linked notes") {
+                            ForEach(item.liveNotes, id: \.id) { note in
+                                HStack(spacing: 8) {
+                                    Button(note.displayTitle) { app.open(note) }
+                                        .buttonStyle(.plain)
+                                        .font(CraftFont.body)
+                                        .underline()
+                                    Spacer(minLength: 4)
+                                    Button {
+                                        AssociationService.unlink(noteID: note.id, from: item, in: context)
+                                        try? context.save()
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 13))
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 28, height: 28)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Unlink")
+                                    .accessibilityLabel("Unlink \(note.displayTitle)")
+                                }
+                            }
+                        }
+                    }
+
+                    MarkdownEditor(text: $item.notes, placeholder: "Comment", minHeight: 120)
                         .padding(.top, 16)
 
                     if item.workflowStatus == .blocked
@@ -79,11 +106,18 @@ private struct TaskDocument: View {
                         }
                     }
 
+                    Button("Start Run…") {
+                        app.presentNewRun(origin: .task, project: item.project, task: item)
+                    }
+                    .buttonStyle(.plain)
+                    .font(CraftFont.body)
+                    .padding(.top, 24)
+
                     Button("Delete Task", role: .destructive, action: { confirmDelete = true })
                         .buttonStyle(.plain)
                         .font(CraftFont.body)
                         .foregroundStyle(.red)
-                        .padding(.top, 24)
+                        .padding(.top, 12)
                 }
                 .padding(.horizontal, 24)
                 .padding(.vertical, 28)
@@ -99,6 +133,10 @@ private struct TaskDocument: View {
         }
         .confirmationDialog("Delete this task?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete Task", role: .destructive) {
+                guard RunStore.canDelete(item, in: context) else {
+                    app.flash(RunStoreError.stillActive.localizedDescription)
+                    return
+                }
                 TaskStore.delete(item, in: context)
                 app.selectTask(nil)
             }
@@ -234,7 +272,7 @@ private struct TaskDocument: View {
 
     private var notesPill: some View {
         PropertyPill(
-            title: item.liveNotes.first?.displayTitle ?? "Notes",
+            title: notesPillTitle,
             systemImage: "note.text"
         ) {
             Button("New Note…") { createNote() }
@@ -242,11 +280,24 @@ private struct TaskDocument: View {
             if !notesInScope.isEmpty {
                 Divider()
                 ForEach(notesInScope) { note in
-                    Button(note.displayTitle) { toggle(note) }
+                    Button {
+                        toggle(note)
+                    } label: {
+                        Label(note.displayTitle, systemImage: linkedNoteIDs.contains(note.id) ? "checkmark" : "note.text")
+                    }
                 }
             }
         }
     }
+
+    private var notesPillTitle: String {
+        let notes = item.liveNotes
+        if notes.isEmpty { return "Notes" }
+        if notes.count == 1 { return notes[0].displayTitle }
+        return "\(notes.count) notes"
+    }
+
+    private var linkedNoteIDs: Set<UUID> { Set(item.noteLinks.map(\.noteID)) }
 
     private var statusSymbol: String {
         switch item.workflowStatus {
@@ -323,6 +374,7 @@ private struct TaskDocument: View {
         AssociationService.applyLink(note: note, onto: item)
         project.touch()
         try? context.save()
+        app.open(note)
     }
 }
 

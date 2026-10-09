@@ -15,6 +15,7 @@ struct ChatInput: View {
     var onSend: (String) -> Bool
     var onStop: (() -> Void)?
     var onRetryStuck: (() -> Void)?
+    var onStartRun: (() -> Void)?
     var debugLog: ChatDebugLog?
 
     @Environment(AppModel.self) private var app
@@ -34,6 +35,12 @@ struct ChatInput: View {
                     allowsProviderChange: allowsProviderChange
                 )
                 Spacer(minLength: 8)
+                if let onStartRun {
+                    Button("Start Run…", action: onStartRun)
+                        .buttonStyle(.plain)
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if providerID == TalkProvider.cursor.rawValue, let usage = app.usage {
                     ChatUsage(usage: usage)
                 }

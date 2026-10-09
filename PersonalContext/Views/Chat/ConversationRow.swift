@@ -28,6 +28,12 @@ struct ConversationRow: View {
                 Label("Edit…", systemImage: "pencil")
             }
             Button {
+                let brief = conversation.orderedMessages.last(where: { $0.role == .user })?.content ?? ""
+                app.presentNewRun(origin: .chat, project: conversation.project, chat: conversation, brief: brief)
+            } label: {
+                Label("Start Run…", systemImage: "play.circle")
+            }
+            Button {
                 conversation.isArchived.toggle()
                 conversation.updatedAt = .now
             } label: {

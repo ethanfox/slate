@@ -30,6 +30,7 @@ final class AppModel {
     var selectedNote: UUID?
     var selectedDecision: UUID?
     var selectedConversation: UUID?
+    var selectedRun: UUID?
     var modal: AppModal?
     var modalHost = ModalHost.main
     var toast: String?
@@ -37,6 +38,7 @@ final class AppModel {
     var chatConversationID: UUID?
     var activeReply = ""
     private(set) var runningChats: [RunningChat] = []
+    let runCoordinator = RunCoordinator()
     @ObservationIgnored private var chatRuntimes: [UUID: ChatRuntime] = [:]
     @ObservationIgnored private var retiredContainers: [ModelContainer] = []
     @ObservationIgnored private var storeReloadTask: Task<Void, Never>?
@@ -116,7 +118,11 @@ final class AppModel {
     let objectFind = ObjectFindSession()
 
     var isObjectPage: Bool {
-        selectedNote != nil || selectedDecision != nil || selectedThread != nil
+        if selectedNote != nil || selectedDecision != nil || selectedThread != nil || selectedRun != nil {
+            return true
+        }
+        if case .run = chromeDestination { return true }
+        return false
     }
 
     func selectOverviewPlate(_ id: UUID?) {
@@ -310,6 +316,8 @@ final class AppModel {
         refreshChatGPTModels()
         refreshUsage()
         restoreWindowTabs()
+        runCoordinator.attach(self)
+        runCoordinator.recover(in: container.mainContext)
         objectFind.installShortcuts { [weak self] in
             guard let self else { return false }
             return self.isObjectPage || self.objectFind.isOpen
@@ -620,6 +628,78 @@ final class AppModel {
     }
 
     static let cursorIntegrationsURL = URL(string: "https://cursor.com/dashboard?tab=integrations")!
+
+    func presentNewRun(
+        origin: RunOrigin,
+        project: Project? = nil,
+        task: AgendaItem? = nil,
+        chat: Conversation? = nil,
+        brief: String = "",
+        retryOf: AgentRun? = nil
+    ) {
+        if origin == .task, let task, let active = RunStore.activeRun(forTask: task.id, in: container.mainContext) {
+            open(active)
+            return
+        }
+        let defaults = runDefaults(for: project)
+        present(.newRun(
+            retryOf.map(RunStore.retryDraft) ?? NewRunDraft.blank(
+                origin: origin,
+                projectID: project?.id,
+                taskID: task?.id,
+                originChatID: chat?.id,
+                brief: brief,
+                providerID: defaults.provider,
+                modelID: defaults.model,
+                pathRaw: defaults.path
+            )
+        ))
+    }
+
+    func startRun(_ draft: NewRunDraft) {
+        do {
+            let run = try RunStore.enqueue(draft, in: container.mainContext)
+            dismissModal()
+            open(run)
+            runCoordinator.start(run, in: container.mainContext)
+        } catch {
+            flash(error.localizedDescription)
+        }
+    }
+
+    func retryRun(_ run: AgentRun) {
+        presentNewRun(
+            origin: run.origin,
+            project: run.project,
+            task: run.task,
+            chat: run.originChat,
+            brief: run.brief,
+            retryOf: run
+        )
+    }
+
+    func cancelRun(_ run: AgentRun) {
+        runCoordinator.cancel(run, in: container.mainContext)
+    }
+
+    func runDefaults(for project: Project?) -> (provider: String, model: String, path: String) {
+        if let project, !project.workerProviderID.isEmpty {
+            return (
+                project.workerProviderID,
+                project.workerModelID.isEmpty ? talkModelID : project.workerModelID,
+                project.workerPath.isEmpty ? WorkerPath.local.rawValue : project.workerPath
+            )
+        }
+        return (talkProvider.rawValue, talkModelID, WorkerPath.local.rawValue)
+    }
+
+    func providerConnected(_ id: String) -> Bool {
+        switch TalkProvider(rawValue: id) {
+        case .chatgpt: sources.hasChatGPT
+        case .cursor: hasAPIKey
+        default: false
+        }
+    }
 }
 
 enum CursorCloudRepositoriesState: Equatable {

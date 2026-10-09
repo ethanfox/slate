@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 
 struct ChatSource: Identifiable, Equatable, Codable, Hashable {
     enum Kind: String, Codable {
-        case url, note, thread, decision, project, conversation
+        case url, note, thread, decision, project, conversation, task, run
     }
 
     var id: String
@@ -23,7 +23,7 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable {
     var shortName: String {
         switch kind {
         case .url: return host ?? title
-        case .note, .thread, .decision, .project, .conversation:
+        case .note, .thread, .decision, .project, .conversation, .task, .run:
             return title.isEmpty ? kindLabel : title
         }
     }
@@ -36,6 +36,8 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable {
         case .decision: return "Decision"
         case .project: return "Project"
         case .conversation: return "Chat"
+        case .task: return "Task"
+        case .run: return "Run"
         }
     }
 
@@ -47,6 +49,8 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable {
         case .decision: return "checkmark.seal"
         case .project: return "square.stack"
         case .conversation: return "bubble.left"
+        case .task: return "checklist"
+        case .run: return "play.circle"
         }
     }
 
@@ -89,6 +93,12 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable {
         case .conversation:
             guard let conversation = conversation(in: context) else { return missing(kindLabel) }
             return live(id: conversation.id, title: conversation.title.isEmpty ? "Chat" : conversation.title, kindLabel: kindLabel)
+        case .task:
+            guard let task = task(in: context) else { return missing(kindLabel) }
+            return live(id: task.id, title: task.displayTitle, kindLabel: kindLabel)
+        case .run:
+            guard let run = run(in: context) else { return missing(kindLabel) }
+            return live(id: run.id, title: run.displayTitle, kindLabel: kindLabel)
         }
     }
 
@@ -121,6 +131,13 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable {
             if let project = project(in: context) { app.open(project, newTab: newTab) }
         case .conversation:
             if let conversation = conversation(in: context) { app.open(conversation, newTab: newTab) }
+        case .task:
+            if let task = task(in: context) {
+                if let project = task.project { app.open(project, tab: .tasks, newTab: newTab) }
+                app.selectTask(task.id)
+            }
+        case .run:
+            if let run = run(in: context) { app.open(run, newTab: newTab) }
         }
     }
 
@@ -168,6 +185,17 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable {
         return found?.first
     }
 
+    func task(in context: ModelContext) -> AgendaItem? {
+        guard let uuid = UUID(uuidString: id) else { return nil }
+        let found = try? context.fetch(FetchDescriptor<AgendaItem>(predicate: #Predicate { $0.id == uuid }))
+        return found?.first
+    }
+
+    func run(in context: ModelContext) -> AgentRun? {
+        guard let uuid = UUID(uuidString: id) else { return nil }
+        return RunStore.run(uuid, in: context)
+    }
+
     func conversation(in context: ModelContext) -> Conversation? {
         if let uuid = UUID(uuidString: id) {
             let found = try? context.fetch(FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == uuid }))
@@ -194,6 +222,10 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable {
             return firstLine(project(in: context)?.summary)
         case .conversation:
             return ""
+        case .task:
+            return firstLine(task(in: context)?.notes)
+        case .run:
+            return firstLine(run(in: context)?.resultSummary.isEmpty == false ? run(in: context)?.resultSummary : run(in: context)?.brief)
         }
     }
 

@@ -92,6 +92,10 @@ enum ContextBuilder {
                 var line = "- \(task.displayTitle) (id \(task.id.uuidString), \(task.workflowStatus.rawValue)"
                 if task.isNext { line += ", next" }
                 line += ")"
+                let linked = task.liveNotes.map(\.displayTitle)
+                if !linked.isEmpty {
+                    line += " notes: \(linked.joined(separator: ", "))"
+                }
                 lines.append(line)
             }
         }
@@ -117,7 +121,7 @@ enum ContextBuilder {
             parts.append("""
             You are the assistant inside Slate, the user's knowledge base for their projects. You have the Slate MCP tools, which read and change that knowledge base.
 
-            When the user tells you something that should last (a fact, a decision, a change of direction, a new line of work, a task), save it yourself with those tools right away, then say in one short line what you saved. Never ask the user to save anything. Update an existing decision, track, note, task, or project when it covers the same thing instead of adding a duplicate. When a new decision replaces an old one, pass supersedes_id. Use the ids from the tools. Use the task tools to list, create, update, and complete Slate tasks. complete_task records repeat history; do not set status to done on a repeating task.
+            When the user tells you something that should last (a fact, a decision, a change of direction, a new line of work, a task), save it yourself with those tools right away, then say in one short line what you saved. Never ask the user to save anything. Update an existing decision, track, note, task, or project when it covers the same thing instead of adding a duplicate. When a new decision replaces an old one, pass supersedes_id. Use the ids from the tools. Use the task tools to list, create, update, and complete Slate tasks. complete_task records repeat history; do not set status to done on a repeating task. A task can link many notes with note_ids. Notes are specs and facts. Whether work is done lives only on the task. Never write built, not built, shipped, or pending into a note, a thread summary, or the task notes field.
 
             You cannot delete records. If something should go away, call mark_for_deletion with a required reason. Optionally pass replacement_type and replacement_id when another record replaces it. The user decides Keep or Delete. Archive is only for chats the user hides, not a substitute for delete.
 

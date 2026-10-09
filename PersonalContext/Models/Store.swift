@@ -20,7 +20,8 @@ enum Store {
         TaskCompletion.self,
         TaskDependency.self,
         DeletionMark.self,
-        CodeAttachment.self
+        CodeAttachment.self,
+        AgentRun.self
     ])
 
     static var configuration: ModelConfiguration {

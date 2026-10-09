@@ -19,6 +19,7 @@ struct ProjectColumn: View {
     @State private var collapsed: Set<UUID> = []
     @State private var expandedCompleted: Set<UUID> = []
     @State private var showingAllChats = false
+    @State private var showingAllRuns = false
     @State private var pendingThreadDelete: ProjectThread?
     @State private var pendingNoteDelete: Note?
     @State private var pendingDecisionDelete: Decision?
@@ -33,6 +34,10 @@ struct ProjectColumn: View {
 
     private var conversations: [Conversation] {
         project.conversations.filter { !$0.isArchived }.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    private var projectRuns: [AgentRun] {
+        project.runs.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     private var notes: [Note] {
@@ -110,6 +115,7 @@ struct ProjectColumn: View {
         }
         .onChange(of: project.id, initial: true) { _, _ in
             showingAllChats = false
+            showingAllRuns = false
             revealTracks(reset: true)
         }
         .onChange(of: app.selectedThread) { _, id in
@@ -117,6 +123,9 @@ struct ProjectColumn: View {
         }
         .onChange(of: app.selectedConversation) { _, id in
             revealSelectedChat(id)
+        }
+        .onChange(of: app.selectedRun) { _, id in
+            revealSelectedRun(id)
         }
     }
 
@@ -134,6 +143,12 @@ struct ProjectColumn: View {
                 isSelected: tab == .tasks,
                 label: "Tasks",
                 action: { show(.tasks) }
+            )
+            ColumnIconButton(
+                systemImage: ProjectColumnSection.runs.symbol,
+                isSelected: tab == .runs,
+                label: ProjectColumnSection.runs.title,
+                action: { show(.runs) }
             )
             if !conversations.isEmpty {
                 ColumnIconButton(
@@ -187,6 +202,32 @@ struct ProjectColumn: View {
                         }
                         .buttonStyle(.plain)
                         SectionAddButton(title: "Task") { createTask() }
+                    }
+
+                    header(.runs, add: newRun)
+                    if isSectionOpen(.runs) {
+                        ForEach(visibleRuns) { run in
+                            Button {
+                                app.open(run)
+                            } label: {
+                                SidebarRow(
+                                    title: run.displayTitle,
+                                    systemImage: "play.circle",
+                                    isSelected: tab == .runs && app.selectedRun == run.id,
+                                    isBusy: run.status.isActive
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu { RunContextMenu(run: run) }
+                        }
+                        if projectRuns.count > ProjectColumnMetrics.chatPreviewLimit {
+                            ColumnShowMoreButton(
+                                expanded: showingAllRuns,
+                                remaining: projectRuns.count - ProjectColumnMetrics.chatPreviewLimit
+                            ) {
+                                showingAllRuns.toggle()
+                            }
+                        }
                     }
 
                     if !conversations.isEmpty {
@@ -333,7 +374,11 @@ struct ProjectColumn: View {
     }
 
     private func show(_ tab: ProjectTab) {
-        app.open(project, tab: tab)
+        if tab == .runs {
+            app.showProjectRuns(in: project)
+        } else {
+            app.open(project, tab: tab)
+        }
         if let section = ProjectColumnSection.allCases.first(where: { $0.tab == tab }) {
             app.openProjectSection(section)
         }
@@ -346,6 +391,11 @@ struct ProjectColumn: View {
     private var visibleConversations: [Conversation] {
         if showingAllChats { return conversations }
         return Array(conversations.prefix(ProjectColumnMetrics.chatPreviewLimit))
+    }
+
+    private var visibleRuns: [AgentRun] {
+        if showingAllRuns { return projectRuns }
+        return Array(projectRuns.prefix(ProjectColumnMetrics.chatPreviewLimit))
     }
 
     private func revealTracks(reset: Bool) {
@@ -374,6 +424,18 @@ struct ProjectColumn: View {
     private func createTask() {
         app.open(project, tab: .tasks)
         app.present(.newTask(project))
+    }
+
+    private func revealSelectedRun(_ id: UUID?) {
+        guard let id else { return }
+        let preview = projectRuns.prefix(ProjectColumnMetrics.chatPreviewLimit)
+        if !preview.contains(where: { $0.id == id }) {
+            showingAllRuns = true
+        }
+    }
+
+    private func newRun() {
+        app.presentNewRun(origin: .project, project: project)
     }
 
     private func newChat() {

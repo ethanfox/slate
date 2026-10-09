@@ -10,6 +10,7 @@ struct WindowTab: Identifiable, Hashable, Codable {
     var selectedNote: UUID?
     var selectedDecision: UUID?
     var selectedConversation: UUID?
+    var selectedRun: UUID?
 
     static func home(id: UUID = UUID()) -> WindowTab {
         WindowTab(
@@ -19,7 +20,8 @@ struct WindowTab: Identifiable, Hashable, Codable {
             selectedThread: nil,
             selectedNote: nil,
             selectedDecision: nil,
-            selectedConversation: nil
+            selectedConversation: nil,
+            selectedRun: nil
         )
     }
 
@@ -30,8 +32,10 @@ struct WindowTab: Identifiable, Hashable, Codable {
         case .tasks: .tasks
         case .calendar: .calendar
         case .chats: .chats
+        case .runs: .runs
         case .settings: .settings
         case .quickAsk(let id): .conversation(id)
+        case .run(let id): .run(id)
         case .project(let id):
             switch projectTab {
             case .overview: .projectOverview(id)
@@ -44,6 +48,8 @@ struct WindowTab: Identifiable, Hashable, Codable {
                 selectedDecision.map { .decision($0) } ?? .projectDecisions(id)
             case .chat:
                 selectedConversation.map { .conversation($0) } ?? .projectChat(id)
+            case .runs:
+                selectedRun.map { .run($0) } ?? .projectRuns(id)
             }
         }
     }
@@ -51,16 +57,66 @@ struct WindowTab: Identifiable, Hashable, Codable {
     var generatingID: UUID? {
         switch destination {
         case .quickAsk(let id): id
-        default: selectedConversation
+        case .run(let id): id
+        default: selectedConversation ?? selectedRun
         }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, destination, projectTab, selectedThread, selectedNote, selectedDecision, selectedConversation, selectedRun
+    }
+
+    init(
+        id: UUID,
+        destination: Destination,
+        projectTab: ProjectTab,
+        selectedThread: UUID?,
+        selectedNote: UUID?,
+        selectedDecision: UUID?,
+        selectedConversation: UUID?,
+        selectedRun: UUID? = nil
+    ) {
+        self.id = id
+        self.destination = destination
+        self.projectTab = projectTab
+        self.selectedThread = selectedThread
+        self.selectedNote = selectedNote
+        self.selectedDecision = selectedDecision
+        self.selectedConversation = selectedConversation
+        self.selectedRun = selectedRun
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        destination = try container.decode(Destination.self, forKey: .destination)
+        projectTab = try container.decode(ProjectTab.self, forKey: .projectTab)
+        selectedThread = try container.decodeIfPresent(UUID.self, forKey: .selectedThread)
+        selectedNote = try container.decodeIfPresent(UUID.self, forKey: .selectedNote)
+        selectedDecision = try container.decodeIfPresent(UUID.self, forKey: .selectedDecision)
+        selectedConversation = try container.decodeIfPresent(UUID.self, forKey: .selectedConversation)
+        selectedRun = try container.decodeIfPresent(UUID.self, forKey: .selectedRun)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(destination, forKey: .destination)
+        try container.encode(projectTab, forKey: .projectTab)
+        try container.encodeIfPresent(selectedThread, forKey: .selectedThread)
+        try container.encodeIfPresent(selectedNote, forKey: .selectedNote)
+        try container.encodeIfPresent(selectedDecision, forKey: .selectedDecision)
+        try container.encodeIfPresent(selectedConversation, forKey: .selectedConversation)
+        try container.encodeIfPresent(selectedRun, forKey: .selectedRun)
     }
 }
 
 enum TabViewKey: Hashable {
-    case home, projects, tasks, calendar, chats, settings
+    case home, projects, tasks, calendar, chats, runs, settings
     case projectOverview(UUID)
     case projectTasks(UUID)
     case projectChat(UUID)
+    case projectRuns(UUID)
     case projectThreads(UUID)
     case projectNotes(UUID)
     case projectDecisions(UUID)
@@ -68,6 +124,7 @@ enum TabViewKey: Hashable {
     case note(UUID)
     case decision(UUID)
     case conversation(UUID)
+    case run(UUID)
 }
 
 struct TabHistory: Codable, Equatable {
@@ -116,7 +173,8 @@ extension AppModel {
             selectedThread: nil,
             selectedNote: nil,
             selectedDecision: nil,
-            selectedConversation: nil
+            selectedConversation: nil,
+            selectedRun: nil
         )
     }
 
@@ -126,6 +184,7 @@ extension AppModel {
         let note = project.notes.contains(where: { $0.id == selectedNote }) ? selectedNote : nil
         let decision = project.decisions.contains(where: { $0.id == selectedDecision }) ? selectedDecision : nil
         let conversation = project.conversations.contains(where: { $0.id == selectedConversation }) ? selectedConversation : nil
+        let run = project.runs.contains(where: { $0.id == selectedRun }) ? selectedRun : nil
         return WindowTab(
             id: UUID(),
             destination: .project(project.id),
@@ -133,7 +192,8 @@ extension AppModel {
             selectedThread: section == .threads ? thread : nil,
             selectedNote: section == .notes ? note : nil,
             selectedDecision: section == .decisions ? decision : nil,
-            selectedConversation: section == .chat ? conversation : nil
+            selectedConversation: section == .chat ? conversation : nil,
+            selectedRun: section == .runs ? run : nil
         )
     }
 
@@ -183,6 +243,56 @@ extension AppModel {
                 selectedNote: nil,
                 selectedDecision: decision.id,
                 selectedConversation: nil
+            ),
+            newTab: newTab
+        )
+    }
+
+    func open(_ run: AgentRun, newTab: Bool = false) {
+        if let project = run.project {
+            openProjectSection(.runs)
+            reveal(
+                WindowTab(
+                    id: UUID(),
+                    destination: .project(project.id),
+                    projectTab: .runs,
+                    selectedThread: nil,
+                    selectedNote: nil,
+                    selectedDecision: nil,
+                    selectedConversation: nil,
+                    selectedRun: run.id
+                ),
+                newTab: newTab
+            )
+        } else {
+            reveal(
+                WindowTab(
+                    id: UUID(),
+                    destination: .run(run.id),
+                    projectTab: .runs,
+                    selectedThread: nil,
+                    selectedNote: nil,
+                    selectedDecision: nil,
+                    selectedConversation: nil,
+                    selectedRun: run.id
+                ),
+                newTab: newTab
+            )
+        }
+    }
+
+    func showProjectRuns(in project: Project, newTab: Bool = false) {
+        openProjectSection(.runs)
+        reveal(
+            WindowTab(
+                id: UUID(),
+                destination: .project(project.id),
+                projectTab: .runs,
+                selectedThread: nil,
+                selectedNote: nil,
+                selectedDecision: nil,
+                selectedConversation: nil,
+                selectedRun: nil
             ),
             newTab: newTab
         )
@@ -432,7 +542,8 @@ extension AppModel {
             selectedThread: selectedThread,
             selectedNote: selectedNote,
             selectedDecision: selectedDecision,
-            selectedConversation: selectedConversation
+            selectedConversation: selectedConversation,
+            selectedRun: selectedRun
         )
     }
 
@@ -446,6 +557,7 @@ extension AppModel {
         selectedNote = tab.selectedNote
         selectedDecision = tab.selectedDecision
         selectedConversation = tab.selectedConversation
+        selectedRun = tab.selectedRun
         if !historyLocked, previous.viewKey != tab.viewKey {
             recordNavigation(from: previous, to: tab)
         }

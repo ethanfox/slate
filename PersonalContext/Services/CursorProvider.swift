@@ -15,6 +15,8 @@ struct RunnerRequest: Encodable, Sendable {
     var includeSlateTools: Bool
     var includeProjectTools: Bool
     var includeWorkerTool: Bool = false
+    var includeFinishRun: Bool = false
+    var allowedTools: [String] = []
     var runtime: String
     var cloudRepos: [RunnerCloudRepo]
     var codeSnapshots: [RunnerCodeSnapshot] = []
@@ -40,6 +42,8 @@ extension RunnerRequest {
             includeSlateTools ? "slate" : "",
             includeProjectTools ? "code" : "",
             includeWorkerTool ? "worker" : "",
+            includeFinishRun ? "finish" : "",
+            allowedTools.joined(separator: ","),
             mcpCommand,
             apiKey
         ].joined(separator: "\u{1e}")

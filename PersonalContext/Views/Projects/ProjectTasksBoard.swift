@@ -281,7 +281,13 @@ private struct TaskBoardCard: View {
         }
         .contextMenu { menu }
         .confirmationDialog("Delete this task?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Delete Task", role: .destructive) { TaskStore.delete(item, in: context) }
+            Button("Delete Task", role: .destructive) {
+                guard RunStore.canDelete(item, in: context) else {
+                    app.flash(RunStoreError.stillActive.localizedDescription)
+                    return
+                }
+                TaskStore.delete(item, in: context)
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
@@ -308,6 +314,9 @@ private struct TaskBoardCard: View {
         }
         Divider()
         Button("Edit…") { app.selectTask(item.id) }
+        Button("Start Run…") {
+            app.presentNewRun(origin: .task, project: item.project, task: item)
+        }
         Button("Delete…", role: .destructive) { confirmDelete = true }
     }
 }
@@ -371,7 +380,13 @@ private struct TaskListRow: View {
         .onHover { hovering = $0 }
         .contextMenu { menu }
         .confirmationDialog("Delete this task?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Delete Task", role: .destructive) { TaskStore.delete(item, in: context) }
+            Button("Delete Task", role: .destructive) {
+                guard RunStore.canDelete(item, in: context) else {
+                    app.flash(RunStoreError.stillActive.localizedDescription)
+                    return
+                }
+                TaskStore.delete(item, in: context)
+            }
         }
     }
 
@@ -394,6 +409,9 @@ private struct TaskListRow: View {
         }
         Divider()
         Button("Edit…") { app.selectTask(item.id) }
+        Button("Start Run…") {
+            app.presentNewRun(origin: .task, project: item.project, task: item)
+        }
         Button("Delete…", role: .destructive) { confirmDelete = true }
     }
 }

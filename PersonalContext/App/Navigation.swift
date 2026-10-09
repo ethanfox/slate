@@ -6,9 +6,11 @@ enum Destination: Hashable, Codable {
     case tasks
     case calendar
     case chats
+    case runs
     case settings
     case project(UUID)
     case quickAsk(UUID)
+    case run(UUID)
 }
 enum ProjectTab: String, CaseIterable, Identifiable, Hashable, Codable {
     case overview
@@ -17,6 +19,7 @@ enum ProjectTab: String, CaseIterable, Identifiable, Hashable, Codable {
     case notes
     case decisions
     case chat
+    case runs
 
     var id: String { rawValue }
 
@@ -28,11 +31,13 @@ enum ProjectTab: String, CaseIterable, Identifiable, Hashable, Codable {
         case .notes: "Notes"
         case .decisions: "Decisions"
         case .chat: "Chat"
+        case .runs: "Runs"
         }
     }
 }
 
 enum ProjectColumnSection: String, CaseIterable, Identifiable, Hashable {
+    case runs
     case chats
     case tracks
     case notes
@@ -42,6 +47,7 @@ enum ProjectColumnSection: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
+        case .runs: "Runs"
         case .chats: "Chats"
         case .tracks: "Tracks"
         case .notes: "Notes"
@@ -51,6 +57,7 @@ enum ProjectColumnSection: String, CaseIterable, Identifiable, Hashable {
 
     var symbol: String {
         switch self {
+        case .runs: "play.circle"
         case .chats: "bubble.left"
         case .tracks: TrackStyle.symbol
         case .notes: "note.text"
@@ -60,6 +67,7 @@ enum ProjectColumnSection: String, CaseIterable, Identifiable, Hashable {
 
     var tab: ProjectTab {
         switch self {
+        case .runs: .runs
         case .chats: .chat
         case .tracks: .threads
         case .notes: .notes

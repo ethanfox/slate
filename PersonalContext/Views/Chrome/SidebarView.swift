@@ -34,6 +34,7 @@ struct SidebarView: View {
                     row("Tasks", "checklist", destination: .tasks, badge: dueCount)
                     row("Calendar", "calendar", destination: .calendar)
                     row("Chats", "bubble.left.and.bubble.right", destination: .chats, busy: !app.runningChats.isEmpty)
+                    row("Runs", "play.circle", destination: .runs, busy: !app.runCoordinator.running.isEmpty)
 
                     if !orderedProjects.isEmpty {
                         section("Projects")
@@ -91,6 +92,7 @@ struct SidebarView: View {
                 title: Text("Delete \(project.name)?"),
                 message: Text("Tracks, notes, decisions, and conversations in this project will be removed from this Mac."),
                 primaryButton: .destructive(Text("Delete")) {
+                    RunStore.cancelActive(in: project, context: context)
                     app.closeTabs(forProject: project.id)
                     context.delete(project)
                     try? context.save()

@@ -21,14 +21,15 @@ struct ConversationChat: View {
     var body: some View {
         VStack(spacing: 0) {
             if project != nil, !compact {
-                ChatTitleBar(title: conversation.title)
+                ChatTitleBar(title: conversation.title, onStartRun: startRun)
             }
             if !compact, let mark = deletionMark {
                 DeletionBanner(mark: mark, onKeep: keepMark, onDelete: { confirmDelete = true })
             }
             ConversationSessionView(
                 runtime: app.chatRuntime(for: conversation, project: project),
-                compact: compact
+                compact: compact,
+                onStartRun: compact ? startRun : nil
             )
         }
         .alert("Delete this conversation?", isPresented: $confirmDelete) {
@@ -37,6 +38,11 @@ struct ConversationChat: View {
         } message: {
             Text("It’s removed from this Mac. Decisions, notes, and tracks from it stay.")
         }
+    }
+
+    private func startRun() {
+        let brief = conversation.orderedMessages.last(where: { $0.role == .user })?.content ?? ""
+        app.presentNewRun(origin: .chat, project: hostProject, chat: conversation, brief: brief)
     }
 
     private func keepMark() {
@@ -58,37 +64,48 @@ struct ConversationChat: View {
 
 struct ChatTitleBar: View {
     var title: String
+    var onStartRun: (() -> Void)? = nil
 
     private var displayTitle: String {
         title.isEmpty ? "New chat" : title
     }
 
     var body: some View {
-        Text(displayTitle)
-            .font(CraftFont.title)
-            .foregroundStyle(.primary)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 32)
-            .frame(height: 52)
-            .background(CraftColor.canvas)
-            .overlay(alignment: .bottom) {
-                Hairline()
+        HStack(spacing: 12) {
+            Text(displayTitle)
+                .font(CraftFont.title)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let onStartRun {
+                Button("Start Run…", action: onStartRun)
+                    .buttonStyle(.plain)
+                    .font(CraftFont.body)
+                    .foregroundStyle(.secondary)
             }
-            .accessibilityAddTraits(.isHeader)
+        }
+        .padding(.horizontal, 32)
+        .frame(height: 52)
+        .background(CraftColor.canvas)
+        .overlay(alignment: .bottom) {
+            Hairline()
+        }
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
 private struct ConversationSessionView: View {
     @Bindable var runtime: ChatRuntime
     var compact = false
+    var onStartRun: (() -> Void)? = nil
     @Environment(AppModel.self) private var app
     @ObservedObject private var session: ChatSession
 
-    init(runtime: ChatRuntime, compact: Bool) {
+    init(runtime: ChatRuntime, compact: Bool, onStartRun: (() -> Void)? = nil) {
         self.runtime = runtime
         self.compact = compact
+        self.onStartRun = onStartRun
         _session = ObservedObject(wrappedValue: runtime.session)
     }
 
@@ -116,6 +133,7 @@ private struct ConversationSessionView: View {
                 onSend: send,
                 onStop: { session.cancel() },
                 onRetryStuck: retryStuck,
+                onStartRun: onStartRun,
                 debugLog: runtime.bridge.debugLog
             )
             .padding(.horizontal, compact ? 16 : 32)

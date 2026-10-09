@@ -100,6 +100,9 @@ final class Project: Identifiable {
     @Relationship(deleteRule: .cascade, inverse: \CodeAttachment.project)
     var codeAttachments: [CodeAttachment] = []
 
+    @Relationship(deleteRule: .cascade, inverse: \AgentRun.project)
+    var runs: [AgentRun] = []
+
     var overviewWidthRaw: String = "twoThirds"
     var overviewLayoutJSON: String = ""
     var workerProviderID: String = ""
@@ -127,6 +130,7 @@ final class Project: Identifiable {
             + decisions.map(\.createdAt)
             + threads.map(\.updatedAt)
             + conversations.map(\.updatedAt)
+            + runs.map(\.updatedAt)
         return dates.max() ?? updatedAt
     }
 
@@ -470,6 +474,9 @@ final class Conversation {
     @Relationship(deleteRule: .cascade, inverse: \ChatMessage.conversation)
     var messages: [ChatMessage] = []
 
+    @Relationship(deleteRule: .nullify, inverse: \AgentRun.originChat)
+    var originatedRuns: [AgentRun] = []
+
     @Relationship(inverse: \Tag.conversations)
     var tags: [Tag] = []
 
@@ -678,6 +685,9 @@ final class AgendaItem {
 
     @Relationship(deleteRule: .cascade, inverse: \TaskDependency.blockingTask)
     var blockingLinks: [TaskDependency] = []
+
+    @Relationship(deleteRule: .nullify, inverse: \AgentRun.task)
+    var agentRuns: [AgentRun] = []
 
     var kind: AgendaKind {
         get { AgendaKind(rawValue: kindRaw) ?? .reminder }

@@ -62,7 +62,7 @@ Structure (`SidebarView`):
 Order, top to bottom:
 
 1. Home (`house`)
-2. Workspace label, then Projects (`square.stack`), Tasks (`checklist`), Calendar (`calendar`), Chats (`bubble.left.and.bubble.right`)
+2. Workspace label, then Projects (`square.stack`), Tasks (`checklist`), Calendar (`calendar`), Chats (`bubble.left.and.bubble.right`), Runs (`play.circle`)
 3. Projects label, then pinned projects first, then the rest by name. Omit the whole Projects block when there are none.
 4. Settings (`gearshape`), footer
 
@@ -74,6 +74,7 @@ Rows (`SidebarRow`):
 - Pin: `pin.fill`, 9pt, tertiary, trailing edge. Not a badge.
 - **Tasks due count (locked exception):** the Tasks row may show a trailing count in that same slot, `CraftFont.caption`, tertiary, when there are incomplete reminders or Slate tasks due today or earlier. Accessibility value: “3 due”. Do not badge any other row.
 - **Chats working spinner (locked exception):** when any conversation is generating, the Chats icon is a `ProgressView` in the same 18×18 slot. Idle icon stays `bubble.left.and.bubble.right`. This is not a badge. Reduce Motion uses a static `ellipsis` instead of the spinner. Accessibility value: “Working”.
+- **Runs working spinner (locked exception):** same as Chats, for any Run that is `queued` or `running`. Idle icon stays `play.circle`.
 - Plain buttons. Section labels are 13 semibold, secondary, 20 above / 4 below / 8 inset, no hit testing.
 
 Do not add hover to section labels. Do not move Settings into the scroll. Do not add a divider. Do not change the width, the 52pt drag strip, or the row metrics.
@@ -155,6 +156,16 @@ Workspace page. One job: what is still running, and how to get back to it.
 - Then “Recent”: the 10 most recent unarchived sessions, excluding ones already in Running.
 - A row opens that conversation. Do not host a second chat on this page.
 
+### Runs
+
+Workspace page. Copy Chats. Toolbar adds **New Run** — a run cannot be created empty.
+
+- Centered column, 560 wide. Row text stays left-aligned.
+- If any Run is `queued` / `running` / `waiting`: section “Running”, those rows. Meta is the live wait title or `Queued`.
+- If none are: `play.circle` mark, “Nothing running.”, then “Runs that are still working will show up here.”
+- Then “Recent”: the 10 most recently updated terminal Runs.
+- A row opens that Run. Do not host the Run document on this page.
+
 ### Documents and chat
 
 The page is the document. No panel around the text.
@@ -162,6 +173,7 @@ Shared chat component responsibilities and usage are documented in [`features/ch
 
 - Body 15, line height about 1.45. Titles in the document follow the toolbar title. Do not add a second 24pt bold title in the middle of the page.
 - **Project chat title (locked).** The project chat page pins a 52pt title bar at the top of the solid page: the conversation title in `CraftFont.title`, 32 inset, canvas fill, hairline below. It does not scroll with the transcript. Empty title or a new chat reads “New chat”. Ask Slate (compact) does not get this bar. This is page chrome, not a second window toolbar.
+- **Run document (locked).** Solid page, 52pt title bar like project chat. Empty title reads “New run”. No composer. Body is status, origin, brief, history, then a receipt or error.
 - **Deletion banner (locked).** When a note, track, decision, or project chat is marked for deletion, pin a banner at the top of that page (under the chat title if one is showing). It does not scroll with the document. Collapsed: `xmark.octagon` in red, “Marked for deletion”, Keep, Delete, chevron. Height 52, 32 inset, canvas fill, hairline below. Expanded: the reason, then an optional replacement card. Keep clears the mark. Delete uses the existing confirmation and actually deletes. Do not put this in the window toolbar. Ask Slate (compact) does not get this banner. Spec in [`features/mark-for-deletion.md`](features/mark-for-deletion.md).
 - Composer is a solid field on the solid page: 12 corner radius, 12 padding, hairline border at the content color’s hairline token. It sticks to the bottom of the column, inset 32, with 14 of padding around it. A hairline may separate it from the transcript because it is pinned chrome on the page, not a section break.
 - Chat bubbles, if any, are flat fills using the elevated solid for the assistant and the selection solid for the user. No tails, no shadows, no gradient.
@@ -182,9 +194,10 @@ Threads, notes, and decisions are a source list on the solid page, not a second 
 - Width 250 when pinned, solid canvas, no glass. Separate it from the document with a single inset hairline.
 - Same row metrics as the sidebar (28 tall, 8 inset, radius 8) so it feels like a list and not a new component.
 - The document to the right keeps the 32 inset and the 680 measure.
-- **Collapse (locked).** An icon-only `sidebar.leading` control sits on the Overview row. It does not hide the column the way the main sidebar does. Collapsed width is 52: Overview, Tasks, plus section icons (Chats, Tracks, Notes, Decisions) stay visible. Hovering the rail for 0.1s slides the full 250 column in from the leading edge, over the document. A quicker pass does not open it. Leaving slides it back out the same way, a little quicker (open 0.22 easeOut, close 0.14 easeOut). The page does not reflow on hover. Clicking the control is the only action that pins the column open or closed and shifts the layout. Reduce Motion: opacity only, no slide.
+- **Collapse (locked).** An icon-only `sidebar.leading` control sits on the Overview row. It does not hide the column the way the main sidebar does. Collapsed width is 52: Overview, Tasks, plus section icons (Runs, Chats, Tracks, Notes, Decisions) stay visible. Hovering the rail for 0.1s slides the full 250 column in from the leading edge, over the document. A quicker pass does not open it. Leaving slides it back out the same way, a little quicker (open 0.22 easeOut, close 0.14 easeOut). The page does not reflow on hover. Clicking the control is the only action that pins the column open or closed and shifts the layout. Reduce Motion: opacity only, no slide.
 - **Tasks.** A destination row directly under Overview, not a collapsible section. Symbol `checklist`. Trailing add in the expanded column. It opens the project task page. The window tab reads “{Project}: Tasks”. Kanban always shows the four columns on the canvas: a 3×12 status pip, title, count, and plus. Ready is blue, In Progress yellow, Blocked red, Done green. Cards are elevated plates with a hairline. No tinted column well. List uses the same pip and statuses as rows. The window toolbar is New Task, a view picker (Kanban / List), and the trailing pane toggle. Clicking a task opens a solid 400-wide trailing page (`SlideInspector`, same 0.22 clip as the overview inspector). It is a document: `DocumentTitle`, property pills, 15pt notes. Close is the header ×, Escape, or the toolbar toggle. Do not use the overview inspector chrome or the task modal on this board. New Task stays a modal. Calendar and workspace Tasks still use the modal.
-- **Sections.** Chats, Tracks, Notes, and Decisions are collapsible. The section label is the control; the plus stays for create. A section opens when it matches the current tab or the user opens it. The others stay closed. This is reveal-in-sidebar, not expand-all.
+- **Sections.** Runs, Chats, Tracks, Notes, and Decisions are collapsible. Runs is always visible, after Tasks and before Chats. The section label is the control; the plus stays for create. A section opens when it matches the current tab or the user opens it. The others stay closed. This is reveal-in-sidebar, not expand-all.
+- **Runs.** Newest first. Show 10, then Show more. Working rows use the sidebar busy spinner. Plus opens New Run with this project filled.
 - **Tracks.** Subtracks indent 28 per level. Trees start collapsed. Opening a track expands only the path to that track. Completed children of a track sit in a Completed group under that track, collapsed by default, and use `checkmark.circle` instead of the kind icon.
 - **Chats.** Newest first. Show 10, then Show more. Show less folds it back. Opening a chat past the first 10 expands the list.
 - **Marked for deletion.** A marked chat, track, note, or decision swaps its leading icon for `xmark.octagon` in red. The title stays primary. This is a status exception, not a decorative color.
@@ -363,7 +376,7 @@ Rules:
 - **Modals:** entry `.scale(0.96).combined(with: .opacity)` with `Motion.snappy`; exit `.scale(0.98).combined(with: .opacity)` with `Motion.quick`. Use an asymmetric transition.
 - **Destination changes** (sidebar navigation) are instant. Do not animate the page swap.
 - **Chrome column slide:** sidebar and inspector. Width clip plus opacity, `.easeInOut(duration: 0.22)`, as specified under Window. The page grid may reflow with that same transaction. Do not give the inspector its own animation. The project Tasks inspector uses this same column.
-- No stagger. No hover scale. No looping or ambient animation. Exceptions: the chat orb (its own spec), and the Chats sidebar icon while a conversation is generating. No bounce above the `.snappy` default.
+- No stagger. No hover scale. No looping or ambient animation. Exceptions: the chat orb (its own spec), the Chats sidebar icon while a conversation is generating, and the Runs sidebar or tab spinner while a Run is active. No bounce above the `.snappy` default.
 - **Reduce Motion:** read `@Environment(\.accessibilityReduceMotion)`. When it is on, every transition becomes `.opacity`, and every animation that moves or scales becomes `Motion.quick` opacity only. Nothing slides, scales, or pushes.
 
 ## Calendar
