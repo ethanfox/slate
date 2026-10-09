@@ -126,78 +126,28 @@ enum RunChatGPT {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    var session = try await ChatGPTSignIn.validSession()
-                    let tools = try await gateway.definitions()
-                    var input: [[String: Any]] = [
-                        ["role": "user", "content": userText]
-                    ]
                     var coalescer = StreamTextCoalescer()
-                    for round in 0...ChatGPTProvider.maxToolRounds {
-                        let roundTools = ChatGPTProvider.toolsForRound(round, tools: tools)
-                        let payload = ChatGPTProvider.inferenceBody(
-                            model: model,
-                            instructions: instructions,
-                            input: input,
-                            tools: roundTools
-                        )
-                        let bytes = try await ChatGPTProvider.openAuthorizedStream(session: &session, payload: payload)
-                        var calls: [Call] = []
-                        var replay: [[String: Any]] = []
-                        for try await line in bytes.lines {
-                            try Task.checkCancellation()
-                            guard line.hasPrefix("data:") else { continue }
-                            let raw = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
-                            guard raw != "[DONE]", let data = raw.data(using: .utf8),
-                                  let event = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                                  let type = event["type"] as? String else { continue }
-                            switch type {
-                            case "response.output_text.delta":
-                                guard let delta = event["delta"] as? String, !delta.isEmpty else { continue }
+                    let tools = try await gateway.definitions()
+                    try await AgentRuntime.run(
+                        instructions: instructions,
+                        input: [["role": "user", "content": userText]],
+                        tools: tools,
+                        maxRounds: ChatGPTProvider.maxToolRounds,
+                        transport: ChatGPTTransport(model: model),
+                        gateway: gateway,
+                        onEvent: { event in
+                            switch event {
+                            case .text(let delta):
                                 if let chunk = coalescer.push(delta) {
                                     continuation.yield(.text(chunk))
                                 }
-                            case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
+                            case .thinking:
                                 continuation.yield(.wait(ChatWaitState.thinking.label))
-                            case "response.output_item.added", "response.output_item.done":
-                                guard let item = event["item"] as? [String: Any] else { continue }
-                                if type == "response.output_item.done" {
-                                    replay.append(ChatGPTProvider.replayItem(item))
-                                }
-                                guard let call = Call.parse(item) else { continue }
-                                if let index = calls.firstIndex(where: { $0.id == call.id }) {
-                                    if type == "response.output_item.done" { calls[index] = call }
-                                } else {
-                                    calls.append(call)
-                                }
+                            case .callStarted(let call), .callFinished(let call, _):
                                 continuation.yield(.wait(RunWaitLabel.forTool(call.name)))
-                            case "response.failed", "error":
-                                throw ChatGPTAuthError(
-                                    ChatGPTProvider.apiError(from: event) ?? "ChatGPT could not complete the response."
-                                )
-                            default:
-                                continue
                             }
                         }
-                        if let leftover = coalescer.take() {
-                            continuation.yield(.text(leftover))
-                        }
-                        if calls.isEmpty || roundTools.isEmpty { break }
-                        input.append(contentsOf: replay)
-                        for call in calls {
-                            continuation.yield(.wait(RunWaitLabel.forTool(call.name)))
-                            let output: String
-                            do {
-                                output = try await gateway.execute(name: call.name, arguments: call.arguments)
-                            } catch {
-                                output = "Error: \(error.localizedDescription)"
-                            }
-                            input.append([
-                                "type": "function_call_output",
-                                "call_id": call.id,
-                                "output": output
-                            ])
-                        }
-                    }
+                    )
                     if let leftover = coalescer.take() {
                         continuation.yield(.text(leftover))
                     }
@@ -212,29 +162,6 @@ enum RunChatGPT {
                 guard case .cancelled = termination else { return }
                 task.cancel()
             }
-        }
-    }
-
-    private struct Call {
-        var id: String
-        var name: String
-        var arguments: [String: Any]
-
-        static func parse(_ item: [String: Any]) -> Call? {
-            guard item["type"] as? String == "function_call",
-                  let name = item["name"] as? String,
-                  let callID = item["call_id"] as? String
-            else { return nil }
-            return Call(id: callID, name: name, arguments: arguments(from: item["arguments"]))
-        }
-
-        private static func arguments(from raw: Any?) -> [String: Any] {
-            if let arguments = raw as? [String: Any] { return arguments }
-            guard let string = raw as? String,
-                  let data = string.data(using: .utf8),
-                  let arguments = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else { return [:] }
-            return arguments
         }
     }
 }

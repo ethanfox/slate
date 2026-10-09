@@ -109,6 +109,8 @@ final class ProviderNeutralTests: XCTestCase {
         let first = bridge.prepareProviderTurn(userText: "hi")
         XCTAssertTrue(first.contains("You are the assistant inside Slate"))
         XCTAssertTrue(first.contains("<focused-track>"))
+        XCTAssertTrue(first.contains("append_to_body"))
+        XCTAssertTrue(first.contains("keeping existing requirements"))
         XCTAssertTrue(first.contains("Use the existing session store."))
         XCTAssertTrue(first.contains("Keep the Mac session"))
         XCTAssertTrue(first.contains("Wire refresh"))
@@ -120,6 +122,94 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertTrue(later.contains("<focused-track>"))
         XCTAssertTrue(later.contains("Do not invent a second token."))
         XCTAssertTrue(later.contains("Wire refresh"))
+    }
+
+    @MainActor
+    func testFocusedTrackBodyChangeAppearsOnNextTurn() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let seed = HarborEvalFixture.seed(in: container.mainContext)
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test", project: seed.project)
+        conversation.thread = seed.auth
+        container.mainContext.insert(conversation)
+        try container.mainContext.save()
+
+        let bridge = CursorConversationBridge(conversation: conversation, project: seed.project)
+        let first = bridge.prepareProviderTurn(userText: "What are the requirements?")
+        XCTAssertTrue(first.contains(HarborEvalFixture.authBody))
+        XCTAssertFalse(first.contains("Sign-in must work offline."))
+
+        seed.auth.body = HarborEvalFixture.authBodyWithOffline
+        try container.mainContext.save()
+
+        let later = bridge.prepareProviderTurn(userText: "What are the requirements now?")
+        XCTAssertTrue(later.contains("Sign-in must work offline."))
+        XCTAssertTrue(later.contains("local session store"))
+    }
+
+    @MainActor
+    func testFocusedContextExcludesUnrelatedTracksAndNoteBodies() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let seed = HarborEvalFixture.seed(in: container.mainContext)
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test", project: seed.project)
+        conversation.thread = seed.auth
+        container.mainContext.insert(conversation)
+        try container.mainContext.save()
+
+        let text = CursorConversationBridge(conversation: conversation, project: seed.project)
+            .prepareProviderTurn(userText: "What's left?")
+        XCTAssertTrue(text.contains("<focused-track>"))
+        XCTAssertTrue(text.contains("Auth"))
+        XCTAssertTrue(text.contains("Tokens"))
+        XCTAssertFalse(text.contains("Billing"))
+        XCTAssertFalse(text.contains(HarborEvalFixture.vendorTail))
+        XCTAssertFalse(text.contains(HarborEvalFixture.billingSentinel))
+        XCTAssertFalse(text.contains("Retry invoice webhooks"))
+    }
+
+    @MainActor
+    func testFocusedContextShowsDescendantTaskStatusOnNextTurn() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let seed = HarborEvalFixture.seed(in: container.mainContext)
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test", project: seed.project)
+        conversation.thread = seed.auth
+        container.mainContext.insert(conversation)
+        try container.mainContext.save()
+
+        let bridge = CursorConversationBridge(conversation: conversation, project: seed.project)
+        let refresh = seed.fixRefresh.id.uuidString
+        let first = bridge.prepareProviderTurn(userText: "What's left?")
+        XCTAssertTrue(first.contains("Fix refresh after wake (id \(refresh), blocked)"))
+
+        TaskStore.setStatus(.ready, on: seed.fixRefresh, in: container.mainContext)
+        try container.mainContext.save()
+
+        let later = bridge.prepareProviderTurn(userText: "And now?")
+        XCTAssertTrue(later.contains("Fix refresh after wake (id \(refresh), ready)"))
+        XCTAssertFalse(later.contains("Fix refresh after wake (id \(refresh), blocked)"))
+    }
+
+    @MainActor
+    func testTrackFirstRulesRemainAfterOpeningTurn() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let seed = HarborEvalFixture.seed(in: container.mainContext)
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test", project: seed.project)
+        conversation.thread = seed.auth
+        container.mainContext.insert(conversation)
+        try container.mainContext.save()
+
+        let bridge = CursorConversationBridge(conversation: conversation, project: seed.project)
+        let first = bridge.prepareProviderTurn(userText: "hi")
+        XCTAssertTrue(first.contains(ContextBuilder.knowledgeRules))
+        XCTAssertTrue(first.contains("You are the assistant inside Slate"))
+
+        let later = bridge.prepareProviderTurn(userText: "again")
+        XCTAssertFalse(later.contains("You are the assistant inside Slate"))
+        XCTAssertTrue(later.contains(ContextBuilder.knowledgeRules))
+        XCTAssertTrue(later.contains("track bodies"))
     }
 
     @MainActor

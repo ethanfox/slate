@@ -35,11 +35,19 @@
 		D5E6F708192A3B4C5D6E7F80 /* TaskInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4D5E6F708192A3B4C5D6E7F /* TaskInspector.swift */; };
 		F18A2B3C4D5E6F708192A3B4 /* ChromeChoiceDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A1B2C3D4E5F60718293A4 /* ChromeChoiceDialog.swift */; };
 		E07C8D9F3A4B5C6D7E8F901A /* TaskStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */; };
+		8F3A1C2E4B5D60718293A002 /* MCPToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */; };
+		8F3A1C2E4B5D60718293A003 /* Tools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75926FA04CD11DF7C22B424B /* Tools.swift */; };
+		8F3A1C2E4B5D60718293A005 /* HarborEvalFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A1C2E4B5D60718293A004 /* HarborEvalFixture.swift */; };
+		8F3A1C2E4B5D60718293A008 /* TrackFirstEval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A1C2E4B5D60718293A007 /* TrackFirstEval.swift */; };
+		8F3A1C2E4B5D60718293A00A /* TrackFirstEvalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A1C2E4B5D60718293A009 /* TrackFirstEvalTests.swift */; };
 		B81A0C1D2E3F405162738A02 /* AgentRun.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A01 /* AgentRun.swift */; };
 		B81A0C1D2E3F405162738A03 /* AgentRun.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A01 /* AgentRun.swift */; };
 		B81A0C1D2E3F405162738A05 /* RunStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A04 /* RunStore.swift */; };
 		B81A0C1D2E3F405162738A06 /* RunStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A04 /* RunStore.swift */; };
 		B81A0C1D2E3F405162738A08 /* RunToolPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A07 /* RunToolPolicy.swift */; };
+		A91E2F3A4B5C6D7E8F901002 /* AgentToolGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = A91E2F3A4B5C6D7E8F901001 /* AgentToolGateway.swift */; };
+		A91E2F3A4B5C6D7E8F901004 /* AgentRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A91E2F3A4B5C6D7E8F901003 /* AgentRuntime.swift */; };
+		A91E2F3A4B5C6D7E8F901006 /* AgentRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A91E2F3A4B5C6D7E8F901005 /* AgentRuntimeTests.swift */; };
 		B81A0C1D2E3F405162738A0A /* RunGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A09 /* RunGateway.swift */; };
 		B81A0C1D2E3F405162738A0C /* RunCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A0B /* RunCoordinator.swift */; };
 		B81A0C1D2E3F405162738A0E /* RunAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A0D /* RunAdapters.swift */; };
@@ -226,6 +234,9 @@
 		B81A0C1D2E3F405162738A01 /* AgentRun.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRun.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A04 /* RunStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunStore.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A07 /* RunToolPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunToolPolicy.swift; sourceTree = "<group>"; };
+		A91E2F3A4B5C6D7E8F901001 /* AgentToolGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentToolGateway.swift; sourceTree = "<group>"; };
+		A91E2F3A4B5C6D7E8F901003 /* AgentRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntime.swift; sourceTree = "<group>"; };
+		A91E2F3A4B5C6D7E8F901005 /* AgentRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntimeTests.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A09 /* RunGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunGateway.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A0B /* RunCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunCoordinator.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A0D /* RunAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunAdapters.swift; sourceTree = "<group>"; };
@@ -253,6 +264,11 @@
 		C4D5E6F708192A3B4C5D6E7F /* TaskInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskInspector.swift; sourceTree = "<group>"; };
 		E07A1B2C3D4E5F60718293A4 /* ChromeChoiceDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeChoiceDialog.swift; sourceTree = "<group>"; };
 		DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStoreTests.swift; sourceTree = "<group>"; };
+		8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPToolsTests.swift; sourceTree = "<group>"; };
+		8F3A1C2E4B5D60718293A004 /* HarborEvalFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarborEvalFixture.swift; sourceTree = "<group>"; };
+		8F3A1C2E4B5D60718293A006 /* track-first-eval.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = Scenarios/track-first-eval.md; sourceTree = "<group>"; };
+		8F3A1C2E4B5D60718293A007 /* TrackFirstEval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackFirstEval.swift; sourceTree = "<group>"; };
+		8F3A1C2E4B5D60718293A009 /* TrackFirstEvalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackFirstEvalTests.swift; sourceTree = "<group>"; };
 		509E6F9E705BA7F4A6F2184F /* WindowTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTab.swift; sourceTree = "<group>"; };
 		51AEE9771680CE63EEA8864D /* ChatRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRuntime.swift; sourceTree = "<group>"; };
 		C8E1A2B304F56D7E8A9B0C11 /* StreamTextCoalescer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamTextCoalescer.swift; sourceTree = "<group>"; };
@@ -464,6 +480,8 @@
 				5077C7D2C8E53970BDE445D0 /* AssociationService.swift */,
 				8A1C2E3F4B5D6E708192A3B4 /* TaskStore.swift */,
 				B81A0C1D2E3F405162738A04 /* RunStore.swift */,
+				A91E2F3A4B5C6D7E8F901001 /* AgentToolGateway.swift */,
+				A91E2F3A4B5C6D7E8F901003 /* AgentRuntime.swift */,
 				B81A0C1D2E3F405162738A07 /* RunToolPolicy.swift */,
 				B81A0C1D2E3F405162738A09 /* RunGateway.swift */,
 				B81A0C1D2E3F405162738A0B /* RunCoordinator.swift */,
@@ -653,8 +671,14 @@
 				3C8E1A2B4D5F60718293B4C5 /* MarkdownTableTests.swift */,
 				588C1D051000807F84657854 /* ProviderNeutralTests.swift */,
 				DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */,
+				8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */,
+				8F3A1C2E4B5D60718293A004 /* HarborEvalFixture.swift */,
+				8F3A1C2E4B5D60718293A007 /* TrackFirstEval.swift */,
+				8F3A1C2E4B5D60718293A009 /* TrackFirstEvalTests.swift */,
+				8F3A1C2E4B5D60718293A006 /* track-first-eval.md */,
 				B81A0C1D2E3F405162738A15 /* RunStoreTests.swift */,
 				B81A0C1D2E3F405162738A17 /* RunToolPolicyTests.swift */,
+				A91E2F3A4B5C6D7E8F901005 /* AgentRuntimeTests.swift */,
 			);
 			path = PersonalContextTests;
 			sourceTree = "<group>";
@@ -835,8 +859,14 @@
 				4D9F2B3C5E60718293A4C5D6 /* MarkdownTableTests.swift in Sources */,
 				CA068E7D29AD93EE8C1E9CD7 /* ProviderNeutralTests.swift in Sources */,
 				E07C8D9F3A4B5C6D7E8F901A /* TaskStoreTests.swift in Sources */,
+				8F3A1C2E4B5D60718293A002 /* MCPToolsTests.swift in Sources */,
+				8F3A1C2E4B5D60718293A003 /* Tools.swift in Sources */,
+				8F3A1C2E4B5D60718293A005 /* HarborEvalFixture.swift in Sources */,
+				8F3A1C2E4B5D60718293A008 /* TrackFirstEval.swift in Sources */,
+				8F3A1C2E4B5D60718293A00A /* TrackFirstEvalTests.swift in Sources */,
 				B81A0C1D2E3F405162738A16 /* RunStoreTests.swift in Sources */,
 				B81A0C1D2E3F405162738A18 /* RunToolPolicyTests.swift in Sources */,
+				A91E2F3A4B5C6D7E8F901006 /* AgentRuntimeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -935,6 +965,8 @@
 				C3F5F2636A9119A4EC956BB3 /* Records.swift in Sources */,
 				B81A0C1D2E3F405162738A02 /* AgentRun.swift in Sources */,
 				B81A0C1D2E3F405162738A05 /* RunStore.swift in Sources */,
+				A91E2F3A4B5C6D7E8F901002 /* AgentToolGateway.swift in Sources */,
+				A91E2F3A4B5C6D7E8F901004 /* AgentRuntime.swift in Sources */,
 				B81A0C1D2E3F405162738A08 /* RunToolPolicy.swift in Sources */,
 				B81A0C1D2E3F405162738A0A /* RunGateway.swift in Sources */,
 				B81A0C1D2E3F405162738A0C /* RunCoordinator.swift in Sources */,
@@ -1008,6 +1040,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContextTests;
 				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) SLATE_TESTS";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Slate.app/Contents/MacOS/Slate";
 			};
 			name = Debug;
@@ -1043,6 +1076,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContextTests;
 				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) SLATE_TESTS";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Slate.app/Contents/MacOS/Slate";
 			};
 			name = Release;

@@ -1,5 +1,8 @@
 import Foundation
 import SwiftData
+#if SLATE_TESTS
+@testable import Slate
+#endif
 
 struct ToolError: Error {
     var message: String
@@ -526,14 +529,14 @@ enum Tools {
         },
         Tool(
             name: "create_thread",
-            description: "Start a track: a line of work such as a direction, feature, problem, experiment, or topic. Put the spec and evolving work in the body.",
+            description: "Start a track: a line of work such as a direction, feature, problem, experiment, or topic. Put the spec in the body. Work to do is a task, not a body edit.",
             properties: [
                 "project_id": projectID,
                 "title": text("Thread title."),
                 "kind": options(ThreadKind.self, "Kind of thread. Defaults to topic."),
                 "status": options(ThreadStatus.self, "Defaults to exploring."),
                 "summary": text("One or two sentences."),
-                "body": text("Markdown spec and evolving work."),
+                "body": text("Markdown spec."),
                 "parent_id": text("Parent thread id, to nest this thread.")
             ],
             required: ["project_id", "title"], readOnly: false
@@ -562,7 +565,7 @@ enum Tools {
                 "kind": options(ThreadKind.self, "Kind of thread."),
                 "status": options(ThreadStatus.self, "Thread status."),
                 "summary": text("New summary."),
-                "body": text("Replaces the whole markdown spec."),
+                "body": text("Replaces the whole markdown spec. Omit or leave empty to keep the current body."),
                 "append_to_body": text("Markdown appended to the end of the spec."),
                 "parent_id": text("New parent thread id. Empty string makes it a top-level thread.")
             ],
@@ -573,7 +576,7 @@ enum Tools {
             if let kind = try args.choice("kind", as: ThreadKind.self) { thread.kind = kind }
             if let status = try args.choice("status", as: ThreadStatus.self) { thread.status = status }
             if let summary = args.string("summary") { thread.summary = summary }
-            if let body = args.string("body") { thread.body = body }
+            if let body = args.string("body"), !body.isEmpty { thread.body = body }
             if let addition = args.string("append_to_body"), !addition.isEmpty {
                 thread.body = thread.body.isEmpty ? addition : thread.body + "\n\n" + addition
             }

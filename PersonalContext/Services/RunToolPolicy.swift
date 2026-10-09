@@ -5,6 +5,9 @@ struct RunToolPolicy: Equatable, Sendable {
     var projectID: UUID?
     var assignedTaskID: UUID?
     var allowCode: Bool
+    var denied: Set<String>
+    var requireProject: Bool
+    var attachesRunSource: Bool
 
     var allowsSlateWrites: Bool { projectID != nil }
 
@@ -19,11 +22,41 @@ struct RunToolPolicy: Equatable, Sendable {
 
     static let finishRun = "finish_run"
 
+    init(
+        runID: UUID,
+        projectID: UUID?,
+        assignedTaskID: UUID?,
+        allowCode: Bool,
+        denied: Set<String> = RunToolPolicy.denied,
+        requireProject: Bool = true,
+        attachesRunSource: Bool = true
+    ) {
+        self.runID = runID
+        self.projectID = projectID
+        self.assignedTaskID = assignedTaskID
+        self.allowCode = allowCode
+        self.denied = denied
+        self.requireProject = requireProject
+        self.attachesRunSource = attachesRunSource
+    }
+
+    static func chat(projectID: UUID?) -> RunToolPolicy {
+        RunToolPolicy(
+            runID: UUID(),
+            projectID: projectID,
+            assignedTaskID: nil,
+            allowCode: true,
+            denied: [],
+            requireProject: false,
+            attachesRunSource: false
+        )
+    }
+
     func allows(_ name: String) -> Bool {
         if name == Self.finishRun { return true }
-        if Self.denied.contains(name) { return false }
+        if denied.contains(name) { return false }
         if name.hasPrefix("project_") { return allowCode }
-        if !allowsSlateWrites {
+        if requireProject && !allowsSlateWrites {
             return false
         }
         return true
@@ -64,7 +97,8 @@ struct RunToolPolicy: Equatable, Sendable {
         if let projectID, writesProject(name) {
             arguments["project_id"] = projectID.uuidString
         }
-        if name == "create_note", arguments["source"] == nil || (arguments["source"] as? String)?.isEmpty == true {
+        if attachesRunSource, name == "create_note",
+           arguments["source"] == nil || (arguments["source"] as? String)?.isEmpty == true {
             arguments["source"] = "slate://run/\(runID.uuidString)"
         }
         return arguments

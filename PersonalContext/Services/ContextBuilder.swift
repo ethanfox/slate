@@ -1,7 +1,7 @@
 import Foundation
 
 enum ContextBuilder {
-    static let knowledgeRules = "Feature and problem specs, and evolving work, belong in track bodies. Notes hold reference material. A task links to its governing tracks through track_ids; linked notes are supplementary. Whether work is done lives only on the task. Never write built, not built, shipped, or pending into a note, a thread summary, or the task notes field."
+    static let knowledgeRules = "Feature and problem specs belong in track bodies. Notes hold reference material. Work to do is a task: create it with create_task and link governing tracks through track_ids; linked notes are supplementary. Whether work is done lives only on the task. Never write built, not built, shipped, or pending into a note, a thread summary, or the task notes field."
 
     static func identity(for project: Project) -> String {
         var lines: [String] = []
@@ -124,6 +124,8 @@ enum ContextBuilder {
 
             When you point the user at a note, track, decision, or other Slate record, put a markdown link on its own line using the id from the tools: [Title](slate://note/UUID), slate://thread/UUID, slate://decision/UUID, slate://project/UUID, or slate://conversation/UUID. The app turns that into a card they can open. Do not paste raw ids. Do not invent ids.
             """)
+        } else {
+            parts.append(knowledgeRules)
         }
         if let thread = focusedThread {
             parts.append(focusedTrackPrompt(for: thread))
@@ -199,7 +201,7 @@ enum ContextBuilder {
     private static func focusedTrackPrompt(for thread: ProjectThread) -> String {
         let title = thread.title.isEmpty ? "Untitled" : thread.title
         return """
-        You are in the side chat on track "\(title)" (id \(thread.id.uuidString)). When the user asks you to write, draft, rewrite, or add to this track, call update_thread on that id immediately (body or append_to_body). Answer questions and look up other project records with the tools. Do not create a new track for work that belongs here.
+        You are in the side chat on track "\(title)" (id \(thread.id.uuidString)). When the user asks you to add a requirement or append to this track, call update_thread on that id with append_to_body. When they ask you to rewrite or replace the spec, get the current body and call update_thread with body, keeping existing requirements unless they asked to remove them. When they ask for a task, call create_task with this id in track_ids. Answer questions and look up other project records with the tools. Do not create a new track for work that belongs here.
 
         <focused-track>
         \(focusedTrack(for: thread))

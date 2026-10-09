@@ -1,16 +1,18 @@
 import Foundation
 
 @MainActor
-final class RunGateway {
+final class RunGateway: AgentToolGateway {
     let policy: RunToolPolicy
-    private let inner: SlateToolGateway
+    let includeFinishRun: Bool
+    private let inner: any AgentToolGateway
     private(set) var journal: [RunResultLink] = []
     private(set) var finishSummary: String?
     private(set) var finishLinks: [RunResultLink] = []
 
-    init(policy: RunToolPolicy, inner: SlateToolGateway) {
+    init(policy: RunToolPolicy, inner: any AgentToolGateway, includeFinishRun: Bool = true) {
         self.policy = policy
         self.inner = inner
+        self.includeFinishRun = includeFinishRun
     }
 
     func definitions() async throws -> [[String: Any]] {
@@ -19,7 +21,9 @@ final class RunGateway {
             guard let name = tool["name"] as? String else { return false }
             return policy.allows(name)
         }
-        tools.append(Self.finishDefinition)
+        if includeFinishRun {
+            tools.append(Self.finishDefinition)
+        }
         return tools
     }
 
@@ -31,6 +35,9 @@ final class RunGateway {
             break
         }
         if name == RunToolPolicy.finishRun {
+            guard includeFinishRun else {
+                throw RunToolDenied("This session cannot use \(name).")
+            }
             return try finish(arguments)
         }
         let prepared = policy.preparedArguments(name, arguments)

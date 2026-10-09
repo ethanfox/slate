@@ -44,129 +44,88 @@ struct ChatGPTProvider: ChatProvider {
                     guard !model.isEmpty else {
                         throw ChatGPTAuthError("Choose a ChatGPT model in Settings.")
                     }
-                    var session = try await ChatGPTSignIn.validSession()
-                    let prepared = try await MainActor.run { () throws -> (String, SlateToolGateway, [[String: Any]]) in
+                    let prepared = try await MainActor.run { () throws -> (String, RunGateway, [[String: Any]]) in
                         let userText = Self.text(from: messages.last(where: { $0.role == .user }))
                         let instructions = bridge.prepareProviderTurn(
                             userText: userText,
                             includeSlateTools: includeSlateTools
                         )
-                        let gateway = SlateToolGateway(
-                            includeSlateTools: includeSlateTools,
-                            includeProjectTools: includeProjectTools,
-                            prepareRoots: includeProjectTools
-                                ? { try await bridge.prepareCodeRoots() }
-                                : nil,
-                            consult: includeSlateTools && ProjectWorker.isConfigured(on: bridge.project)
-                                ? { brief in try await ProjectWorker.consult(brief: brief, reportingTo: bridge, options: options) }
-                                : nil,
-                            mcp: includeSlateTools ? bridge.mcp : nil
+                        let gateway = RunGateway(
+                            policy: .chat(projectID: bridge.project?.id),
+                            inner: SlateToolGateway(
+                                includeSlateTools: includeSlateTools,
+                                includeProjectTools: includeProjectTools,
+                                prepareRoots: includeProjectTools
+                                    ? { try await bridge.prepareCodeRoots() }
+                                    : nil,
+                                consult: includeSlateTools && ProjectWorker.isConfigured(on: bridge.project)
+                                    ? { brief in try await ProjectWorker.consult(brief: brief, reportingTo: bridge, options: options) }
+                                    : nil,
+                                mcp: includeSlateTools ? bridge.mcp : nil
+                            ),
+                            includeFinishRun: false
                         )
                         return (instructions, gateway, messages.map(Self.responseInput))
                     }
                     let instructions = prepared.0
                     let gateway = prepared.1
-                    var input = prepared.2
                     let tools = try await gateway.definitions()
                     await MainActor.run {
                         bridge.debugLog.add("chatgpt tools=\(tools.count)")
                     }
+                    if pace.preparedAt == nil {
+                        pace.markPrepared()
+                        await MainActor.run { bridge.debugLog.pace = pace }
+                    }
                     var emitted = false
-                    for round in 0...Self.maxToolRounds {
-                        let roundTools = Self.toolsForRound(round, tools: tools)
-                        let payload = Self.inferenceBody(
-                            model: model,
-                            instructions: instructions,
-                            input: input,
-                            tools: roundTools
-                        )
-                        ChatTrace.event("chatgpt request model=\(model) tools=\(roundTools.count) input=\(input.count)")
-                        if pace.preparedAt == nil {
-                            pace.markPrepared()
-                            await MainActor.run { bridge.debugLog.pace = pace }
-                        }
-
-                        let bytes = try await Self.openAuthorizedStream(session: &session, payload: payload)
-
-                        var calls: [FunctionCall] = []
-                        var replay: [[String: Any]] = []
-                        for try await line in bytes.lines {
-                            try Task.checkCancellation()
-                            guard line.hasPrefix("data:") else { continue }
-                            let raw = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
-                            guard raw != "[DONE]", let data = raw.data(using: .utf8),
-                                  let event = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                                  let type = event["type"] as? String else { continue }
-                            switch type {
-                            case "response.output_text.delta":
-                                guard let delta = event["delta"] as? String, !delta.isEmpty else { continue }
+                    var usedBudget = false
+                    try await AgentRuntime.run(
+                        instructions: instructions,
+                        input: prepared.2,
+                        tools: tools,
+                        maxRounds: Self.maxToolRounds,
+                        transport: ChatGPTTransport(model: model),
+                        gateway: gateway,
+                        onEvent: { event in
+                            switch event {
+                            case .text(let delta):
                                 emitted = true
                                 pace.inbound(delta.count)
                                 if let chunk = coalescer.push(delta) {
                                     await emitText(chunk)
                                 }
-                            case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
-                                await MainActor.run { bridge.markThinking(event["delta"] as? String) }
-                            case "response.output_item.added", "response.output_item.done":
-                                guard let item = event["item"] as? [String: Any] else { continue }
-                                if type == "response.output_item.done" {
-                                    replay.append(Self.replayItem(item))
-                                }
-                                guard let call = Self.functionCall(from: item) else { continue }
-                                if let index = calls.firstIndex(where: { $0.id == call.id }) {
-                                    if type == "response.output_item.done" { calls[index] = call }
-                                } else {
-                                    calls.append(call)
-                                }
+                            case .thinking(let delta):
+                                await MainActor.run { bridge.markThinking(delta) }
+                            case .callStarted(let call):
                                 await MainActor.run {
                                     bridge.applyTool(name: call.name, status: "running", id: call.id)
                                     bridge.debugLog.add("chatgpt tool \(call.name)")
                                 }
-                            case "response.failed", "error":
-                                throw ChatGPTAuthError(Self.apiError(from: event) ?? "ChatGPT could not complete the response.")
-                            default:
-                                continue
+                            case .callFinished(let call, let output):
+                                usedBudget = true
+                                await MainActor.run {
+                                    if output.hasPrefix("Error:") {
+                                        bridge.applyTool(
+                                            name: call.name,
+                                            status: "error",
+                                            id: call.id,
+                                            detail: output
+                                        )
+                                    } else {
+                                        bridge.applyTool(
+                                            name: call.name,
+                                            status: "completed",
+                                            id: call.id,
+                                            sources: Self.sources(tool: call.name, result: output)
+                                        )
+                                    }
+                                }
                             }
                         }
-                        await flushText()
-                        if calls.isEmpty || roundTools.isEmpty { break }
-                        input.append(contentsOf: replay)
-                        for call in calls {
-                            await MainActor.run {
-                                bridge.applyTool(name: call.name, status: "running", id: call.id)
-                            }
-                            let output: String
-                            do {
-                                let result = try await gateway.execute(name: call.name, arguments: call.arguments)
-                                await MainActor.run {
-                                    bridge.applyTool(
-                                        name: call.name,
-                                        status: "completed",
-                                        id: call.id,
-                                        sources: Self.sources(tool: call.name, result: result)
-                                    )
-                                }
-                                output = result
-                            } catch {
-                                await MainActor.run {
-                                    bridge.applyTool(name: call.name, status: "error", id: call.id, detail: error.localizedDescription)
-                                }
-                                output = "Error: \(error.localizedDescription)"
-                            }
-                            input.append([
-                                "type": "function_call_output",
-                                "call_id": call.id,
-                                "output": output
-                            ])
-                        }
-                        if round == Self.maxToolRounds - 1 {
-                            input.append([
-                                "role": "user",
-                                "content": Self.answerNowMessage
-                            ])
-                            await MainActor.run {
-                                bridge.debugLog.add("chatgpt tool budget used; forcing answer")
-                            }
+                    )
+                    if usedBudget {
+                        await MainActor.run {
+                            bridge.debugLog.add("chatgpt tools finished")
                         }
                     }
                     await flushText()
@@ -215,7 +174,7 @@ struct ChatGPTProvider: ChatProvider {
     static let answerNowMessage = "Answer now from the tool results you already have. Do not call more tools."
 
     static func toolsForRound(_ round: Int, tools: [[String: Any]]) -> [[String: Any]] {
-        round < maxToolRounds ? tools : []
+        AgentRuntime.toolsForRound(round, tools: tools, maxRounds: maxToolRounds)
     }
 
     static func openAuthorizedStream(
@@ -338,7 +297,7 @@ struct ChatGPTProvider: ChatProvider {
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
-    private static func functionCall(from item: [String: Any]) -> FunctionCall? {
+    static func functionCall(from item: [String: Any]) -> FunctionCall? {
         guard item["type"] as? String == "function_call",
               let name = item["name"] as? String,
               let callID = item["call_id"] as? String
@@ -395,10 +354,68 @@ struct ChatGPTProvider: ChatProvider {
         return object.values.flatMap(sourceRecords)
     }
 
-    private struct FunctionCall {
+    struct FunctionCall {
         var id: String
         var name: String
         var arguments: [String: Any]
+    }
+}
+
+struct ChatGPTTransport: AgentModelTransport {
+    var model: String
+
+    func complete(
+        instructions: String,
+        input: [[String: Any]],
+        tools: [[String: Any]],
+        onText: (String) async -> Void,
+        onThinking: (String?) async -> Void
+    ) async throws -> AgentModelTurn {
+        var session = try await ChatGPTSignIn.validSession()
+        let payload = ChatGPTProvider.inferenceBody(
+            model: model,
+            instructions: instructions,
+            input: input,
+            tools: tools
+        )
+        ChatTrace.event("chatgpt request model=\(model) tools=\(tools.count) input=\(input.count)")
+        let bytes = try await ChatGPTProvider.openAuthorizedStream(session: &session, payload: payload)
+        var calls: [AgentProposedCall] = []
+        var replay: [[String: Any]] = []
+        for try await line in bytes.lines {
+            try Task.checkCancellation()
+            guard line.hasPrefix("data:") else { continue }
+            let raw = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+            guard raw != "[DONE]", let data = raw.data(using: .utf8),
+                  let event = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let type = event["type"] as? String else { continue }
+            switch type {
+            case "response.output_text.delta":
+                guard let delta = event["delta"] as? String, !delta.isEmpty else { continue }
+                await onText(delta)
+            case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
+                await onThinking(event["delta"] as? String)
+            case "response.output_item.added", "response.output_item.done":
+                guard let item = event["item"] as? [String: Any] else { continue }
+                if type == "response.output_item.done" {
+                    replay.append(ChatGPTProvider.replayItem(item))
+                }
+                guard let parsed = ChatGPTProvider.functionCall(from: item) else { continue }
+                let call = AgentProposedCall(id: parsed.id, name: parsed.name, arguments: parsed.arguments)
+                if let index = calls.firstIndex(where: { $0.id == call.id }) {
+                    if type == "response.output_item.done" { calls[index] = call }
+                } else {
+                    calls.append(call)
+                }
+            case "response.failed", "error":
+                throw ChatGPTAuthError(
+                    ChatGPTProvider.apiError(from: event) ?? "ChatGPT could not complete the response."
+                )
+            default:
+                continue
+            }
+        }
+        return AgentModelTurn(calls: calls, replay: replay)
     }
 }
 

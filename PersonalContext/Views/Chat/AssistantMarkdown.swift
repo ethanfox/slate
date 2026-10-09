@@ -850,7 +850,7 @@ enum ChatMarkdown {
             paragraph.headIndent = CGFloat(indent)
             paragraph.firstLineHeadIndent = 0
             paragraph.lineSpacing = 4
-            paragraph.paragraphSpacing = 6
+            paragraph.paragraphSpacing = 4
             let body = NSMutableAttributedString(
                 attributedString: piece(marker, fontSize: fontSize, header: nil, list: true)
             )
@@ -1007,7 +1007,7 @@ enum ChatMarkdown {
     ) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = 6
-        paragraph.paragraphSpacing = empty ? 8 : 4
+        paragraph.paragraphSpacing = 8
         if let header {
             paragraph.paragraphSpacingBefore = header == 1 ? 16 : 12
             paragraph.paragraphSpacing = 8

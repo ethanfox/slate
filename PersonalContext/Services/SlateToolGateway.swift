@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-final class SlateToolGateway {
+final class SlateToolGateway: AgentToolGateway {
     private var roots: [ProjectCodeRoot]
     private let includeSlateTools: Bool
     private let includeProjectTools: Bool
