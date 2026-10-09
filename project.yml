@@ -47,12 +47,14 @@ targets:
         script: sh "$SRCROOT/PersonalContextRunner/build.sh"
         inputFiles:
           - $(SRCROOT)/PersonalContextRunner/runner.ts
+          - $(SRCROOT)/PersonalContextRunner/source-read.ts
           - $(SRCROOT)/PersonalContextRunner/package.json
           - $(SRCROOT)/PersonalContextRunner/bun.lock
           - $(SRCROOT)/PersonalContextRunner/runner.entitlements
         outputFiles:
           - $(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/slate-node
           - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/runner/runner.mjs
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/runner/source-read.mjs
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ethanfox.PersonalContext

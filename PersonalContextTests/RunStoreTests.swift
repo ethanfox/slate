@@ -66,6 +66,13 @@ final class RunStoreTests: XCTestCase {
         XCTAssertEqual(run.statusDetail, RunStore.quitDetail)
     }
 
+    func testQueuedSurvivesRecoverAbandoned() throws {
+        let run = try RunStore.enqueue(draft(origin: .workspace, brief: "Not started yet"), in: context)
+        RunStore.recoverAbandoned(in: context)
+        XCTAssertEqual(run.status, .queued)
+        XCTAssertNotEqual(run.statusDetail, RunStore.quitDetail)
+    }
+
     func testDeleteTaskNullifies() throws {
         let project = project("Harbor")
         let item = task("Write it", in: project)
@@ -106,6 +113,24 @@ final class RunStoreTests: XCTestCase {
         )
         XCTAssertEqual(run.providerID, "chatgpt")
         XCTAssertEqual(run.status, .queued)
+    }
+
+    func testRefetchAfterReopenFindsTheSameRun() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("slate-run-reopen-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let configuration = ModelConfiguration(schema: Store.schema, url: url)
+        let original = try ModelContainer(for: Store.schema, configurations: configuration)
+        let run = try RunStore.enqueue(draft(origin: .workspace, brief: "Index this"), in: original.mainContext)
+        let id = run.id
+        try RunStore.transition(run, to: .running, in: original.mainContext)
+        let reopened = try ModelContainer(for: Store.schema, configurations: configuration)
+        let found = try XCTUnwrap(RunStore.run(id, in: reopened.mainContext))
+        XCTAssertEqual(found.id, id)
+        XCTAssertEqual(found.brief, "Index this")
+        XCTAssertEqual(found.status, .running)
+        try RunStore.succeed(found, summary: "Published", links: [], in: reopened.mainContext)
+        XCTAssertEqual(found.status, .succeeded)
     }
 
     func testCannotDeleteActive() throws {

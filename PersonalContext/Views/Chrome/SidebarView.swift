@@ -94,6 +94,7 @@ struct SidebarView: View {
                 primaryButton: .destructive(Text("Delete")) {
                     RunStore.cancelActive(in: project, context: context)
                     app.closeTabs(forProject: project.id)
+                    CodeReferenceStore.deleteOwnedReferences(in: project, context: context)
                     context.delete(project)
                     try? context.save()
                 },

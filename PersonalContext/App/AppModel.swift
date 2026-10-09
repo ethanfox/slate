@@ -294,6 +294,7 @@ final class AppModel {
             container = try! Store.open()
             storeError = nil
         }
+        Store.disableAutosave(container)
         ChatTrace.event("app launch hasKey=\(hasAPIKey) storeError=\(storeError ?? "none")")
         CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(),
@@ -357,10 +358,13 @@ final class AppModel {
         for runtime in chatRuntimes.values {
             runtime.persist()
         }
+        Store.disableAutosave(container)
         try? container.mainContext.save()
         do {
             let previous = container
+            Store.disableAutosave(previous)
             let reopened = try Store.open()
+            Store.disableAutosave(reopened)
             retiredContainers.append(previous)
             container = reopened
             storeGeneration = UUID()
@@ -372,6 +376,7 @@ final class AppModel {
             ChatTrace.event("store reopened after outside change")
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(2))
+                Store.disableAutosave(previous)
                 self?.retiredContainers.removeAll { $0 === previous }
             }
         } catch {
@@ -660,6 +665,53 @@ final class AppModel {
         do {
             let run = try RunStore.enqueue(draft, in: container.mainContext)
             dismissModal()
+            open(run)
+            runCoordinator.start(run, in: container.mainContext)
+        } catch {
+            flash(error.localizedDescription)
+        }
+    }
+
+    func startIndexing(attachment: CodeAttachment) {
+        guard let project = attachment.project else {
+            flash("That repository is not attached to a project.")
+            return
+        }
+        if let active = CodeReferenceStore.activeIndexingRun(for: attachment, in: container.mainContext) {
+            open(active)
+            return
+        }
+        let defaults = runDefaults(for: project)
+        guard providerConnected(defaults.provider) else {
+            flash("Connect the project worker in Settings before indexing.")
+            return
+        }
+        do {
+            let run = try RunStore.enqueue(
+                RepositoryIndex.draft(
+                    for: attachment,
+                    project: project,
+                    providerID: defaults.provider,
+                    modelID: defaults.model
+                ),
+                in: container.mainContext
+            )
+            let tools = RunToolPolicy.catalogNames(for: run)
+            guard run.purpose == .indexRepository,
+                  run.indexedAttachmentID == attachment.id,
+                  tools.contains("upsert_code_reference_entry"),
+                  tools.contains("set_code_reference_meta")
+            else {
+                try RunStore.failUnpublishedIndex(
+                    run,
+                    workerSummary: "",
+                    detail: "Indexing tools were not granted. The run was not started.",
+                    in: container.mainContext
+                )
+                flash("Indexing was not started. The run is missing its attachment identity or write tools.")
+                open(run)
+                return
+            }
             open(run)
             runCoordinator.start(run, in: container.mainContext)
         } catch {

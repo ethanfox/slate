@@ -23,6 +23,7 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertNil(body["notes"])
         XCTAssertNil(body["tasks"])
         XCTAssertNil(body["deletion_marks"])
+        XCTAssertEqual((body["attachments"] as? [[String: Any]])?.count, 0)
         let contextText = try XCTUnwrap(body["context"] as? String)
         XCTAssertTrue(contextText.contains("Harbor"))
         XCTAssertFalse(contextText.contains("Active decisions"))

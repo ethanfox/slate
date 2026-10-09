@@ -172,6 +172,8 @@ enum RunWaitLabel {
         case "webSearch": return "Searching the web"
         case "webFetch": return "Fetching a page"
         case "create_note", "update_note": return "Writing a note"
+        case "upsert_code_reference_entry", "set_code_reference_meta": return "Writing the code reference"
+        case "list_code_references", "get_code_reference_entry": return "Reading the code reference"
         case RunToolPolicy.finishRun: return ChatWaitState.writing.label
         default:
             return ChatToolActivity.title(for: name, status: .running)
@@ -203,7 +205,14 @@ enum RunPrompt {
         return "Do the job. Call finish_run with a short summary when you are done. You have no project to write into."
     }
 
-    static func body(brief: String, project: Project?) -> String {
+    static func body(brief: String, project: Project?, run: AgentRun? = nil) -> String {
+        if run?.purpose == .indexRepository {
+            let title = run.flatMap { run -> CodeAttachment? in
+                guard let id = run.indexedAttachmentID, let project = run.project else { return nil }
+                return project.codeAttachments.first { $0.id == id }
+            }.map { $0.title.isEmpty ? $0.locator : $0.title } ?? "the attached repository"
+            return RepositoryIndex.prompt(brief: brief, project: project, attachmentTitle: title)
+        }
         let context = project.map(ContextBuilder.identity(for:)) ?? ""
         let close = closeInstruction(hasProject: project != nil)
         if context.isEmpty {

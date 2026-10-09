@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readAttachedFile, recordReadProvenance } from "./source-read";
 import { writeSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -36,6 +37,7 @@ type Request = {
     archiveURL?: string;
     commitsURL?: string;
   }[];
+  readProvenancePath?: string;
 };
 
 type Source = { id?: string; title: string; url?: string; kind: string; pin?: boolean };
@@ -336,7 +338,9 @@ function rootMatches(root: { title: string; locator?: string; path: string }, re
   if (!needle) return false;
   const title = root.title.toLowerCase();
   const locator = (root.locator ?? "").toLowerCase();
-  return title === needle || locator === needle || title.endsWith(`/${needle}`) || locator.endsWith(`/${needle}`);
+  const path = root.path.toLowerCase();
+  return title === needle || locator === needle || path === needle
+    || title.endsWith(`/${needle}`) || locator.endsWith(`/${needle}`) || path.endsWith(`/${needle}`);
 }
 
 function selectedRoots(roots: Request["codeRoots"], requested?: unknown) {
@@ -360,8 +364,34 @@ function safeFile(root: Request["codeRoots"][number], requested: unknown): strin
   return file;
 }
 
+
 function toolText(value: unknown): SDKCustomToolResult {
   return { content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }] } as SDKCustomToolResult;
+}
+
+async function commitsForRoot(root: Request["codeRoots"][number]): Promise<Record<string, unknown>[]> {
+  try {
+    const items = JSON.parse(await readFile(resolve(root.path, ".slate-commits.json"), "utf8"));
+    if (Array.isArray(items) && items.length) {
+      return items.map((item) => ({ ...(asRecord(item) ?? {}), root: root.title }));
+    }
+  } catch {
+    // Fall through to git on local folders.
+  }
+  try {
+    const { stdout } = await runFile(
+      "/usr/bin/git",
+      ["-C", root.path, "log", "-20", "--pretty=format:%H%x1f%an%x1f%aI%x1f%s"],
+      { timeout: 8000 }
+    );
+    return String(stdout).split("\n").flatMap((line) => {
+      const parts = line.split("\u001f");
+      if (parts.length < 4) return [];
+      return [{ sha: parts[0], author: parts[1], date: parts[2], message: parts[3], root: root.title }];
+    });
+  } catch {
+    return [];
+  }
 }
 
 function tipSHA(commits: unknown): string | undefined {
@@ -486,16 +516,51 @@ async function prepareCodeRoots(request: Request): Promise<Request["codeRoots"]>
   return roots;
 }
 
+function asHostRoots(text?: string): Request["codeRoots"] {
+  try {
+    const parsed = JSON.parse(text ?? "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item) => {
+      const rec = asRecord(item);
+      const path = field(rec, "path");
+      const title = field(rec, "title") ?? path;
+      if (!path || !title) return [];
+      return [{ title, locator: field(rec, "locator") ?? "", path }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function resolveRootsFromHost(): Promise<Request["codeRoots"]> {
+  const id = randomUUID();
+  emit({ type: "host_tool", name: "resolve_project_code_roots", id, text: "" });
+  const reply = await readHostReply(id);
+  if (reply.error) throw new Error(reply.error);
+  return asHostRoots(reply.text);
+}
+
+function rootsKey(request: Request): string {
+  return JSON.stringify({
+    roots: (request.codeRoots ?? []).map((root) => [root.title, root.locator, root.path]),
+    snapshots: request.codeSnapshots ?? [],
+  });
+}
+
 function projectCodeTools(session: { request: Request }): Record<string, SDKCustomTool> {
   let prepared: Promise<Request["codeRoots"]> | undefined;
   let preparedFor = "";
   const rootsFor = () => {
-    const key = JSON.stringify(session.request.codeSnapshots ?? []);
+    const key = rootsKey(session.request);
     if (preparedFor !== key) {
       prepared = undefined;
       preparedFor = key;
     }
-    prepared ??= prepareCodeRoots(session.request);
+    prepared ??= (async () => {
+      const roots = await prepareCodeRoots(session.request);
+      if (roots.length) return roots;
+      return resolveRootsFromHost();
+    })();
     return prepared;
   };
   return {
@@ -576,12 +641,10 @@ function projectCodeTools(session: { request: Request }): Record<string, SDKCust
         const root = selectedRoot(roots, fields?.root);
         if (!root) throw new Error(roots.length ? "Specify root because this project has several code attachments." : "No code is attached to this Slate project.");
         const file = safeFile(root, fields?.path);
-        const lines = (await readFile(file, "utf8")).split(/\r?\n/);
-        const start = Math.max(1, Number(fields?.start_line ?? 1));
-        const end = Math.min(lines.length, Number(fields?.end_line ?? start + 249));
-        const result = lines.slice(start - 1, end).map((line, index) => `${start + index}: ${line}`).join("\n");
-        emit(toolEvent("project_read_file", "completed", args, { root: root.title, path: fields?.path, start, end }));
-        return toolText(result);
+        const { hash, text } = await readAttachedFile(file, fields?.start_line, fields?.end_line);
+        await recordReadProvenance(session.request.readProvenancePath, fields?.path, hash);
+        emit(toolEvent("project_read_file", "completed", args, { root: root.title, path: fields?.path, content_hash: hash }));
+        return toolText(text);
       },
     },
     project_git_log: {
@@ -599,14 +662,7 @@ function projectCodeTools(session: { request: Request }): Record<string, SDKCust
         const selected = selectedRoots(roots, requested);
         const commits: Record<string, unknown>[] = [];
         for (const root of selected) {
-          try {
-            const items = JSON.parse(await readFile(resolve(root.path, ".slate-commits.json"), "utf8"));
-            if (Array.isArray(items)) {
-              commits.push(...items.map((item) => ({ ...(asRecord(item) ?? {}), root: root.title })));
-            }
-          } catch {
-            continue;
-          }
+          commits.push(...(await commitsForRoot(root)));
         }
         if (!roots.length) throw new Error("No code is attached to this Slate project.");
         if (!selected.length) throw new Error(`Unknown code root. Use one of: ${roots.map((root) => root.title).join(", ")}.`);

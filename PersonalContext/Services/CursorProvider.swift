@@ -20,6 +20,7 @@ struct RunnerRequest: Encodable, Sendable {
     var runtime: String
     var cloudRepos: [RunnerCloudRepo]
     var codeSnapshots: [RunnerCodeSnapshot] = []
+    var readProvenancePath: String = ""
 }
 
 struct RunnerCodeSnapshot: Encodable, Sendable {
@@ -313,6 +314,20 @@ final class CursorConversationBridge {
         let roots = try await ProjectCodeWorkspace.prepare(for: project, storeURL: store)
         activeCodeRoots = roots
         return roots
+    }
+
+    func currentCodeRoots() async throws -> [ProjectCodeRoot] {
+        let store = conversation.modelContext?.container.configurations.first?.url
+        let current = ProjectCodeWorkspace.authorizedRoots(for: project, storeURL: store)
+        if !current.isEmpty {
+            keepAccess(to: current)
+            return current
+        }
+        return try await prepareCodeRoots()
+    }
+
+    func encodedCurrentCodeRoots() async throws -> String {
+        try ProjectCodeWorkspace.encodedRoots(try await currentCodeRoots())
     }
 
     func keepAccess(to roots: [ProjectCodeRoot]) {
@@ -906,11 +921,16 @@ struct CursorChatProvider: ChatProvider {
                                 bridge.debugLog.add("event host_tool \(toolName) \(ChatTrace.clip(brief, 80))")
                             }
                             do {
-                                let output = try await ProjectWorker.consult(
-                                    brief: brief,
-                                    reportingTo: bridge,
-                                    options: options
-                                )
+                                let output: String
+                                if toolName == "resolve_project_code_roots" {
+                                    output = try await bridge.encodedCurrentCodeRoots()
+                                } else {
+                                    output = try await ProjectWorker.consult(
+                                        brief: brief,
+                                        reportingTo: bridge,
+                                        options: options
+                                    )
+                                }
                                 await MainActor.run {
                                     bridge.applyTool(name: toolName, status: "completed", id: toolID)
                                     bridge.replyToHostTool(id: toolID, text: output)

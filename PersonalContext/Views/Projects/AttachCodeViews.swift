@@ -27,6 +27,13 @@ struct ProjectCodeSection: View {
                 }
             }
 
+            if !attachments.isEmpty {
+                Text("Index repository reads this code with the project worker and writes an architecture reference. It cannot edit the source.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             HStack(spacing: 12) {
                 Button("Add folder…") { addFolder() }
                 if pickingRepo {
@@ -101,8 +108,31 @@ struct ProjectCodeSection: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                Text(referenceLine(attachment))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
             Spacer(minLength: 8)
+            if let run = CodeReferenceStore.activeIndexingRun(for: attachment, in: context) {
+                Button("Indexing…") { app.open(run) }
+                    .buttonStyle(.plain)
+                    .font(CraftFont.body)
+                    .foregroundStyle(.secondary)
+            } else {
+                Button(CodeReferenceStore.published(on: attachment, in: context) == nil ? "Index repository" : "Re-index") {
+                    app.startIndexing(attachment: attachment)
+                }
+                .buttonStyle(.plain)
+                .font(CraftFont.body)
+                .foregroundStyle(.secondary)
+            }
+            if CodeReferenceStore.published(on: attachment, in: context) != nil {
+                Button("View") { app.present(.inspectCodeReference(attachment.id)) }
+                    .buttonStyle(.plain)
+                    .font(CraftFont.body)
+                    .foregroundStyle(.secondary)
+            }
             Button("Open") {
                 open(attachment)
             }
@@ -110,6 +140,7 @@ struct ProjectCodeSection: View {
             .font(CraftFont.body)
             .foregroundStyle(.secondary)
             Button("Remove") {
+                CodeReferenceStore.deleteOwnedReferences(for: attachment, in: context)
                 context.delete(attachment)
                 project.touch()
                 try? context.save()
@@ -139,6 +170,16 @@ struct ProjectCodeSection: View {
             return repo.owner
         }
         return "\(repo.owner) · \(repo.tokenName)"
+    }
+
+    private func referenceLine(_ attachment: CodeAttachment) -> String {
+        if let run = CodeReferenceStore.activeIndexingRun(for: attachment, in: context) {
+            return "Indexing · \(run.status.label)"
+        }
+        if let published = CodeReferenceStore.published(on: attachment, in: context) {
+            return CodeReferenceStore.coverageLabel(published)
+        }
+        return "No architecture reference"
     }
 
     private func attachedSubtitle(_ attachment: CodeAttachment) -> String {

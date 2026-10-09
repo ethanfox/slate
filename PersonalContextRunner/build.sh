@@ -24,6 +24,7 @@ mkdir -p "$RUNNER"
 
 # The SDK loads its own chunk files at runtime, so it ships as installed packages instead of being bundled.
 bun build runner.ts --target=node --format=esm --packages=external --outfile "$RUNNER/runner.mjs"
+bun build source-read.ts --target=node --format=esm --outfile "$RUNNER/source-read.mjs"
 rsync -a --delete --exclude ".bin" --exclude "@types" --exclude "bun-types" --exclude "typescript" node_modules/ "$RUNNER/node_modules/"
 
 cp "$NODE" "$MACOS/slate-node"

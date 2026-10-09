@@ -8,6 +8,8 @@ final class SlateToolGateway: AgentToolGateway {
     private let prepareRoots: (() async throws -> [ProjectCodeRoot])?
     private let consult: ((String) async throws -> String)?
     private let mcp: SlateMCPClient?
+    private let indexingRunID: UUID?
+    private let storeURL: URL?
 
     init(
         roots: [ProjectCodeRoot] = [],
@@ -15,7 +17,9 @@ final class SlateToolGateway: AgentToolGateway {
         includeProjectTools: Bool = true,
         prepareRoots: (() async throws -> [ProjectCodeRoot])? = nil,
         consult: ((String) async throws -> String)? = nil,
-        mcp: SlateMCPClient? = nil
+        mcp: SlateMCPClient? = nil,
+        indexingRunID: UUID? = nil,
+        storeURL: URL? = nil
     ) {
         self.roots = roots
         self.includeSlateTools = includeSlateTools
@@ -23,6 +27,8 @@ final class SlateToolGateway: AgentToolGateway {
         self.prepareRoots = prepareRoots
         self.consult = consult
         self.mcp = mcp ?? (includeSlateTools ? .shared : nil)
+        self.indexingRunID = indexingRunID
+        self.storeURL = storeURL
     }
 
     func definitions() async throws -> [[String: Any]] {
@@ -93,8 +99,10 @@ final class SlateToolGateway: AgentToolGateway {
     }
 
     private func ensureRoots() async throws {
-        guard roots.isEmpty, let prepareRoots else { return }
-        roots = try await prepareRoots()
+        if let prepareRoots {
+            roots = try await prepareRoots()
+            return
+        }
     }
 
     private func listFiles(query: String?) throws -> String {
@@ -147,44 +155,29 @@ final class SlateToolGateway: AgentToolGateway {
         guard file.path == base.path || file.path.hasPrefix(base.path + "/") else {
             throw ProjectWorkspaceError("The requested path is outside the attached repository.")
         }
-        let lines = try String(contentsOf: file, encoding: .utf8).components(separatedBy: .newlines)
+        let data = try Data(contentsOf: file)
+        let hash = CodeContentHash.sha256(of: data)
+        if let indexingRunID {
+            CodeReadProvenance.record(runID: indexingRunID, path: path, hash: hash, storeURL: storeURL)
+        }
+        let lines = (String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self))
+            .components(separatedBy: .newlines)
         let first = max(1, start ?? 1)
         let last = min(lines.count, end ?? first + 249)
-        guard first <= last else { return "" }
-        return lines[(first - 1)..<last]
+        guard first <= last else { return "content_hash \(hash)" }
+        let body = lines[(first - 1)..<last]
             .enumerated()
             .map { "\(first + $0.offset): \($0.element)" }
             .joined(separator: "\n")
+        return "content_hash \(hash)\n\(body)"
     }
 
     private func gitLog(rootTitle: String?) throws -> String {
-        let selected = ProjectCodeRoot.resolve(roots, requested: rootTitle)
-        guard !selected.isEmpty else {
-            throw ProjectWorkspaceError(
-                roots.isEmpty
-                    ? "No code is attached to this Slate project."
-                    : "Unknown code root. Use one of: \(roots.map(\.title).joined(separator: ", "))."
-            )
-        }
-        var commits: [[String: Any]] = []
-        for root in selected {
-            let file = URL(fileURLWithPath: root.path).appendingPathComponent(".slate-commits.json")
-            guard let data = try? Data(contentsOf: file),
-                  let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { continue }
-            commits += items.map { item in
-                var item = item
-                item["root"] = root.title
-                return item
-            }
-        }
-        guard !commits.isEmpty else {
-            throw ProjectWorkspaceError("Git history is unavailable for this attachment.")
-        }
-        return try jsonString(commits)
+        try jsonString(ProjectCodeWorkspace.gitHistory(for: roots, requested: rootTitle))
     }
 
     private func allFiles(limit: Int) -> [(root: String, path: String, url: URL)] {
-        let ignored = Set([".git", ".build", "build", "DerivedData", "node_modules", ".swiftpm"])
+        let ignored = Set([".git", ".build", "build", "DerivedData", "node_modules", ".swiftpm", "xcuserdata"])
         var output: [(root: String, path: String, url: URL)] = []
         for root in roots {
             let base = URL(fileURLWithPath: root.path)

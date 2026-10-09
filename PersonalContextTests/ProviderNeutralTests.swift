@@ -226,8 +226,11 @@ final class ProviderNeutralTests: XCTestCase {
             project: project
         ))
         try container.mainContext.save()
+        let attachment = project.codeAttachments[0]
         let text = ContextBuilder.identity(for: project)
         XCTAssertTrue(text.contains("owner/repo"))
+        XCTAssertTrue(text.contains(attachment.id.uuidString))
+        XCTAssertTrue(text.contains("list_code_references"))
         XCTAssertTrue(text.contains("project_git_log"))
     }
 
@@ -342,7 +345,9 @@ final class ProviderNeutralTests: XCTestCase {
         let root = ProjectCodeRoot(title: "owner/repo", locator: "owner/repo", path: "/tmp/repo")
         XCTAssertTrue(root.matches("owner/repo"))
         XCTAssertTrue(root.matches("repo"))
+        XCTAssertTrue(root.matches("/tmp/repo"))
         XCTAssertEqual(ProjectCodeRoot.resolve([root], requested: "Harbor").map(\.title), ["owner/repo"])
+        XCTAssertEqual(ProjectCodeRoot.resolve([root], requested: "/tmp/repo").map(\.path), ["/tmp/repo"])
     }
 
     func testWorkerCapabilitiesAreProviderSpecific() {
@@ -379,7 +384,8 @@ final class ProviderNeutralTests: XCTestCase {
             name: "project_read_file",
             arguments: ["path": "Answer.swift"]
         )
-        XCTAssertEqual(read, "1: let answer = 42\n2: ")
+        XCTAssertTrue(read.hasPrefix("content_hash sha256:"), read)
+        XCTAssertTrue(read.contains("1: let answer = 42"), read)
 
         do {
             _ = try await gateway.execute(
@@ -529,7 +535,7 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertTrue(listed.contains("A.swift"))
         XCTAssertEqual(prepared, 1)
         _ = try await gateway.execute(name: "project_list_files", arguments: [:])
-        XCTAssertEqual(prepared, 1)
+        XCTAssertEqual(prepared, 2)
     }
 
     @MainActor

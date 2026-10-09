@@ -56,7 +56,7 @@ struct ChatGPTProvider: ChatProvider {
                                 includeSlateTools: includeSlateTools,
                                 includeProjectTools: includeProjectTools,
                                 prepareRoots: includeProjectTools
-                                    ? { try await bridge.prepareCodeRoots() }
+                                    ? { try await bridge.currentCodeRoots() }
                                     : nil,
                                 consult: includeSlateTools && ProjectWorker.isConfigured(on: bridge.project)
                                     ? { brief in try await ProjectWorker.consult(brief: brief, reportingTo: bridge, options: options) }

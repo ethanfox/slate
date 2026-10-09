@@ -56,6 +56,15 @@
 		B81A0C1D2E3F405162738A14 /* RunPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A13 /* RunPage.swift */; };
 		B81A0C1D2E3F405162738A16 /* RunStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A15 /* RunStoreTests.swift */; };
 		B81A0C1D2E3F405162738A18 /* RunToolPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A17 /* RunToolPolicyTests.swift */; };
+		C0DE1A2B3C4D5E6F70819202 /* CodeReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE1A2B3C4D5E6F70819201 /* CodeReference.swift */; };
+		C0DE1A2B3C4D5E6F70819203 /* CodeReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE1A2B3C4D5E6F70819201 /* CodeReference.swift */; };
+		C0DE1A2B3C4D5E6F70819205 /* CodeReferenceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE1A2B3C4D5E6F70819204 /* CodeReferenceStore.swift */; };
+		C0DE1A2B3C4D5E6F70819206 /* CodeReferenceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE1A2B3C4D5E6F70819204 /* CodeReferenceStore.swift */; };
+		C0DE1A2B3C4D5E6F70819208 /* RepositoryIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE1A2B3C4D5E6F70819207 /* RepositoryIndex.swift */; };
+		C0DE1A2B3C4D5E6F7081920A /* CodeReferenceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE1A2B3C4D5E6F70819209 /* CodeReferenceSheet.swift */; };
+		C0DE1A2B3C4D5E6F7081920C /* CodeReferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE1A2B3C4D5E6F7081920B /* CodeReferenceTests.swift */; };
+		C0DE1A2B3C4D5E6F7081920E /* CodeIndexEval.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE1A2B3C4D5E6F7081920D /* CodeIndexEval.swift */; };
+		C0DE1A2B3C4D5E6F70819210 /* CodeIndexEvalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE1A2B3C4D5E6F7081920F /* CodeIndexEvalTests.swift */; };
 		27EFEA7479970E75FC4AB694 /* Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD732A03D4885370CA6EC0EB /* Inspector.swift */; };
 		29D44665FC2D878340D62760 /* ChatObjectLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCA29163C23868CA9F844257 /* ChatObjectLink.swift */; };
 		29EED17BD5A4994333989D73 /* ChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A174CA3B685C41C4ABCF1D54 /* ChatScreen.swift */; };
@@ -245,6 +254,14 @@
 		B81A0C1D2E3F405162738A13 /* RunPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunPage.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A15 /* RunStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunStoreTests.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A17 /* RunToolPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunToolPolicyTests.swift; sourceTree = "<group>"; };
+		C0DE1A2B3C4D5E6F70819201 /* CodeReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeReference.swift; sourceTree = "<group>"; };
+		C0DE1A2B3C4D5E6F70819204 /* CodeReferenceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeReferenceStore.swift; sourceTree = "<group>"; };
+		C0DE1A2B3C4D5E6F70819207 /* RepositoryIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryIndex.swift; sourceTree = "<group>"; };
+		C0DE1A2B3C4D5E6F70819209 /* CodeReferenceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeReferenceSheet.swift; sourceTree = "<group>"; };
+		C0DE1A2B3C4D5E6F7081920B /* CodeReferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeReferenceTests.swift; sourceTree = "<group>"; };
+		C0DE1A2B3C4D5E6F7081920D /* CodeIndexEval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeIndexEval.swift; sourceTree = "<group>"; };
+		C0DE1A2B3C4D5E6F7081920F /* CodeIndexEvalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeIndexEvalTests.swift; sourceTree = "<group>"; };
+		C0DE1A2B3C4D5E6F70819211 /* code-index-eval.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = Scenarios/code-index-eval.md; sourceTree = "<group>"; };
 		375909AB0149768B4CB292E2 /* LiquidOrbMetalB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidOrbMetalB.swift; sourceTree = "<group>"; };
 		37724CB7BB30F472C170A449 /* ModelToolbarPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelToolbarPicker.swift; sourceTree = "<group>"; };
 		37FCD90F1DD6475A4AD5AC1C /* GitForgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitForgeClient.swift; sourceTree = "<group>"; };
@@ -483,6 +500,8 @@
 				A91E2F3A4B5C6D7E8F901001 /* AgentToolGateway.swift */,
 				A91E2F3A4B5C6D7E8F901003 /* AgentRuntime.swift */,
 				B81A0C1D2E3F405162738A07 /* RunToolPolicy.swift */,
+				C0DE1A2B3C4D5E6F70819204 /* CodeReferenceStore.swift */,
+				C0DE1A2B3C4D5E6F70819207 /* RepositoryIndex.swift */,
 				B81A0C1D2E3F405162738A09 /* RunGateway.swift */,
 				B81A0C1D2E3F405162738A0B /* RunCoordinator.swift */,
 				B81A0C1D2E3F405162738A0D /* RunAdapters.swift */,
@@ -541,6 +560,7 @@
 				06566D4B5F0858C10300294C /* MarkdownPreview.swift */,
 				AB3545DC169370BDB82CFAEB /* NotePage.swift */,
 				B81A0C1D2E3F405162738A13 /* RunPage.swift */,
+				C0DE1A2B3C4D5E6F70819209 /* CodeReferenceSheet.swift */,
 				A91C3E7B4D2F80A16B5E4C39 /* ObjectFind.swift */,
 				C13E5A9D6F4102C38D706E5B /* ObjectFindBar.swift */,
 				85B462CAB65E38C9331F5F12 /* PropertyPill.swift */,
@@ -605,6 +625,7 @@
 			children = (
 				E0C540C9CE3A784CC7E9EBD1 /* Records.swift */,
 				B81A0C1D2E3F405162738A01 /* AgentRun.swift */,
+				C0DE1A2B3C4D5E6F70819201 /* CodeReference.swift */,
 				D287C789B72E1A5CE8DC14AA /* Store.swift */,
 			);
 			path = Models;
@@ -679,6 +700,10 @@
 				B81A0C1D2E3F405162738A15 /* RunStoreTests.swift */,
 				B81A0C1D2E3F405162738A17 /* RunToolPolicyTests.swift */,
 				A91E2F3A4B5C6D7E8F901005 /* AgentRuntimeTests.swift */,
+				C0DE1A2B3C4D5E6F7081920B /* CodeReferenceTests.swift */,
+				C0DE1A2B3C4D5E6F7081920D /* CodeIndexEval.swift */,
+				C0DE1A2B3C4D5E6F7081920F /* CodeIndexEvalTests.swift */,
+				C0DE1A2B3C4D5E6F70819211 /* code-index-eval.md */,
 			);
 			path = PersonalContextTests;
 			sourceTree = "<group>";
@@ -816,6 +841,7 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/PersonalContextRunner/runner.ts",
+				"$(SRCROOT)/PersonalContextRunner/source-read.ts",
 				"$(SRCROOT)/PersonalContextRunner/package.json",
 				"$(SRCROOT)/PersonalContextRunner/bun.lock",
 				"$(SRCROOT)/PersonalContextRunner/runner.entitlements",
@@ -826,6 +852,7 @@
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/slate-node",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/runner/runner.mjs",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/runner/source-read.mjs",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -844,6 +871,8 @@
 				C47AD6C7A2C240B194DCC9B1 /* Store.swift in Sources */,
 				AC3E4F5B6D708192A3B4C5D6 /* TaskStore.swift in Sources */,
 				B81A0C1D2E3F405162738A03 /* AgentRun.swift in Sources */,
+				C0DE1A2B3C4D5E6F70819203 /* CodeReference.swift in Sources */,
+				C0DE1A2B3C4D5E6F70819206 /* CodeReferenceStore.swift in Sources */,
 				B81A0C1D2E3F405162738A06 /* RunStore.swift in Sources */,
 				53A38F15BD97D0A7F87DC464 /* TextFormat.swift in Sources */,
 				E07C1D18E64FA5C2D35EA795 /* Tools.swift in Sources */,
@@ -867,6 +896,9 @@
 				B81A0C1D2E3F405162738A16 /* RunStoreTests.swift in Sources */,
 				B81A0C1D2E3F405162738A18 /* RunToolPolicyTests.swift in Sources */,
 				A91E2F3A4B5C6D7E8F901006 /* AgentRuntimeTests.swift in Sources */,
+				C0DE1A2B3C4D5E6F7081920C /* CodeReferenceTests.swift in Sources */,
+				C0DE1A2B3C4D5E6F7081920E /* CodeIndexEval.swift in Sources */,
+				C0DE1A2B3C4D5E6F70819210 /* CodeIndexEvalTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -974,6 +1006,10 @@
 				B81A0C1D2E3F405162738A10 /* RunsView.swift in Sources */,
 				B81A0C1D2E3F405162738A12 /* NewRunSheet.swift in Sources */,
 				B81A0C1D2E3F405162738A14 /* RunPage.swift in Sources */,
+				C0DE1A2B3C4D5E6F7081920A /* CodeReferenceSheet.swift in Sources */,
+				C0DE1A2B3C4D5E6F70819202 /* CodeReference.swift in Sources */,
+				C0DE1A2B3C4D5E6F70819205 /* CodeReferenceStore.swift in Sources */,
+				C0DE1A2B3C4D5E6F70819208 /* RepositoryIndex.swift in Sources */,
 				19E0640705A6EAD921AE18AD /* RootView.swift in Sources */,
 				8F74E8CF9CC8040D5B9F908F /* SaveSheet.swift in Sources */,
 				55D821BAAFC11B0776685369 /* SelectableText.swift in Sources */,

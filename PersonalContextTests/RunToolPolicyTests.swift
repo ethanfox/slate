@@ -45,6 +45,20 @@ final class RunToolPolicyTests: XCTestCase {
         XCTAssertThrowsError(try denied.get())
     }
 
+    func testIndexingIsScopedAndReadOnlyForSource() {
+        let attachmentID = UUID()
+        let policy = RunToolPolicy.indexing(runID: UUID(), projectID: UUID(), attachmentID: attachmentID)
+        XCTAssertTrue(policy.allows("project_read_file"))
+        XCTAssertTrue(policy.allows("upsert_code_reference_entry"))
+        XCTAssertFalse(policy.allows("create_note"))
+        XCTAssertFalse(policy.allows("list_notes"))
+        XCTAssertFalse(policy.allows("project_write_file"))
+        XCTAssertThrowsError(try policy.permitsCall("create_note", arguments: ["content": "no"]).get())
+        XCTAssertThrowsError(try policy.permitsCall("upsert_code_reference_entry", arguments: [
+            "attachment_id": UUID().uuidString
+        ]).get())
+    }
+
     func testInjectsRunSource() {
         let runID = UUID()
         let projectID = UUID()

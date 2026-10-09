@@ -573,6 +573,8 @@ struct RootView: View {
             NewRunSheet(draft: draft)
         case .editRun(let run):
             EditRunModal(run: run)
+        case .inspectCodeReference(let id):
+            CodeReferenceSheet(attachmentID: id)
         }
     }
 

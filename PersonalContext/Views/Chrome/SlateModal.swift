@@ -22,6 +22,7 @@ enum AppModal: Identifiable {
     case editNote(Note)
     case newRun(NewRunDraft)
     case editRun(AgentRun)
+    case inspectCodeReference(UUID)
 
     var id: String {
         switch self {
@@ -45,12 +46,14 @@ enum AppModal: Identifiable {
         case .newRun(let draft):
             "new-run-\(draft.origin.rawValue)-\(draft.retryOfID?.uuidString ?? draft.taskID?.uuidString ?? draft.projectID?.uuidString ?? "none")"
         case .editRun(let run): "edit-run-\(run.id.uuidString)"
+        case .inspectCodeReference(let id): "code-reference-\(id.uuidString)"
         }
     }
 
     var panelWidth: CGFloat {
         switch self {
         case .newEvent, .editEvent, .newTask, .newTaskFromNote, .editReminder, .editTask: 520
+        case .inspectCodeReference: 560
         default: 440
         }
     }

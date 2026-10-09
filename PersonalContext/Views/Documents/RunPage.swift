@@ -28,14 +28,14 @@ struct RunPage: View {
                     .findAnchor(.body)
                 history
                     .padding(.top, 28)
-                if run.status == .succeeded {
-                    receipt
-                        .padding(.top, 28)
-                }
                 if run.status == .failed || run.status == .cancelled, !run.statusDetail.isEmpty {
                     Text(run.statusDetail)
                         .font(CraftFont.body)
                         .foregroundStyle(.red)
+                        .padding(.top, 28)
+                }
+                if run.status == .succeeded || ((run.status == .failed || run.status == .cancelled) && !run.resultSummary.isEmpty) {
+                    receipt
                         .padding(.top, 28)
                 }
                 actions
@@ -188,6 +188,11 @@ struct RunPage: View {
                     .buttonStyle(.plain)
                     .font(CraftFont.body)
             }
+            if run.purpose == .indexRepository, let attachmentID = run.indexedAttachmentID {
+                Button("View Reference") { app.present(.inspectCodeReference(attachmentID)) }
+                    .buttonStyle(.plain)
+                    .font(CraftFont.body)
+            }
             Spacer()
         }
     }
@@ -216,6 +221,11 @@ struct RunPage: View {
         guard let url = URL(string: link.url) else { return }
         if link.kind == .file {
             guard RunLinkSafety.fileAllowed(link.url, roots: ProjectCodeWorkspace.localRoots(for: run.project)) else { return }
+        }
+        if url.scheme?.lowercased() == "slate", url.host == "code-reference",
+           let attachmentID = run.indexedAttachmentID {
+            app.present(.inspectCodeReference(attachmentID))
+            return
         }
         if url.scheme?.lowercased() == "slate", let source = ChatObjectLink.parse(url, title: link.label) {
             source.open(app: app, context: context)

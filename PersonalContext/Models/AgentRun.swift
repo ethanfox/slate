@@ -10,6 +10,13 @@ enum RunOrigin: String, Codable, CaseIterable, Identifiable, Hashable {
     var id: String { rawValue }
 }
 
+enum RunPurpose: String, Codable, CaseIterable, Identifiable, Hashable {
+    case general
+    case indexRepository
+
+    var id: String { rawValue }
+}
+
 enum RunStatus: String, Codable, CaseIterable, Identifiable, Hashable {
     case queued
     case running
@@ -90,6 +97,8 @@ struct NewRunDraft: Equatable {
     var modelID: String
     var pathRaw: String
     var repositoryLocators: [String]
+    var purpose: RunPurpose
+    var indexedAttachmentID: UUID?
     var retryOfID: UUID?
 
     static func blank(
@@ -113,6 +122,8 @@ struct NewRunDraft: Equatable {
             modelID: modelID,
             pathRaw: pathRaw,
             repositoryLocators: [],
+            purpose: .general,
+            indexedAttachmentID: nil,
             retryOfID: retryOfID
         )
     }
@@ -135,6 +146,8 @@ final class AgentRun {
     var resultSummary: String
     var resultLinksJSON: String
     var repositoryLocatorsJSON: String
+    var purposeRaw: String = RunPurpose.general.rawValue
+    var indexedAttachmentIDString: String = ""
     var branch: String
     var statusDetail: String
     var adapterStateJSON: String
@@ -179,6 +192,16 @@ final class AgentRun {
         set { repositoryLocatorsJSON = Self.encode(newValue) }
     }
 
+    var purpose: RunPurpose {
+        get { RunPurpose(rawValue: purposeRaw) ?? .general }
+        set { purposeRaw = newValue.rawValue }
+    }
+
+    var indexedAttachmentID: UUID? {
+        get { UUID(uuidString: indexedAttachmentIDString) }
+        set { indexedAttachmentIDString = newValue?.uuidString ?? "" }
+    }
+
     var path: String { pathRaw }
 
     init(
@@ -190,7 +213,9 @@ final class AgentRun {
         project: Project? = nil,
         task: AgendaItem? = nil,
         originChat: Conversation? = nil,
-        retryOf: AgentRun? = nil
+        retryOf: AgentRun? = nil,
+        purpose: RunPurpose = .general,
+        indexedAttachmentID: UUID? = nil
     ) {
         self.id = UUID()
         self.originRaw = origin.rawValue
@@ -207,6 +232,8 @@ final class AgentRun {
         self.resultSummary = ""
         self.resultLinksJSON = "[]"
         self.repositoryLocatorsJSON = "[]"
+        self.purposeRaw = purpose.rawValue
+        self.indexedAttachmentIDString = indexedAttachmentID?.uuidString ?? ""
         self.branch = ""
         self.statusDetail = ""
         self.adapterStateJSON = ""

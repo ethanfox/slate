@@ -26,6 +26,14 @@ final class RunCoordinator {
         RunStore.recoverAbandoned(in: context)
         running = []
         jobs = [:]
+        startQueuedIndexing(in: context)
+    }
+
+    private func startQueuedIndexing(in context: ModelContext) {
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+        for run in RunStore.runs(in: context) where run.status == .queued && run.purpose == .indexRepository {
+            start(run, in: context)
+        }
     }
 
     func start(_ run: AgentRun, in context: ModelContext) {
@@ -41,59 +49,78 @@ final class RunCoordinator {
         }
         let task = Task { [weak self] in
             guard let self else { return }
-            await self.perform(id, in: context)
+            await self.perform(id)
         }
         jobs[id] = Job(task: task, process: nil)
     }
 
     func cancel(_ run: AgentRun, in context: ModelContext) {
-        jobs[run.id]?.task.cancel()
-        jobs[run.id]?.process?.stop()
+        let id = run.id
+        jobs[id]?.task.cancel()
+        jobs[id]?.process?.stop()
         try? RunStore.cancel(run, in: context)
-        clear(run.id)
+        clear(id)
     }
 
     func waitLabel(for id: UUID) -> String? {
         running.first { $0.id == id }?.label
     }
 
-    private func perform(_ id: UUID, in context: ModelContext) async {
-        guard let run = RunStore.run(id, in: context), let app else { return }
+    /// MCP writes reopen `AppModel.container`. A held `AgentRun` or `ModelContext`
+    /// then traps in SwiftData getters (EXC_BREAKPOINT on `id`). Always resolve
+    /// from the live container after an await.
+    private func liveContext() -> ModelContext? {
+        app?.container.mainContext
+    }
+
+    private func resolvedRun(_ id: UUID) -> AgentRun? {
+        guard let context = liveContext() else { return nil }
+        return RunStore.run(id, in: context)
+    }
+
+    private func perform(_ id: UUID) async {
+        guard let run = resolvedRun(id), let app else { return }
         do {
             try Task.checkCancellation()
             try validateProvider(run, app: app)
             if run.providerID == TalkProvider.chatgpt.rawValue {
-                try await runChatGPT(run, app: app, context: context)
+                try await runChatGPT(id, app: app)
             } else {
-                try await runCursor(run, app: app, context: context)
+                try await runCursor(id, app: app)
             }
         } catch is CancellationError {
-            if let run = RunStore.run(id, in: context), run.status.isActive {
+            if let context = liveContext(), let run = resolvedRun(id), run.status.isActive {
                 try? RunStore.cancel(run, in: context)
             }
             clear(id)
         } catch {
-            if let run = RunStore.run(id, in: context), run.status.isActive {
+            if let context = liveContext(), let run = resolvedRun(id), run.status.isActive {
                 try? RunStore.fail(run, detail: error.localizedDescription, in: context)
             }
             clear(id)
         }
     }
 
-    private func runChatGPT(_ run: AgentRun, app: AppModel, context: ModelContext) async throws {
+    private func runChatGPT(_ id: UUID, app _: AppModel) async throws {
+        guard let run = resolvedRun(id) else { return }
         let policy = policy(for: run)
         let roots = try await selectedRoots(for: run)
+        guard let run = resolvedRun(id), let context = liveContext() else { return }
+        try prepareIndex(run, roots: roots, in: context)
+        let includeSlate = policy.allowsSlateWrites || policy.allowCodeReferenceWrite
         let gateway = RunGateway(
             policy: policy,
             inner: SlateToolGateway(
                 roots: roots,
-                includeSlateTools: policy.allowsSlateWrites,
+                includeSlateTools: includeSlate,
                 includeProjectTools: policy.allowCode,
                 consult: nil,
-                mcp: policy.allowsSlateWrites ? .shared : nil
+                mcp: includeSlate ? .shared : nil,
+                indexingRunID: run.purpose == .indexRepository ? run.id : nil,
+                storeURL: context.container.configurations.first?.url
             )
         )
-        let prompt = RunPrompt.body(brief: run.brief, project: run.project)
+        let prompt = RunPrompt.body(brief: run.brief, project: run.project, run: run)
         let stream = RunChatGPT.stream(
             instructions: prompt,
             userText: run.brief,
@@ -105,62 +132,75 @@ final class RunCoordinator {
             try Task.checkCancellation()
             switch event {
             case .wait(let label):
-                setWait(run.id, label)
+                setWait(id, label)
             case .text(let text):
                 lastText += text
-                setWait(run.id, ChatWaitState.writing.label)
+                setWait(id, ChatWaitState.writing.label)
             case .citation:
                 break
             }
         }
-        try finish(run, gateway: gateway, lastText: lastText, extra: [], roots: roots, in: context)
+        try await finish(id, gateway: gateway, lastText: lastText, extra: [], roots: roots)
     }
 
-    private func runCursor(_ run: AgentRun, app: AppModel, context: ModelContext) async throws {
+    private func runCursor(_ id: UUID, app: AppModel) async throws {
         guard let apiKey = app.apiKey, !apiKey.isEmpty else {
             throw CursorAPIError(status: 0, message: "Add a Cursor API key in Settings.")
         }
         guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "slate-mcp") else {
             throw CursorAPIError(status: 0, message: "The Slate MCP is missing from the app.")
         }
+        guard let run = resolvedRun(id) else { return }
         let policy = policy(for: run)
         let roots = try await selectedRoots(for: run)
+        guard let run = resolvedRun(id), let context = liveContext() else { return }
+        try prepareIndex(run, roots: roots, in: context)
         let store = context.container.configurations.first?.url
         let folder = store?.deletingLastPathComponent().appendingPathComponent("Agent", isDirectory: true)
         if let folder {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
-        let workspace = roots.count == 1
-            ? roots[0].path
-            : (roots.first.map { URL(fileURLWithPath: $0.path).deletingLastPathComponent().path } ?? folder?.path ?? NSTemporaryDirectory())
-        let listed = policy.allowsSlateWrites
-            ? policy.allowedNames(from: RunToolPolicy.slateCatalog)
-            : []
+        let workspace: String
+        if run.purpose == .indexRepository {
+            workspace = folder?.path ?? NSTemporaryDirectory()
+        } else if roots.count == 1 {
+            workspace = roots[0].path
+        } else {
+            workspace = roots.first.map { URL(fileURLWithPath: $0.path).deletingLastPathComponent().path } ?? folder?.path ?? NSTemporaryDirectory()
+        }
+        let includeSlate = policy.allowsSlateWrites || policy.allowCodeReferenceWrite
+        let catalog = run.purpose == .indexRepository
+            ? RunToolPolicy.indexingCatalog
+            : RunToolPolicy.slateCatalog
+        let listed = includeSlate ? policy.allowedNames(from: catalog) : []
         let request = RunnerRequest(
             apiKey: apiKey,
             env: ProcessInfo.processInfo.environment,
             agentId: nil,
             name: run.displayTitle,
-            text: RunPrompt.body(brief: run.brief, project: run.project),
+            text: RunPrompt.body(brief: run.brief, project: run.project, run: run),
             model: run.modelID,
             cwd: workspace,
             mcpCommand: mcp.path,
             codeRoots: roots,
-            includeSlateTools: policy.allowsSlateWrites,
+            includeSlateTools: includeSlate,
             includeProjectTools: policy.allowCode,
             includeWorkerTool: false,
             includeFinishRun: true,
             allowedTools: listed,
-            runtime: run.pathRaw,
-            cloudRepos: cloudRepos(for: run.project),
-            codeSnapshots: policy.allowCode && run.pathRaw == WorkerPath.local.rawValue
+            runtime: run.purpose == .indexRepository ? WorkerPath.local.rawValue : run.pathRaw,
+            cloudRepos: run.purpose == .indexRepository ? [] : cloudRepos(for: run.project),
+            codeSnapshots: policy.allowCode && (run.purpose == .indexRepository || run.pathRaw == WorkerPath.local.rawValue)
                 ? ProjectCodeWorkspace.remoteSnapshots(for: run.project, storeURL: store)
-                : []
+                : [],
+            readProvenancePath: run.purpose == .indexRepository
+                ? CodeReadProvenance.fileURL(runID: run.id, storeURL: store).path
+                : ""
         )
         let process = RunCursorProcess()
-        if var job = jobs[run.id] {
+        if var job = jobs[id] {
             job.process = process
-            jobs[run.id] = job
+            jobs[id] = job
         }
         let gateway = RunGateway(
             policy: policy,
@@ -177,18 +217,26 @@ final class RunCoordinator {
         for try await event in try process.start(request) {
             try Task.checkCancellation()
             if let label = RunWaitLabel.forCursor(event) {
-                setWait(run.id, label)
+                setWait(id, label)
             }
             if event.type == "text", let text = event.text, !text.isEmpty {
                 lastText += text
             }
-            if event.type == "host_tool", event.name == RunToolPolicy.finishRun, let id = event.id {
-                let arguments = Self.hostArguments(event)
-                do {
-                    _ = try await gateway.execute(name: RunToolPolicy.finishRun, arguments: arguments)
-                    process.replyToHostTool(id: id, text: "{\"ok\":true}")
-                } catch {
-                    process.replyToHostTool(id: id, error: error.localizedDescription)
+            if event.type == "host_tool", let toolID = event.id {
+                if event.name == "resolve_project_code_roots" {
+                    do {
+                        process.replyToHostTool(id: toolID, text: try ProjectCodeWorkspace.encodedRoots(roots))
+                    } catch {
+                        process.replyToHostTool(id: toolID, error: error.localizedDescription)
+                    }
+                } else if event.name == RunToolPolicy.finishRun {
+                    let arguments = Self.hostArguments(event)
+                    do {
+                        _ = try await gateway.execute(name: RunToolPolicy.finishRun, arguments: arguments)
+                        process.replyToHostTool(id: toolID, text: "{\"ok\":true}")
+                    } catch {
+                        process.replyToHostTool(id: toolID, error: error.localizedDescription)
+                    }
                 }
             }
             if event.type == "error", let message = event.error ?? event.message, !message.isEmpty {
@@ -202,7 +250,28 @@ final class RunCoordinator {
             }
         }
         process.stop()
-        try finish(run, gateway: gateway, lastText: lastText, extra: citations, roots: roots, in: context)
+        try await finish(id, gateway: gateway, lastText: lastText, extra: citations, roots: roots)
+    }
+
+    private func finish(
+        _ id: UUID,
+        gateway: RunGateway,
+        lastText: String,
+        extra: [RunResultLink],
+        roots: [ProjectCodeRoot]
+    ) async throws {
+        var run: AgentRun?
+        var context: ModelContext?
+        for _ in 0..<5 {
+            run = resolvedRun(id)
+            context = liveContext()
+            if run != nil, context != nil { break }
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        guard let run, let context else {
+            throw CursorAPIError(status: 0, message: "The run disappeared before it could be published.")
+        }
+        try finish(run, gateway: gateway, lastText: lastText, extra: extra, roots: roots, in: context)
     }
 
     private func finish(
@@ -214,15 +283,37 @@ final class RunCoordinator {
         in context: ModelContext
     ) throws {
         guard run.status.isActive else { return }
-        let summary: String
+        var extra = extra
+        let workerSummary: String
         if let finish = gateway.finishSummary, !finish.isEmpty {
-            summary = finish
+            workerSummary = finish
         } else {
-            let trimmed = lastText.trimmingCharacters(in: .whitespacesAndNewlines)
-            summary = trimmed.isEmpty ? "Finished with no summary." : trimmed
+            workerSummary = lastText.trimmingCharacters(in: .whitespacesAndNewlines)
         }
+        if run.purpose == .indexRepository {
+            do {
+                let published = try publishIndex(run, roots: roots, in: context)
+                extra.append(
+                    RunResultLink(
+                        label: "Code reference",
+                        url: "slate://code-reference/\(published.id.uuidString)",
+                        kind: .document
+                    )
+                )
+            } catch {
+                try RunStore.failUnpublishedIndex(
+                    run,
+                    workerSummary: workerSummary,
+                    detail: error.localizedDescription,
+                    in: context
+                )
+                clear(run.id)
+                return
+            }
+        }
+        let summary = workerSummary.isEmpty ? "Finished with no summary." : workerSummary
         var links = gateway.journal
-        for link in gateway.finishLinks + extra where !links.contains(where: { $0.url == link.url }) {
+        for link in extra + gateway.finishLinks where !links.contains(where: { $0.url == link.url }) {
             if link.kind == .file, !RunLinkSafety.fileAllowed(link.url, roots: roots) { continue }
             if !RunLinkSafety.allows(link.url) { continue }
             links.append(link)
@@ -232,20 +323,54 @@ final class RunCoordinator {
     }
 
     private func policy(for run: AgentRun) -> RunToolPolicy {
-        RunToolPolicy(
-            runID: run.id,
-            projectID: run.project?.id,
-            assignedTaskID: run.task?.id,
-            allowCode: run.project != nil && !run.repositoryLocators.isEmpty
+        RunToolPolicy.effective(for: run)
+    }
+
+    private func prepareIndex(_ run: AgentRun, roots: [ProjectCodeRoot], in context: ModelContext) throws {
+        guard run.purpose == .indexRepository else { return }
+        guard let attachmentID = run.indexedAttachmentID,
+              let attachment = CodeReferenceStore.attachment(attachmentID, in: context)
+        else {
+            throw CodeReferenceError.attachmentNotFound
+        }
+        let path = roots.first?.path ?? CodeReferenceStore.rootPath(
+            for: attachment,
+            storeURL: context.container.configurations.first?.url
+        ) ?? attachment.locator
+        _ = try CodeReferenceStore.beginStaging(
+            for: attachment,
+            run: run,
+            fingerprint: RepositoryIndex.fingerprint(at: path),
+            in: context
+        )
+    }
+
+    private func publishIndex(_ run: AgentRun, roots: [ProjectCodeRoot], in context: ModelContext) throws -> CodeReference {
+        guard let attachmentID = run.indexedAttachmentID,
+              let attachment = CodeReferenceStore.attachment(attachmentID, in: context)
+        else {
+            throw CodeReferenceError.attachmentNotFound
+        }
+        let path = roots.first?.path ?? CodeReferenceStore.rootPath(
+            for: attachment,
+            storeURL: context.container.configurations.first?.url
+        )
+        guard let path else { throw CodeReferenceError.pathMissing(attachment.locator) }
+        return try CodeReferenceStore.publishIfValid(
+            run: run,
+            rootPath: path,
+            currentFingerprint: RepositoryIndex.fingerprint(at: path),
+            in: context
         )
     }
 
     private func selectedRoots(for run: AgentRun) async throws -> [ProjectCodeRoot] {
         guard let project = run.project, !run.repositoryLocators.isEmpty else { return [] }
-        let store = run.modelContext?.container.configurations.first?.url
+        let locators = run.repositoryLocators
+        let store = liveContext()?.container.configurations.first?.url
         let prepared = try await ProjectCodeWorkspace.prepare(for: project, storeURL: store)
         return prepared.filter { root in
-            run.repositoryLocators.contains { locator in
+            locators.contains { locator in
                 root.locator == locator || root.title == locator || root.path == locator
             }
         }
@@ -317,6 +442,13 @@ extension RunToolPolicy {
         "list_decisions", "get_decision", "create_decision", "update_decision",
         "list_threads", "get_thread", "create_thread", "update_thread",
         "list_notes", "get_note", "create_note", "update_note",
-        "list_runs", "get_run"
+        "list_runs", "get_run",
+        "list_code_references", "get_code_reference_entry"
+    ]
+
+    static let indexingCatalog = [
+        "list_projects", "get_project",
+        "list_code_references", "get_code_reference_entry",
+        "upsert_code_reference_entry", "set_code_reference_meta"
     ]
 }

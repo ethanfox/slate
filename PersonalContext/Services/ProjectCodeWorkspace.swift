@@ -19,8 +19,10 @@ struct ProjectCodeRoot: Codable, Hashable, Sendable {
         guard !needle.isEmpty else { return false }
         return title.lowercased() == needle
             || locator.lowercased() == needle
+            || path.lowercased() == needle
             || locator.lowercased().hasSuffix("/" + needle)
             || title.lowercased().hasSuffix("/" + needle)
+            || path.lowercased().hasSuffix("/" + needle)
     }
 
     static func resolve(_ roots: [ProjectCodeRoot], requested: String?) -> [ProjectCodeRoot] {
@@ -87,6 +89,53 @@ enum ProjectCodeWorkspace {
             .compactMap(localRoot(for:))
     }
 
+    /// Currently readable attachments for this project: local folders plus remote snapshots already on disk.
+    /// Uses the same persisted attachment fetch as `list_code_references`. Does not download remotes.
+    static func authorizedRoots(for project: Project?, storeURL: URL?) -> [ProjectCodeRoot] {
+        guard let project else { return [] }
+        var roots: [ProjectCodeRoot] = []
+        for attachment in attachments(on: project).sorted(by: { $0.createdAt < $1.createdAt }) {
+            switch attachment.kind {
+            case .folder:
+                if let root = localRoot(for: attachment) {
+                    roots.append(root)
+                }
+            case .github, .gitlab:
+                guard let storeURL else { continue }
+                let snapshot = RemoteSnapshot(attachment: attachment, projectID: project.id, storeURL: storeURL)
+                let marker = snapshot.destination.appendingPathComponent(".slate-snapshot")
+                if FileManager.default.fileExists(atPath: marker.path) {
+                    roots.append(root(for: attachment, path: snapshot.destination.path))
+                }
+            }
+        }
+        return roots
+    }
+
+    static func encodedRoots(_ roots: [ProjectCodeRoot]) throws -> String {
+        let payload = roots.map { ["title": $0.title, "locator": $0.locator, "path": $0.path] }
+        return String(decoding: try JSONSerialization.data(withJSONObject: payload), as: UTF8.self)
+    }
+
+    static func gitHistory(for roots: [ProjectCodeRoot], requested: String?) throws -> [[String: Any]] {
+        let selected = ProjectCodeRoot.resolve(roots, requested: requested)
+        guard !selected.isEmpty else {
+            throw ProjectWorkspaceError(
+                roots.isEmpty
+                    ? "No code is attached to this Slate project."
+                    : "Unknown code root. Use one of: \(roots.map(\.title).joined(separator: ", "))."
+            )
+        }
+        var commits: [[String: Any]] = []
+        for root in selected {
+            commits += historyEntries(in: root)
+        }
+        guard !commits.isEmpty else {
+            throw ProjectWorkspaceError("Git history is unavailable for this attachment.")
+        }
+        return commits
+    }
+
     static func remoteSnapshots(for project: Project?, storeURL: URL?) -> [RunnerCodeSnapshot] {
         guard let project, let storeURL else { return [] }
         return attachments(on: project).compactMap { attachment in
@@ -110,21 +159,64 @@ enum ProjectCodeWorkspace {
     }
 
     static func attachments(on project: Project) -> [CodeAttachment] {
-        if !project.codeAttachments.isEmpty { return project.codeAttachments }
-        guard let context = project.modelContext else { return [] }
-        let id = project.id
-        let found = (try? context.fetch(FetchDescriptor<CodeAttachment>())) ?? []
-        return found.filter { $0.project?.id == id }
+        if let context = project.modelContext {
+            return CodeReferenceStore.attachmentsOn(project, in: context)
+        }
+        return project.codeAttachments
     }
 
     private static func localRoot(for attachment: CodeAttachment) -> ProjectCodeRoot? {
-        if let url = resolveFolder(attachment), url.startAccessingSecurityScopedResource() {
-            return root(for: attachment, path: url.path)
+        if let url = resolveFolder(attachment) {
+            let accessed = url.startAccessingSecurityScopedResource()
+            if accessed || FileManager.default.fileExists(atPath: url.path) {
+                return root(for: attachment, path: url.path)
+            }
         }
         if FileManager.default.fileExists(atPath: attachment.locator) {
             return root(for: attachment, path: attachment.locator)
         }
         return nil
+    }
+
+    private static func historyEntries(in root: ProjectCodeRoot) -> [[String: Any]] {
+        let stored = URL(fileURLWithPath: root.path).appendingPathComponent(".slate-commits.json")
+        if let data = try? Data(contentsOf: stored),
+           let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            return items.map { item in
+                var item = item
+                item["root"] = root.title
+                return item
+            }
+        }
+        return gitLog(at: root.path, title: root.title)
+    }
+
+    private static func gitLog(at path: String, title: String) -> [[String: Any]] {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["-C", path, "log", "-20", "--pretty=format:%H%x1f%an%x1f%aI%x1f%s"]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return []
+        }
+        guard process.terminationStatus == 0 else { return [] }
+        let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        return text.split(whereSeparator: \.isNewline).compactMap { line in
+            let parts = line.split(separator: "\u{1f}", omittingEmptySubsequences: false).map(String.init)
+            guard parts.count >= 4 else { return nil }
+            return [
+                "sha": parts[0],
+                "author": parts[1],
+                "date": parts[2],
+                "message": parts[3],
+                "root": title
+            ]
+        }
     }
 
     private static func root(for attachment: CodeAttachment, path: String) -> ProjectCodeRoot {
@@ -143,12 +235,24 @@ enum ProjectCodeWorkspace {
             return URL(fileURLWithPath: attachment.locator)
         }
         var stale = false
-        return try? URL(
+        guard let url = try? URL(
             resolvingBookmarkData: bookmark,
             options: [.withSecurityScope, .withoutUI],
             relativeTo: nil,
             bookmarkDataIsStale: &stale
-        )
+        ) else {
+            return nil
+        }
+        if stale, url.startAccessingSecurityScopedResource() {
+            if let refreshed = try? url.bookmarkData(
+                options: [.withSecurityScope],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            ) {
+                attachment.bookmark = refreshed
+            }
+        }
+        return url
     }
 }
 

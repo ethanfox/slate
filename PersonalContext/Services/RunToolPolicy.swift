@@ -5,11 +5,14 @@ struct RunToolPolicy: Equatable, Sendable {
     var projectID: UUID?
     var assignedTaskID: UUID?
     var allowCode: Bool
+    var allowSlateKnowledgeWrite: Bool
+    var allowCodeReferenceWrite: Bool
+    var scopedAttachmentID: UUID?
     var denied: Set<String>
     var requireProject: Bool
     var attachesRunSource: Bool
 
-    var allowsSlateWrites: Bool { projectID != nil }
+    var allowsSlateWrites: Bool { allowSlateKnowledgeWrite && projectID != nil }
 
     static let denied: Set<String> = [
         "complete_task",
@@ -20,6 +23,13 @@ struct RunToolPolicy: Equatable, Sendable {
         "consult_code"
     ]
 
+    static let projectWrites: Set<String> = [
+        "project_write_file",
+        "project_edit_file",
+        "project_apply_patch",
+        "project_delete_file"
+    ]
+
     static let finishRun = "finish_run"
 
     init(
@@ -27,6 +37,9 @@ struct RunToolPolicy: Equatable, Sendable {
         projectID: UUID?,
         assignedTaskID: UUID?,
         allowCode: Bool,
+        allowSlateKnowledgeWrite: Bool = true,
+        allowCodeReferenceWrite: Bool = false,
+        scopedAttachmentID: UUID? = nil,
         denied: Set<String> = RunToolPolicy.denied,
         requireProject: Bool = true,
         attachesRunSource: Bool = true
@@ -35,6 +48,9 @@ struct RunToolPolicy: Equatable, Sendable {
         self.projectID = projectID
         self.assignedTaskID = assignedTaskID
         self.allowCode = allowCode
+        self.allowSlateKnowledgeWrite = allowSlateKnowledgeWrite
+        self.allowCodeReferenceWrite = allowCodeReferenceWrite
+        self.scopedAttachmentID = scopedAttachmentID
         self.denied = denied
         self.requireProject = requireProject
         self.attachesRunSource = attachesRunSource
@@ -46,7 +62,24 @@ struct RunToolPolicy: Equatable, Sendable {
             projectID: projectID,
             assignedTaskID: nil,
             allowCode: true,
+            allowSlateKnowledgeWrite: true,
+            allowCodeReferenceWrite: false,
             denied: [],
+            requireProject: false,
+            attachesRunSource: false
+        )
+    }
+
+    static func indexing(runID: UUID, projectID: UUID?, attachmentID: UUID) -> RunToolPolicy {
+        RunToolPolicy(
+            runID: runID,
+            projectID: projectID,
+            assignedTaskID: nil,
+            allowCode: true,
+            allowSlateKnowledgeWrite: false,
+            allowCodeReferenceWrite: true,
+            scopedAttachmentID: attachmentID,
+            denied: RunToolPolicy.denied.union(projectWrites),
             requireProject: false,
             attachesRunSource: false
         )
@@ -55,8 +88,15 @@ struct RunToolPolicy: Equatable, Sendable {
     func allows(_ name: String) -> Bool {
         if name == Self.finishRun { return true }
         if denied.contains(name) { return false }
+        if Self.projectWrites.contains(name) { return false }
+        if RepositoryIndex.toolWrites.contains(name) { return allowCodeReferenceWrite }
+        if RepositoryIndex.toolReads.contains(name) { return true }
         if name.hasPrefix("project_") { return allowCode }
-        if requireProject && !allowsSlateWrites {
+        if isSlateWrite(name) { return allowsSlateWrites }
+        if allowCodeReferenceWrite {
+            return name == "list_projects" || name == "get_project"
+        }
+        if requireProject && projectID == nil && isSlateTool(name) {
             return false
         }
         return true
@@ -68,6 +108,12 @@ struct RunToolPolicy: Equatable, Sendable {
 
     func permitsCall(_ name: String, arguments: [String: Any]) -> Result<Void, RunToolDenied> {
         guard allows(name) else {
+            if Self.projectWrites.contains(name) {
+                return .failure(RunToolDenied(CodeReferenceError.sourceEditDenied.localizedDescription ?? "This run cannot edit source."))
+            }
+            if isSlateWrite(name) && !allowsSlateWrites {
+                return .failure(RunToolDenied(CodeReferenceError.unrelatedWriteDenied.localizedDescription ?? "This run cannot change unrelated Slate records."))
+            }
             return .failure(RunToolDenied("This run cannot use \(name)."))
         }
         if name == "update_task" || name == "complete_task" {
@@ -89,6 +135,13 @@ struct RunToolPolicy: Equatable, Sendable {
            incoming != expected {
             return .failure(RunToolDenied("This run can only write in its own project."))
         }
+        if RepositoryIndex.toolWrites.contains(name), let scoped = scopedAttachmentID {
+            if let raw = arguments["attachment_id"] as? String,
+               let incoming = UUID(uuidString: raw),
+               incoming != scoped {
+                return .failure(RunToolDenied(CodeReferenceError.attachmentMismatch.localizedDescription ?? "Wrong attachment."))
+            }
+        }
         return .success(())
     }
 
@@ -101,7 +154,30 @@ struct RunToolPolicy: Equatable, Sendable {
            arguments["source"] == nil || (arguments["source"] as? String)?.isEmpty == true {
             arguments["source"] = "slate://run/\(runID.uuidString)"
         }
+        if RepositoryIndex.toolWrites.contains(name), let scopedAttachmentID {
+            arguments["attachment_id"] = scopedAttachmentID.uuidString
+        }
         return arguments
+    }
+
+    static func effective(for run: AgentRun) -> RunToolPolicy {
+        if run.purpose == .indexRepository, let attachmentID = run.indexedAttachmentID {
+            return .indexing(runID: run.id, projectID: run.project?.id, attachmentID: attachmentID)
+        }
+        return RunToolPolicy(
+            runID: run.id,
+            projectID: run.project?.id,
+            assignedTaskID: run.task?.id,
+            allowCode: run.project != nil && !run.repositoryLocators.isEmpty
+        )
+    }
+
+    static func catalogNames(for run: AgentRun) -> [String] {
+        let policy = effective(for: run)
+        let catalog = run.purpose == .indexRepository && run.indexedAttachmentID != nil
+            ? indexingCatalog
+            : slateCatalog
+        return policy.allowedNames(from: catalog)
     }
 }
 
@@ -113,4 +189,22 @@ struct RunToolDenied: LocalizedError {
 
 private func writesProject(_ name: String) -> Bool {
     name.hasPrefix("create_") || name.hasPrefix("list_")
+}
+
+private func isSlateWrite(_ name: String) -> Bool {
+    name.hasPrefix("create_")
+        || name.hasPrefix("update_")
+        || name.hasPrefix("delete_")
+        || name == "complete_task"
+        || name == "mark_for_deletion"
+}
+
+private func isSlateTool(_ name: String) -> Bool {
+    name.hasPrefix("list_")
+        || name.hasPrefix("get_")
+        || name.hasPrefix("create_")
+        || name.hasPrefix("update_")
+        || name.hasPrefix("delete_")
+        || name == "complete_task"
+        || name == "mark_for_deletion"
 }
