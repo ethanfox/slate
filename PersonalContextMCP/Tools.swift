@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
-#if SLATE_TESTS
-@testable import Slate
+#if MEMBRAE_TESTS
+@testable import Membrae
 #endif
 
 struct ToolError: Error {
@@ -307,7 +307,7 @@ enum Tools {
 
         Tool(
             name: "list_tasks",
-            description: "List Slate tasks. Completions are not included. Use list_completions for repeat history. Pass track_id to list work on a track.",
+            description: "List Membrae tasks. Completions are not included. Use list_completions for repeat history. Pass track_id to list work on a track.",
             properties: [
                 "project_id": text("Optional project id. Omit to list every task."),
                 "track_id": text("Only tasks linked to this track."),
@@ -336,7 +336,7 @@ enum Tools {
         },
         Tool(
             name: "get_task",
-            description: "Get one Slate task, including linked notes, blockers, dependents, and completion ids.",
+            description: "Get one Membrae task, including linked notes, blockers, dependents, and completion ids.",
             properties: ["task_id": text("Task id.")],
             required: ["task_id"], readOnly: true
         ) { args, context in
@@ -344,7 +344,7 @@ enum Tools {
         },
         Tool(
             name: "create_task",
-            description: "Create a Slate task. project_id is optional. is_next requires an active project. Link governing tracks with track_ids. Reference notes are supplementary via note_ids. Do not put built/not-built in notes.",
+            description: "Create a Membrae task. project_id is optional. is_next requires an active project. Link governing tracks with track_ids. Reference notes are supplementary via note_ids. Do not put built/not-built in notes.",
             properties: [
                 "title": text("Task title."),
                 "project_id": text("Optional project id."),
@@ -367,7 +367,7 @@ enum Tools {
         },
         Tool(
             name: "update_task",
-            description: "Change a Slate task. Only the fields you pass are changed. track_ids, note_ids, and blocker_ids replace the whole set.",
+            description: "Change a Membrae task. Only the fields you pass are changed. track_ids, note_ids, and blocker_ids replace the whole set.",
             properties: [
                 "task_id": text("Task id."),
                 "title": text("New title."),
@@ -390,7 +390,7 @@ enum Tools {
         },
         Tool(
             name: "complete_task",
-            description: "Complete a Slate task. Repeating tasks write a completion and advance the due date. Non-repeating tasks move to Done. Already-done tasks are returned unchanged.",
+            description: "Complete a Membrae task. Repeating tasks write a completion and advance the due date. Non-repeating tasks move to Done. Already-done tasks are returned unchanged.",
             properties: ["task_id": text("Task id.")],
             required: ["task_id"], readOnly: false
         ) { args, context in
@@ -713,7 +713,7 @@ enum Tools {
         },
         Tool(
             name: "list_runs",
-            description: "List Slate agent Runs. Newest first. Filter by project, task, status, or origin.",
+            description: "List Membrae agent Runs. Newest first. Filter by project, task, status, or origin.",
             properties: [
                 "project_id": text("Optional project id."),
                 "task_id": text("Optional task id."),
@@ -795,7 +795,7 @@ enum Tools {
                         ],
                         "required": ["path"]
                     ],
-                    "description": "Supporting source locations you inspected. At least one is required. Slate attaches the content hash from the project_read_file result; do not supply hashes."
+                    "description": "Supporting source locations you inspected. At least one is required. Membrae attaches the content hash from the project_read_file result; do not supply hashes."
                 ],
                 "related_keys": [
                     "type": "array",
@@ -944,7 +944,7 @@ enum Lookup {
         guard let found = try context.fetch(FetchDescriptor<AgendaItem>(predicate: #Predicate { $0.id == id })).first else {
             throw ToolError("No task with id \(id.uuidString).")
         }
-        guard found.kind == .task else { throw ToolError("That id is not a Slate task.") }
+        guard found.kind == .task else { throw ToolError("That id is not a Membrae task.") }
         return found
     }
 

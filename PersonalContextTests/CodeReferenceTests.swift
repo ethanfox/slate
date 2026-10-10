@@ -1,6 +1,6 @@
 import SwiftData
 import XCTest
-@testable import Slate
+@testable import Membrae
 
 @MainActor
 final class CodeReferenceTests: XCTestCase {
@@ -427,7 +427,7 @@ final class CodeReferenceTests: XCTestCase {
             CodeReferenceStore.attachmentsOn(project, in: context).map(\.id)
         )
 
-        let frozen = SlateToolGateway(roots: [], includeSlateTools: false)
+        let frozen = MembraeToolGateway(roots: [], includeMembraeTools: false)
         do {
             _ = try await frozen.execute(
                 name: "project_read_file",
@@ -444,9 +444,9 @@ final class CodeReferenceTests: XCTestCase {
         XCTAssertEqual(frozenList, "[]")
 
         var lateRoots: [ProjectCodeRoot] = []
-        let live = SlateToolGateway(
+        let live = MembraeToolGateway(
             roots: [],
-            includeSlateTools: false,
+            includeMembraeTools: false,
             prepareRoots: { lateRoots }
         )
         let emptyLive = try await live.execute(name: "project_list_files", arguments: [:])
@@ -766,9 +766,9 @@ final class CodeReferenceTests: XCTestCase {
         let run = try startIndex(attachment)
         let file = fixtureRoot.appendingPathComponent("Sources/Runtime.swift")
         let expected = try CodeContentHash.sha256(ofFile: file)
-        let gateway = SlateToolGateway(
+        let gateway = MembraeToolGateway(
             roots: [.init(title: attachment.title, locator: attachment.locator, path: fixtureRoot.path)],
-            includeSlateTools: false,
+            includeMembraeTools: false,
             indexingRunID: run.id,
             storeURL: container.configurations.first?.url
         )
@@ -894,7 +894,7 @@ final class CodeReferenceTests: XCTestCase {
     }
 
     private func makeFixture() throws -> URL {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("slate-index-\(UUID().uuidString)", isDirectory: true)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("membrae-index-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("Sources"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("Tests"), withIntermediateDirectories: true)
         try """
@@ -926,8 +926,8 @@ final class CodeReferenceTests: XCTestCase {
         end: Int
     ) throws -> String {
         let node = try XCTUnwrap(
-            Bundle.main.url(forAuxiliaryExecutable: "slate-node"),
-            "slate-node should be embedded in Slate.app"
+            Bundle.main.url(forAuxiliaryExecutable: "membrae-node"),
+            "membrae-node should be embedded in Membrae.app"
         )
         let script = try XCTUnwrap(
             Bundle.main.url(forResource: "source-read", withExtension: "mjs", subdirectory: "runner"),
@@ -958,12 +958,12 @@ final class CodeReferenceTests: XCTestCase {
     private func writeFixtureCommits() throws {
         let commits: [[String: String]] = [[
             "sha": "abc123def456",
-            "author": "Slate",
+            "author": "Membrae",
             "date": "2026-10-09T00:00:00Z",
             "message": "fixture"
         ]]
         try JSONSerialization.data(withJSONObject: commits).write(
-            to: fixtureRoot.appendingPathComponent(".slate-commits.json")
+            to: fixtureRoot.appendingPathComponent(".membrae-commits.json")
         )
     }
 
@@ -987,7 +987,7 @@ final class CodeReferenceTests: XCTestCase {
 final class CodeReferencePersistenceTests: XCTestCase {
     func testFileStoreMigratesPurposeAndIsReadableFromANewContainer() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("slate-ref-persist-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("membrae-ref-persist-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let url = root.appendingPathComponent("default.store")
@@ -996,7 +996,7 @@ final class CodeReferencePersistenceTests: XCTestCase {
 
         let writer = try Store.open(url: url)
         let writerContext = writer.mainContext
-        let project = Project(name: "Slate", symbol: "folder", summary: "")
+        let project = Project(name: "Membrae", symbol: "folder", summary: "")
         writerContext.insert(project)
         let attachment = CodeAttachment(kind: .folder, title: "PC-OS", locator: fixture.path, project: project)
         writerContext.insert(attachment)
@@ -1009,7 +1009,7 @@ final class CodeReferencePersistenceTests: XCTestCase {
         let migrated = try Store.open(url: url)
         let migratedContext = migrated.mainContext
         let migratedProject = try XCTUnwrap(
-            try migratedContext.fetch(FetchDescriptor<Project>()).first { $0.name == "Slate" }
+            try migratedContext.fetch(FetchDescriptor<Project>()).first { $0.name == "Membrae" }
         )
         let migratedAttachment = try XCTUnwrap(
             CodeReferenceStore.attachmentsOn(migratedProject, in: migratedContext)
@@ -1110,7 +1110,7 @@ final class CodeReferencePersistenceTests: XCTestCase {
 
     func testUnpublishedAttemptIsDiagnosableFromASeparateContainer() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("slate-ref-diag-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("membrae-ref-diag-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let url = root.appendingPathComponent("default.store")
@@ -1119,7 +1119,7 @@ final class CodeReferencePersistenceTests: XCTestCase {
 
         let writer = try Store.open(url: url)
         let context = writer.mainContext
-        let project = Project(name: "Slate", symbol: "folder", summary: "")
+        let project = Project(name: "Membrae", symbol: "folder", summary: "")
         context.insert(project)
         let attachment = CodeAttachment(kind: .folder, title: "PC-OS", locator: fixture.path, project: project)
         context.insert(attachment)
@@ -1165,7 +1165,7 @@ final class CodeReferencePersistenceTests: XCTestCase {
 
     func testExistingIndexingRunIsBackfilledAndDiagnosableFromASeparateContainer() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("slate-ref-backfill-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("membrae-ref-backfill-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let url = root.appendingPathComponent("default.store")
@@ -1178,7 +1178,7 @@ final class CodeReferencePersistenceTests: XCTestCase {
         do {
             let writer = try Store.open(url: url)
             let context = writer.mainContext
-            let project = Project(name: "Slate", symbol: "folder", summary: "")
+            let project = Project(name: "Membrae", symbol: "folder", summary: "")
             context.insert(project)
             let attachment = CodeAttachment(kind: .folder, title: "PC-OS", locator: fixture.path, project: project)
             context.insert(attachment)
@@ -1218,7 +1218,7 @@ final class CodeReferencePersistenceTests: XCTestCase {
 
     func testEnqueuePersistsPurposeOnDiskWithoutBackfill() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("slate-ref-identity-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("membrae-ref-identity-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let url = root.appendingPathComponent("default.store")
@@ -1227,7 +1227,7 @@ final class CodeReferencePersistenceTests: XCTestCase {
 
         let writer = try Store.open(url: url)
         let context = writer.mainContext
-        let project = Project(name: "Slate", symbol: "folder", summary: "")
+        let project = Project(name: "Membrae", symbol: "folder", summary: "")
         context.insert(project)
         let attachment = CodeAttachment(kind: .folder, title: "PC-OS", locator: fixture.path, project: project)
         context.insert(attachment)
@@ -1247,14 +1247,14 @@ final class CodeReferencePersistenceTests: XCTestCase {
 
     func testIndependentOwnershipSurvivesStaleAttachmentSaveAndReopen() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("slate-ref-owned-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("membrae-ref-owned-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let url = root.appendingPathComponent("default.store")
 
         let seed = try Store.open(url: url)
         let seedContext = seed.mainContext
-        let project = Project(name: "Slate", symbol: "folder", summary: "")
+        let project = Project(name: "Membrae", symbol: "folder", summary: "")
         seedContext.insert(project)
         let attachment = CodeAttachment(kind: .folder, title: "PC-OS", locator: "/tmp/pc-os", project: project)
         seedContext.insert(attachment)
@@ -1357,7 +1357,7 @@ final class CodeReferencePersistenceTests: XCTestCase {
         let attachment = CodeAttachment(
             kind: .folder,
             title: "Persistence probe",
-            locator: "/tmp/slate-persistence-probe",
+            locator: "/tmp/membrae-persistence-probe",
             project: project
         )
         writerContext.insert(attachment)
@@ -1444,7 +1444,7 @@ final class CodeReferencePersistenceTests: XCTestCase {
     }
 
     private func makeSourceFixture() throws -> URL {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("slate-src-\(UUID().uuidString)", isDirectory: true)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("membrae-src-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("Sources"), withIntermediateDirectories: true)
         try "func start() {}\n".write(to: root.appendingPathComponent("Sources/Runtime.swift"), atomically: true, encoding: .utf8)
         return root
@@ -1469,17 +1469,17 @@ final class CodeReferencePersistenceTests: XCTestCase {
 
 @MainActor
 final class LiveSourceAccessTests: XCTestCase {
-    func testLiveSlateProjectSourceToolsResolveAttachedRepository() async throws {
+    func testLiveMembraeProjectSourceToolsResolveAttachedRepository() async throws {
         guard ProcessInfo.processInfo.environment["SLATE_LIVE_SOURCE_VERIFY"] == "1"
-            || ProcessInfo.processInfo.environment["TEST_RUNNER_SLATE_LIVE_SOURCE_VERIFY"] == "1"
+            || ProcessInfo.processInfo.environment["TEST_RUNNER_MEMBRAE_LIVE_SOURCE_VERIFY"] == "1"
         else {
-            throw XCTSkip("Set TEST_RUNNER_SLATE_LIVE_SOURCE_VERIFY=1 to verify live Slate source access.")
+            throw XCTSkip("Set TEST_RUNNER_MEMBRAE_LIVE_SOURCE_VERIFY=1 to verify live Membrae source access.")
         }
         let container = try Store.open()
         let context = ModelContext(container)
         context.autosaveEnabled = false
         let project = try XCTUnwrap(
-            (try context.fetch(FetchDescriptor<Project>())).first { $0.name == "Slate" }
+            (try context.fetch(FetchDescriptor<Project>())).first { $0.name == "Membrae" }
         )
         let listed = try object(Tools.call(
             "list_code_references",
@@ -1497,12 +1497,12 @@ final class LiveSourceAccessTests: XCTestCase {
         ))
         let path = try XCTUnwrap((entry["source_locations"] as? [[String: Any]])?.first?["path"] as? String)
         let roots = ProjectCodeWorkspace.localRoots(for: project)
-        XCTAssertFalse(roots.isEmpty, "Live Slate project should resolve authorized folder attachments")
+        XCTAssertFalse(roots.isEmpty, "Live Membrae project should resolve authorized folder attachments")
         print("LIVE_REF_KEY=\(key)")
         print("LIVE_REF_PATH=\(path)")
         print("LIVE_ROOTS=\(roots.map(\.locator))")
 
-        let frozen = SlateToolGateway(roots: [], includeSlateTools: false)
+        let frozen = MembraeToolGateway(roots: [], includeMembraeTools: false)
         do {
             _ = try await frozen.execute(
                 name: "project_read_file",
@@ -1513,9 +1513,9 @@ final class LiveSourceAccessTests: XCTestCase {
             XCTAssertTrue(error.localizedDescription.contains("No code is attached"), error.localizedDescription)
         }
 
-        let live = SlateToolGateway(
+        let live = MembraeToolGateway(
             roots: [],
-            includeSlateTools: false,
+            includeMembraeTools: false,
             prepareRoots: { ProjectCodeWorkspace.localRoots(for: project) }
         )
         let files = try await live.execute(name: "project_list_files", arguments: ["query": path])

@@ -4,12 +4,12 @@ import SwiftData
 let supportedVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
 
 let instructions = """
-Slate is the user's knowledge base of projects. Each project has decisions (what was decided and why), \
+Membrae is the user's knowledge base of projects. Each project has decisions (what was decided and why), \
 threads (directions, features, problems, experiments, topics, which can nest), notes, and tasks. \
 Active decisions are the source of truth. When the user states a fact, choice, or plan, record it here instead of \
 asking them to save it. Read before you write so you update an existing record rather than duplicating it. \
 When a decision replaces an older one, create the new decision with supersedes_id. \
-Use the task tools to list, create, update, and complete Slate tasks. complete_task records repeat history; \
+Use the task tools to list, create, update, and complete Membrae tasks. complete_task records repeat history; \
 do not set status to done on a repeating task. \
 \(ContextBuilder.knowledgeRules) \
 get_project is lean. Use get_thread for a track body and its linked work, list_tasks with track_id for tasks, \
@@ -33,7 +33,7 @@ func respond(_ id: Any, code: Int, message: String) {
 }
 
 func log(_ message: String) {
-    FileHandle.standardError.write(Data("slate-mcp: \(message)\n".utf8))
+    FileHandle.standardError.write(Data("membrae-mcp: \(message)\n".utf8))
 }
 
 func requestID(_ value: Any?) -> Any? {
@@ -73,7 +73,7 @@ while let line = readLine(strippingNewline: true) {
         respond(id, result: [
             "protocolVersion": supportedVersions.contains(requested) ? requested : supportedVersions[0],
             "capabilities": ["tools": ["listChanged": false]],
-            "serverInfo": ["name": "slate", "version": "1.0"],
+            "serverInfo": ["name": "membrae", "version": "1.0"],
             "instructions": instructions
         ])
     case "ping", "initialized", "notifications/initialized":
@@ -89,7 +89,7 @@ while let line = readLine(strippingNewline: true) {
         } catch {
             log("store open failed: \(error.localizedDescription)")
             respond(id, result: [
-                "content": [["type": "text", "text": "Slate store could not be opened: \(error.localizedDescription)"]],
+                "content": [["type": "text", "text": "Membrae store could not be opened: \(error.localizedDescription)"]],
                 "isError": true
             ])
         }

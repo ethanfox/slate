@@ -421,7 +421,7 @@ private struct ComposerField: NSViewRepresentable {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: ComposerScrollField, context: Context) -> CGSize? {
-        nsView.measuredSize(width: proposal.width ?? 240)
+        nsView.measuredSize(width: proposal.width)
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
@@ -447,6 +447,7 @@ private struct ComposerField: NSViewRepresentable {
 final class ComposerScrollField: NSScrollView {
     let editor = ComposerNSTextView()
     var lineLimit: ClosedRange<Int> = 1...6
+    private var wrapWidth: CGFloat = 240
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -462,17 +463,22 @@ final class ComposerScrollField: NSScrollView {
         editor.isVerticallyResizable = true
         editor.isHorizontallyResizable = false
         editor.autoresizingMask = [.width]
-        editor.textContainer?.containerSize = NSSize(width: 100, height: CGFloat.greatestFiniteMagnitude)
-        editor.textContainer?.widthTracksTextView = true
+        editor.textContainer?.widthTracksTextView = false
+        editor.textContainer?.containerSize = NSSize(width: wrapWidth, height: CGFloat.greatestFiniteMagnitude)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func measuredSize(width: CGFloat) -> CGSize {
-        let width = max(width, 1)
-        editor.textContainer?.containerSize = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        applyWrapWidth(newSize.width)
+    }
+
+    func measuredSize(width proposed: CGFloat?) -> CGSize {
+        let width = resolvedWidth(proposed)
+        applyWrapWidth(width)
         editor.layoutManager?.ensureLayout(for: editor.textContainer!)
         let used = editor.layoutManager?.usedRect(for: editor.textContainer!) ?? .zero
         let minHeight = lineHeight * CGFloat(lineLimit.lowerBound)
@@ -480,6 +486,28 @@ final class ComposerScrollField: NSScrollView {
         let height = min(max(ceil(used.height), minHeight), maxHeight)
         hasVerticalScroller = used.height > maxHeight + 1
         return CGSize(width: width, height: height)
+    }
+
+    private func resolvedWidth(_ proposed: CGFloat?) -> CGFloat {
+        if let proposed, proposed.isFinite, proposed > 1 {
+            wrapWidth = proposed
+            return proposed
+        }
+        if bounds.width.isFinite, bounds.width > 1 {
+            wrapWidth = bounds.width
+            return bounds.width
+        }
+        return wrapWidth
+    }
+
+    private func applyWrapWidth(_ width: CGFloat) {
+        let width = max(width, 1)
+        wrapWidth = width
+        editor.textContainer?.widthTracksTextView = false
+        editor.textContainer?.containerSize = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        if editor.frame.width != width {
+            editor.setFrameSize(NSSize(width: width, height: max(editor.frame.height, lineHeight)))
+        }
     }
 
     private var lineHeight: CGFloat {
@@ -524,12 +552,36 @@ final class ComposerNSTextView: NSTextView {
         focusRingType = .none
         textContainerInset = .zero
         textContainer?.lineFragmentPadding = 0
+        textContainer?.widthTracksTextView = false
+        textContainer?.lineBreakMode = .byWordWrapping
         unregisterDraggedTypes()
         setAccessibilityRole(.textArea)
     }
 
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        textContainer?.widthTracksTextView = false
+        textContainer?.containerSize = NSSize(width: max(newSize.width, 1), height: CGFloat.greatestFiniteMagnitude)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 36 || event.keyCode == 76 {
+            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if mods.contains(.shift) || mods.contains(.option) {
+                super.insertNewline(nil)
+                return
+            }
+            if mods.subtracting([.capsLock, .numericPad, .function]).isEmpty {
+                onSubmit?()
+                return
+            }
+        }
+        super.keyDown(with: event)
+    }
+
     override func insertNewline(_ sender: Any?) {
-        if NSEvent.modifierFlags.contains(.shift) {
+        let mods = NSApp.currentEvent?.modifierFlags.intersection(.deviceIndependentFlagsMask) ?? []
+        if mods.contains(.shift) || mods.contains(.option) {
             super.insertNewline(sender)
             return
         }

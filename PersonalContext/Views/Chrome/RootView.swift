@@ -221,7 +221,7 @@ struct RootView: View {
             WindowGlass()
         }
         .overlay {
-            SlateModalPresenter(modal: app.modal(in: .main), onDismiss: app.dismissModal) { modal in
+            MembraeModalPresenter(modal: app.modal(in: .main), onDismiss: app.dismissModal) { modal in
                 modalContent(modal)
             }
         }
@@ -352,15 +352,15 @@ struct RootView: View {
             Button {
                 app.trackChatOpen.toggle()
             } label: {
-                Label(app.trackChatOpen ? "Hide Chat" : "Ask Slate", systemImage: "bubble.left")
+                Label(app.trackChatOpen ? "Hide Chat" : "Ask Membrae", systemImage: "bubble.left")
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .contentShape(Capsule())
             }
             .buttonStyle(.plain)
             .glassEffect(.regular, in: Capsule())
-            .help(app.trackChatOpen ? "Hide track chat" : "Ask Slate")
-            .accessibilityLabel(app.trackChatOpen ? "Hide track chat" : "Ask Slate")
+            .help(app.trackChatOpen ? "Hide track chat" : "Ask Membrae")
+            .accessibilityLabel(app.trackChatOpen ? "Hide track chat" : "Ask Membrae")
         } else if let project = openProject, app.tab(for: project.id) == .overview {
             Button(action: toggleInspector) {
                 Image(systemName: "sidebar.trailing")
@@ -559,6 +559,8 @@ struct RootView: View {
             ConnectGitHubSheet()
         case .connectGitLab:
             ConnectGitLabSheet()
+        case .replaceImportKey:
+            ReplaceImportKeySheet()
         case .editProject(let project):
             EditProjectModal(project: project)
         case .editConversation(let conversation):

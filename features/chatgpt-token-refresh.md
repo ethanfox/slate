@@ -2,7 +2,7 @@
 
 Problem from 8 Oct 2026. Direction is locked.
 
-A ChatGPT turn can last many sequential tool rounds. Slate used to mint the access token once at the start and reuse it. When the token died mid-turn, the API said `token_expired` and the user had to reconnect.
+A ChatGPT turn can last many sequential tool rounds. Membrae used to mint the access token once at the start and reuse it. When the token died mid-turn, the API said `token_expired` and the user had to reconnect.
 
 ## What to do
 

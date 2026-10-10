@@ -262,7 +262,7 @@ struct ProjectCodeSection: View {
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = false
         panel.prompt = "Attach"
-        panel.message = "Slate can read this folder later. It cannot edit files from this."
+        panel.message = "Membrae can read this folder later. It cannot edit files from this."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let accessed = url.startAccessingSecurityScopedResource()
         defer {

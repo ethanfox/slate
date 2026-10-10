@@ -14,7 +14,7 @@ Cursor and ChatGPT do not send the same project context. That is not a product d
 
 They should match:
 
-- First turn: short identity + “use the Slate tools.”
+- First turn: short identity + “use the Membrae tools.”
 - Later turns: identity only, or nothing new.
 - Records come from MCP when needed, not from a dump on every request.
 

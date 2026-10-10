@@ -11,7 +11,11 @@ struct ChatContentBlock: Identifiable, Equatable {
 }
 
 enum ChatObjectLink {
-    static let scheme = "slate"
+    static let scheme = "membrae"
+
+    static func isAppScheme(_ raw: String?) -> Bool {
+        raw?.lowercased() == scheme
+    }
 
     static func blocks(in text: String) -> [ChatContentBlock] {
         var result: [ChatContentBlock] = []
@@ -48,7 +52,7 @@ enum ChatObjectLink {
     }
 
     static func parse(_ url: URL, title: String = "") -> ChatSource? {
-        guard url.scheme?.lowercased() == scheme else { return nil }
+        guard isAppScheme(url.scheme) else { return nil }
         guard let kind = kind(from: url.host() ?? "") else { return nil }
         let id = url.path.split(separator: "/").map(String.init).first { !$0.isEmpty } ?? ""
         guard UUID(uuidString: id) != nil else { return nil }
@@ -119,10 +123,7 @@ enum ChatObjectLink {
         _ text: String,
         from start: String.Index
     ) -> (range: Range<String.Index>, source: ChatSource)? {
-        let prefix = "slate://"
-        guard let prefixEnd = text.index(start, offsetBy: prefix.count, limitedBy: text.endIndex),
-              String(text[start..<prefixEnd]).lowercased() == prefix
-        else { return nil }
+        guard let prefixEnd = schemePrefixEnd(in: text, from: start) else { return nil }
         var index = prefixEnd
         let kindStart = index
         while index < text.endIndex, text[index].isLetter {
@@ -152,6 +153,14 @@ enum ChatObjectLink {
             pin: false
         )
         return (start..<index, source)
+    }
+
+    private static func schemePrefixEnd(in text: String, from start: String.Index) -> String.Index? {
+        let prefix = "\(scheme)://"
+        guard let prefixEnd = text.index(start, offsetBy: prefix.count, limitedBy: text.endIndex),
+              String(text[start..<prefixEnd]).lowercased() == prefix
+        else { return nil }
+        return prefixEnd
     }
 
     private static func kind(from raw: String) -> ChatSource.Kind? {

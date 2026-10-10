@@ -285,7 +285,7 @@ enum CodeReadProvenance {
     }
 
     private static func folder(storeURL: URL?) -> URL {
-        let fallback = FileManager.default.temporaryDirectory.appendingPathComponent("SlateCodeReads", isDirectory: true)
+        let fallback = FileManager.default.temporaryDirectory.appendingPathComponent("MembraeCodeReads", isDirectory: true)
         guard let storeURL, storeURL.isFileURL, !storeURL.path.isEmpty, storeURL.path != "/",
               storeURL.path != "/dev/null", !storeURL.path.contains("memory")
         else { return fallback }

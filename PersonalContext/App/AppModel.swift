@@ -39,6 +39,7 @@ final class AppModel {
     var activeReply = ""
     private(set) var runningChats: [RunningChat] = []
     let runCoordinator = RunCoordinator()
+    let importRelay = ImportRelayController()
     @ObservationIgnored private var chatRuntimes: [UUID: ChatRuntime] = [:]
     @ObservationIgnored private var retiredContainers: [ModelContainer] = []
     @ObservationIgnored private var storeReloadTask: Task<Void, Never>?
@@ -279,10 +280,10 @@ final class AppModel {
         }
         if let data = UserDefaults.standard.data(forKey: Keys.orbPalette),
            let stored = try? JSONDecoder().decode(OrbPalette.self, from: data),
-           stored != .legacySlate {
+           stored != .legacy {
             orbPalette = stored
         } else {
-            orbPalette = .slate
+            orbPalette = .membrae
         }
         apiKey = KeychainStore.read(.cursorAPIKey)
         sources.load()
@@ -330,6 +331,7 @@ final class AppModel {
         restoreWindowTabs()
         runCoordinator.attach(self)
         runCoordinator.recover(in: container.mainContext)
+        importRelay.attach(self)
         objectFind.installShortcuts { [weak self] in
             guard let self else { return false }
             return self.isObjectPage || self.objectFind.isOpen
@@ -626,6 +628,17 @@ final class AppModel {
             do {
                 let fetched = try await ChatGPTSignIn.models(session: session)
                 chatGPTModels = fetched
+                for model in fetched {
+                    guard model.endpointImage != nil || model.endpointDocument != nil else { continue }
+                    AttachmentCapabilityStore.applyEndpoint(
+                        provider: .chatgpt,
+                        model: model.id,
+                        endpoint: "",
+                        image: model.endpointImage ?? .unknown,
+                        document: model.endpointDocument ?? .unknown,
+                        pdfParser: false
+                    )
+                }
                 if chatGPTModelID.isEmpty, let first = chatGPTModels.first {
                     chatGPTModelID = first.id
                 }
@@ -869,4 +882,6 @@ enum Keys {
     static let orbPalette = "orbPalette"
     static let windowTabs = "windowTabs"
     static let openChatLinksInNewTab = "openChatLinksInNewTab"
+    static let importEnabled = "importEnabled"
+    static let importRelayURL = "importRelayURL"
 }

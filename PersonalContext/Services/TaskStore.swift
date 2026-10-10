@@ -12,7 +12,7 @@ enum TaskStoreError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notATask: "That record is not a Slate task."
+        case .notATask: "That record is not a Membrae task."
         case .nextRequiresActiveProject: "Next needs an active project."
         case .nextNotEligible: "Only Ready or In Progress tasks can be Next."
         case .selfLink: "A task cannot block itself."

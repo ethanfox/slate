@@ -27,7 +27,7 @@ enum RunStoreError: LocalizedError, Equatable {
 }
 
 enum RunStore {
-    static let quitDetail = "Slate stopped before this run finished."
+    static let quitDetail = "Membrae stopped before this run finished."
 
     static func runs(in context: ModelContext, project: Project? = nil, status: RunStatus? = nil) -> [AgentRun] {
         let descriptor = FetchDescriptor<AgentRun>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])

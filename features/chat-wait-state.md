@@ -1,6 +1,6 @@
 # Chat wait-state and sources
 
-Reference: ChatGPT chat UI, 7 Oct 2026. Behavior to steal. Do not copy their chrome, bubbles, or colors. Slate stays a solid page, 15pt body, one chat component set.
+Reference: ChatGPT chat UI, 7 Oct 2026. Behavior to steal. Do not copy their chrome, bubbles, or colors. Membrae stays a solid page, 15pt body, one chat component set.
 
 The user should never sit on a black box. While the model works they see what it is doing. When it is done they can open what it did. Claims that came from a source carry that source on the sentence.
 
@@ -23,9 +23,9 @@ Until ChatGPT-as-provider exists, Cursor will not send citation annotations. Att
 
 ## Object cards
 
-When the model points the user at a note, track, decision, or other Slate object, it writes a markdown link with a `slate://` URL on its own line:
+When the model points the user at a note, track, decision, or other Membrae object, it writes a markdown link with a `membrae://` URL on its own line:
 
-`[Title](slate://note/UUID)`
+`[Title](membrae://note/UUID)`
 
 That renders as a card in the reply. Click opens the object. Source chips stay for citations on a claim. Cards are for destinations. Do not dump raw ids.
 

@@ -1,6 +1,6 @@
 import Foundation
 import SwiftData
-@testable import Slate
+@testable import Membrae
 
 @MainActor
 enum TrackFirstEval {
@@ -466,11 +466,11 @@ enum TrackFirstEval {
                 "parameters": tool["inputSchema"] as? [String: Any] ?? ["type": "object"]
             ]
         }
-        let projectGateway: SlateToolGateway?
+        let projectGateway: MembraeToolGateway?
         if let codeRoot {
-            projectGateway = SlateToolGateway(
+            projectGateway = MembraeToolGateway(
                 roots: [.init(title: "Harbor", path: codeRoot.path)],
-                includeSlateTools: false
+                includeMembraeTools: false
             )
             tools += try await projectGateway!.definitions()
         } else {
@@ -556,10 +556,10 @@ enum TrackFirstEval {
 @MainActor
 final class EvalToolGateway: AgentToolGateway {
     let container: ModelContainer
-    let project: SlateToolGateway?
+    let project: MembraeToolGateway?
     let tools: [[String: Any]]
 
-    init(container: ModelContainer, project: SlateToolGateway?, tools: [[String: Any]]) {
+    init(container: ModelContainer, project: MembraeToolGateway?, tools: [[String: Any]]) {
         self.container = container
         self.project = project
         self.tools = tools

@@ -4,7 +4,7 @@ struct ChatGPTProvider: ChatProvider {
     let id = "chatgpt"
     let name = "ChatGPT"
     let bridge: CursorConversationBridge
-    var includeSlateTools = true
+    var includeMembraeTools = true
     var includeProjectTools = true
 
     var zeroResponseMessage: String { "ChatGPT didn’t return a reply." }
@@ -47,20 +47,20 @@ struct ChatGPTProvider: ChatProvider {
                         let userText = Self.text(from: messages.last(where: { $0.role == .user }))
                         let instructions = bridge.prepareProviderTurn(
                             userText: userText,
-                            includeSlateTools: includeSlateTools
+                            includeMembraeTools: includeMembraeTools
                         )
                         let gateway = RunGateway(
                             policy: .chat(projectID: bridge.project?.id),
-                            inner: SlateToolGateway(
-                                includeSlateTools: includeSlateTools,
+                            inner: MembraeToolGateway(
+                                includeMembraeTools: includeMembraeTools,
                                 includeProjectTools: includeProjectTools,
                                 prepareRoots: includeProjectTools
                                     ? { try await bridge.currentCodeRoots() }
                                     : nil,
-                                consult: includeSlateTools && ProjectWorker.isConfigured(on: bridge.project)
+                                consult: includeMembraeTools && ProjectWorker.isConfigured(on: bridge.project)
                                     ? { brief in try await ProjectWorker.consult(brief: brief, reportingTo: bridge, options: options) }
                                     : nil,
-                                mcp: includeSlateTools ? bridge.mcp : nil
+                                mcp: includeMembraeTools ? bridge.mcp : nil
                             ),
                             includeFinishRun: false
                         )
@@ -368,7 +368,7 @@ struct ChatGPTProvider: ChatProvider {
             RunnerSource(
                 id: record.id,
                 title: record.title,
-                url: record.id.map { "slate://\(kind)/\($0)" },
+                url: record.id.map { "membrae://\(kind)/\($0)" },
                 kind: kind,
                 pin: lower.hasPrefix("get_")
             )

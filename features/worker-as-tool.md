@@ -13,7 +13,7 @@ The main model talks. If it needs a checkout, it calls a tool.
 - That tool prepares roots (see [`code-roots-on-demand.md`](code-roots-on-demand.md)), runs the worker, returns findings.
 - No worker call if the user asked about a decision, a track, or a note.
 
-This matches [`workers-and-agent-board.md`](workers-and-agent-board.md): coding agents are workers you dispatch. They are not a hidden prefix on every Slate turn.
+This matches [`workers-and-agent-board.md`](workers-and-agent-board.md): coding agents are workers you dispatch. They are not a hidden prefix on every Membrae turn.
 
 ## Do not
 

@@ -1,5 +1,5 @@
 import XCTest
-@testable import Slate
+@testable import Membrae
 
 final class MarkdownTableTests: XCTestCase {
     func testFindsPipeTable() {
@@ -113,8 +113,8 @@ final class MarkdownTableTests: XCTestCase {
     }
 
     func testKeepsInlineCodeInsideListItem() {
-        let rendered = ChatMarkdown.attributed("- Forward to `slate-mcp` while open")
-        let range = (rendered.string as NSString).range(of: "slate-mcp")
+        let rendered = ChatMarkdown.attributed("- Forward to `membrae-mcp` while open")
+        let range = (rendered.string as NSString).range(of: "membrae-mcp")
         XCTAssertNotEqual(range.location, NSNotFound)
         let font = rendered.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont
         XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.monoSpace) == true)

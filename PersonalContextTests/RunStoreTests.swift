@@ -1,6 +1,6 @@
 import SwiftData
 import XCTest
-@testable import Slate
+@testable import Membrae
 
 @MainActor
 final class RunStoreTests: XCTestCase {
@@ -117,7 +117,7 @@ final class RunStoreTests: XCTestCase {
 
     func testRefetchAfterReopenFindsTheSameRun() throws {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("slate-run-reopen-\(UUID().uuidString).store")
+            .appendingPathComponent("membrae-run-reopen-\(UUID().uuidString).store")
         defer { try? FileManager.default.removeItem(at: url) }
         let configuration = ModelConfiguration(schema: Store.schema, url: url)
         let original = try ModelContainer(for: Store.schema, configurations: configuration)

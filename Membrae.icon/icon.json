@@ -28,8 +28,8 @@
           ],
           "glass" : true,
           "hidden" : true,
-          "image-name" : "slate.svg",
-          "name" : "slate",
+          "image-name" : "membrae.svg",
+          "name" : "membrae",
           "position" : {
             "scale" : 1,
             "translation-in-points" : [
@@ -80,7 +80,14 @@
             }
           ],
           "image-name" : "Mask group.svg",
-          "name" : "Mask group"
+          "name" : "Mask group",
+          "position" : {
+            "scale" : 1.2,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         }
       ],
       "shadow" : {

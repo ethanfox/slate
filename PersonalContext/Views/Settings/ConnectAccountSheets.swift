@@ -15,7 +15,7 @@ struct ConnectChatGPTSheet: View {
                 Text("Continue with ChatGPT")
                     .font(CraftFont.title)
             }
-            Text("Opens ChatGPT in your browser so Slate can use your Plus or Pro plan. It does not bring memory, chats, custom instructions, or files. Slate stays the personal context.")
+            Text("Opens ChatGPT in your browser so Membrae can use your Plus or Pro plan. It does not bring memory, chats, custom instructions, or files. Membrae stays the personal context.")
                 .font(CraftFont.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

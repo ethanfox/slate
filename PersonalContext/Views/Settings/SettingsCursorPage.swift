@@ -164,10 +164,10 @@ struct SettingsCursorPage: View {
     }
 
     private func connectCursorApp() {
-        guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "slate-mcp"),
+        guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "membrae-mcp"),
               let config = try? JSONSerialization.data(withJSONObject: ["command": mcp.path], options: .withoutEscapingSlashes),
               let encoded = config.base64EncodedString().addingPercentEncoding(withAllowedCharacters: .alphanumerics),
-              let url = URL(string: "cursor://anysphere.cursor-deeplink/mcp/install?name=slate&config=\(encoded)")
+              let url = URL(string: "cursor://anysphere.cursor-deeplink/mcp/install?name=membrae&config=\(encoded)")
         else { return }
         guard NSWorkspace.shared.urlForApplication(toOpen: url) != nil else {
             app.flash("Cursor isn’t installed on this Mac.")

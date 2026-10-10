@@ -5,14 +5,14 @@ struct RunToolPolicy: Equatable, Sendable {
     var projectID: UUID?
     var assignedTaskID: UUID?
     var allowCode: Bool
-    var allowSlateKnowledgeWrite: Bool
+    var allowMembraeKnowledgeWrite: Bool
     var allowCodeReferenceWrite: Bool
     var scopedAttachmentID: UUID?
     var denied: Set<String>
     var requireProject: Bool
     var attachesRunSource: Bool
 
-    var allowsSlateWrites: Bool { allowSlateKnowledgeWrite && projectID != nil }
+    var allowsMembraeWrites: Bool { allowMembraeKnowledgeWrite && projectID != nil }
 
     static let denied: Set<String> = [
         "complete_task",
@@ -37,7 +37,7 @@ struct RunToolPolicy: Equatable, Sendable {
         projectID: UUID?,
         assignedTaskID: UUID?,
         allowCode: Bool,
-        allowSlateKnowledgeWrite: Bool = true,
+        allowMembraeKnowledgeWrite: Bool = true,
         allowCodeReferenceWrite: Bool = false,
         scopedAttachmentID: UUID? = nil,
         denied: Set<String> = RunToolPolicy.denied,
@@ -48,7 +48,7 @@ struct RunToolPolicy: Equatable, Sendable {
         self.projectID = projectID
         self.assignedTaskID = assignedTaskID
         self.allowCode = allowCode
-        self.allowSlateKnowledgeWrite = allowSlateKnowledgeWrite
+        self.allowMembraeKnowledgeWrite = allowMembraeKnowledgeWrite
         self.allowCodeReferenceWrite = allowCodeReferenceWrite
         self.scopedAttachmentID = scopedAttachmentID
         self.denied = denied
@@ -62,7 +62,7 @@ struct RunToolPolicy: Equatable, Sendable {
             projectID: projectID,
             assignedTaskID: nil,
             allowCode: true,
-            allowSlateKnowledgeWrite: true,
+            allowMembraeKnowledgeWrite: true,
             allowCodeReferenceWrite: false,
             denied: [],
             requireProject: false,
@@ -76,7 +76,7 @@ struct RunToolPolicy: Equatable, Sendable {
             projectID: projectID,
             assignedTaskID: nil,
             allowCode: true,
-            allowSlateKnowledgeWrite: false,
+            allowMembraeKnowledgeWrite: false,
             allowCodeReferenceWrite: true,
             scopedAttachmentID: attachmentID,
             denied: RunToolPolicy.denied.union(projectWrites),
@@ -92,11 +92,11 @@ struct RunToolPolicy: Equatable, Sendable {
         if RepositoryIndex.toolWrites.contains(name) { return allowCodeReferenceWrite }
         if RepositoryIndex.toolReads.contains(name) { return true }
         if name.hasPrefix("project_") { return allowCode }
-        if isSlateWrite(name) { return allowsSlateWrites }
+        if isMembraeWrite(name) { return allowsMembraeWrites }
         if allowCodeReferenceWrite {
             return name == "list_projects" || name == "get_project"
         }
-        if requireProject && projectID == nil && isSlateTool(name) {
+        if requireProject && projectID == nil && isMembraeTool(name) {
             return false
         }
         return true
@@ -111,8 +111,8 @@ struct RunToolPolicy: Equatable, Sendable {
             if Self.projectWrites.contains(name) {
                 return .failure(RunToolDenied(CodeReferenceError.sourceEditDenied.localizedDescription ?? "This run cannot edit source."))
             }
-            if isSlateWrite(name) && !allowsSlateWrites {
-                return .failure(RunToolDenied(CodeReferenceError.unrelatedWriteDenied.localizedDescription ?? "This run cannot change unrelated Slate records."))
+            if isMembraeWrite(name) && !allowsMembraeWrites {
+                return .failure(RunToolDenied(CodeReferenceError.unrelatedWriteDenied.localizedDescription ?? "This run cannot change unrelated Membrae records."))
             }
             return .failure(RunToolDenied("This run cannot use \(name)."))
         }
@@ -152,7 +152,7 @@ struct RunToolPolicy: Equatable, Sendable {
         }
         if attachesRunSource, name == "create_note",
            arguments["source"] == nil || (arguments["source"] as? String)?.isEmpty == true {
-            arguments["source"] = "slate://run/\(runID.uuidString)"
+            arguments["source"] = "membrae://run/\(runID.uuidString)"
         }
         if RepositoryIndex.toolWrites.contains(name), let scopedAttachmentID {
             arguments["attachment_id"] = scopedAttachmentID.uuidString
@@ -176,7 +176,7 @@ struct RunToolPolicy: Equatable, Sendable {
         let policy = effective(for: run)
         let catalog = run.purpose == .indexRepository && run.indexedAttachmentID != nil
             ? indexingCatalog
-            : slateCatalog
+            : membraeCatalog
         return policy.allowedNames(from: catalog)
     }
 }
@@ -191,7 +191,7 @@ private func writesProject(_ name: String) -> Bool {
     name.hasPrefix("create_") || name.hasPrefix("list_")
 }
 
-private func isSlateWrite(_ name: String) -> Bool {
+private func isMembraeWrite(_ name: String) -> Bool {
     name.hasPrefix("create_")
         || name.hasPrefix("update_")
         || name.hasPrefix("delete_")
@@ -199,7 +199,7 @@ private func isSlateWrite(_ name: String) -> Bool {
         || name == "mark_for_deletion"
 }
 
-private func isSlateTool(_ name: String) -> Bool {
+private func isMembraeTool(_ name: String) -> Bool {
     name.hasPrefix("list_")
         || name.hasPrefix("get_")
         || name.hasPrefix("create_")

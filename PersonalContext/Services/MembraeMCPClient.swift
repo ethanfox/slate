@@ -1,8 +1,8 @@
 import Foundation
 
-/// One slate-mcp process for ChatGPT. Tool schemas are listed once and reused.
-actor SlateMCPClient {
-    static let shared = SlateMCPClient()
+/// One membrae-mcp process for ChatGPT. Tool schemas are listed once and reused.
+actor MembraeMCPClient {
+    static let shared = MembraeMCPClient()
 
     private let command: String?
     private var process: Process?
@@ -15,7 +15,7 @@ actor SlateMCPClient {
     private var listProvider: (() async throws -> [[String: Any]])?
     private(set) var listCalls = 0
 
-    init(command: String? = Bundle.main.url(forAuxiliaryExecutable: "slate-mcp")?.path) {
+    init(command: String? = Bundle.main.url(forAuxiliaryExecutable: "membrae-mcp")?.path) {
         self.command = command
     }
 
@@ -32,7 +32,7 @@ actor SlateMCPClient {
         let data = try await request("tools/list", params: [:])
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let listed = object["tools"] as? [[String: Any]] else {
-            throw ProjectWorkspaceError("The Slate tool service returned no tools.")
+            throw ProjectWorkspaceError("The Membrae tool service returned no tools.")
         }
         cachedTools = listed
         return listed
@@ -51,7 +51,7 @@ actor SlateMCPClient {
     func stop() {
         idleTask?.cancel()
         idleTask = nil
-        failPending(ProjectWorkspaceError("The Slate tool service stopped."))
+        failPending(ProjectWorkspaceError("The Membrae tool service stopped."))
         stdin = nil
         if let process, process.isRunning {
             process.terminate()
@@ -70,7 +70,7 @@ actor SlateMCPClient {
     private func ensureProcess() async throws {
         if process?.isRunning == true { return }
         guard let command else {
-            throw ProjectWorkspaceError("The Slate tool service is unavailable.")
+            throw ProjectWorkspaceError("The Membrae tool service is unavailable.")
         }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: command)
@@ -99,13 +99,13 @@ actor SlateMCPClient {
         _ = try await send("initialize", params: [
             "protocolVersion": "2025-06-18",
             "capabilities": [:],
-            "clientInfo": ["name": "slate-app", "version": "1.0"]
+            "clientInfo": ["name": "membrae-app", "version": "1.0"]
         ])
     }
 
     private func send(_ method: String, params: [String: Any]) async throws -> Data {
         guard let stdin else {
-            throw ProjectWorkspaceError("The Slate tool service is unavailable.")
+            throw ProjectWorkspaceError("The Membrae tool service is unavailable.")
         }
         let id = nextID
         nextID += 1
@@ -139,7 +139,7 @@ actor SlateMCPClient {
                   let id = Self.jsonID(object["id"]),
                   let continuation = pending.removeValue(forKey: id) else { continue }
             if let error = object["error"] as? [String: Any] {
-                continuation.resume(throwing: ProjectWorkspaceError(error["message"] as? String ?? "A Slate tool failed."))
+                continuation.resume(throwing: ProjectWorkspaceError(error["message"] as? String ?? "A Membrae tool failed."))
             } else {
                 let result = object["result"] ?? [:]
                 do {
@@ -162,7 +162,7 @@ actor SlateMCPClient {
         if let process, process.isRunning { return }
         stdin = nil
         process = nil
-        failPending(ProjectWorkspaceError("The Slate tool service stopped."))
+        failPending(ProjectWorkspaceError("The Membrae tool service stopped."))
     }
 
     private func failPending(_ error: Error) {

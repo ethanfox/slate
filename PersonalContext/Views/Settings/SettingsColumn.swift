@@ -10,6 +10,7 @@ struct SettingsColumn: View {
                     section("Account", first: true)
                     row(.chatgpt)
                     row(.cursor)
+                    row(.importRelay)
                     row(.compatible)
                     section("Sources")
                     row(.sources)

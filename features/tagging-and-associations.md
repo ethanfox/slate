@@ -9,7 +9,7 @@ Two systems. Do not merge them.
 
 Projects do not get tags. A project is a container. You find work in a project by looking at what is in it, or by tags on those objects.
 
-App tasks are the same Slate object as a reminder, stored on `AgendaItem` instead of EventKit. Do not hang tags off EventKit identifiers.
+App tasks are the same Membrae object as a reminder, stored on `AgendaItem` instead of EventKit. Do not hang tags off EventKit identifiers.
 
 ## What already exists
 
@@ -23,18 +23,18 @@ Associations do not replace this ownership.
 | Conversation | one Project (nullable in code) | one Track |
 | Chat message | one Conversation | — |
 | Reminder | EventKit list | scratch text |
-| Task | Slate | scratch text |
+| Task | Membrae | scratch text |
 | Event | EventKit calendar | scratch text |
 
 A note or track always has a project. That is why linking one to a reminder can fill in the project.
 
-An EventKit list is not a Slate project. A calendar is not a Slate project. Those stay independent.
+An EventKit list is not a Membrae project. A calendar is not a Membrae project. Those stay independent.
 
-Scratch text on a reminder or event is not a Slate Note. Both can exist on the same item.
+Scratch text on a reminder or event is not a Membrae Note. Both can exist on the same item.
 
 ## Who gets what
 
-| Object | Tags | Project | Tracks | Slate Notes | Decisions |
+| Object | Tags | Project | Tracks | Membrae Notes | Decisions |
 | --- | --- | --- | --- | --- | --- |
 | Project | no | — | owns them | owns them | owns them |
 | Track | yes | already has one | — | already has notes | already has decisions |
@@ -49,7 +49,7 @@ Reminders and events do not link to decisions. A decision can sit on a project w
 
 A reminder or event has one project. Cross-project meaning uses tags.
 
-One Slate Note can sit on many reminders, events, or tasks.
+One Membrae Note can sit on many reminders, events, or tasks.
 
 ## Tags
 
@@ -70,9 +70,9 @@ Not taggable: projects, chat messages.
 
 Recurring events: tags and associations belong to the **series**, not one occurrence.
 
-First tag or first association on an EventKit reminder or event creates the Slate record. Items you never touch have no Slate row.
+First tag or first association on an EventKit reminder or event creates the Membrae record. Items you never touch have no Membrae row.
 
-Slate tags and links still work when the EventKit item is read-only. EventKit write is only for title, due, list/calendar, and scratch text.
+Membrae tags and links still work when the EventKit item is read-only. EventKit write is only for title, due, list/calendar, and scratch text.
 
 Surfaces that show tags: the object itself, and Home / Tasks / Calendar rows. A unified “everything with this tag” index is its own later project. The data model does not wait on it.
 
@@ -83,7 +83,7 @@ On a reminder, event, or task:
 1. **Tags** — any number.
 2. **Project** — at most one. User-set or inherited.
 3. **Tracks** — any number, all in that project. Each link is user-set or inherited.
-4. **Slate Notes** — any number, all in that project.
+4. **Membrae Notes** — any number, all in that project.
 5. **Scratch text** — the EventKit notes string. Shown under the item’s name. Not an object.
 
 **Inherit** is the UI word. Never say derived.
@@ -107,10 +107,10 @@ Three things, all allowed:
 | Thing | What it is | How it looks |
 | --- | --- | --- |
 | Scratch text | EventKit notes string | Line under the item’s name |
-| Linked Slate Note | existing document | An object on the item |
-| New Slate Note from the item | create a note, then link it | Same as a linked object |
+| Linked Membrae Note | existing document | An object on the item |
+| New Membrae Note from the item | create a note, then link it | Same as a linked object |
 
-Creating a **reminder or task from a Slate Note**: the item’s title is the note’s name at that moment. That title is a snapshot. Renaming the note later does not rename the item. The note is linked as an object. Fill-in then runs: project from the note, and the note’s track if it has one (inherited).
+Creating a **reminder or task from a Membrae Note**: the item’s title is the note’s name at that moment. That title is a snapshot. Renaming the note later does not rename the item. The note is linked as an object. Fill-in then runs: project from the note, and the note’s track if it has one (inherited).
 
 Creating a **note from a reminder**: the note belongs to the reminder’s project (pick one first if empty), then the reminder links to it. Fill-in runs as usual.
 
@@ -119,8 +119,8 @@ Creating a **note from a reminder**: the note belongs to the reminder’s projec
 Project is one field. It is **user-set** or **inherited**. Never switch it silently.
 
 1. User picks a project. Mark it user-set. Later links do not change it unless the user confirms a switch.
-2. User links a track or a Slate Note, and project is empty. Set project to that object’s project. Mark it inherited.
-3. Linking a Slate Note also links that note’s track when the note has one. Mark that track link **inherited**, unless the track is already on the item as user-set. Then the same-project rule runs.
+2. User links a track or a Membrae Note, and project is empty. Set project to that object’s project. Mark it inherited.
+3. Linking a Membrae Note also links that note’s track when the note has one. Mark that track link **inherited**, unless the track is already on the item as user-set. Then the same-project rule runs.
 4. Another track or note from the **same** project: keep the project.
 5. A track or note from a **different** project: ask. Do not switch on their behalf.
    - Keep the current project and refuse the link, or
@@ -164,19 +164,19 @@ Broken links do not auto-drop and do not vanish. They go to a **Deleted** sectio
 What lands there:
 
 - A linked note or track was deleted.
-- The EventKit reminder or event was deleted outside Slate, so the Slate record has tags and links but no live calendar/reminder item.
+- The EventKit reminder or event was deleted outside Membrae, so the Membrae record has tags and links but no live calendar/reminder item.
 
-What the user can do there: drop the link, pick a replacement, delete the Slate record, or ignore it until later.
+What the user can do there: drop the link, pick a replacement, delete the Membrae record, or ignore it until later.
 
 While a broken link is still in Deleted, do **not** clear an inherited project. The item stays where it was until the user resolves that row. When they drop the last link that justified the inherited project, then clear it. When they pick a replacement, fill-in runs again.
 
 Archived tracks are not deleted. Keep the link. Hide those items on views that already hide archived work.
 
-## Slate record
+## Membrae record
 
 Tags are their own SwiftData model.
 
-Reminders, events, and tasks share one Slate-side record (`AgendaItem`):
+Reminders, events, and tasks share one Membrae-side record (`AgendaItem`):
 
 - `kind`: reminder | event | task
 - EventKit identifier, nullable

@@ -2,7 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readAttachedFile, recordReadProvenance } from "./source-read";
 import { writeSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
 import { promisify } from "node:util";
@@ -20,7 +20,7 @@ type Request = {
   cwd: string;
   mcpCommand: string;
   codeRoots: { title: string; locator?: string; path: string }[];
-  includeSlateTools: boolean;
+  includeMembraeTools: boolean;
   includeProjectTools: boolean;
   includeWorkerTool?: boolean;
   includeFinishRun?: boolean;
@@ -246,7 +246,7 @@ function sourcesFrom(name: string, args: unknown, result?: unknown): Source[] {
     .map((record) => ({
       id: record.id,
       title: record.title,
-      url: record.url ?? `slate://${kind}/${record.id}`,
+      url: record.url ?? `membrae://${kind}/${record.id}`,
       kind,
       pin,
     }));
@@ -267,8 +267,8 @@ function toolEvent(name: string, status: string, args?: unknown, result?: unknow
 
 type McpTool = { name: string; description?: string; inputSchema?: SDKCustomTool["inputSchema"]; annotations?: SDKCustomTool["annotations"] };
 
-/** Runs the Slate MCP as a child and exposes its tools in-process, since MCP server calls need an approval a headless run can't give. */
-async function slateTools(command: string, allowed?: string[]): Promise<Record<string, SDKCustomTool>> {
+/** Runs the Membrae MCP as a child and exposes its tools in-process, since MCP server calls need an approval a headless run can't give. */
+async function membraeTools(command: string, allowed?: string[]): Promise<Record<string, SDKCustomTool>> {
   const child = spawn(command, [], { stdio: ["pipe", "pipe", "inherit"] });
   const pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
   let nextId = 1;
@@ -281,7 +281,7 @@ async function slateTools(command: string, allowed?: string[]): Promise<Record<s
     else waiter.resolve(message.result);
   });
   child.on("exit", (code) => {
-    for (const waiter of pending.values()) waiter.reject(new Error(`Slate MCP exited (${code}).`));
+    for (const waiter of pending.values()) waiter.reject(new Error(`Membrae MCP exited (${code}).`));
     pending.clear();
   });
   const call = (method: string, params: unknown): Promise<any> =>
@@ -291,7 +291,7 @@ async function slateTools(command: string, allowed?: string[]): Promise<Record<s
       child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
     });
 
-  await call("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "slate-runner", version: "1.0" } });
+  await call("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "membrae-runner", version: "1.0" } });
   const { tools } = (await call("tools/list", {})) as { tools: McpTool[] };
   const allow = allowed?.length ? new Set(allowed) : null;
   return Object.fromEntries(
@@ -392,9 +392,26 @@ function gitLogFailure(root: Request["codeRoots"][number], error: unknown): Erro
   return new Error(`git log failed in ${root.path} (exit ${code}): ${detail}`);
 }
 
+async function productFile(directory: string, name: string): Promise<string> {
+  const current = resolve(directory, name);
+  const legacy = resolve(directory, name.replace(".membrae-", ".slate-"));
+  try {
+    await stat(current);
+    return current;
+  } catch {
+    try {
+      await stat(legacy);
+      await rename(legacy, current);
+    } catch {
+      // First write uses the Membrae name.
+    }
+  }
+  return current;
+}
+
 async function commitsForRoot(root: Request["codeRoots"][number]): Promise<Record<string, unknown>[]> {
   try {
-    const items = JSON.parse(await readFile(resolve(root.path, ".slate-commits.json"), "utf8"));
+    const items = JSON.parse(await readFile(await productFile(root.path, ".membrae-commits.json"), "utf8"));
     if (Array.isArray(items) && items.length) {
       return items.map((item) => ({ ...(asRecord(item) ?? {}), root: root.title }));
     }
@@ -426,7 +443,7 @@ function tipSHA(commits: unknown): string | undefined {
 
 async function storedTip(destination: string): Promise<string | undefined> {
   try {
-    return tipSHA(JSON.parse(await readFile(resolve(destination, ".slate-commits.json"), "utf8")));
+    return tipSHA(JSON.parse(await readFile(await productFile(destination, ".membrae-commits.json"), "utf8")));
   } catch {
     return undefined;
   }
@@ -435,7 +452,7 @@ async function storedTip(destination: string): Promise<string | undefined> {
 function snapshotHeaders(snapshot: Request["codeSnapshots"][number]): Record<string, string> {
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
-    "User-Agent": "Slate",
+    "User-Agent": "Membrae",
   };
   if (snapshot.token) {
     headers.Authorization = snapshot.kind === "gitlab" ? snapshot.token : `Bearer ${snapshot.token}`;
@@ -495,7 +512,7 @@ async function prepareSnapshot(snapshot: Request["codeSnapshots"][number]): Prom
   }
   if (!commits.length) {
     try {
-      await stat(resolve(snapshot.path, ".slate-snapshot"));
+      await stat(await productFile(snapshot.path, ".membrae-snapshot"));
       return snapshot.path;
     } catch {
       // download
@@ -520,9 +537,9 @@ async function prepareSnapshot(snapshot: Request["codeSnapshots"][number]): Prom
       await runFile("/bin/mv", [join(source, name), join(snapshot.path, name)]);
     }
     if (commits.length) {
-      await writeFile(resolve(snapshot.path, ".slate-commits.json"), JSON.stringify(commits));
+      await writeFile(await productFile(snapshot.path, ".membrae-commits.json"), JSON.stringify(commits));
     }
-    await writeFile(resolve(snapshot.path, ".slate-snapshot"), snapshot.locator);
+    await writeFile(await productFile(snapshot.path, ".membrae-snapshot"), snapshot.locator);
   } finally {
     await rm(archiveFile, { force: true });
     await rm(extracted, { recursive: true, force: true });
@@ -588,7 +605,7 @@ function projectCodeTools(session: { request: Request }): Record<string, SDKCust
   };
   return {
     project_list_files: {
-      description: "List files in the Slate project's attached code. Read-only.",
+      description: "List files in the Membrae project's attached code. Read-only.",
       inputSchema: {
         type: "object",
         properties: {
@@ -603,13 +620,13 @@ function projectCodeTools(session: { request: Request }): Record<string, SDKCust
           .filter((file) => !query || file.relative.toLowerCase().includes(query))
           .slice(0, 300)
           .map((file) => ({ root: file.root, path: file.relative }));
-        const result = roots.length ? files : { error: "No code is attached to this Slate project." };
+        const result = roots.length ? files : { error: "No code is attached to this Membrae project." };
         emit(toolEvent("project_list_files", "completed", args, result));
         return toolText(result);
       },
     },
     project_search_code: {
-      description: "Search text in the Slate project's attached code. Read-only.",
+      description: "Search text in the Membrae project's attached code. Read-only.",
       inputSchema: {
         type: "object",
         properties: {
@@ -640,13 +657,13 @@ function projectCodeTools(session: { request: Request }): Record<string, SDKCust
             continue;
           }
         }
-        const result = roots.length ? matches : { error: "No code is attached to this Slate project." };
+        const result = roots.length ? matches : { error: "No code is attached to this Membrae project." };
         emit(toolEvent("project_search_code", "completed", args, result));
         return toolText(result);
       },
     },
     project_read_file: {
-      description: "Read a line range from a file in the Slate project's attached code. Read-only.",
+      description: "Read a line range from a file in the Membrae project's attached code. Read-only.",
       inputSchema: {
         type: "object",
         properties: {
@@ -662,7 +679,7 @@ function projectCodeTools(session: { request: Request }): Record<string, SDKCust
         const roots = await rootsFor();
         const fields = asRecord(args);
         const root = selectedRoot(roots, fields?.root);
-        if (!root) throw new Error(roots.length ? "Specify root because this project has several code attachments." : "No code is attached to this Slate project.");
+        if (!root) throw new Error(roots.length ? "Specify root because this project has several code attachments." : "No code is attached to this Membrae project.");
         const file = safeFile(root, fields?.path);
         const { hash, text } = await readAttachedFile(file, fields?.start_line, fields?.end_line);
         await recordReadProvenance(session.request.readProvenancePath, fields?.path, hash);
@@ -671,7 +688,7 @@ function projectCodeTools(session: { request: Request }): Record<string, SDKCust
       },
     },
     project_git_log: {
-      description: "Read recent commits for the Slate project's attached remote repositories. Read-only.",
+      description: "Read recent commits for the Membrae project's attached remote repositories. Read-only.",
       inputSchema: {
         type: "object",
         properties: {
@@ -692,7 +709,7 @@ function projectCodeTools(session: { request: Request }): Record<string, SDKCust
             failures.push(error instanceof Error ? error.message : String(error));
           }
         }
-        if (!roots.length) throw new Error("No code is attached to this Slate project.");
+        if (!roots.length) throw new Error("No code is attached to this Membrae project.");
         if (!selected.length) throw new Error(`Unknown code root. Use one of: ${roots.map((root) => root.title).join(", ")}.`);
         if (!commits.length) {
           throw new Error(
@@ -786,7 +803,7 @@ function workerTool(): Record<string, SDKCustomTool> {
   return {
     consult_code: {
       description:
-        "Ask the project's Worker to inspect attached code. Pass a brief. Do not use this for decisions, tracks, or notes — those are Slate tools.",
+        "Ask the project's Worker to inspect attached code. Pass a brief. Do not use this for decisions, tracks, or notes — those are Membrae tools.",
       inputSchema: {
         type: "object",
         properties: {
@@ -833,7 +850,7 @@ async function createSession(request: Request): Promise<Session> {
     });
   } else {
     const customTools = {
-      ...(request.includeSlateTools ? await slateTools(request.mcpCommand, request.allowedTools) : {}),
+      ...(request.includeMembraeTools ? await membraeTools(request.mcpCommand, request.allowedTools) : {}),
       ...(request.includeProjectTools ? projectCodeTools(session) : {}),
       ...(request.includeWorkerTool ? workerTool() : {}),
       ...(request.includeFinishRun ? finishRunTool() : {}),

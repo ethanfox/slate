@@ -1,6 +1,6 @@
 import Foundation
 import SwiftData
-@testable import Slate
+@testable import Membrae
 
 @MainActor
 enum CodeIndexEval {
@@ -27,7 +27,7 @@ enum CodeIndexEval {
 
     static var isRequested: Bool {
         let value = ProcessInfo.processInfo.environment["SLATE_EVAL_INDEX"]
-            ?? ProcessInfo.processInfo.environment["TEST_RUNNER_SLATE_EVAL_INDEX"]
+            ?? ProcessInfo.processInfo.environment["TEST_RUNNER_MEMBRAE_EVAL_INDEX"]
             ?? ""
         return value == "1" || value.lowercased() == "true"
     }
@@ -36,7 +36,7 @@ enum CodeIndexEval {
         let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Store.schema, configurations: configuration)
         let context = container.mainContext
-        let project = Project(name: "Slate", symbol: "note.text", summary: "Native Mac knowledge base.")
+        let project = Project(name: "Membrae", symbol: "note.text", summary: "Native Mac knowledge base.")
         context.insert(project)
         let attachment = CodeAttachment(kind: .folder, title: "PC-OS", locator: repoPath, project: project)
         context.insert(attachment)
@@ -58,9 +58,9 @@ enum CodeIndexEval {
         )
 
         let policy = RunToolPolicy.indexing(runID: run.id, projectID: project.id, attachmentID: attachment.id)
-        let inner = SlateToolGateway(
+        let inner = MembraeToolGateway(
             roots: [.init(title: attachment.title, locator: attachment.locator, path: repoPath)],
-            includeSlateTools: false,
+            includeMembraeTools: false,
             includeProjectTools: true
         )
         let tools = (try await inner.definitions() + Tools.definitions.map { tool in
@@ -147,7 +147,7 @@ enum CodeIndexEval {
         let blob = entries.map { $0.title + $0.body + $0.paths.joined() }.joined()
         let hits = known.filter { blob.contains($0) }
         if hits.count < 2 {
-            notes.append("Few known Slate components were named. Hits: \(hits.joined(separator: ", ")).")
+            notes.append("Few known Membrae components were named. Hits: \(hits.joined(separator: ", ")).")
         } else {
             notes.append("Named known components: \(hits.joined(separator: ", ")).")
         }

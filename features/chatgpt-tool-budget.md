@@ -2,7 +2,7 @@
 
 Problem from 8 Oct 2026. Direction is locked.
 
-ChatGPT is `store: false`. After identity-only context it lists and gets records one round at a time. Eight sequential rounds later Slate threw “exceeded the tool-call limit” and the user got nothing.
+ChatGPT is `store: false`. After identity-only context it lists and gets records one round at a time. Eight sequential rounds later Membrae threw “exceeded the tool-call limit” and the user got nothing.
 
 ## What to do
 

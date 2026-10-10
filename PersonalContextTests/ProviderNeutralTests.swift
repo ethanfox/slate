@@ -1,6 +1,6 @@
 import SwiftData
 import XCTest
-@testable import Slate
+@testable import Membrae
 
 final class ProviderNeutralTests: XCTestCase {
     @MainActor
@@ -35,7 +35,7 @@ final class ProviderNeutralTests: XCTestCase {
 
         let bridge = CursorConversationBridge(conversation: conversation, project: project)
         let first = bridge.prepareProviderTurn(userText: "hi")
-        XCTAssertTrue(first.contains("You are the assistant inside Slate"))
+        XCTAssertTrue(first.contains("You are the assistant inside Membrae"))
         XCTAssertTrue(first.contains("Do not walk the whole project"))
         XCTAssertTrue(first.contains("Harbor"))
         XCTAssertTrue(first.contains("<project-context>"))
@@ -43,7 +43,7 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertFalse(first.contains("Ship the Mac app in Swift"))
 
         let later = bridge.prepareProviderTurn(userText: "again")
-        XCTAssertFalse(later.contains("You are the assistant inside Slate"))
+        XCTAssertFalse(later.contains("You are the assistant inside Membrae"))
         XCTAssertTrue(later.contains("Harbor"))
         XCTAssertFalse(later.contains("Active decisions"))
         XCTAssertFalse(later.contains("Ship the Mac app in Swift"))
@@ -88,7 +88,7 @@ final class ProviderNeutralTests: XCTestCase {
         child.parent = track
         let decision = Decision(
             title: "Keep the Mac session",
-            decision: "Reuse ChatGPTSignIn, do not mint Slate tokens.",
+            decision: "Reuse ChatGPTSignIn, do not mint Membrae tokens.",
             project: project,
             thread: track
         )
@@ -107,7 +107,7 @@ final class ProviderNeutralTests: XCTestCase {
 
         let bridge = CursorConversationBridge(conversation: conversation, project: project)
         let first = bridge.prepareProviderTurn(userText: "hi")
-        XCTAssertTrue(first.contains("You are the assistant inside Slate"))
+        XCTAssertTrue(first.contains("You are the assistant inside Membrae"))
         XCTAssertTrue(first.contains("<focused-track>"))
         XCTAssertTrue(first.contains("append_to_body"))
         XCTAssertTrue(first.contains("keeping existing requirements"))
@@ -118,7 +118,7 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertFalse(first.contains("Notes are specs and facts"))
 
         let later = bridge.prepareProviderTurn(userText: "again")
-        XCTAssertFalse(later.contains("You are the assistant inside Slate"))
+        XCTAssertFalse(later.contains("You are the assistant inside Membrae"))
         XCTAssertTrue(later.contains("<focused-track>"))
         XCTAssertTrue(later.contains("Do not invent a second token."))
         XCTAssertTrue(later.contains("Wire refresh"))
@@ -204,10 +204,10 @@ final class ProviderNeutralTests: XCTestCase {
         let bridge = CursorConversationBridge(conversation: conversation, project: seed.project)
         let first = bridge.prepareProviderTurn(userText: "hi")
         XCTAssertTrue(first.contains(ContextBuilder.knowledgeRules))
-        XCTAssertTrue(first.contains("You are the assistant inside Slate"))
+        XCTAssertTrue(first.contains("You are the assistant inside Membrae"))
 
         let later = bridge.prepareProviderTurn(userText: "again")
-        XCTAssertFalse(later.contains("You are the assistant inside Slate"))
+        XCTAssertFalse(later.contains("You are the assistant inside Membrae"))
         XCTAssertTrue(later.contains(ContextBuilder.knowledgeRules))
         XCTAssertTrue(later.contains("track bodies"))
     }
@@ -278,7 +278,7 @@ final class ProviderNeutralTests: XCTestCase {
             cwd: "/tmp",
             mcpCommand: "/mcp",
             codeRoots: [],
-            includeSlateTools: true,
+            includeMembraeTools: true,
             includeProjectTools: true,
             runtime: "local",
             cloudRepos: []
@@ -291,8 +291,8 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertNotEqual(left.reuseKey, right.reuseKey)
     }
 
-    func testSlateMCPClientCachesToolList() async throws {
-        let client = SlateMCPClient(command: nil)
+    func testMembraeMCPClientCachesToolList() async throws {
+        let client = MembraeMCPClient(command: nil)
         await client.useListProvider {
             [["name": "get_note", "description": "Read a note.", "inputSchema": ["type": "object"]]]
         }
@@ -305,13 +305,13 @@ final class ProviderNeutralTests: XCTestCase {
     }
 
     @MainActor
-    func testGatewayUsesCachedSlateTools() async throws {
-        let client = SlateMCPClient(command: nil)
+    func testGatewayUsesCachedMembraeTools() async throws {
+        let client = MembraeMCPClient(command: nil)
         await client.useListProvider {
             [["name": "get_note", "description": "Read a note.", "inputSchema": ["type": "object"]]]
         }
-        let gateway = SlateToolGateway(
-            includeSlateTools: true,
+        let gateway = MembraeToolGateway(
+            includeMembraeTools: true,
             includeProjectTools: false,
             mcp: client
         )
@@ -325,8 +325,8 @@ final class ProviderNeutralTests: XCTestCase {
     @MainActor
     func testGatewayConsultCodeIsOnDemand() async throws {
         var briefs: [String] = []
-        let gateway = SlateToolGateway(
-            includeSlateTools: false,
+        let gateway = MembraeToolGateway(
+            includeMembraeTools: false,
             includeProjectTools: false,
             consult: { brief in
                 briefs.append(brief)
@@ -367,9 +367,9 @@ final class ProviderNeutralTests: XCTestCase {
             encoding: .utf8
         )
 
-        let gateway = SlateToolGateway(
+        let gateway = MembraeToolGateway(
             roots: [.init(title: "Fixture", path: root.path)],
-            includeSlateTools: false
+            includeMembraeTools: false
         )
         let listed = try await gateway.execute(name: "project_list_files", arguments: [:])
         XCTAssertTrue(listed.contains("Answer.swift"))
@@ -401,7 +401,7 @@ final class ProviderNeutralTests: XCTestCase {
     func testChatGPTInferenceBodyMatchesPlanUsageContract() {
         let body = ChatGPTProvider.inferenceBody(
             model: "gpt-5.5",
-            instructions: "Use Slate tools.",
+            instructions: "Use Membrae tools.",
             input: [["role": "user", "content": "hello"]],
             tools: [["type": "function", "name": "list_projects"]]
         )
@@ -418,7 +418,7 @@ final class ProviderNeutralTests: XCTestCase {
 
         let forced = ChatGPTProvider.inferenceBody(
             model: "gpt-5.5",
-            instructions: "Use Slate tools.",
+            instructions: "Use Membrae tools.",
             input: [["role": "user", "content": ChatGPTProvider.answerNowMessage]],
             tools: []
         )
@@ -492,6 +492,23 @@ final class ProviderNeutralTests: XCTestCase {
         ])
         XCTAssertEqual(models.map(\.id), ["gpt-5.5"])
         XCTAssertEqual(models.map(\.displayName), ["GPT-5.5"])
+        XCTAssertNil(models.first?.endpointImage)
+        XCTAssertNil(models.first?.endpointDocument)
+    }
+
+    func testChatGPTCatalogReadsEndpointModalitiesWhenPresent() {
+        let models = ChatGPTSignIn.catalog(from: [
+            "models": [
+                [
+                    "slug": "research",
+                    "display_name": "Research",
+                    "visibility": "list",
+                    "input_modalities": ["text", "image", "file"],
+                ]
+            ]
+        ])
+        XCTAssertEqual(models.first?.endpointImage, .supported)
+        XCTAssertEqual(models.first?.endpointDocument, .supported)
     }
 
     func testCommitTipReadsGitHubAndGitLabShapes() throws {
@@ -507,7 +524,7 @@ final class ProviderNeutralTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let stored = try JSONSerialization.data(withJSONObject: [["sha": "abc123", "message": "tip"]])
-        try stored.write(to: root.appendingPathComponent(".slate-commits.json"))
+        try stored.write(to: root.appendingPathComponent(".membrae-commits.json"))
         let fetched = try JSONSerialization.data(withJSONObject: [["sha": "abc123"]])
         XCTAssertTrue(ManagedCloneService.isCurrent(at: root, commits: fetched))
         let other = try JSONSerialization.data(withJSONObject: [["sha": "def456"]])
@@ -521,8 +538,8 @@ final class ProviderNeutralTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         try "ok\n".write(to: root.appendingPathComponent("A.swift"), atomically: true, encoding: .utf8)
         var prepared = 0
-        let gateway = SlateToolGateway(
-            includeSlateTools: false,
+        let gateway = MembraeToolGateway(
+            includeMembraeTools: false,
             prepareRoots: {
                 prepared += 1
                 return [.init(title: "Fixture", path: root.path)]
@@ -562,8 +579,8 @@ final class ProviderNeutralTests: XCTestCase {
         let project = Project(name: "Clone", symbol: "folder", summary: "")
         let attachment = CodeAttachment(
             kind: .github,
-            title: "slate",
-            locator: "ethanfox/slate",
+            title: "membrae",
+            locator: "ethanfox/membrae",
             defaultBranch: "main",
             project: project
         )
@@ -573,8 +590,8 @@ final class ProviderNeutralTests: XCTestCase {
             storeURL: root.appendingPathComponent("default.store")
         )
         let cloned = try await ManagedCloneService.prepare(snapshot)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: cloned.appendingPathComponent(".slate-snapshot").path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: cloned.appendingPathComponent(".slate-commits.json").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cloned.appendingPathComponent(".membrae-snapshot").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cloned.appendingPathComponent(".membrae-commits.json").path))
     }
 
     func testUserBubbleWrapCapIgnoresInfiniteProposal() {

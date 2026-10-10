@@ -2,7 +2,7 @@
 
 Problem from 8 Oct 2026. Direction is locked.
 
-ChatGPT has no Node agent to keep warm. The delay is work Slate does *before* `URLSession.bytes`: validate the session, `prepareCodeRoots()`, spawn `slate-mcp` just to list tools, then POST. If the model calls tools, rounds stay sequential. That is the API. Paying clone + process spawn on “what did we decide” is not. After the tool budget, force an answer — see [`chatgpt-tool-budget.md`](chatgpt-tool-budget.md).
+ChatGPT has no Node agent to keep warm. The delay is work Membrae does *before* `URLSession.bytes`: validate the session, `prepareCodeRoots()`, spawn `membrae-mcp` just to list tools, then POST. If the model calls tools, rounds stay sequential. That is the API. Paying clone + process spawn on “what did we decide” is not. After the tool budget, force an answer — see [`chatgpt-tool-budget.md`](chatgpt-tool-budget.md).
 
 ## What to do
 
@@ -17,12 +17,12 @@ Tool-call rounds stay sequential. That is the API. First token should not wait o
 
 ## Do not
 
-- Spawn MCP on every send to rediscover the same Slate tools
+- Spawn MCP on every send to rediscover the same Membrae tools
 - Call `prepareCodeRoots()` in `ChatGPTProvider.stream` before the request
 - Refresh the ChatGPT session when it is still valid
 
 ## Where it lives
 
-`ChatGPTProvider.stream`, `SlateToolGateway.definitions` / `invokeMCP`, `ChatGPTSignIn.validSession`.
+`ChatGPTProvider.stream`, `MembraeToolGateway.definitions` / `invokeMCP`, `ChatGPTSignIn.validSession`.
 
 See also: [`code-roots-on-demand.md`](code-roots-on-demand.md), [`provider-turn-context.md`](provider-turn-context.md), [`hot-cursor-runner.md`](hot-cursor-runner.md).

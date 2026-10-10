@@ -59,7 +59,7 @@ enum CodeReferenceError: LocalizedError, Equatable {
         case .sourceEditDenied:
             "This run cannot edit source."
         case .unrelatedWriteDenied:
-            "This run cannot change unrelated Slate records."
+            "This run cannot change unrelated Membrae records."
         case .attachmentNotFound:
             "No code attachment matches that id."
         case .entryNotFound:

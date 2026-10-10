@@ -1,6 +1,6 @@
 import SwiftData
 import XCTest
-@testable import Slate
+@testable import Membrae
 
 @MainActor
 final class TrackFirstEvalTests: XCTestCase {
@@ -139,15 +139,15 @@ final class TrackFirstEvalTests: XCTestCase {
 
     func testLiveHarborScenarios() async throws {
         let model = ProcessInfo.processInfo.environment["SLATE_EVAL_MODEL"]
-            ?? ProcessInfo.processInfo.environment["TEST_RUNNER_SLATE_EVAL_MODEL"]
+            ?? ProcessInfo.processInfo.environment["TEST_RUNNER_MEMBRAE_EVAL_MODEL"]
             ?? "gpt-5.5"
         let repeats = Int(
             ProcessInfo.processInfo.environment["SLATE_EVAL_REPEATS"]
-                ?? ProcessInfo.processInfo.environment["TEST_RUNNER_SLATE_EVAL_REPEATS"]
+                ?? ProcessInfo.processInfo.environment["TEST_RUNNER_MEMBRAE_EVAL_REPEATS"]
                 ?? "1"
         ) ?? 1
         let ids = (ProcessInfo.processInfo.environment["SLATE_EVAL_IDS"]
-            ?? ProcessInfo.processInfo.environment["TEST_RUNNER_SLATE_EVAL_IDS"]
+            ?? ProcessInfo.processInfo.environment["TEST_RUNNER_MEMBRAE_EVAL_IDS"]
             ?? "")
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }

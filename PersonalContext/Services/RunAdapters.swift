@@ -15,7 +15,7 @@ final class RunCursorProcess {
 
     func start(_ request: RunnerRequest) throws -> AsyncThrowingStream<RunnerEvent, Error> {
         stop()
-        guard let node = Bundle.main.url(forAuxiliaryExecutable: "slate-node"),
+        guard let node = Bundle.main.url(forAuxiliaryExecutable: "membrae-node"),
               let runner = Bundle.main.url(forResource: "runner", withExtension: "mjs", subdirectory: "runner") else {
             throw CursorAPIError(status: 0, message: "The agent runner is missing from the app.")
         }

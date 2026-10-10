@@ -66,13 +66,13 @@ struct SettingsOrbPage: View {
             SettingsRow {
                 Spacer(minLength: 0)
                 Button("Reset to Default", action: reset)
-                    .disabled(app.orbPalette == .slate)
+                    .disabled(app.orbPalette == .membrae)
             }
         }
     }
 
     private func reset() {
-        app.orbPalette = .slate
+        app.orbPalette = .membrae
     }
 }
 

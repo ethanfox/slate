@@ -20,6 +20,8 @@ struct ChatGPTSession: Codable, Sendable {
 struct ChatGPTModel: Identifiable, Hashable, Sendable {
     var id: String
     var displayName: String
+    var endpointImage: CapabilityValue?
+    var endpointDocument: CapabilityValue?
 }
 
 enum ChatGPTSignIn {
@@ -82,7 +84,7 @@ enum ChatGPTSignIn {
             items.append(.init(name: "id_token_hint", value: existing.idToken))
         } else {
             items.append(.init(name: "client_id", value: "dynamic_agent_client"))
-            items.append(.init(name: "agent_name_hint", value: "Slate"))
+            items.append(.init(name: "agent_name_hint", value: "Membrae"))
         }
         var components = URLComponents(url: authorizeURL, resolvingAgainstBaseURL: false)!
         components.queryItems = items
@@ -214,18 +216,67 @@ enum ChatGPTSignIn {
                 guard let slug = item["slug"] as? String ?? item["id"] as? String, !slug.isEmpty else {
                     return nil
                 }
-                return ChatGPTModel(id: slug, displayName: item["display_name"] as? String ?? slug)
+                let modalities = endpointModalities(from: item)
+                return ChatGPTModel(
+                    id: slug,
+                    displayName: item["display_name"] as? String ?? slug,
+                    endpointImage: modalities?.image,
+                    endpointDocument: modalities?.document
+                )
             }
         }
         let rawItems = (payload["data"] as? [[String: Any]]) ?? []
-        return rawItems.compactMap { item in
-            item["id"] as? String ?? item["model"] as? String ?? item["slug"] as? String
-        }
-        .filter { id in
+        return rawItems.compactMap { item -> ChatGPTModel? in
+            guard let id = item["id"] as? String ?? item["model"] as? String ?? item["slug"] as? String else {
+                return nil
+            }
             let lower = id.lowercased()
-            return lower.hasPrefix("gpt-") || lower.hasPrefix("o1") || lower.hasPrefix("o3") || lower.hasPrefix("o4") || lower.hasPrefix("chatgpt")
+            guard lower.hasPrefix("gpt-") || lower.hasPrefix("o1") || lower.hasPrefix("o3") || lower.hasPrefix("o4") || lower.hasPrefix("chatgpt") else {
+                return nil
+            }
+            let modalities = endpointModalities(from: item)
+            return ChatGPTModel(
+                id: id,
+                displayName: id,
+                endpointImage: modalities?.image,
+                endpointDocument: modalities?.document
+            )
         }
-        .map { ChatGPTModel(id: $0, displayName: $0) }
+    }
+
+    static func endpointModalities(from item: [String: Any]) -> (image: CapabilityValue, document: CapabilityValue)? {
+        let lists: [[String]] = [
+            item["input_modalities"] as? [String],
+            item["supported_input_modalities"] as? [String],
+            (item["architecture"] as? [String: Any])?["input_modalities"] as? [String],
+        ].compactMap { $0 }
+        if let modalities = lists.first {
+            let lower = Set(modalities.map { $0.lowercased() })
+            let image: CapabilityValue = lower.contains("image") || lower.contains("vision") ? .supported : .unsupported
+            let document: CapabilityValue = lower.contains("file") || lower.contains("document") ? .supported : .unsupported
+            return (image, document)
+        }
+        guard let caps = item["capabilities"] as? [String: Any] else { return nil }
+        let image = boolish(caps["image"]) ?? boolish(caps["vision"])
+        let document = boolish(caps["file"]) ?? boolish(caps["files"]) ?? boolish(caps["document"])
+        guard image != nil || document != nil else { return nil }
+        return (
+            image: image.map { $0 ? .supported : .unsupported } ?? .unknown,
+            document: document.map { $0 ? .supported : .unsupported } ?? .unknown
+        )
+    }
+
+    private static func boolish(_ value: Any?) -> Bool? {
+        if let flag = value as? Bool { return flag }
+        if let number = value as? NSNumber { return number.boolValue }
+        if let text = value as? String {
+            switch text.lowercased() {
+            case "true", "yes", "1": return true
+            case "false", "no", "0": return false
+            default: return nil
+            }
+        }
+        return nil
     }
 
     static func remainingLifetime(_ session: ChatGPTSession) -> TimeInterval {

@@ -170,6 +170,7 @@ enum ProjectSort: String, CaseIterable, Identifiable, Hashable {
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     case chatgpt
     case cursor
+    case importRelay
     case compatible
     case sources
     case calendar
@@ -185,6 +186,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .chatgpt: "ChatGPT"
         case .cursor: "Cursor"
+        case .importRelay: "Import"
         case .compatible: "Compatible endpoint"
         case .sources: "Sources"
         case .calendar: "Calendar"
@@ -200,6 +202,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .chatgpt: "bubble.left"
         case .cursor: "sparkle"
+        case .importRelay: "square.and.arrow.down"
         case .compatible: "link.circle"
         case .sources: "link"
         case .calendar: "calendar"

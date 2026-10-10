@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Slate-owned chat session. Owns submission, provider streaming, and turn lifecycle.
+/// Membrae-owned chat session. Owns submission, provider streaming, and turn lifecycle.
 @MainActor
 @Observable
 final class ChatEngine {

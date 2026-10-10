@@ -301,7 +301,7 @@ struct ChatWork: Equatable, Codable {
 }
 
 enum ChatTranscript {
-    private static let start = "\n\n<!--slate:"
+    private static let start = "\n\n<!--membrae:"
     private static let end = "-->"
 
     struct Payload: Codable {
@@ -342,7 +342,7 @@ enum ChatTranscript {
 }
 
 extension NSAttributedString.Key {
-    static let chatSources = NSAttributedString.Key("slate.chatSources")
+    static let chatSources = NSAttributedString.Key("membrae.chatSources")
 }
 
 actor FaviconStore {

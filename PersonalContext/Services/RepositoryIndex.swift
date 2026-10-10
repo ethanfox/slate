@@ -54,13 +54,13 @@ enum RepositoryIndex {
         Work in this order:
         1. Establish a bounded inventory: structure, languages, build configuration, dependencies, entry points, and tests. Skip generated files, build output, vendored dependencies, binaries, and sensitive files.
         2. Read actual source with project_read_file. Identify components from the implementation, not a filename taxonomy. Record uncertainties and uninvestigated areas. Each implementation entry must cite the source you actually inspected.
-        3. Write reference entries with upsert_code_reference_entry. Each entry is a coherent component: purpose, execution flow, state and persistence, dependencies, likely change locations, and relevant tests. Include at least one supporting source location for the files you read. Point at real paths and optional declaration names. Do not invent locations you did not inspect. Slate records the content hash of the file version returned by project_read_file; do not supply hashes.
+        3. Write reference entries with upsert_code_reference_entry. Each entry is a coherent component: purpose, execution flow, state and persistence, dependencies, likely change locations, and relevant tests. Include at least one supporting source location for the files you read. Point at real paths and optional declaration names. Do not invent locations you did not inspect. Membrae records the content hash of the file version returned by project_read_file; do not supply hashes.
         4. Call set_code_reference_meta with coverage (inventory, partial, or complete), coverage notes, and what local changes you examined. Partial work must be labeled partial. Do not claim the reference is complete if areas remain uninvestigated.
-        5. Call finish_run with a short summary. Publication happens only if Slate validates the staged reference. Do not claim you published it.
+        5. Call finish_run with a short summary. Publication happens only if Membrae validates the staged reference. Do not claim you published it.
 
         You may read this repository through project_list_files, project_search_code, project_read_file, and project_git_log.
         You may write only the staged code reference for this attachment.
-        You cannot edit source, create notes or tracks, or change other Slate records.
+        You cannot edit source, create notes or tracks, or change other Membrae records.
 
         \(brief)
         """
@@ -93,7 +93,7 @@ enum RepositoryIndex {
     }
 
     private static func tipSHA(at path: String) -> String? {
-        let file = URL(fileURLWithPath: path).appendingPathComponent(".slate-commits.json")
+        let file = Store.commitsFile(in: URL(fileURLWithPath: path))
         guard let data = try? Data(contentsOf: file) else { return nil }
         return ManagedCloneService.tipSHA(from: data)
     }

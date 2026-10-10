@@ -6,7 +6,7 @@ struct TasksView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" }, sort: \AgendaItem.updatedAt, order: .reverse)
-    private var slateTasks: [AgendaItem]
+    private var membraeTasks: [AgendaItem]
     @State private var completedOpen = false
 
     var body: some View {
@@ -37,7 +37,7 @@ struct TasksView: View {
             switch app.eventKit.remindersAccess {
             case .notDetermined, .writeOnly:
                 EventKitAccessLine(
-                    text: "Slate can also show Apple Reminders here.",
+                    text: "Membrae can also show Apple Reminders here.",
                     actionTitle: "Allow Reminders Access"
                 ) {
                     Task { await app.eventKit.requestRemindersAccess() }
@@ -134,11 +134,11 @@ struct TasksView: View {
     }
 
     private var openTasks: [AgendaItem] {
-        slateTasks.filter { !$0.isCompleted }
+        membraeTasks.filter { !$0.isCompleted }
     }
 
     private var completedTasks: [AgendaItem] {
-        slateTasks.filter(\.isCompleted)
+        membraeTasks.filter(\.isCompleted)
     }
 
     private var completedReminders: [ReminderItem] {

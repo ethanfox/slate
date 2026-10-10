@@ -7,14 +7,14 @@ struct OrbPalette: Equatable, Codable, Sendable {
     var ember: String
     var ink: String
 
-    static let slate = OrbPalette(
+    static let membrae = OrbPalette(
         sky: "08050B",
         horizon: "2F516A",
         ember: "46688C",
         ink: "08050B"
     )
 
-    static let legacySlate = OrbPalette(
+    static let legacy = OrbPalette(
         sky: "8188A0",
         horizon: "3F4352",
         ember: "C4843C",

@@ -54,7 +54,8 @@ enum AttachmentPrep {
         model: String,
         endpoint: String,
         store: FileStore,
-        includeHistory: Bool
+        includeHistory: Bool,
+        defaults: UserDefaults = .standard
     ) throws -> [PreparedAttachment] {
         var needed = refs
         if includeHistory {
@@ -65,7 +66,12 @@ enum AttachmentPrep {
         var seen = Set<UUID>()
         needed = needed.filter { seen.insert($0.id).inserted }
         let assets = try validateCountAndSize(needed, store: store)
-        let capability = AttachmentCapabilityStore.snapshot(provider: provider, model: model, endpoint: endpoint)
+        let capability = AttachmentCapabilityStore.snapshot(
+            provider: provider,
+            model: model,
+            endpoint: endpoint,
+            defaults: defaults
+        )
         let adapter = AttachmentCapabilityStore.adapter(for: provider, endpoint: endpoint)
         var prepared: [PreparedAttachment] = []
         var extractedCharacters = 0

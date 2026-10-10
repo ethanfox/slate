@@ -103,7 +103,7 @@ enum ProjectCodeWorkspace {
             case .github, .gitlab:
                 guard let storeURL else { continue }
                 let snapshot = RemoteSnapshot(attachment: attachment, projectID: project.id, storeURL: storeURL)
-                let marker = snapshot.destination.appendingPathComponent(".slate-snapshot")
+                let marker = Store.snapshotFile(in: snapshot.destination)
                 if FileManager.default.fileExists(atPath: marker.path) {
                     roots.append(root(for: attachment, path: snapshot.destination.path))
                 }
@@ -122,7 +122,7 @@ enum ProjectCodeWorkspace {
         guard !selected.isEmpty else {
             throw ProjectWorkspaceError(
                 roots.isEmpty
-                    ? "No code is attached to this Slate project."
+                    ? "No code is attached to this Membrae project."
                     : "Unknown code root. Use one of: \(roots.map(\.title).joined(separator: ", "))."
             )
         }
@@ -185,7 +185,7 @@ enum ProjectCodeWorkspace {
     }
 
     private static func historyEntries(in root: ProjectCodeRoot) throws -> [[String: Any]] {
-        let stored = URL(fileURLWithPath: root.path).appendingPathComponent(".slate-commits.json")
+        let stored = Store.commitsFile(in: URL(fileURLWithPath: root.path))
         if let data = try? Data(contentsOf: stored),
            let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
            !items.isEmpty {
@@ -312,7 +312,7 @@ struct RemoteSnapshot: Sendable {
     func authorizedRequest(url: URL) -> URLRequest {
         var request = URLRequest(url: url)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("Slate", forHTTPHeaderField: "User-Agent")
+        request.setValue("Membrae", forHTTPHeaderField: "User-Agent")
         if let token, !token.isEmpty {
             switch kind {
             case .github:
@@ -337,7 +337,7 @@ enum ManagedCloneService {
     }
 
     static func isCurrent(at destination: URL, commits: Data) -> Bool {
-        let stored = destination.appendingPathComponent(".slate-commits.json")
+        let stored = Store.commitsFile(in: destination)
         guard let have = try? Data(contentsOf: stored),
               let tip = tipSHA(from: commits),
               let existing = tipSHA(from: have)
@@ -346,7 +346,7 @@ enum ManagedCloneService {
     }
 
     static func prepare(_ snapshot: RemoteSnapshot) async throws -> URL {
-        let marker = snapshot.destination.appendingPathComponent(".slate-snapshot")
+        let marker = Store.snapshotFile(in: snapshot.destination)
         let fetched = try? await fetchCommits(snapshot)
         if let fetched, isCurrent(at: snapshot.destination, commits: fetched) {
             return snapshot.destination
@@ -404,7 +404,7 @@ enum ManagedCloneService {
             }
             if let commits {
                 try commits.write(
-                    to: snapshot.destination.appendingPathComponent(".slate-commits.json"),
+                    to: Store.commitsFile(in: snapshot.destination),
                     options: .atomic
                 )
             }

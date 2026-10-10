@@ -26,14 +26,14 @@ enum ProjectWorker {
         let provider = chatProvider(
             id: project.workerProviderID,
             bridge: workerBridge,
-            includeSlateTools: false,
+            includeMembraeTools: false,
             includeProjectTools: true,
             resumeConversation: false,
             path: WorkerPath(rawValue: project.workerPath) ?? .local
         )
         let model = modelID(project: project, conversation: bridge.conversation)
         let prompt = """
-        Inspect the attached project code to answer the question below. This is read-only consultation: do not edit files, create commits, or change Slate records. Return concise findings with repository-relative file paths and line numbers.
+        Inspect the attached project code to answer the question below. This is read-only consultation: do not edit files, create commits, or change Membrae records. Return concise findings with repository-relative file paths and line numbers.
 
         \(question)
         """
@@ -61,7 +61,7 @@ enum ProjectWorker {
     static func chatProvider(
         id: String,
         bridge: CursorConversationBridge,
-        includeSlateTools: Bool = true,
+        includeMembraeTools: Bool = true,
         includeProjectTools: Bool = true,
         resumeConversation: Bool = true,
         path: WorkerPath = .local
@@ -70,7 +70,7 @@ enum ProjectWorker {
         case .cursor:
             return CursorChatProvider(
                 bridge: bridge,
-                includeSlateTools: includeSlateTools,
+                includeMembraeTools: includeMembraeTools,
                 includeProjectTools: includeProjectTools,
                 resumeConversation: resumeConversation,
                 runtime: path
@@ -78,7 +78,7 @@ enum ProjectWorker {
         case .chatgpt:
             return ChatGPTProvider(
                 bridge: bridge,
-                includeSlateTools: includeSlateTools,
+                includeMembraeTools: includeMembraeTools,
                 includeProjectTools: includeProjectTools
             )
         default:

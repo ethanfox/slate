@@ -116,7 +116,7 @@ struct SettingsTagsPage: View {
                         }
                     }
                 } else {
-                    Button("Delete Slate record", role: .destructive) {
+                    Button("Delete Membrae record", role: .destructive) {
                         context.delete(row.item)
                         try? context.save()
                     }

@@ -29,7 +29,7 @@ enum FileExtraction {
         return ExtractedAttachment(
             filename: filename,
             text: decoded,
-            disclosure: "Slate extracted the text of \(filename)."
+            disclosure: "Membrae extracted the text of \(filename)."
         )
     }
 
@@ -54,7 +54,7 @@ enum FileExtraction {
         return ExtractedAttachment(
             filename: filename,
             text: text,
-            disclosure: "Slate extracted text from \(filename). Images and layout are not included."
+            disclosure: "Membrae extracted text from \(filename). Images and layout are not included."
         )
     }
 
@@ -68,7 +68,7 @@ enum FileExtraction {
             return ExtractedAttachment(
                 filename: filename,
                 text: text,
-                disclosure: "Slate read cell values from \(filename). Formatting, charts, and macros are excluded. Formulas are not executed."
+                disclosure: "Membrae read cell values from \(filename). Formatting, charts, and macros are excluded. Formulas are not executed."
             )
         } catch let error as AttachmentError {
             throw error

@@ -2,7 +2,7 @@
 
 Plan from 5 Oct 2026. Direction is locked. UI is not.
 
-Slate is the project. Coding agents are workers. A pull request is the receipt.
+Membrae is the project. Coding agents are workers. A pull request is the receipt.
 
 A project is goals, direction, decisions, tracks, and what’s next. Repos are where work lands so the project can run. Issues are the tickets in someone else’s tracker. Tasks are what you made yourself responsible for. Most projects have more than one moving part. They are never just a git repo.
 
@@ -12,12 +12,12 @@ A PR documents what changed, on which component. It does not own the reason the 
 
 Every worker is one of these. The board is the same.
 
-| Path | Where it runs | Slate closed / lid down | Several at once |
+| Path | Where it runs | Membrae closed / lid down | Several at once |
 | --- | --- | --- | --- |
 | **Local** | This Mac, one folder (`cwd`) | Stops (unless detached; then the board goes dark) | Yes. One process per job. Same checkout will collide; different repos or worktrees will not. |
 | **Cloud** | Their VM | Keeps going | Yes, subject to that vendor’s caps |
 
-Cursor does both. Local is what Slate chat already is (`@cursor/sdk` + `local.cwd`). Cloud is `POST /v1/agents` (or SDK `cloud.repos`). A public Slate offers both: local for “I’m here, work in this checkout,” cloud for “go do it, I’m leaving.”
+Cursor does both. Local is what Membrae chat already is (`@cursor/sdk` + `local.cwd`). Cloud is `POST /v1/agents` (or SDK `cloud.repos`). A public Membrae offers both: local for “I’m here, work in this checkout,” cloud for “go do it, I’m leaving.”
 
 ## The join
 
@@ -25,17 +25,17 @@ Handoff out: brief + decisions + which repos + who should run it.
 
 Handoff back: queued / running / waiting / done / blocked, plus a summary, a branch, and a PR link when there is one. That write-back is the documentation.
 
-You open the vendor UI for the transcript or the diff. Slate does not rebuild their agent view.
+You open the vendor UI for the transcript or the diff. Membrae does not rebuild their agent view.
 
 ## Three kinds of work
 
-We do not have issues yet. Slate Tasks are personal. They are not Linear issues and they are not GitHub issues. Do not merge these.
+We do not have issues yet. Membrae Tasks are personal. They are not Linear issues and they are not GitHub issues. Do not merge these.
 
-| Object | Question | Source of truth | Lives in Slate as |
+| Object | Question | Source of truth | Lives in Membrae as |
 | --- | --- | --- | --- |
-| **Task** | What did I make myself responsible for? | Slate (`AgendaItem`). Reminders still mirror EventKit. | The object itself |
+| **Task** | What did I make myself responsible for? | Membrae (`AgendaItem`). Reminders still mirror EventKit. | The object itself |
 | **Issue** | What’s on the product / team board? | Linear, GitHub Issues, or GitLab Issues | A cached **ref**. We do not own the ticket. |
-| **Run** | Who is executing, right now? | Slate, plus the worker’s id | The object itself |
+| **Run** | Who is executing, right now? | Membrae, plus the worker’s id | The object itself |
 
 A project overview needs all three, linked, not flattened into one list.
 
@@ -65,7 +65,7 @@ Two sides. What Linear understands can go to Linear. Notes and tracks stay here.
 
 **Goes to Linear** (same fields as `IssueCreateInput`): title, body, column → `stateId`, priority `0–4` (none / urgent / high / normal / low), estimate, parent, due date, assignee. If there is no Linear team yet, we still store them.
 
-**Stays in Slate:** project, tracks, notes. Same association rules as a task: many tracks, many notes, same project. A linked note is not the issue body. Tags later, same as a task.
+**Stays in Membrae:** project, tracks, notes. Same association rules as a task: many tracks, many notes, same project. A linked note is not the issue body. Tags later, same as a task.
 
 The pane is an overview. You can move the column, set priority, due, assignee, attach notes and tracks. Comments and the rest stay in Linear. A button opens the issue in Linear’s app if it’s installed, otherwise the browser. Same pattern for GitHub and GitLab. A PR is still a receipt, not an issue field.
 
@@ -76,14 +76,14 @@ The pane is an overview. You can move the column, set priority, due, assignee, a
 | Column | both | → Linear `stateId` when connected |
 | Priority | both | Linear’s 0–4 |
 | Estimate / parent / due / assignee | both | |
-| Project | Slate | Required |
-| Tracks | Slate | Many, same project |
-| Notes | Slate | Many, same project |
+| Project | Membrae | Required |
+| Tracks | Membrae | Many, same project |
+| Notes | Membrae | Many, same project |
 | Extra | cache | Cycle, milestone, labels |
 
 ### What the project overview is answering
 
-- **Mine** — Slate tasks due, plus issue refs where assignee is me.
+- **Mine** — Membrae tasks due, plus issue refs where assignee is me.
 - **On the board** — issue refs on this project, any assignee.
 - **Executing** — runs.
 
@@ -128,7 +128,7 @@ Opening a row. Not a transcript.
 4. **Receipt** — PR link, or “No pull request yet.”
 5. **Follow-up** — the composer. Open in Cursor (or the vendor) is the page action.
 
-Chat in Slate can stay Cursor-first for a while. The execution board is multi-worker from day one.
+Chat in Membrae can stay Cursor-first for a while. The execution board is multi-worker from day one.
 
 ## Who can close the loop
 
@@ -139,25 +139,25 @@ First-class adapters (dispatch + status + PR from an API):
 - **Jules** — alpha API. One repo per session. Jules GitHub App first. Plan caps on daily/concurrent tasks.
 - **Devin** — org API, paid. Status and PR URL. “Waiting on you” is first-class.
 
-Local CLIs (Cursor SDK, Claude Code, Codex, …) are workers too. Several processes on this Mac. Slate starts them; quit Slate and they die. Receipt is DIY unless they print a PR.
+Local CLIs (Cursor SDK, Claude Code, Codex, …) are workers too. Several processes on this Mac. Membrae starts them; quit Membrae and they die. Receipt is DIY unless they print a PR.
 
-Do not pretend to drive **Claude Code cloud** or **Codex Cloud** from Slate. Those UIs exist. They have no supported coordinator API.
+Do not pretend to drive **Claude Code cloud** or **Codex Cloud** from Membrae. Those UIs exist. They have no supported coordinator API.
 
-GitHub is never automatic. Someone’s App or a token you collected. A GitHub login can list issues and PRs. It still does not make an issue a Slate task, and it does not make a PR an issue.
+GitHub is never automatic. Someone’s App or a token you collected. A GitHub login can list issues and PRs. It still does not make an issue a Membrae task, and it does not make a PR an issue.
 
 ## Repos on a project
 
-Attach many. They are components, not the project. Connecting a repo requires a Slate project (pick one or make one). That is how issues and PRs find Harbor. Do not also create a GitHub/GitLab Project, and do not write a default status onto their issues. Open stays open.
+Attach many. They are components, not the project. Connecting a repo requires a Membrae project (pick one or make one). That is how issues and PRs find Harbor. Do not also create a GitHub/GitLab Project, and do not write a default status onto their issues. Open stays open.
 
 A run picks which ones it needs. Most jobs hit one. A few hit two. Default Cursor-hosted cloud is usually one repo; several in one run needs an any-repo pool or a named environment (max 20 on create). Copilot and Jules are one repo per job — N jobs for N repos.
 
-Do not connect GitHub in Slate just to launch Cursor. Cursor’s (or Jules’s, or Devin’s) own GitHub connection is what clones and opens the PR. A Slate GitHub login is only for browsing, issue/PR links, or a local clone.
+Do not connect GitHub in Membrae just to launch Cursor. Cursor’s (or Jules’s, or Devin’s) own GitHub connection is what clones and opens the PR. A Membrae GitHub login is only for browsing, issue/PR links, or a local clone.
 
 ## Sidebar and project view
 
 Open. Explore in Paper. Constraints from `DESIGN.md` still apply until we change them:
 
-- Sidebar is locked: 232 wide, 28-tall rows, no badge except the Tasks due count. Chats is the workspace page for Slate conversations (running plus recent). It is not the Work page.
+- Sidebar is locked: 232 wide, 28-tall rows, no badge except the Tasks due count. Chats is the workspace page for Membrae conversations (running plus recent). It is not the Work page.
 - One job per view. Rich, not busy.
 - The same object is edited the same way everywhere.
 
@@ -172,9 +172,9 @@ Both swap Board / List.
 
 ### Issue pane
 
-One pane. Same fields, same actions, wherever you open it (workspace board, workspace list, project board, project list). Ask Slate–style, 360, trailing edge.
+One pane. Same fields, same actions, wherever you open it (workspace board, workspace list, project board, project list). Ask Membrae–style, 360, trailing edge.
 
-Overview first: identifier, title, body, column, priority, due, assignee. Then Slate links with `AssociationOpenRow` (Tracks, Linked notes). Then deploy.
+Overview first: identifier, title, body, column, priority, due, assignee. Then Membrae links with `AssociationOpenRow` (Tracks, Linked notes). Then deploy.
 
 **Workers connected**
 
@@ -192,7 +192,7 @@ Do not invent a second pane. Do not hide deploy on the project page.
 
 ### Add Worker
 
-Slate modal. Title “Add Worker”. Worker (menu: Cursor, Copilot, Jules, Devin, Claude CLI), Path (Local / Cloud, when that adapter has both), credential field. Add / Cancel.
+Membrae modal. Title “Add Worker”. Worker (menu: Cursor, Copilot, Jules, Devin, Claude CLI), Path (Local / Cloud, when that adapter has both), credential field. Add / Cancel.
 
 Connect… on a Settings row opens this same modal.
 

@@ -30,12 +30,71 @@ enum Store {
         AgentRun.self
     ])
 
-    /// Same identifier the app and slate-mcp declare in their entitlements.
+    /// Same identifier the app and membrae-mcp declare in their entitlements.
     static let applicationGroupIdentifier = "NUF99UVUKB.com.ethanfox.PersonalContext"
 
     static var applicationGroupStoreURL: URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: applicationGroupIdentifier)?
             .appendingPathComponent("Library/Application Support/default.store")
+    }
+
+    static func productSupportDirectory(
+        in root: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    ) -> URL {
+        let directory = root ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        let current = directory.appendingPathComponent("Membrae", isDirectory: true)
+        let legacy = directory.appendingPathComponent("Slate", isDirectory: true)
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: current.path), fm.fileExists(atPath: legacy.path) {
+            try? fm.moveItem(at: legacy, to: current)
+        }
+        return current
+    }
+
+    static func marker(_ name: String, in directory: URL) -> URL {
+        let current = directory.appendingPathComponent(name)
+        let legacy = directory.appendingPathComponent(name.replacingOccurrences(of: ".membrae-", with: ".slate-"))
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: current.path), fm.fileExists(atPath: legacy.path) {
+            try? fm.moveItem(at: legacy, to: current)
+        }
+        return current
+    }
+
+    static func commitsFile(in directory: URL) -> URL {
+        marker(".membrae-commits.json", in: directory)
+    }
+
+    static func snapshotFile(in directory: URL) -> URL {
+        marker(".membrae-snapshot", in: directory)
+    }
+
+    static func rewriteProductNames(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "slate://", with: "membrae://")
+            .replacingOccurrences(of: "<!--slate:", with: "<!--membrae:")
+    }
+
+    static func migrateProductNames(in context: ModelContext) {
+        var changed = false
+        let messages = (try? context.fetch(FetchDescriptor<ChatMessage>())) ?? []
+        for message in messages {
+            let updated = rewriteProductNames(message.content)
+            if updated != message.content {
+                message.content = updated
+                changed = true
+            }
+        }
+        for run in RunStore.runs(in: context) {
+            let updated = rewriteProductNames(run.resultLinksJSON)
+            if updated != run.resultLinksJSON {
+                run.resultLinksJSON = updated
+                changed = true
+            }
+        }
+        if changed {
+            try? context.save()
+        }
     }
 
     static var configuration: ModelConfiguration {
@@ -63,6 +122,7 @@ enum Store {
         context.autosaveEnabled = false
         legacyBackfillIndexingMetadata(in: context)
         try backfillCodeReferenceOwnership(in: context)
+        migrateProductNames(in: context)
         try? FileStore.default(context: context).cleanup()
         return container
     }

@@ -3,7 +3,7 @@
 Ordinary tests do not call a paid model. This evaluation is opt-in.
 
 ```sh
-TEST_RUNNER_SLATE_EVAL_INDEX=1 TEST_RUNNER_SLATE_EVAL_MODEL=gpt-5.5 xcodebuild -project PersonalContext.xcodeproj -scheme PersonalContext -derivedDataPath build -destination 'platform=macOS' -only-testing:PersonalContextTests/CodeIndexEvalTests/testLiveSlateRepositoryIndex test
+TEST_RUNNER_MEMBRAE_EVAL_INDEX=1 TEST_RUNNER_MEMBRAE_EVAL_MODEL=gpt-5.5 xcodebuild -project PersonalContext.xcodeproj -scheme PersonalContext -derivedDataPath build -destination 'platform=macOS' -only-testing:PersonalContextTests/CodeIndexEvalTests/testLiveMembraeRepositoryIndex test
 ```
 
 It indexes this repository, writes the generated reference and tool trace under `PersonalContextTests/Scenarios/code-index-traces`, and fails only on structural problems: no published reference, empty entries, or paths that do not exist.

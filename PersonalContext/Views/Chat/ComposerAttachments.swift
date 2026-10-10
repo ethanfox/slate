@@ -306,6 +306,6 @@ enum ComposerImport {
         if asset.mediaType.contains("spreadsheet") {
             return "Spreadsheet values will be extracted. Formatting, charts, and macros are excluded."
         }
-        return "Slate will send the text of \(asset.filename) when the connection has no native file input."
+        return "Membrae will send the text of \(asset.filename) when the connection has no native file input."
     }
 }

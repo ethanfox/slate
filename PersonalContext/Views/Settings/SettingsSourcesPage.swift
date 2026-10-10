@@ -10,7 +10,7 @@ struct SettingsSourcesPage: View {
         SettingsPage {
             SettingsGroup("Sources") {
                 SettingsRow {
-                    Text("Slate uses these tokens to list repos and read files directly. Cursor Cloud does not use them — connect GitHub on cursor.com for cloud clones.")
+                    Text("Membrae uses these tokens to list repos and read files directly. Cursor Cloud does not use them — connect GitHub on cursor.com for cloud clones.")
                         .font(CraftFont.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

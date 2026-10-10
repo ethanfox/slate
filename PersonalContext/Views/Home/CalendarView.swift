@@ -6,7 +6,7 @@ struct CalendarView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" })
-    private var slateTasks: [AgendaItem]
+    private var membraeTasks: [AgendaItem]
     @Query private var completions: [TaskCompletion]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedDay = Calendar.current.startOfDay(for: .now)
@@ -53,7 +53,7 @@ struct CalendarView: View {
             agenda(proxy: proxy)
         case .notDetermined, .writeOnly:
             EventKitAccessLine(
-                text: "Slate needs Calendar access to show your events.",
+                text: "Membrae needs Calendar access to show your events.",
                 actionTitle: "Allow Calendar Access"
             ) {
                 Task { await app.eventKit.requestEventsAccess() }
@@ -221,7 +221,7 @@ struct CalendarView: View {
             }
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
             .map(DayItem.reminder)
-        let tasks = slateTasks
+        let tasks = membraeTasks
             .filter { task in
                 if task.isCompleted { return false }
                 if let due = task.due {

@@ -99,7 +99,7 @@
 		4D9F2B3C5E60718293A4C5D6 /* MarkdownTableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C8E1A2B4D5F60718293B4C5 /* MarkdownTableTests.swift */; };
 		5CEECB088156040C95489B64 /* SymbolPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8B9A9D93886D56BA6078212 /* SymbolPicker.swift */; };
 		5D1208CD41C73CB5813D80D5 /* DecisionPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D08ADD9A59836BBFCCEDA98 /* DecisionPage.swift */; };
-		5D4E315BC149BA93FB000D85 /* Slate.icon in Resources */ = {isa = PBXBuildFile; fileRef = DCDFDF327D4CF27E208C2DAA /* Slate.icon */; };
+		5D4E315BC149BA93FB000D85 /* Membrae.icon in Resources */ = {isa = PBXBuildFile; fileRef = DCDFDF327D4CF27E208C2DAA /* Membrae.icon */; };
 		608ED879D00292BDC7F0F72D /* SettingsTagsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07154E6405D2E7F829D439B4 /* SettingsTagsPage.swift */; };
 		6271F4DD4DF1EF931FFE51BD /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718061204D90BCFCD66D501C /* KeychainStore.swift */; };
 		628E38B59A9414F249425F2B /* EventKitAccessLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E58979D71F21F89355E97C7 /* EventKitAccessLine.swift */; };
@@ -110,7 +110,7 @@
 		6B79A71495D0CCAC66F0A0A4 /* ChatMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65DEA7985A36C0955B7C5DA /* ChatMessages.swift */; };
 		727A13054357C732319E171D /* OverviewPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 690265881D471474DCC2ECDF /* OverviewPage.swift */; };
 		760DDFD8D6967066C5710C5E /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CD200308EE0C3ADEEAFBB91C /* MetalKit.framework */; };
-		777EF2FC8B39A970FAC7E1B4 /* SlateModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57195853AAFC087CC563F2F /* SlateModal.swift */; };
+		777EF2FC8B39A970FAC7E1B4 /* MembraeModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57195853AAFC087CC563F2F /* MembraeModal.swift */; };
 		79975CBF26B1098293BC82C0 /* EditRecordModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3FA7A23D2010D975AB8C6D /* EditRecordModal.swift */; };
 		7D9F8C63712BBB12934A5FDE /* Records.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0C540C9CE3A784CC7E9EBD1 /* Records.swift */; };
 		83B3538C787ACDDD267EF567 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = D287C789B72E1A5CE8DC14AA /* Store.swift */; };
@@ -144,8 +144,8 @@
 		B814076A4605FE4B0593ADE7 /* ChatRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51AEE9771680CE63EEA8864D /* ChatRuntime.swift */; };
 		D9F2B3C415067E8F9B0C1D22 /* StreamTextCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8E1A2B304F56D7E8A9B0C11 /* StreamTextCoalescer.swift */; };
 		B82FC40282ED31CF898CD9B1 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A5537B9B75008C51A4CCB08 /* HomeView.swift */; };
-		B8870ECA941ADC69B2339111 /* SlateToolGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1AFC28C1F00D3700732A654 /* SlateToolGateway.swift */; };
-		F3B2C4D516078E9F0B1C2D3E /* SlateMCPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A1B3C405F67D8E9A0B1C2D /* SlateMCPClient.swift */; };
+		B8870ECA941ADC69B2339111 /* MembraeToolGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1AFC28C1F00D3700732A654 /* MembraeToolGateway.swift */; };
+		F3B2C4D516078E9F0B1C2D3E /* MembraeMCPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A1B3C405F67D8E9A0B1C2D /* MembraeMCPClient.swift */; };
 		B9385874EAADC357F8D54E22 /* SidebarRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A2E39623063207485C60C1 /* SidebarRow.swift */; };
 		B9E59273CDE8060B252497A2 /* ProjectsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC37F181EBBBF8E1E7F7E4D /* ProjectsView.swift */; };
 		BC90A33899359007E8F65EC1 /* FocusDismissal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00DB08B2B0C6ACC8AEA864AE /* FocusDismissal.swift */; };
@@ -208,6 +208,11 @@
 		F7923FE98A551FFBCE7186A4 /* ProjectColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */; };
 		FA3EB0AB86C91248D9A40273 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5543E221A797F7A128F4D5B2 /* main.swift */; };
 		FCF956190420683B665BF2B1 /* SettingsOrbPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2F383ABB4798F3AF6233DD5 /* SettingsOrbPage.swift */; };
+		F11E5704B0000030 /* ImportKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000030 /* ImportKeyStore.swift */; };
+		F11E5704B0000031 /* ImportRelayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000031 /* ImportRelayClient.swift */; };
+		F11E5704B0000032 /* ImportToolHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000032 /* ImportToolHost.swift */; };
+		F11E5704B0000033 /* SettingsImportPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000033 /* SettingsImportPage.swift */; };
+		F11E5704B0000034 /* ImportToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000034 /* ImportToolsTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -383,8 +388,8 @@
 		3C8E1A2B4D5F60718293B4C5 /* MarkdownTableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTableTests.swift; sourceTree = "<group>"; };
 		ABB935F4B84FA0030048EC33 /* LinkPresentation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = LinkPresentation.framework; path = System/Library/Frameworks/LinkPresentation.framework; sourceTree = SDKROOT; };
 		AD3FA7A23D2010D975AB8C6D /* EditRecordModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditRecordModal.swift; sourceTree = "<group>"; };
-		B1AFC28C1F00D3700732A654 /* SlateToolGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlateToolGateway.swift; sourceTree = "<group>"; };
-		E2A1B3C405F67D8E9A0B1C2D /* SlateMCPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlateMCPClient.swift; sourceTree = "<group>"; };
+		B1AFC28C1F00D3700732A654 /* MembraeToolGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembraeToolGateway.swift; sourceTree = "<group>"; };
+		E2A1B3C405F67D8E9A0B1C2D /* MembraeMCPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembraeMCPClient.swift; sourceTree = "<group>"; };
 		B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectColumn.swift; sourceTree = "<group>"; };
 		B530330434B899D87B7F9D1D /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 		B53F847FAC96205C323B63B7 /* SettingsCalendarPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCalendarPage.swift; sourceTree = "<group>"; };
@@ -405,7 +410,7 @@
 		D74D3D5D164B5B5C20C530C8 /* Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigation.swift; sourceTree = "<group>"; };
 		D8B9A9D93886D56BA6078212 /* SymbolPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymbolPicker.swift; sourceTree = "<group>"; };
 		DCA29163C23868CA9F844257 /* ChatObjectLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatObjectLink.swift; sourceTree = "<group>"; };
-		DCDFDF327D4CF27E208C2DAA /* Slate.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Slate.icon; sourceTree = "<group>"; };
+		DCDFDF327D4CF27E208C2DAA /* Membrae.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Membrae.icon; sourceTree = "<group>"; };
 		DD732A03D4885370CA6EC0EB /* Inspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Inspector.swift; sourceTree = "<group>"; };
 		DF040EA1BCECFFBD441F0F91 /* ChatGPTProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatGPTProvider.swift; sourceTree = "<group>"; };
 		DF0BEA4CDC6DFF8DC0FE081A /* MarkdownEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownEditor.swift; sourceTree = "<group>"; };
@@ -413,7 +418,7 @@
 		E177D53D62F208568F2DF9CE /* TagField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagField.swift; sourceTree = "<group>"; };
 		E3D0C1F706C485B4A9186664 /* ThreadKindStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadKindStyle.swift; sourceTree = "<group>"; };
 		E40B615A4396A1424EA51062 /* FocusWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusWidget.swift; sourceTree = "<group>"; };
-		E57195853AAFC087CC563F2F /* SlateModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlateModal.swift; sourceTree = "<group>"; };
+		E57195853AAFC087CC563F2F /* MembraeModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembraeModal.swift; sourceTree = "<group>"; };
 		E8A70CB263710D294E4BC460 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E8B24C96AAB593E09C71D659 /* ChatGPTSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatGPTSignIn.swift; sourceTree = "<group>"; };
 		EC016D22E36FCD26459AE8C5 /* ConnectCursorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectCursorSheet.swift; sourceTree = "<group>"; };
@@ -430,6 +435,11 @@
 		F93C81A0E693EB3D6CE616F2 /* LoopbackAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopbackAuth.swift; sourceTree = "<group>"; };
 		F95931057DAA72031D16DD3F /* SettingsColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsColumn.swift; sourceTree = "<group>"; };
 		F9B1DE9ED0526412EC9393D2 /* LiquidOrb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidOrb.swift; sourceTree = "<group>"; };
+		F11E5704A0000030 /* ImportKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportKeyStore.swift; sourceTree = "<group>"; };
+		F11E5704A0000031 /* ImportRelayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportRelayClient.swift; sourceTree = "<group>"; };
+		F11E5704A0000032 /* ImportToolHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportToolHost.swift; sourceTree = "<group>"; };
+		F11E5704A0000033 /* SettingsImportPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsImportPage.swift; sourceTree = "<group>"; };
+		F11E5704A0000034 /* ImportToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportToolsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -469,7 +479,7 @@
 				B0CFEA48A675560AE1D9829E /* Views */,
 				E8A70CB263710D294E4BC460 /* Assets.xcassets */,
 				A530004EEDCDC03762905AC4 /* PersonalContext.entitlements */,
-				DCDFDF327D4CF27E208C2DAA /* Slate.icon */,
+				DCDFDF327D4CF27E208C2DAA /* Membrae.icon */,
 			);
 			path = PersonalContext;
 			sourceTree = "<group>";
@@ -575,12 +585,15 @@
 				A3145311DCFABD2A63DBE1A2 /* EventKitService.swift */,
 				37FCD90F1DD6475A4AD5AC1C /* GitForgeClient.swift */,
 				718061204D90BCFCD66D501C /* KeychainStore.swift */,
+				F11E5704A0000030 /* ImportKeyStore.swift */,
+				F11E5704A0000031 /* ImportRelayClient.swift */,
+				F11E5704A0000032 /* ImportToolHost.swift */,
 				F93C81A0E693EB3D6CE616F2 /* LoopbackAuth.swift */,
 				F11E5704A0000020 /* GitHistory.swift */,
 				7EAF9BCF07A6C20AF5CD7FA0 /* ProjectCodeWorkspace.swift */,
 				4ED0D31A8A2D0F3A0FC48424 /* ProjectWorkerProvider.swift */,
-				E2A1B3C405F67D8E9A0B1C2D /* SlateMCPClient.swift */,
-				B1AFC28C1F00D3700732A654 /* SlateToolGateway.swift */,
+				E2A1B3C405F67D8E9A0B1C2D /* MembraeMCPClient.swift */,
+				B1AFC28C1F00D3700732A654 /* MembraeToolGateway.swift */,
 				251C929D14566FDE88E32BD5 /* SourceConnections.swift */,
 			);
 			path = Services;
@@ -652,7 +665,7 @@
 				F3A2E39623063207485C60C1 /* SidebarRow.swift */,
 				F721FDC648EAE06103D02D53 /* SidebarSectionHeader.swift */,
 				3E67767C42C9589E3B832171 /* SidebarView.swift */,
-				E57195853AAFC087CC563F2F /* SlateModal.swift */,
+				E57195853AAFC087CC563F2F /* MembraeModal.swift */,
 				ECC1D1E59D9D3C62BF5F531A /* WindowTabStrip.swift */,
 			);
 			path = Chrome;
@@ -706,6 +719,7 @@
 				022EAD2D997C0A29F21400CA /* SettingsChrome.swift */,
 				F95931057DAA72031D16DD3F /* SettingsColumn.swift */,
 				3F3CB7A7C440980D6F3F0544 /* SettingsCursorPage.swift */,
+				F11E5704A0000033 /* SettingsImportPage.swift */,
 				4A07E5F475297DE983C9EAB1 /* SettingsDeveloperPage.swift */,
 				6CB5A9AA568D21B3A29ABC80 /* SettingsModelPage.swift */,
 				D2F383ABB4798F3AF6233DD5 /* SettingsOrbPage.swift */,
@@ -757,6 +771,7 @@
 				588C1D051000807F84657854 /* ProviderNeutralTests.swift */,
 				DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */,
 				8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */,
+				F11E5704A0000034 /* ImportToolsTests.swift */,
 				8F3A1C2E4B5D60718293A004 /* HarborEvalFixture.swift */,
 				8F3A1C2E4B5D60718293A007 /* TrackFirstEval.swift */,
 				8F3A1C2E4B5D60718293A009 /* TrackFirstEvalTests.swift */,
@@ -895,7 +910,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				192471238C76D59FC90449D9 /* Assets.xcassets in Resources */,
-				5D4E315BC149BA93FB000D85 /* Slate.icon in Resources */,
+				5D4E315BC149BA93FB000D85 /* Membrae.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -920,7 +935,7 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/slate-node",
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/membrae-node",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/runner/runner.mjs",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/runner/source-read.mjs",
 			);
@@ -964,6 +979,7 @@
 				CA068E7D29AD93EE8C1E9CD7 /* ProviderNeutralTests.swift in Sources */,
 				E07C8D9F3A4B5C6D7E8F901A /* TaskStoreTests.swift in Sources */,
 				8F3A1C2E4B5D60718293A002 /* MCPToolsTests.swift in Sources */,
+				F11E5704B0000034 /* ImportToolsTests.swift in Sources */,
 				8F3A1C2E4B5D60718293A003 /* Tools.swift in Sources */,
 				8F3A1C2E4B5D60718293A005 /* HarborEvalFixture.swift in Sources */,
 				8F3A1C2E4B5D60718293A008 /* TrackFirstEval.swift in Sources */,
@@ -1039,6 +1055,9 @@
 				B82FC40282ED31CF898CD9B1 /* HomeView.swift in Sources */,
 				27EFEA7479970E75FC4AB694 /* Inspector.swift in Sources */,
 				6271F4DD4DF1EF931FFE51BD /* KeychainStore.swift in Sources */,
+				F11E5704B0000030 /* ImportKeyStore.swift in Sources */,
+				F11E5704B0000031 /* ImportRelayClient.swift in Sources */,
+				F11E5704B0000032 /* ImportToolHost.swift in Sources */,
 				8EF3176206A8C89215961D73 /* LiquidOrb.swift in Sources */,
 				166DC65EE5FB938E78BAB773 /* LiquidOrbMetalA.swift in Sources */,
 				A92F38125025957D0400CA53 /* LiquidOrbMetalB.swift in Sources */,
@@ -1116,6 +1135,7 @@
 				0D7F061768A531FE6F0479B8 /* SettingsChrome.swift in Sources */,
 				DE92F59D86BACF2159A03545 /* SettingsColumn.swift in Sources */,
 				99F4012674FF0C6F6E3EB1E0 /* SettingsCursorPage.swift in Sources */,
+				F11E5704B0000033 /* SettingsImportPage.swift in Sources */,
 				2B3FFCA249FAB9946EA65A82 /* SettingsDeveloperPage.swift in Sources */,
 				19928B69F66B86E39584DBB3 /* SettingsModelPage.swift in Sources */,
 				FCF956190420683B665BF2B1 /* SettingsOrbPage.swift in Sources */,
@@ -1125,9 +1145,9 @@
 				B9385874EAADC357F8D54E22 /* SidebarRow.swift in Sources */,
 				4E4575D43D714CD2473BFF9F /* SidebarSectionHeader.swift in Sources */,
 				9821685BF325DE132872A5E3 /* SidebarView.swift in Sources */,
-				777EF2FC8B39A970FAC7E1B4 /* SlateModal.swift in Sources */,
-				F3B2C4D516078E9F0B1C2D3E /* SlateMCPClient.swift in Sources */,
-				B8870ECA941ADC69B2339111 /* SlateToolGateway.swift in Sources */,
+				777EF2FC8B39A970FAC7E1B4 /* MembraeModal.swift in Sources */,
+				F3B2C4D516078E9F0B1C2D3E /* MembraeMCPClient.swift in Sources */,
+				B8870ECA941ADC69B2339111 /* MembraeToolGateway.swift in Sources */,
 				05FD064003B7CEADF8D13FE2 /* SourceChip.swift in Sources */,
 				1ACA211AEB62C15EB47941E1 /* SourceConnections.swift in Sources */,
 				83B3538C787ACDDD267EF567 /* Store.swift in Sources */,
@@ -1173,8 +1193,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContextTests;
 				SDKROOT = macosx;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) SLATE_TESTS";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Slate.app/Contents/MacOS/Slate";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) MEMBRAE_TESTS";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Membrae.app/Contents/MacOS/Membrae";
 			};
 			name = Debug;
 		};
@@ -1190,7 +1210,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContext.mcp;
-				PRODUCT_NAME = "slate-mcp";
+				PRODUCT_NAME = "membrae-mcp";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 			};
@@ -1209,8 +1229,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContextTests;
 				SDKROOT = macosx;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) SLATE_TESTS";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Slate.app/Contents/MacOS/Slate";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) MEMBRAE_TESTS";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Membrae.app/Contents/MacOS/Membrae";
 			};
 			name = Release;
 		};
@@ -1287,7 +1307,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContext.mcp;
-				PRODUCT_NAME = "slate-mcp";
+				PRODUCT_NAME = "membrae-mcp";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 			};
@@ -1296,26 +1316,26 @@
 		E446DEC95BAD396280929FC7 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = Slate;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Membrae;
 				CODE_SIGN_ENTITLEMENTS = PersonalContext/PersonalContext.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Slate;
-				INFOPLIST_KEY_CFBundleName = Slate;
+				INFOPLIST_KEY_CFBundleDisplayName = Membrae;
+				INFOPLIST_KEY_CFBundleName = Membrae;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Slate reads your Calendar and Reminders so it can show and add events and tasks on this Mac.";
-				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Slate reads your Calendar and Reminders so it can show and add events and tasks on this Mac.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Membrae reads your Calendar and Reminders so it can show and add events and tasks on this Mac.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Membrae reads your Calendar and Reminders so it can show and add events and tasks on this Mac.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContext;
-				PRODUCT_MODULE_NAME = Slate;
-				PRODUCT_NAME = Slate;
+				PRODUCT_MODULE_NAME = Membrae;
+				PRODUCT_NAME = Membrae;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -1323,26 +1343,26 @@
 		E85CF19539829385E5B7C046 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = Slate;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Membrae;
 				CODE_SIGN_ENTITLEMENTS = PersonalContext/PersonalContext.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Slate;
-				INFOPLIST_KEY_CFBundleName = Slate;
+				INFOPLIST_KEY_CFBundleDisplayName = Membrae;
+				INFOPLIST_KEY_CFBundleName = Membrae;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Slate reads your Calendar and Reminders so it can show and add events and tasks on this Mac.";
-				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Slate reads your Calendar and Reminders so it can show and add events and tasks on this Mac.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Membrae reads your Calendar and Reminders so it can show and add events and tasks on this Mac.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Membrae reads your Calendar and Reminders so it can show and add events and tasks on this Mac.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContext;
-				PRODUCT_MODULE_NAME = Slate;
-				PRODUCT_NAME = Slate;
+				PRODUCT_MODULE_NAME = Membrae;
+				PRODUCT_NAME = Membrae;
 				SDKROOT = macosx;
 			};
 			name = Debug;

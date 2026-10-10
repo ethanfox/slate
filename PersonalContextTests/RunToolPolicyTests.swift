@@ -1,5 +1,5 @@
 import XCTest
-@testable import Slate
+@testable import Membrae
 
 final class RunToolPolicyTests: XCTestCase {
     func testOmitsCompleteTask() {
@@ -13,7 +13,7 @@ final class RunToolPolicyTests: XCTestCase {
         XCTAssertFalse(policy.allowedNames(from: ["complete_task", "create_note"]).contains("complete_task"))
     }
 
-    func testUnprojectedHasNoSlateWrites() {
+    func testUnprojectedHasNoMembraeWrites() {
         let policy = RunToolPolicy(runID: UUID(), projectID: nil, assignedTaskID: nil, allowCode: false)
         XCTAssertFalse(policy.allows("create_note"))
         XCTAssertFalse(policy.allows("project_read_file"))
@@ -64,7 +64,7 @@ final class RunToolPolicyTests: XCTestCase {
         let projectID = UUID()
         let policy = RunToolPolicy(runID: runID, projectID: projectID, assignedTaskID: nil, allowCode: false)
         let prepared = policy.preparedArguments("create_note", ["content": "Hello"])
-        XCTAssertEqual(prepared["source"] as? String, "slate://run/\(runID.uuidString)")
+        XCTAssertEqual(prepared["source"] as? String, "membrae://run/\(runID.uuidString)")
         XCTAssertEqual(prepared["project_id"] as? String, projectID.uuidString)
     }
 }

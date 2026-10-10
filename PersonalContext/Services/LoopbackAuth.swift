@@ -106,7 +106,7 @@ enum LoopbackAuth {
 
         private func reply(_ connection: NWConnection, request: String) {
             let query = Self.query(from: request, path: path)
-            let html = "<!doctype html><meta charset=utf-8><title>Slate</title><p>Signed in. You can close this window and return to Slate.</p>"
+            let html = "<!doctype html><meta charset=utf-8><title>Membrae</title><p>Signed in. You can close this window and return to Membrae.</p>"
             let body = Data(html.utf8)
             let header = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
             var response = Data(header.utf8)

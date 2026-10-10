@@ -1,6 +1,6 @@
 import Foundation
 
-/// Slate safety defaults. Not claims about provider limits.
+/// Membrae safety defaults. Not claims about provider limits.
 enum AttachmentLimits {
     static let maxFiles = 10
     static let maxFileBytes = 20 * 1_048_576
@@ -66,7 +66,7 @@ enum AttachmentError: LocalizedError, Equatable {
         case .unreadable(let name, let reason):
             return "Couldn’t read \(name). \(reason)"
         case .missingAsset(let name):
-            return "\(name) is missing from Slate’s file storage. Remove it and attach the file again."
+            return "\(name) is missing from Membrae’s file storage. Remove it and attach the file again."
         case .preparing:
             return "Wait for attachments to finish preparing."
         case .unknownImageSupport:

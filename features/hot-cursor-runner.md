@@ -2,7 +2,7 @@
 
 Problem from 8 Oct 2026. Direction is locked.
 
-The Cursor runner is one-shot. Every send spawns Node, starts `slate-mcp`, lists tools, then `Agent.create` or `Agent.resume`. The process exits when the turn ends. `externalSessionID` only skips creating a *new* agent. It does not keep the process warm.
+The Cursor runner is one-shot. Every send spawns Node, starts `membrae-mcp`, lists tools, then `Agent.create` or `Agent.resume`. The process exits when the turn ends. `externalSessionID` only skips creating a *new* agent. It does not keep the process warm.
 
 That is several seconds of dead air after send, even on a local folder.
 
@@ -17,7 +17,7 @@ Keep one runner process per conversation (or one process with a conversation id 
 
 ## Do not
 
-- Spawn `slate-node` + `runner.mjs` on every `stream`
+- Spawn `membrae-node` + `runner.mjs` on every `stream`
 - Call `agent.close()` and `process.exit` at the end of a successful turn
 - Use one shared Agent for two conversations
 

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ChatOrb: View {
     var state: OrbState
-    var palette: OrbPalette = .slate
+    var palette: OrbPalette = .membrae
     var status: String?
     var size: CGFloat = 168
     var showsStatus = true
@@ -47,7 +47,7 @@ struct ChatOrb: View {
 
     private var colorTint: (SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>)? {
         let colors = (state == .error ? OrbPalette.error : palette).metalColors
-        if state != .error, palette == .slate || palette == .legacySlate {
+        if state != .error, palette == .membrae || palette == .legacy {
             return nil
         }
         return (colors.sky, colors.horizon, colors.ember, colors.ink)

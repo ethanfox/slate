@@ -76,7 +76,7 @@ final class RunGateway: AgentToolGateway {
         let title = (object["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         return RunResultLink(
             label: title?.isEmpty == false ? title! : kind.capitalized,
-            url: "slate://\(kind)/\(id)",
+            url: "membrae://\(kind)/\(id)",
             kind: .document
         )
     }
@@ -124,7 +124,7 @@ enum RunLinkSafety {
     static func allows(_ raw: String) -> Bool {
         guard let url = URL(string: raw), let scheme = url.scheme?.lowercased() else { return false }
         switch scheme {
-        case "https", "slate":
+        case "https", "membrae":
             return true
         case "file":
             return true
@@ -136,7 +136,7 @@ enum RunLinkSafety {
     static func kind(for raw: String) -> RunLinkKind {
         guard let url = URL(string: raw), let scheme = url.scheme?.lowercased() else { return .link }
         switch scheme {
-        case "slate": return .document
+        case "membrae": return .document
         case "file": return .file
         default: return .link
         }

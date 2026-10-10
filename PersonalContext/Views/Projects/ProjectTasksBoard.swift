@@ -6,12 +6,12 @@ struct ProjectTasksBoard: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" }, sort: \AgendaItem.updatedAt, order: .reverse)
-    private var slateTasks: [AgendaItem]
+    private var membraeTasks: [AgendaItem]
     @Query private var completions: [TaskCompletion]
     @State private var inspectCompletion: TaskCompletion?
 
     private var projectTasks: [AgendaItem] {
-        slateTasks.filter { $0.project?.id == project.id }
+        membraeTasks.filter { $0.project?.id == project.id }
     }
 
     private var projectCompletions: [TaskCompletion] {

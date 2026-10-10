@@ -27,7 +27,7 @@ Two tabs cannot show the same view. Opening something that is already a tab swit
 
 Each tab keeps that view. Switching tabs puts it back on screen, including scroll. Inspector open/closed and sidebar collapsed stay on the window, not on the tab.
 
-The main sidebar follows the current tab. A tab on Slate highlights Slate. Switch to Article One and the sidebar highlights Article One.
+The main sidebar follows the current tab. A tab on Membrae highlights Membrae. Switch to Article One and the sidebar highlights Article One.
 
 ## How a tab opens
 

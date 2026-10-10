@@ -14,9 +14,7 @@ struct FileStore: Sendable {
         if let store = Store.applicationGroupStoreURL {
             return store.deletingLastPathComponent().appendingPathComponent("StoredAssets", isDirectory: true)
         }
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return support.appendingPathComponent("Slate/StoredAssets", isDirectory: true)
+        return Store.productSupportDirectory().appendingPathComponent("StoredAssets", isDirectory: true)
     }
 
     func importFile(url: URL, ownerKind: AssetOwnerKind, ownerID: UUID, orderIndex: Int) throws -> StoredAsset {

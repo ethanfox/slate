@@ -1,5 +1,5 @@
 import XCTest
-@testable import Slate
+@testable import Membrae
 
 final class AgentRuntimeTests: XCTestCase {
     func testDeniedToolNeverReachesInnerGateway() async throws {

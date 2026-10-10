@@ -31,7 +31,7 @@ enum ContextBuilder {
             lines.append("Call list_code_references with this project_id to discover published reference entries, then get_code_reference_entry. Do not ask the user to paste the reference. For source files, call project_list_files, project_search_code, project_read_file, or project_git_log. Do not use a shell or invent missing attachments.")
         }
         if !project.workerProviderID.isEmpty {
-            lines.append("A project Worker can inspect the attached code. Call consult_code with a brief when you need a repo pass. Do not call it for decisions, tracks, notes, or tasks — use the Slate tools.")
+            lines.append("A project Worker can inspect the attached code. Call consult_code with a brief when you need a repo pass. Do not call it for decisions, tracks, notes, or tasks — use the Membrae tools.")
         }
         return lines.joined(separator: "\n")
     }
@@ -122,15 +122,15 @@ enum ContextBuilder {
         var parts: [String] = []
         if opening {
             parts.append("""
-            You are the assistant inside Slate, the user's knowledge base for their projects. You have the Slate MCP tools, which read and change that knowledge base.
+            You are the assistant inside Membrae, the user's knowledge base for their projects. You have the Membrae MCP tools, which read and change that knowledge base.
 
-            When the user tells you something that should last (a fact, a decision, a change of direction, a new line of work, a task), save it yourself with those tools right away, then say in one short line what you saved. Never ask the user to save anything. Update an existing decision, track, note, task, or project when it covers the same thing instead of adding a duplicate. When a new decision replaces an old one, pass supersedes_id. Use the ids from the tools. Use the task tools to list, create, update, and complete Slate tasks. complete_task records repeat history; do not set status to done on a repeating task. \(knowledgeRules)
+            When the user tells you something that should last (a fact, a decision, a change of direction, a new line of work, a task), save it yourself with those tools right away, then say in one short line what you saved. Never ask the user to save anything. Update an existing decision, track, note, task, or project when it covers the same thing instead of adding a duplicate. When a new decision replaces an old one, pass supersedes_id. Use the ids from the tools. Use the task tools to list, create, update, and complete Membrae tasks. complete_task records repeat history; do not set status to done on a repeating task. \(knowledgeRules)
 
             You cannot delete records. If something should go away, call mark_for_deletion with a required reason. Optionally pass replacement_type and replacement_id when another record replaces it. The user decides Keep or Delete. Archive is only for chats the user hides, not a substitute for delete.
 
             Look up decisions, tracks, notes, tasks, and published code references with the tools. Treat those records as the source of truth and weight active decisions above tracks and notes. get_project is lean and includes attachment ids; open a track with get_thread and list tasks with track_id. Call list_code_references with the project_id to read a published architecture reference, then get_code_reference_entry. Do not ask the user to paste the reference. Do not invent project facts. Do not create or edit files unless the user explicitly asks. If the project lists attached code, inspect files with the project_* tools instead of claiming you cannot see the repository. Fetch only what this message needs. Batch those calls. Do not walk the whole project. After a few tool rounds, answer.
 
-            When you point the user at a note, track, decision, or other Slate record, put a markdown link on its own line using the id from the tools: [Title](slate://note/UUID), slate://thread/UUID, slate://decision/UUID, slate://project/UUID, or slate://conversation/UUID. The app turns that into a card they can open. Do not paste raw ids. Do not invent ids.
+            When you point the user at a note, track, decision, or other Membrae record, put a markdown link on its own line using the id from the tools: [Title](membrae://note/UUID), membrae://thread/UUID, membrae://decision/UUID, membrae://project/UUID, or membrae://conversation/UUID. The app turns that into a card they can open. Do not paste raw ids. Do not invent ids.
             """)
         } else {
             parts.append(knowledgeRules)
@@ -197,7 +197,7 @@ enum ContextBuilder {
 
     static func codeConsultationPrompt(userText: String, context: String) -> String {
         var parts = [
-            "Inspect the attached project code in read-only mode. Do not edit files, create commits, or change Slate records. Cite repository-relative paths and line numbers."
+            "Inspect the attached project code in read-only mode. Do not edit files, create commits, or change Membrae records. Cite repository-relative paths and line numbers."
         ]
         if !context.isEmpty {
             parts.append("<project-context>\n\(context)\n</project-context>")

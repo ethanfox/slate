@@ -1,6 +1,6 @@
 # Chat components
 
-Slate has multiple conversations, but one implementation of the chat interface. Reuse these components instead of building a Home, project, or track-specific version.
+Membrae has multiple conversations, but one implementation of the chat interface. Reuse these components instead of building a Home, project, or track-specific version.
 
 ## Components
 
@@ -63,7 +63,7 @@ Sharing the components does not share conversation state.
 - **Project Overview:** `ChatInput` creates a new conversation attached to that project and queues its first message.
 - **Empty project chat:** `ChatInput` creates a new conversation attached to that project.
 - **Existing project chat:** `ConversationChat` displays and continues the selected conversation.
-- **Ask Slate:** `ThreadChatPane` resolves a conversation attached to the selected track, then displays `ConversationChat` in compact layout.
+- **Ask Membrae:** `ThreadChatPane` resolves a conversation attached to the selected track, then displays `ConversationChat` in compact layout.
 - **Chats:** workspace page. Running conversations first. If none are running, “Nothing running.” then the 10 most recent sessions. A row opens that conversation. The sidebar icon spins while any turn is generating.
 
 The queued first message includes its destination conversation ID. Only the matching runtime consumes it.
@@ -75,7 +75,7 @@ The shared components own chat content and controls. Their parent screens own pl
 - Home: 32 horizontal, 14 vertical
 - Overview and empty project chat: maximum width 680, 32 horizontal, 14 vertical, separator above
 - Regular conversation: 32 horizontal, 14 vertical
-- Ask Slate: 16 horizontal, 14 vertical
+- Ask Membrae: 16 horizontal, 14 vertical
 
 Do not put page navigation, project selection, track selection, or screen-specific padding inside `ChatInput` or `ChatMessages`.
 
@@ -86,7 +86,7 @@ Do not put page navigation, project selection, track selection, or screen-specif
 - Conversation lifecycle and persistence go in `ChatRuntime`.
 - Screen-specific navigation stays in the screen that hosts the chat.
 
-Do not add another chat text field directly to Home, Overview, project chat, or Ask Slate.
+Do not add another chat text field directly to Home, Overview, project chat, or Ask Membrae.
 
 Chat slowness is not one ticket. Each problem has its own spec:
 

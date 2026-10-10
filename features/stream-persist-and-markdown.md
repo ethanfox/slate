@@ -26,7 +26,7 @@ The stream loops also run on `@MainActor`, so network handling, disk, and layout
 
 ## Libraries
 
-Slate already has [AIChatKit](https://github.com/NerdSnipe-Inc/AIChatKit) (`ChatSession`, unused `MarkdownMessageView`) and [MarkdownUI](https://github.com/gonzalezreal/swift-markdown-ui). Neither parses incrementally. MarkdownUI is maintenance-only; [discussion #261](https://github.com/gonzalezreal/swift-markdown-ui/discussions/261) is this exact problem.
+Membrae already has [AIChatKit](https://github.com/NerdSnipe-Inc/AIChatKit) (`ChatSession`, unused `MarkdownMessageView`) and [MarkdownUI](https://github.com/gonzalezreal/swift-markdown-ui). Neither parses incrementally. MarkdownUI is maintenance-only; [discussion #261](https://github.com/gonzalezreal/swift-markdown-ui/discussions/261) is this exact problem.
 
 [Microsoft SwiftStreamingMarkdown](https://github.com/microsoft/SwiftStreamingMarkdown) is the library built for token streams (`StreamedMarkdownView`). Worth it *after* persist debounce. Switching the bubble to `MarkdownMessageView` alone will not feel fast.
 

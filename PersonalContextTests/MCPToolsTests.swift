@@ -1,6 +1,6 @@
 import SwiftData
 import XCTest
-@testable import Slate
+@testable import Membrae
 
 @MainActor
 final class MCPToolsTests: XCTestCase {

@@ -107,15 +107,15 @@ final class RunCoordinator {
         let roots = try await selectedRoots(for: run)
         guard let run = resolvedRun(id), let context = liveContext() else { return }
         try prepareIndex(run, roots: roots, in: context)
-        let includeSlate = policy.allowsSlateWrites || policy.allowCodeReferenceWrite
+        let includeMembrae = policy.allowsMembraeWrites || policy.allowCodeReferenceWrite
         let gateway = RunGateway(
             policy: policy,
-            inner: SlateToolGateway(
+            inner: MembraeToolGateway(
                 roots: roots,
-                includeSlateTools: includeSlate,
+                includeMembraeTools: includeMembrae,
                 includeProjectTools: policy.allowCode,
                 consult: nil,
-                mcp: includeSlate ? .shared : nil,
+                mcp: includeMembrae ? .shared : nil,
                 indexingRunID: run.purpose == .indexRepository ? run.id : nil,
                 storeURL: context.container.configurations.first?.url
             )
@@ -147,8 +147,8 @@ final class RunCoordinator {
         guard let apiKey = app.apiKey, !apiKey.isEmpty else {
             throw CursorAPIError(status: 0, message: "Add a Cursor API key in Settings.")
         }
-        guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "slate-mcp") else {
-            throw CursorAPIError(status: 0, message: "The Slate MCP is missing from the app.")
+        guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "membrae-mcp") else {
+            throw CursorAPIError(status: 0, message: "The Membrae MCP is missing from the app.")
         }
         guard let run = resolvedRun(id) else { return }
         let policy = policy(for: run)
@@ -168,11 +168,11 @@ final class RunCoordinator {
         } else {
             workspace = roots.first.map { URL(fileURLWithPath: $0.path).deletingLastPathComponent().path } ?? folder?.path ?? NSTemporaryDirectory()
         }
-        let includeSlate = policy.allowsSlateWrites || policy.allowCodeReferenceWrite
+        let includeMembrae = policy.allowsMembraeWrites || policy.allowCodeReferenceWrite
         let catalog = run.purpose == .indexRepository
             ? RunToolPolicy.indexingCatalog
-            : RunToolPolicy.slateCatalog
-        let listed = includeSlate ? policy.allowedNames(from: catalog) : []
+            : RunToolPolicy.membraeCatalog
+        let listed = includeMembrae ? policy.allowedNames(from: catalog) : []
         let request = RunnerRequest(
             apiKey: apiKey,
             env: ProcessInfo.processInfo.environment,
@@ -183,7 +183,7 @@ final class RunCoordinator {
             cwd: workspace,
             mcpCommand: mcp.path,
             codeRoots: roots,
-            includeSlateTools: includeSlate,
+            includeMembraeTools: includeMembrae,
             includeProjectTools: policy.allowCode,
             includeWorkerTool: false,
             includeFinishRun: true,
@@ -204,9 +204,9 @@ final class RunCoordinator {
         }
         let gateway = RunGateway(
             policy: policy,
-            inner: SlateToolGateway(
+            inner: MembraeToolGateway(
                 roots: roots,
-                includeSlateTools: false,
+                includeMembraeTools: false,
                 includeProjectTools: false,
                 consult: nil,
                 mcp: nil
@@ -296,7 +296,7 @@ final class RunCoordinator {
                 extra.append(
                     RunResultLink(
                         label: "Code reference",
-                        url: "slate://code-reference/\(published.id.uuidString)",
+                        url: "membrae://code-reference/\(published.id.uuidString)",
                         kind: .document
                     )
                 )
@@ -435,7 +435,7 @@ final class RunCoordinator {
 }
 
 extension RunToolPolicy {
-    static let slateCatalog = [
+    static let membraeCatalog = [
         "list_projects", "get_project",
         "list_tasks", "get_task", "create_task", "update_task",
         "list_completions", "get_completion",

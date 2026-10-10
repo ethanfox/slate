@@ -8,6 +8,7 @@ struct SettingsDeveloperPage: View {
 
     var body: some View {
         @Bindable var app = app
+        @Bindable var relay = app.importRelay
         SettingsPage {
             SettingsGroup("Developer") {
                 SettingsRow {
@@ -16,6 +17,19 @@ struct SettingsDeveloperPage: View {
                     Toggle("Show Cursor agent IDs", isOn: $app.showAgentIDs)
                         .labelsHidden()
                         .toggleStyle(.switch)
+                }
+                Hairline().padding(.horizontal, 16)
+                SettingsRow {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Import relay URL")
+                        Text("Empty uses https://mcp.membrae.com. For local testing only.")
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 16)
+                    TextField("https://127.0.0.1:8787", text: $relay.relayOverride)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 220)
                 }
                 if !projects.isEmpty {
                     Hairline().padding(.horizontal, 16)

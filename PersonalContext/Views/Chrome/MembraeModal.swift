@@ -15,6 +15,7 @@ enum AppModal: Identifiable {
     case connectChatGPT
     case connectGitHub
     case connectGitLab
+    case replaceImportKey
     case editProject(Project)
     case editConversation(Conversation)
     case editThread(ProjectThread)
@@ -38,6 +39,7 @@ enum AppModal: Identifiable {
         case .connectChatGPT: "connect-chatgpt"
         case .connectGitHub: "connect-github"
         case .connectGitLab: "connect-gitlab"
+        case .replaceImportKey: "replace-import-key"
         case .editProject(let project): "edit-project-\(project.id.uuidString)"
         case .editConversation(let conversation): "edit-conversation-\(conversation.id.uuidString)"
         case .editThread(let thread): "edit-thread-\(thread.id.uuidString)"
@@ -76,7 +78,7 @@ extension EnvironmentValues {
     @Entry var modalInnerSize = CGSize.zero
 }
 
-struct SlateModalPresenter<ModalContent: View>: View {
+struct MembraeModalPresenter<ModalContent: View>: View {
     var modal: AppModal?
     var onDismiss: () -> Void
     @ViewBuilder var modalContent: (AppModal) -> ModalContent

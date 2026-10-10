@@ -222,12 +222,12 @@ struct RunPage: View {
         if link.kind == .file {
             guard RunLinkSafety.fileAllowed(link.url, roots: ProjectCodeWorkspace.localRoots(for: run.project)) else { return }
         }
-        if url.scheme?.lowercased() == "slate", url.host == "code-reference",
+        if ChatObjectLink.isAppScheme(url.scheme), url.host == "code-reference",
            let attachmentID = run.indexedAttachmentID {
             app.present(.inspectCodeReference(attachmentID))
             return
         }
-        if url.scheme?.lowercased() == "slate", let source = ChatObjectLink.parse(url, title: link.label) {
+        if ChatObjectLink.isAppScheme(url.scheme), let source = ChatObjectLink.parse(url, title: link.label) {
             source.open(app: app, context: context)
             return
         }

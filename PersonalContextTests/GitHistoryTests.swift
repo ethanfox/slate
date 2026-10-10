@@ -1,5 +1,5 @@
 import XCTest
-@testable import Slate
+@testable import Membrae
 import SwiftGitX
 
 @MainActor
@@ -8,7 +8,7 @@ final class GitHistoryTests: XCTestCase {
 
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("slate-git-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("membrae-git-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 
@@ -27,7 +27,7 @@ final class GitHistoryTests: XCTestCase {
         let fromRoot = try GitHistory.commits(in: root.path)
         XCTAssertEqual(fromRoot.map(\.message), ["second", "first"])
         XCTAssertEqual(fromRoot.map(\.sha), [second.id.hex, first.id.hex])
-        XCTAssertEqual(fromRoot[0].author, "Slate Test")
+        XCTAssertEqual(fromRoot[0].author, "Membrae Test")
         XCTAssertTrue(fromRoot[0].date.contains("T"), fromRoot[0].date)
 
         let fromNested = try ProjectCodeWorkspace.gitHistory(
@@ -69,7 +69,7 @@ final class GitHistoryTests: XCTestCase {
     }
 
     func testInaccessibleWorktreeGitDirIsReported() throws {
-        let gitDir = "/private/var/folders/slate-missing-gitdir-\(UUID().uuidString)"
+        let gitDir = "/private/var/folders/membrae-missing-gitdir-\(UUID().uuidString)"
         try "gitdir: \(gitDir)\n".write(to: root.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
         XCTAssertThrowsError(try GitHistory.commits(in: root.path)) { error in
             let text = error.localizedDescription
@@ -95,8 +95,8 @@ final class GitHistoryTests: XCTestCase {
 
     private func seededRepository() throws -> Repository {
         let repository = try Repository.create(at: root)
-        try repository.config.set("user.name", to: "Slate Test")
-        try repository.config.set("user.email", to: "slate@example.com")
+        try repository.config.set("user.name", to: "Membrae Test")
+        try repository.config.set("user.email", to: "membrae@example.com")
         return repository
     }
 

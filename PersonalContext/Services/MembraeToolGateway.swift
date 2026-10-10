@@ -1,32 +1,32 @@
 import Foundation
 
 @MainActor
-final class SlateToolGateway: AgentToolGateway {
+final class MembraeToolGateway: AgentToolGateway {
     private var roots: [ProjectCodeRoot]
-    private let includeSlateTools: Bool
+    private let includeMembraeTools: Bool
     private let includeProjectTools: Bool
     private let prepareRoots: (() async throws -> [ProjectCodeRoot])?
     private let consult: ((String) async throws -> String)?
-    private let mcp: SlateMCPClient?
+    private let mcp: MembraeMCPClient?
     private let indexingRunID: UUID?
     private let storeURL: URL?
 
     init(
         roots: [ProjectCodeRoot] = [],
-        includeSlateTools: Bool = true,
+        includeMembraeTools: Bool = true,
         includeProjectTools: Bool = true,
         prepareRoots: (() async throws -> [ProjectCodeRoot])? = nil,
         consult: ((String) async throws -> String)? = nil,
-        mcp: SlateMCPClient? = nil,
+        mcp: MembraeMCPClient? = nil,
         indexingRunID: UUID? = nil,
         storeURL: URL? = nil
     ) {
         self.roots = roots
-        self.includeSlateTools = includeSlateTools
+        self.includeMembraeTools = includeMembraeTools
         self.includeProjectTools = includeProjectTools
         self.prepareRoots = prepareRoots
         self.consult = consult
-        self.mcp = mcp ?? (includeSlateTools ? .shared : nil)
+        self.mcp = mcp ?? (includeMembraeTools ? .shared : nil)
         self.indexingRunID = indexingRunID
         self.storeURL = storeURL
     }
@@ -36,7 +36,7 @@ final class SlateToolGateway: AgentToolGateway {
         if consult != nil {
             tools.append(Self.consultDefinition)
         }
-        if includeSlateTools, let mcp {
+        if includeMembraeTools, let mcp {
             let listed = try await mcp.toolDefinitions()
             tools += listed.compactMap { tool in
                 guard let name = tool["name"] as? String else { return nil }
@@ -83,7 +83,7 @@ final class SlateToolGateway: AgentToolGateway {
             return try await consult(brief)
         default:
             guard let mcp else {
-                throw ProjectWorkspaceError("The Slate tool service is unavailable.")
+                throw ProjectWorkspaceError("The Membrae tool service is unavailable.")
             }
             let data = try await mcp.invoke(
                 method: "tools/call",
@@ -146,7 +146,7 @@ final class SlateToolGateway: AgentToolGateway {
         guard let root else {
             throw ProjectWorkspaceError(
                 roots.isEmpty
-                    ? "No code is attached to this Slate project."
+                    ? "No code is attached to this Membrae project."
                     : "Specify root because this project has several code attachments."
             )
         }
@@ -210,7 +210,7 @@ final class SlateToolGateway: AgentToolGateway {
     private static let consultDefinition: [String: Any] = [
         "type": "function",
         "name": "consult_code",
-        "description": "Ask the project's Worker to inspect attached code. Pass a brief. Do not use this for decisions, tracks, or notes — those are Slate tools.",
+        "description": "Ask the project's Worker to inspect attached code. Pass a brief. Do not use this for decisions, tracks, or notes — those are Membrae tools.",
         "parameters": [
             "type": "object",
             "properties": [
@@ -224,7 +224,7 @@ final class SlateToolGateway: AgentToolGateway {
         [
             "type": "function",
             "name": "project_list_files",
-            "description": "List files in the current Slate project's attached code. Read-only.",
+            "description": "List files in the current Membrae project's attached code. Read-only.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -235,7 +235,7 @@ final class SlateToolGateway: AgentToolGateway {
         [
             "type": "function",
             "name": "project_search_code",
-            "description": "Search text in the current Slate project's attached code. Read-only.",
+            "description": "Search text in the current Membrae project's attached code. Read-only.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -247,7 +247,7 @@ final class SlateToolGateway: AgentToolGateway {
         [
             "type": "function",
             "name": "project_read_file",
-            "description": "Read a line range from a file in the current Slate project's attached code. Read-only.",
+            "description": "Read a line range from a file in the current Membrae project's attached code. Read-only.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -262,7 +262,7 @@ final class SlateToolGateway: AgentToolGateway {
         [
             "type": "function",
             "name": "project_git_log",
-            "description": "Read recent commits for the current Slate project's attached remote repositories. Read-only.",
+            "description": "Read recent commits for the current Membrae project's attached remote repositories. Read-only.",
             "parameters": [
                 "type": "object",
                 "properties": [

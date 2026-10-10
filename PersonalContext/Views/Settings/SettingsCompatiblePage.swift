@@ -141,7 +141,7 @@ struct CapabilitySettings: View {
         source: CapabilitySource,
         onChange: @escaping (CapabilityValue) -> Void
     ) -> some View {
-        Picker(source == .user ? "User-configured" : "Capability", selection: Binding(
+        Picker(pickerTitle(source), selection: Binding(
             get: { value },
             set: onChange
         )) {
@@ -153,9 +153,26 @@ struct CapabilitySettings: View {
         .fixedSize()
     }
 
+    private func pickerTitle(_ source: CapabilitySource) -> String {
+        switch source {
+        case .user: "User-configured"
+        case .maintained: "Known model"
+        case .endpoint: "Endpoint"
+        default: "Capability"
+        }
+    }
+
     private func sourceLine(_ snapshot: CapabilitySnapshot) -> String {
-        let image = snapshot.imageSource.rawValue
-        let document = snapshot.documentSource.rawValue
-        return "Image source: \(image). File source: \(document). Missing metadata stays unknown."
+        "Image source: \(label(snapshot.imageSource)). File source: \(label(snapshot.documentSource)). Missing metadata stays unknown."
+    }
+
+    private func label(_ source: CapabilitySource) -> String {
+        switch source {
+        case .maintained: "maintained catalog"
+        case .endpoint: "endpoint"
+        case .user: "user"
+        case .adapter: "adapter"
+        case .unknown: "unknown"
+        }
     }
 }

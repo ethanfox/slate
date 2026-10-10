@@ -1,5 +1,5 @@
 import SwiftData
-@testable import Slate
+@testable import Membrae
 
 @MainActor
 enum HarborEvalFixture {

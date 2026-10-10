@@ -1,9 +1,11 @@
+import AppKit
 import SwiftData
 import SwiftUI
 
 @main
-struct SlateApp: App {
+struct MembraeApp: App {
     @State private var app = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -13,6 +15,12 @@ struct SlateApp: App {
                 .modelContainer(app.container)
                 .textSelection(.enabled)
                 .onAppear { FocusDismissal.install() }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { app.importRelay.handleForeground() }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.didWakeNotification)) { _ in
+                    app.importRelay.handleWake()
+                }
         }
         .defaultSize(width: 1180, height: 760)
         .windowResizability(.contentMinSize)
@@ -107,12 +115,13 @@ struct SlateApp: App {
                 .frame(minWidth: 820, minHeight: 680)
                 .environment(\.modalHost, .settings)
                 .overlay {
-                    SlateModalPresenter(modal: app.modal(in: .settings), onDismiss: app.dismissModal) { modal in
+                    MembraeModalPresenter(modal: app.modal(in: .settings), onDismiss: app.dismissModal) { modal in
                         switch modal {
                         case .connectCursor: ConnectCursorSheet()
                         case .connectChatGPT: ConnectChatGPTSheet()
                         case .connectGitHub: ConnectGitHubSheet()
                         case .connectGitLab: ConnectGitLabSheet()
+                        case .replaceImportKey: ReplaceImportKeySheet()
                         default: EmptyView()
                         }
                     }

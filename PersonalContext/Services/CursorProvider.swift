@@ -11,7 +11,7 @@ struct RunnerRequest: Encodable, Sendable {
     var cwd: String
     var mcpCommand: String
     var codeRoots: [ProjectCodeRoot]
-    var includeSlateTools: Bool
+    var includeMembraeTools: Bool
     var includeProjectTools: Bool
     var includeWorkerTool: Bool = false
     var includeFinishRun: Bool = false
@@ -45,7 +45,7 @@ extension RunnerRequest {
             runtime,
             cwd,
             model,
-            includeSlateTools ? "slate" : "",
+            includeMembraeTools ? "membrae" : "",
             includeProjectTools ? "code" : "",
             includeWorkerTool ? "worker" : "",
             includeFinishRun ? "finish" : "",
@@ -265,7 +265,7 @@ final class CursorConversationBridge {
     @ObservationIgnored private var activeCodeRoots: [ProjectCodeRoot] = []
     @ObservationIgnored private var startNewText = false
     let debugLog = ChatDebugLog()
-    let mcp = SlateMCPClient.shared
+    let mcp = MembraeMCPClient.shared
 
     var workedSeconds: Int {
         guard let startedAt else { return 0 }
@@ -344,13 +344,13 @@ final class CursorConversationBridge {
         apiKey: String,
         model: String,
         codeRoots: [ProjectCodeRoot],
-        includeSlateTools: Bool = true,
+        includeMembraeTools: Bool = true,
         includeProjectTools: Bool = true,
         resumeSession: Bool = true,
         runtime: WorkerPath = .local
     ) throws -> RunnerRequest {
-        guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "slate-mcp") else {
-            throw CursorAPIError(status: 0, message: "The Slate MCP is missing from the app.")
+        guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "membrae-mcp") else {
+            throw CursorAPIError(status: 0, message: "The Membrae MCP is missing from the app.")
         }
         guard conversation.modelContext != nil else {
             throw CursorAPIError(status: 0, message: "Chat lost its place in the knowledge base. Send again.")
@@ -382,16 +382,16 @@ final class CursorConversationBridge {
             env: ProcessInfo.processInfo.environment,
             agentId: opening ? nil : conversation.externalSessionID,
             name: conversation.title,
-            text: includeSlateTools
+            text: includeMembraeTools
                 ? ContextBuilder.prompt(userText: userText, context: context, opening: opening, focusedThread: focused)
                 : ContextBuilder.codeConsultationPrompt(userText: userText, context: context),
             model: model,
             cwd: workspace,
             mcpCommand: mcp.path,
             codeRoots: codeRoots,
-            includeSlateTools: includeSlateTools,
+            includeMembraeTools: includeMembraeTools,
             includeProjectTools: includeProjectTools,
-            includeWorkerTool: includeSlateTools && ProjectWorker.isConfigured(on: project),
+            includeWorkerTool: includeMembraeTools && ProjectWorker.isConfigured(on: project),
             runtime: runtime.rawValue,
             cloudRepos: cloudRepositories(),
             codeSnapshots: includeProjectTools && runtime == .local
@@ -419,7 +419,7 @@ final class CursorConversationBridge {
         }
     }
 
-    func prepareProviderTurn(userText: String, includeSlateTools: Bool = true) -> String {
+    func prepareProviderTurn(userText: String, includeMembraeTools: Bool = true) -> String {
         if conversation.title == "New chat" || conversation.title.isEmpty {
             conversation.title = conversationTitle(from: userText)
         }
@@ -431,7 +431,7 @@ final class CursorConversationBridge {
         conversation.updatedAt = .now
         project?.touch()
         try? conversation.modelContext?.save()
-        if includeSlateTools {
+        if includeMembraeTools {
             return ContextBuilder.prompt(
                 userText: "",
                 context: context,
@@ -443,7 +443,7 @@ final class CursorConversationBridge {
     }
 
     func run(_ request: RunnerRequest) throws -> AsyncThrowingStream<RunnerEvent, Error> {
-        keepRunnerHot = request.includeSlateTools
+        keepRunnerHot = request.includeMembraeTools
         try ensureRunner(request)
         return AsyncThrowingStream { continuation in
             if turnEvents != nil {
@@ -577,7 +577,7 @@ final class CursorConversationBridge {
             return
         }
         closeRunner()
-        guard let node = Bundle.main.url(forAuxiliaryExecutable: "slate-node"),
+        guard let node = Bundle.main.url(forAuxiliaryExecutable: "membrae-node"),
               let runner = Bundle.main.url(forResource: "runner", withExtension: "mjs", subdirectory: "runner") else {
             throw CursorAPIError(status: 0, message: "The agent runner is missing from the app.")
         }
@@ -805,7 +805,7 @@ struct CursorChatProvider: ChatProvider {
     let id = "cursor"
     let name = "Cursor"
     let bridge: CursorConversationBridge
-    var includeSlateTools = true
+    var includeMembraeTools = true
     var includeProjectTools = true
     var resumeConversation = true
     var runtime: WorkerPath = .local
@@ -869,7 +869,7 @@ struct CursorChatProvider: ChatProvider {
                             apiKey: apiKey,
                             model: model,
                             codeRoots: roots,
-                            includeSlateTools: includeSlateTools,
+                            includeMembraeTools: includeMembraeTools,
                             includeProjectTools: includeProjectTools,
                             resumeSession: resumeConversation,
                             runtime: runtime

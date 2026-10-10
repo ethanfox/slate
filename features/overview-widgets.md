@@ -23,7 +23,7 @@ Sizes stay `1×1` / `2×1` / `2×2`. Same plate, different face.
 
 ## Editor
 
-Every widget opens the same modal. Same presenter, scrim, glass, motion, and draft-until-save as other Slate modals. Changing an input updates the preview immediately. Save writes the draft to that plate. Cancel discards.
+Every widget opens the same modal. Same presenter, scrim, glass, motion, and draft-until-save as other Membrae modals. Changing an input updates the preview immediately. Save writes the draft to that plate. Cancel discards.
 
 - Title: `Edit` plus the kind name.
 - Preview is the real face at the same cell size as the plate on the page. If the modal cannot fit that, the whole preview scales. It does not reflow. It does not navigate.

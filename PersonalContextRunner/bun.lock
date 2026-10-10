@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "slate-runner",
+      "name": "membrae-runner",
       "dependencies": {
         "@cursor/sdk": "1.0.32",
       },

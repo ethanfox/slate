@@ -27,7 +27,7 @@ Expanded: the reason, then the replacement as an object card if one was linked.
 
 Keep clears the mark. Delete uses the existing confirmation and removes the record.
 
-Ask Slate (compact) does not get this banner.
+Ask Membrae (compact) does not get this banner.
 
 ## Project column
 

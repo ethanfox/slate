@@ -1,6 +1,6 @@
 import AppKit
 import XCTest
-@testable import Slate
+@testable import Membrae
 
 final class ComposerPasteTests: XCTestCase {
     func testPrefersImageOverTextRepresentation() throws {
