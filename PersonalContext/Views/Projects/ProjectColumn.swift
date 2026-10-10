@@ -150,14 +150,12 @@ struct ProjectColumn: View {
                 label: ProjectColumnSection.runs.title,
                 action: { show(.runs) }
             )
-            if !conversations.isEmpty {
-                ColumnIconButton(
-                    systemImage: ProjectColumnSection.chats.symbol,
-                    isSelected: tab == .chat,
-                    label: ProjectColumnSection.chats.title,
-                    action: { show(.chat) }
-                )
-            }
+            ColumnIconButton(
+                systemImage: ProjectColumnSection.chats.symbol,
+                isSelected: tab == .chat,
+                label: ProjectColumnSection.chats.title,
+                action: { show(.chat) }
+            )
             ColumnIconButton(
                 systemImage: ProjectColumnSection.tracks.symbol,
                 isSelected: tab == .threads,
@@ -230,25 +228,23 @@ struct ProjectColumn: View {
                         }
                     }
 
-                    if !conversations.isEmpty {
-                        header(.chats, add: newChat)
-                        if isSectionOpen(.chats) {
-                            ForEach(visibleConversations) { conversation in
-                                ConversationRow(
-                                    conversation: conversation,
-                                    isSelected: tab == .chat && app.selectedConversation == conversation.id,
-                                    isMarkedForDeletion: markedIDs.contains(conversation.id)
-                                ) {
-                                    app.open(conversation)
-                                }
+                    header(.chats, add: newChat)
+                    if isSectionOpen(.chats) {
+                        ForEach(visibleConversations) { conversation in
+                            ConversationRow(
+                                conversation: conversation,
+                                isSelected: tab == .chat && app.selectedConversation == conversation.id,
+                                isMarkedForDeletion: markedIDs.contains(conversation.id)
+                            ) {
+                                app.open(conversation)
                             }
-                            if conversations.count > ProjectColumnMetrics.chatPreviewLimit {
-                                ColumnShowMoreButton(
-                                    expanded: showingAllChats,
-                                    remaining: conversations.count - ProjectColumnMetrics.chatPreviewLimit
-                                ) {
-                                    showingAllChats.toggle()
-                                }
+                        }
+                        if conversations.count > ProjectColumnMetrics.chatPreviewLimit {
+                            ColumnShowMoreButton(
+                                expanded: showingAllChats,
+                                remaining: conversations.count - ProjectColumnMetrics.chatPreviewLimit
+                            ) {
+                                showingAllChats.toggle()
                             }
                         }
                     }
