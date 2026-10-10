@@ -1,4 +1,3 @@
-import AIChatUI
 import SwiftData
 import SwiftUI
 
@@ -100,14 +99,8 @@ private struct ConversationSessionView: View {
     var compact = false
     var onStartRun: (() -> Void)? = nil
     @Environment(AppModel.self) private var app
-    @ObservedObject private var session: ChatSession
 
-    init(runtime: ChatRuntime, compact: Bool, onStartRun: (() -> Void)? = nil) {
-        self.runtime = runtime
-        self.compact = compact
-        self.onStartRun = onStartRun
-        _session = ObservedObject(wrappedValue: runtime.session)
-    }
+    private var session: ChatEngine { runtime.session }
 
     var body: some View {
         VStack(spacing: 0) {

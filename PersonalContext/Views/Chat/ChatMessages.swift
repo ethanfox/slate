@@ -1,11 +1,9 @@
-import AIChatCore
-import AIChatUI
 import SwiftData
 import SwiftUI
 
 /// Renders the entries from one chat session without owning send or persistence behavior.
 struct ChatMessages: View {
-    @ObservedObject var session: ChatSession
+    var session: ChatEngine
     var compact = false
     var turn: [ChatTurnItem] = []
     var turnUserID: UUID?
@@ -64,7 +62,7 @@ private extension EnvironmentValues {
 }
 
 private struct ChatMessageList: View {
-    @ObservedObject var session: ChatSession
+    var session: ChatEngine
     var turn: [ChatTurnItem]
     var turnUserID: UUID?
     var turnText: String
@@ -86,8 +84,7 @@ private struct ChatMessageList: View {
                         HistoryRow(
                             entry: entry,
                             stored: storedAnswer(for: entry),
-                            showWork: !showTurn,
-                            onToggleKnowledge: { session.toggleKnowledgeRetrieval(id: $0) }
+                            showWork: !showTurn
                         )
                         .equatable()
                         .id(entry.id)
@@ -144,7 +141,7 @@ private struct ChatMessageList: View {
         return "turn-\(user.id.uuidString)"
     }
 
-    private var visibleEntries: [ChatSession.Entry] {
+    private var visibleEntries: [ChatEntry] {
         session.entries.enumerated().compactMap { index, entry in
             hideCurrentTurn(entry, index: index) ? nil : entry
         }
@@ -152,10 +149,8 @@ private struct ChatMessageList: View {
 
     private var lastUserIndex: Int? {
         session.entries.lastIndex { entry in
-            switch entry {
-            case .userMessage, .knowledgeRetrieval: true
-            default: false
-            }
+            if case .userMessage = entry { return true }
+            return false
         }
     }
 
@@ -171,12 +166,10 @@ private struct ChatMessageList: View {
         return turn
     }
 
-    private func hideCurrentTurn(_ entry: ChatSession.Entry, index: Int) -> Bool {
+    private func hideCurrentTurn(_ entry: ChatEntry, index: Int) -> Bool {
         guard showTurn, let lastUserIndex, index > lastUserIndex else { return false }
-        switch entry {
-        case .aiMessage, .reasoning: return true
-        default: return false
-        }
+        if case .aiMessage = entry { return true }
+        return false
     }
 
     private var tools: [ChatToolActivity] {
@@ -251,7 +244,7 @@ private struct ChatMessageList: View {
         app.present(.save(kind))
     }
 
-    private func storedAnswer(for entry: ChatSession.Entry) -> ChatTranscript.Unpacked? {
+    private func storedAnswer(for entry: ChatEntry) -> ChatTranscript.Unpacked? {
         if case .aiMessage(let message) = entry { return answers[message.id] }
         return nil
     }
@@ -264,10 +257,9 @@ private struct ScrollPin: Equatable {
 }
 
 private struct HistoryRow: View, Equatable {
-    var entry: ChatSession.Entry
+    var entry: ChatEntry
     var stored: ChatTranscript.Unpacked?
     var showWork: Bool
-    var onToggleKnowledge: (UUID) -> Void
     @Environment(\.chatMessageLayout) private var layout
 
     static func == (lhs: HistoryRow, rhs: HistoryRow) -> Bool {
@@ -286,28 +278,6 @@ private struct HistoryRow: View, Equatable {
             } else {
                 AssistantMessageBlock(message: message, stored: stored, showWork: showWork)
             }
-        case .reasoning:
-            EmptyView()
-        case .toolCall:
-            EmptyView()
-        case .knowledgeRetrieval(let knowledge):
-            Button {
-                onToggleKnowledge(knowledge.id)
-            } label: {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(knowledge.query.isEmpty ? "Retrieved context" : knowledge.query)
-                        .font(.system(size: 13, weight: .medium))
-                    if knowledge.isExpanded {
-                        Text(knowledge.body)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(12)
-                .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
-                .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.plain)
         case .activity(let activity):
             if activity.isError {
                 Text(activity.text)
@@ -320,7 +290,7 @@ private struct HistoryRow: View, Equatable {
     }
 }
 
-private func sameEntry(_ left: ChatSession.Entry, _ right: ChatSession.Entry) -> Bool {
+private func sameEntry(_ left: ChatEntry, _ right: ChatEntry) -> Bool {
     switch (left, right) {
     case (.userMessage(let left), .userMessage(let right)):
         left.id == right.id
@@ -329,17 +299,8 @@ private func sameEntry(_ left: ChatSession.Entry, _ right: ChatSession.Entry) ->
             && left.isFailed == right.isFailed
     case (.aiMessage(let left), .aiMessage(let right)):
         left.id == right.id && left.text == right.text && left.isStreaming == right.isStreaming
-    case (.knowledgeRetrieval(let left), .knowledgeRetrieval(let right)):
-        left.id == right.id
-            && left.query == right.query
-            && left.body == right.body
-            && left.isExpanded == right.isExpanded
     case (.activity(let left), .activity(let right)):
         left.id == right.id && left.text == right.text && left.isError == right.isError
-    case (.reasoning(let left), .reasoning(let right)):
-        left.id == right.id
-    case (.toolCall(let left), .toolCall(let right)):
-        left.id == right.id
     default:
         false
     }
@@ -518,7 +479,7 @@ private struct ChatToolMark: View {
 }
 
 private struct UserMessageBubble: View {
-    let message: ChatSession.UserEntry
+    let message: ChatEntry.User
     @Environment(\.chatMessageLayout) private var layout
 
     var body: some View {
@@ -563,7 +524,7 @@ private struct UserMessageBubble: View {
 }
 
 private struct AssistantMessageBlock: View {
-    let message: ChatSession.AIEntry
+    let message: ChatEntry.Assistant
     var stored: ChatTranscript.Unpacked?
     var showWork = true
     @Environment(AppModel.self) private var app

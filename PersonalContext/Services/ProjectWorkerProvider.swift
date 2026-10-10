@@ -1,4 +1,3 @@
-import AIChatCore
 import Foundation
 
 enum ProjectWorker {
@@ -11,7 +10,7 @@ enum ProjectWorker {
     static func consult(
         brief: String,
         reportingTo bridge: CursorConversationBridge,
-        options: ChatRequestOptions
+        options: ChatTurnOptions
     ) async throws -> String {
         let question = brief.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !question.isEmpty else {
@@ -38,7 +37,7 @@ enum ProjectWorker {
 
         \(question)
         """
-        let message = AIChatCore.ChatMessage(id: UUID(), role: .user, content: prompt)
+        let message = TalkMessage(id: UUID(), role: .user, text: prompt)
         var output = ""
         for try await event in provider.stream(messages: [message], model: model, options: options) {
             if case .text(let text) = event {

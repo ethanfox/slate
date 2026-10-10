@@ -1,6 +1,3 @@
-import AIChatCore
-import AIChatUI
-import Combine
 import SwiftData
 import SwiftUI
 
@@ -35,7 +32,7 @@ final class ChatDebugLog {
         #endif
     }
 
-    func snapshot(_ session: ChatSession, label: String) {
+    func snapshot(_ session: ChatEngine, label: String) {
         add(label)
         for (index, entry) in session.entries.enumerated() {
             add("  [\(index)] \(Self.describe(entry))")
@@ -52,18 +49,12 @@ final class ChatDebugLog {
         pace = nil
     }
 
-    private static func describe(_ entry: ChatSession.Entry) -> String {
+    private static func describe(_ entry: ChatEntry) -> String {
         switch entry {
         case .userMessage(let message):
             return "user id=\(short(message.id)) \(ChatTrace.clip(message.text, 80))"
         case .aiMessage(let message):
             return "assistant id=\(short(message.id)) stream=\(message.isStreaming) \(ChatTrace.clip(message.text, 80))"
-        case .reasoning(let reasoning):
-            return "reasoning think=\(reasoning.isThinking) \(ChatTrace.clip(reasoning.text, 80))"
-        case .toolCall(let call):
-            return "toolCall \(call.name)"
-        case .knowledgeRetrieval(let knowledge):
-            return "knowledge \(ChatTrace.clip(knowledge.query, 80))"
         case .activity(let activity):
             return "activity error=\(activity.isError) \(ChatTrace.clip(activity.text, 80))"
         }
@@ -81,32 +72,29 @@ final class ChatRuntime {
     let conversationID: UUID
     let providerID: String
     let bridge: CursorConversationBridge
-    let session: ChatSession
+    let session: ChatEngine
     var modelID: String
     var answers: [UUID: ChatTranscript.Unpacked] = [:]
     @ObservationIgnored private var conversation: Conversation?
-    @ObservationIgnored private var ticks: AnyCancellable?
     @ObservationIgnored private var persistTask: Task<Void, Never>?
     @ObservationIgnored var onTick: (() -> Void)?
 
-    init(conversation: Conversation, project: Project?) {
+    init(conversation: Conversation, project: Project?, provider: (any ChatProvider)? = nil) {
         conversationID = conversation.id
         providerID = conversation.providerID
         self.conversation = conversation
         let bridge = CursorConversationBridge(conversation: conversation, project: project ?? conversation.project)
         self.bridge = bridge
         modelID = conversation.modelID
-        session = Self.makeSession(bridge: bridge, conversation: conversation)
+        session = Self.makeSession(bridge: bridge, conversation: conversation, provider: provider)
         answers = Dictionary(uniqueKeysWithValues: conversation.orderedMessages.compactMap { message in
             guard message.role == .assistant else { return nil }
             let answer = ChatTranscript.unpack(message.content)
             guard !answer.sources.isEmpty || answer.work?.hasContent == true else { return nil }
             return (message.id, answer)
         })
-        ticks = session.objectWillChange.sink { [weak self] _ in
-            Task { @MainActor in
-                self?.onTick?()
-            }
+        session.onChange = { [weak self] in
+            self?.onTick?()
         }
     }
 
@@ -172,6 +160,7 @@ final class ChatRuntime {
         persistTask = nil
         guard let conversation, conversation.modelContext != nil else { return }
         var known = Dictionary(uniqueKeysWithValues: conversation.messages.map { ($0.id, $0) })
+        var keepIDs = Set<UUID>()
         for entry in session.entries {
             let stored: ChatMessage?
             switch entry {
@@ -183,6 +172,7 @@ final class ChatRuntime {
                 stored = nil
             }
             guard let stored else { continue }
+            keepIDs.insert(stored.id)
             if let existing = known[stored.id] {
                 if existing.content != stored.content {
                     existing.content = stored.content
@@ -191,6 +181,11 @@ final class ChatRuntime {
                 conversation.messages.append(stored)
                 known[stored.id] = stored
             }
+        }
+        let stale = conversation.messages.filter { !keepIDs.contains($0.id) }
+        for message in stale {
+            conversation.messages.removeAll { $0.id == message.id }
+            conversation.modelContext?.delete(message)
         }
         conversation.updatedAt = .now
         try? conversation.modelContext?.save()
@@ -207,18 +202,22 @@ final class ChatRuntime {
         }
         app.pendingSend = nil
         ChatTrace.event("consumePending send conversation=\(conversationID) chars=\(pending.text.count) generating=\(session.isGenerating)")
-        let sent = send(pending.text)
+        let sent = send(pending.submission)
         ChatTrace.event("consumePending session.send=\(sent)")
     }
 
     func send(_ text: String) -> Bool {
+        send(ChatSubmission(text: text))
+    }
+
+    func send(_ submission: ChatSubmission) -> Bool {
         guard !session.isGenerating else { return false }
-        bridge.debugLog.add("SEND model=\(modelID) generating=\(session.isGenerating) \(ChatTrace.clip(text, 120))")
+        bridge.debugLog.add("SEND model=\(modelID) generating=\(session.isGenerating) \(ChatTrace.clip(submission.trimmedText, 120))")
         bridge.debugLog.snapshot(session, label: "session before send")
         rememberAnswer()
-        bridge.beginTurn()
-        let sent = session.send(text)
+        let sent = session.send(submission)
         if sent {
+            bridge.beginTurn()
             persist()
             for entry in session.entries.reversed() {
                 if case .userMessage(let user) = entry {
@@ -246,20 +245,26 @@ final class ChatRuntime {
         }
     }
 
-    private static func makeSession(bridge: CursorConversationBridge, conversation: Conversation) -> ChatSession {
-        let provider = makeChatProvider(bridge: bridge, conversation: conversation)
-        let session = ChatSession(provider: provider, model: conversation.modelID)
-        var entries: [ChatSession.Entry] = []
-        var history: [AIChatCore.ChatMessage] = []
+    private static func makeSession(
+        bridge: CursorConversationBridge,
+        conversation: Conversation,
+        provider: (any ChatProvider)?
+    ) -> ChatEngine {
+        let session = ChatEngine(
+            provider: provider ?? makeChatProvider(bridge: bridge, conversation: conversation),
+            model: conversation.modelID
+        )
+        var entries: [ChatEntry] = []
+        var history: [TalkMessage] = []
         for message in conversation.orderedMessages where !message.content.isEmpty {
             switch message.role {
             case .user:
                 entries.append(.userMessage(.init(id: message.id, text: message.content)))
-                history.append(.init(id: message.id, role: .user, content: message.content))
+                history.append(TalkMessage(id: message.id, role: .user, text: message.content))
             case .assistant:
                 let answer = ChatTranscript.unpack(message.content)
                 entries.append(.aiMessage(.init(id: message.id, text: message.content, isStreaming: false)))
-                history.append(.init(id: message.id, role: .assistant, content: answer.text))
+                history.append(TalkMessage(id: message.id, role: .assistant, text: answer.text))
             }
         }
         session.loadSnapshot(entries: entries, history: history)
@@ -281,7 +286,7 @@ final class ChatRuntime {
         }
     }
 
-    private func packed(_ reply: ChatSession.AIEntry) -> String {
+    private func packed(_ reply: ChatEntry.Assistant) -> String {
         if let answer = answers[reply.id] {
             return ChatTranscript.pack(text: answer.text, sources: answer.sources, work: answer.work)
         }

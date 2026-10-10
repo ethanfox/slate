@@ -15,9 +15,6 @@ settings:
     ENABLE_HARDENED_RUNTIME: YES
     COMBINE_HIDPI_IMAGES: YES
 packages:
-  AIChatKit:
-    url: https://github.com/NerdSnipe-Inc/AIChatKit
-    from: 2.0.0
   swift-markdown-ui:
     url: https://github.com/gonzalezreal/swift-markdown-ui.git
     from: 2.4.1
@@ -31,10 +28,6 @@ targets:
       - sdk: Metal.framework
       - sdk: MetalKit.framework
       - sdk: LinkPresentation.framework
-      - package: AIChatKit
-        product: AIChatCore
-      - package: AIChatKit
-        product: AIChatUI
       - package: swift-markdown-ui
         product: MarkdownUI
       - target: PersonalContextMCP

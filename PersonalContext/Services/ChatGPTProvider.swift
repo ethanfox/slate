@@ -1,4 +1,3 @@
-import AIChatCore
 import Foundation
 
 struct ChatGPTProvider: ChatProvider {
@@ -11,9 +10,9 @@ struct ChatGPTProvider: ChatProvider {
     var zeroResponseMessage: String { "ChatGPT didn’t return a reply." }
 
     func stream(
-        messages: [AIChatCore.ChatMessage],
+        messages: [TalkMessage],
         model: String,
-        options: ChatRequestOptions
+        options: ChatTurnOptions
     ) -> AsyncThrowingStream<ChatStreamEvent, Error> {
         let bridge = bridge
         return AsyncThrowingStream { continuation in
@@ -162,13 +161,6 @@ struct ChatGPTProvider: ChatProvider {
         }
     }
 
-    func complete(
-        messages: [AIChatCore.ChatMessage],
-        model: String,
-        options: ChatRequestOptions
-    ) async throws -> ChatCompletionResult {
-        throw ChatGPTAuthError("ChatGPT conversations stream only.")
-    }
 
     static let maxToolRounds = 8
     static let answerNowMessage = "Answer now from the tool results you already have. Do not call more tools."
@@ -229,7 +221,7 @@ struct ChatGPTProvider: ChatProvider {
         return payload
     }
 
-    private static func responseInput(_ message: AIChatCore.ChatMessage) -> [String: Any] {
+    private static func responseInput(_ message: TalkMessage) -> [String: Any] {
         [
             "role": message.role == .assistant ? "assistant" : "user",
             "content": text(from: message)
@@ -243,12 +235,8 @@ struct ChatGPTProvider: ChatProvider {
         return replay
     }
 
-    private static func text(from message: AIChatCore.ChatMessage?) -> String {
-        guard let message else { return "" }
-        return message.content.compactMap { block -> String? in
-            if case .text(let text) = block { return text }
-            return nil
-        }.joined(separator: "\n")
+    private static func text(from message: TalkMessage?) -> String {
+        message?.text ?? ""
     }
 
     static func apiError(from data: Data) -> String? {
@@ -427,20 +415,12 @@ struct UnavailableChatProvider: ChatProvider {
     var zeroResponseMessage: String { message }
 
     func stream(
-        messages: [AIChatCore.ChatMessage],
+        messages: [TalkMessage],
         model: String,
-        options: ChatRequestOptions
+        options: ChatTurnOptions
     ) -> AsyncThrowingStream<ChatStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             continuation.finish(throwing: ChatGPTAuthError(message))
         }
-    }
-
-    func complete(
-        messages: [AIChatCore.ChatMessage],
-        model: String,
-        options: ChatRequestOptions
-    ) async throws -> ChatCompletionResult {
-        throw ChatGPTAuthError(message)
     }
 }

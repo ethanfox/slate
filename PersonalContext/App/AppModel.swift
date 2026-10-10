@@ -765,6 +765,11 @@ enum CursorCloudRepositoriesState: Equatable {
 struct PendingSend: Equatable {
     var conversationID: UUID
     var text: String
+    var attachments: [ChatAttachmentRef] = []
+
+    var submission: ChatSubmission {
+        ChatSubmission(text: text, attachments: attachments)
+    }
 }
 
 struct RunningChat: Equatable, Identifiable {

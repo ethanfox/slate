@@ -1,4 +1,3 @@
-import AIChatCore
 import Foundation
 import Observation
 
@@ -808,14 +807,11 @@ struct CursorChatProvider: ChatProvider {
     var zeroResponseMessage: String { "Cursor didn’t return a reply." }
 
     func stream(
-        messages: [AIChatCore.ChatMessage],
+        messages: [TalkMessage],
         model: String,
-        options: ChatRequestOptions
+        options: ChatTurnOptions
     ) -> AsyncThrowingStream<ChatStreamEvent, Error> {
-        let userText = messages.last(where: { $0.role == .user })?.content.compactMap { block -> String? in
-            if case .text(let text) = block { return text }
-            return nil
-        }.joined(separator: "\n") ?? ""
+        let userText = messages.last(where: { $0.role == .user })?.text ?? ""
         let bridge = bridge
 
         ChatTrace.event("provider.stream model=\(model) messages=\(messages.count) userChars=\(userText.count)")
@@ -847,11 +843,7 @@ struct CursorChatProvider: ChatProvider {
                     let request = try await MainActor.run {
                         bridge.debugLog.add("stream start model=\(model) messages=\(messages.count)")
                         for (index, message) in messages.enumerated() {
-                            let text = message.content.compactMap { block -> String? in
-                                if case .text(let text) = block { return text }
-                                return nil
-                            }.joined()
-                            bridge.debugLog.add("  msg[\(index)] \(message.role) \(ChatTrace.clip(text, 80))")
+                            bridge.debugLog.add("  msg[\(index)] \(message.role) \(ChatTrace.clip(message.text, 80))")
                         }
                         guard let apiKey = KeychainStore.read(.cursorAPIKey) else {
                             throw CursorAPIError(status: 0, message: "Add a Cursor API key in Settings.")
@@ -1007,13 +999,5 @@ struct CursorChatProvider: ChatProvider {
                 Task { @MainActor in bridge.stop() }
             }
         }
-    }
-
-    func complete(
-        messages: [AIChatCore.ChatMessage],
-        model: String,
-        options: ChatRequestOptions
-    ) async throws -> ChatCompletionResult {
-        throw CursorAPIError(status: 0, message: "Cursor conversations stream only.")
     }
 }
