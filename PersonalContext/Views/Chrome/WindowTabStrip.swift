@@ -6,6 +6,7 @@ private enum TabDragSpace {
     static let name = "windowTabs"
     static let slot: CGFloat = 156
     static let chip = CGSize(width: 148, height: 28)
+    static let close: CGFloat = 19
 }
 
 struct WindowTabStrip: View {
@@ -515,30 +516,41 @@ private struct WindowTabChip: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 4) {
-            HStack(spacing: 10) {
-                if isGenerating {
-                    ProgressView()
-                        .controlSize(.mini)
-                        .frame(width: 12, height: 12)
-                } else {
-                    Image(systemName: symbol)
-                        .font(CraftFont.tabIcon)
-                        .frame(width: 12, height: 12)
-                }
-                Text(title)
-                    .font(isSelected ? CraftFont.tab : CraftFont.tabIdle)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(spacing: 10) {
+            if isGenerating {
+                ProgressView()
+                    .controlSize(.mini)
+                    .frame(width: 12, height: 12)
+            } else {
+                Image(systemName: symbol)
+                    .font(CraftFont.tabIcon)
+                    .frame(width: 12, height: 12)
             }
-            .foregroundStyle(isSelected ? .primary : .secondary)
-            .contentShape(Rectangle())
-            .overlay {
-                if allowsDrag {
-                    TabDragHandle(onMoved: onDrag, onEnded: onDragEnd, onClick: onSelect)
-                }
+            Text(title)
+                .font(isSelected ? CraftFont.tab : CraftFont.tabIdle)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .foregroundStyle(isSelected ? .primary : .secondary)
+        .padding(.leading, 10.5)
+        .padding(.trailing, TabDragSpace.close)
+        .frame(width: TabDragSpace.chip.width, height: TabDragSpace.chip.height)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isSelected ? CraftColor.selection : Color.clear)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(!isSelected && hovering ? CraftColor.hover : Color.clear)
+                .animation(Motion.hover, value: hovering)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            if allowsDrag {
+                TabDragHandle(onMoved: onDrag, onEnded: onDragEnd, onClick: onSelect)
+                    .padding(.trailing, TabDragSpace.close)
             }
+        }
+        .overlay(alignment: .trailing) {
             Button(action: onClose) {
                 Image(systemName: "xmark")
                     .font(CraftFont.caption)
@@ -549,18 +561,8 @@ private struct WindowTabChip: View {
             .buttonStyle(.plain)
             .help("Close Tab")
             .accessibilityLabel("Close \(title)")
+            .padding(.trailing, 3)
         }
-        .padding(.leading, 10.5)
-        .padding(.trailing, 3)
-        .frame(width: TabDragSpace.chip.width, height: TabDragSpace.chip.height)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isSelected ? CraftColor.selection : Color.clear)
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(!isSelected && hovering ? CraftColor.hover : Color.clear)
-                .animation(Motion.hover, value: hovering)
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { over in
             hovering = over
             onHoverChange(over)
@@ -631,6 +633,10 @@ private final class TabDragHandleView: NSView {
 
     override var mouseDownCanMoveWindow: Bool { false }
     override var isFlipped: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        bounds.contains(point) ? self : nil
+    }
 
     override func mouseDown(with event: NSEvent) {
         guard let window else { return }

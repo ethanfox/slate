@@ -5,14 +5,14 @@ let supportedVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
 
 let instructions = """
 Membrae is the user's knowledge base of projects. Each project has decisions (what was decided and why), \
-threads (directions, features, problems, experiments, topics, which can nest), notes, and tasks. \
+tracks (directions, features, problems, experiments, topics, which can nest), notes, and tasks. \
 Active decisions are the source of truth. When the user states a fact, choice, or plan, record it here instead of \
 asking them to save it. Read before you write so you update an existing record rather than duplicating it. \
 When a decision replaces an older one, create the new decision with supersedes_id. \
 Use the task tools to list, create, update, and complete Membrae tasks. complete_task records repeat history; \
 do not set status to done on a repeating task. \
 \(ContextBuilder.knowledgeRules) \
-get_project is lean. Use get_thread for a track body and its linked work, list_tasks with track_id for tasks, \
+get_project is lean. Use get_track for a track body and its linked work, list_tasks with track_id for tasks, \
 and get_note for reference material. \
 Agents cannot delete. To propose removing a note, track, decision, or chat, call mark_for_deletion \
 with a reason. Optionally link a replacement. The user Keeps or Deletes.

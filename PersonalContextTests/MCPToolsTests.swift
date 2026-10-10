@@ -19,7 +19,7 @@ final class MCPToolsTests: XCTestCase {
         let body = try object(Tools.call("get_project", arguments: ["project_id": seed.project.id.uuidString], container: container))
         XCTAssertEqual(body["name"] as? String, "Harbor")
         XCTAssertNil(body["decisions"])
-        XCTAssertNil(body["threads"])
+        XCTAssertNil(body["tracks"])
         XCTAssertNil(body["notes"])
         XCTAssertNil(body["tasks"])
         XCTAssertNil(body["deletion_marks"])
@@ -40,12 +40,12 @@ final class MCPToolsTests: XCTestCase {
             "get_project",
             arguments: [
                 "project_id": seed.project.id.uuidString,
-                "include": ["decisions", "threads", "notes", "tasks"]
+                "include": ["decisions", "tracks", "notes", "tasks"]
             ],
             container: container
         ))
         let decisions = try XCTUnwrap(body["decisions"] as? [[String: Any]])
-        let threads = try XCTUnwrap(body["threads"] as? [[String: Any]])
+        let threads = try XCTUnwrap(body["tracks"] as? [[String: Any]])
         let notes = try XCTUnwrap(body["notes"] as? [[String: Any]])
         let tasks = try XCTUnwrap(body["tasks"] as? [[String: Any]])
         XCTAssertEqual(decisions.first?["title"] as? String, "Keep the Mac session")
@@ -67,10 +67,10 @@ final class MCPToolsTests: XCTestCase {
 
         let body = try object(Tools.call(
             "get_project",
-            arguments: ["project_id": seed.project.id.uuidString, "include": ["threads"]],
+            arguments: ["project_id": seed.project.id.uuidString, "include": ["tracks"]],
             container: container
         ))
-        let threads = try XCTUnwrap(body["threads"] as? [[String: Any]])
+        let threads = try XCTUnwrap(body["tracks"] as? [[String: Any]])
         XCTAssertTrue(threads.contains { $0["title"] as? String == "Auth" })
         XCTAssertTrue(threads.allSatisfy { $0["body"] == nil })
         XCTAssertFalse(threads.contains { ($0["summary"] as? String)?.contains(HarborEvalFixture.authBody) == true })
@@ -92,7 +92,7 @@ final class MCPToolsTests: XCTestCase {
         let seed = HarborEvalFixture.seed(in: context)
         try context.save()
 
-        let body = try object(Tools.call("get_thread", arguments: ["thread_id": seed.auth.id.uuidString], container: container))
+        let body = try object(Tools.call("get_track", arguments: ["track_id": seed.auth.id.uuidString], container: container))
         XCTAssertEqual(body["body"] as? String, HarborEvalFixture.authBody)
         let tasks = try XCTUnwrap(body["tasks"] as? [[String: Any]])
         XCTAssertEqual(Set(tasks.compactMap { $0["title"] as? String }), ["Ship sign-in", "Fix refresh after wake"])
@@ -109,7 +109,7 @@ final class MCPToolsTests: XCTestCase {
         let seed = HarborEvalFixture.seed(in: context)
         try context.save()
 
-        let body = try object(Tools.call("get_thread", arguments: ["thread_id": seed.auth.id.uuidString], container: container))
+        let body = try object(Tools.call("get_track", arguments: ["track_id": seed.auth.id.uuidString], container: container))
         let notes = try XCTUnwrap(body["notes"] as? [[String: Any]])
         let oauth = try XCTUnwrap(notes.first { $0["title"] as? String == "OAuth vendor reference" })
         XCTAssertNil(oauth["content"])
@@ -165,7 +165,7 @@ final class MCPToolsTests: XCTestCase {
         AssociationService.applyLink(thread: seed.tokens, onto: seed.shipSignIn)
         try context.save()
 
-        let thread = try object(Tools.call("get_thread", arguments: ["thread_id": seed.auth.id.uuidString], container: container))
+        let thread = try object(Tools.call("get_track", arguments: ["track_id": seed.auth.id.uuidString], container: container))
         let threadTasks = try XCTUnwrap(thread["tasks"] as? [[String: Any]])
         XCTAssertEqual(threadTasks.filter { $0["title"] as? String == "Ship sign-in" }.count, 1)
 
@@ -204,16 +204,16 @@ final class MCPToolsTests: XCTestCase {
         try context.save()
 
         _ = try object(Tools.call(
-            "update_thread",
+            "update_track",
             arguments: [
-                "thread_id": seed.auth.id.uuidString,
+                "track_id": seed.auth.id.uuidString,
                 "body": "",
                 "append_to_body": "Sign-in must work offline."
             ],
             container: container
         ))
 
-        let body = try object(Tools.call("get_thread", arguments: ["thread_id": seed.auth.id.uuidString], container: container))
+        let body = try object(Tools.call("get_track", arguments: ["track_id": seed.auth.id.uuidString], container: container))
         let text = try XCTUnwrap(body["body"] as? String)
         XCTAssertTrue(text.contains("local session store"))
         XCTAssertTrue(text.contains("Sign-in must work offline."))
@@ -224,15 +224,15 @@ final class MCPToolsTests: XCTestCase {
         try context.save()
 
         _ = try object(Tools.call(
-            "update_thread",
+            "update_track",
             arguments: [
-                "thread_id": seed.auth.id.uuidString,
+                "track_id": seed.auth.id.uuidString,
                 "append_to_body": "Sign-in must work offline."
             ],
             container: container
         ))
 
-        let body = try object(Tools.call("get_thread", arguments: ["thread_id": seed.auth.id.uuidString], container: container))
+        let body = try object(Tools.call("get_track", arguments: ["track_id": seed.auth.id.uuidString], container: container))
         let text = try XCTUnwrap(body["body"] as? String)
         XCTAssertTrue(text.contains("local session store"))
         XCTAssertTrue(text.contains("Sign-in must work offline."))
@@ -244,15 +244,15 @@ final class MCPToolsTests: XCTestCase {
         try context.save()
 
         _ = try object(Tools.call(
-            "update_thread",
+            "update_track",
             arguments: [
-                "thread_id": seed.auth.id.uuidString,
+                "track_id": seed.auth.id.uuidString,
                 "body": HarborEvalFixture.authBody + " Sign-in must work offline."
             ],
             container: container
         ))
 
-        let body = try object(Tools.call("get_thread", arguments: ["thread_id": seed.auth.id.uuidString], container: container))
+        let body = try object(Tools.call("get_track", arguments: ["track_id": seed.auth.id.uuidString], container: container))
         XCTAssertTrue((body["body"] as? String)?.contains("Sign-in must work offline.") == true)
         XCTAssertTrue((body["body"] as? String)?.contains("local session store") == true)
         let tasks = try XCTUnwrap(body["tasks"] as? [[String: Any]])

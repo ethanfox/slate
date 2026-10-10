@@ -70,7 +70,7 @@ final class RunGateway: AgentToolGateway {
         let kind: String
         if tool.contains("note") { kind = "note" }
         else if tool.contains("decision") { kind = "decision" }
-        else if tool.contains("thread") { kind = "thread" }
+        else if tool.contains("thread") || tool.contains("track") { kind = "thread" }
         else if tool.contains("task") { kind = "task" }
         else { return nil }
         let title = (object["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)

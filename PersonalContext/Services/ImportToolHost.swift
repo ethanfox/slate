@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 enum ImportToolHost {
-    static let allowed = ["list_projects", "create_project", "create_thread", "create_note", "create_decision"]
+    static let allowed = ["list_projects", "create_project", "create_track", "create_note", "create_decision"]
 
     static let instructions = """
     Membrae import is one-way. Use list_projects or create_project, then create a new track \
@@ -26,7 +26,7 @@ enum ImportToolHost {
             return result(id, [
                 "protocolVersion": versions.contains(requested) ? requested : "2025-06-18",
                 "capabilities": ["tools": ["listChanged": false]],
-                "serverInfo": ["name": "membrae-import", "version": "1.1.0"],
+                "serverInfo": ["name": "membrae-import", "version": "1.2.0"],
                 "instructions": instructions
             ])
         case "server/discover":
@@ -35,7 +35,7 @@ enum ImportToolHost {
                 "supportedVersions": ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"],
                 "capabilities": ["tools": ["listChanged": false]],
                 "instructions": instructions,
-                "_meta": ["io.modelcontextprotocol/serverInfo": ["name": "membrae-import", "version": "1.1.0"]]
+                "_meta": ["io.modelcontextprotocol/serverInfo": ["name": "membrae-import", "version": "1.2.0"]]
             ])
         case "ping", "initialized", "notifications/initialized":
             return result(id, [:] as [String: Any])
@@ -46,8 +46,8 @@ enum ImportToolHost {
         case "prompts/list":
             return result(id, ["prompts": [] as [Any]])
         case "tools/call":
-            let name = params["name"] as? String ?? ""
-            let arguments = params["arguments"] as? [String: Any] ?? [:]
+            let name = canonical(params["name"] as? String ?? "")
+            let arguments = migrate(params["arguments"] as? [String: Any] ?? [:])
             return call(id, name: name, arguments: arguments, client: client, container: container, metadata: &metadata)
         default:
             return error(id, -32601, "Method not found: \(method)")
@@ -126,7 +126,7 @@ enum ImportToolHost {
             context.insert(project)
             ImportKeyStore.recordImport(.init(kind: "Project", title: project.name, projectName: project.name, at: .now), in: &metadata)
             return ["id": project.id.uuidString, "name": project.name, "summary": project.summary]
-        case "create_thread":
+        case "create_track":
             let project = try project(args.uuid("project_id"), in: context)
             let parent = try allowedThread(args.optionalUUID("parent_id"), project: project, metadata: metadata)
             let thread = ProjectThread(
@@ -145,7 +145,7 @@ enum ImportToolHost {
             return threadShape(thread)
         case "create_note":
             let project = try project(args.uuid("project_id"), in: context)
-            let thread = try allowedThread(args.optionalUUID("thread_id"), project: project, metadata: metadata)
+            let thread = try allowedThread(args.optionalUUID("track_id"), project: project, metadata: metadata)
             let note = Note(
                 content: try args.required("content"),
                 project: project,
@@ -159,7 +159,7 @@ enum ImportToolHost {
             return noteShape(note)
         case "create_decision":
             let project = try project(args.uuid("project_id"), in: context)
-            let thread = try allowedThread(args.optionalUUID("thread_id"), project: project, metadata: metadata)
+            let thread = try allowedThread(args.optionalUUID("track_id"), project: project, metadata: metadata)
             let decision = Decision(
                 title: try args.required("title"),
                 decision: try args.required("decision"),
@@ -202,10 +202,10 @@ enum ImportToolHost {
                 "current_direction": text("Where the project is heading right now."),
                 "symbol": text("SF Symbol name for the icon. Defaults to folder.")
             ], ["name"], false),
-            tool("create_thread", "Create track", "Start a new track in this import.", [
+            tool("create_track", "Create track", "Start a new track in this import.", [
                 "project_id": text("Project id from list_projects or create_project."),
-                "title": text("Thread title."),
-                "kind": enumText(ThreadKind.self, "Kind of thread. Defaults to topic."),
+                "title": text("Track title."),
+                "kind": enumText(ThreadKind.self, "Kind of track. Defaults to topic."),
                 "status": enumText(ThreadStatus.self, "Defaults to exploring."),
                 "summary": text("One or two sentences."),
                 "body": text("Markdown spec."),
@@ -215,14 +215,14 @@ enum ImportToolHost {
                 "project_id": text("Project id from list_projects or create_project."),
                 "title": text("Note title."),
                 "content": text("Markdown content."),
-                "thread_id": text("Track id created in this import. Omit for a project-level note.")
+                "track_id": text("Track id created in this import. Omit for a project-level note.")
             ], ["project_id", "content"], false),
             tool("create_decision", "Create decision", "Record a new decision. Cannot replace an existing one.", [
                 "project_id": text("Project id from list_projects or create_project."),
                 "title": text("Short name for the decision."),
                 "decision": text("What was decided."),
                 "rationale": text("Why."),
-                "thread_id": text("Track id created in this import.")
+                "track_id": text("Track id created in this import.")
             ], ["project_id", "title", "decision"], false)
         ]
     }
@@ -270,7 +270,7 @@ enum ImportToolHost {
             "title": note.displayTitle,
             "content": note.content,
             "source": note.source,
-            "thread_id": note.thread?.id.uuidString ?? ""
+            "track_id": note.thread?.id.uuidString ?? ""
         ]
     }
 
@@ -281,8 +281,20 @@ enum ImportToolHost {
             "title": decision.title,
             "decision": decision.decision,
             "rationale": decision.rationale,
-            "thread_id": decision.thread?.id.uuidString ?? ""
+            "track_id": decision.thread?.id.uuidString ?? ""
         ]
+    }
+
+    private static func canonical(_ name: String) -> String {
+        name == "create_thread" ? "create_track" : name
+    }
+
+    private static func migrate(_ arguments: [String: Any]) -> [String: Any] {
+        var next = arguments
+        if next["track_id"] == nil, let old = next["thread_id"] {
+            next["track_id"] = old
+        }
+        return next
     }
 
     private static func result(_ id: Any?, _ value: [String: Any]) -> [String: Any] {

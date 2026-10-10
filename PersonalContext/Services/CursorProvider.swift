@@ -192,7 +192,7 @@ struct ChatToolActivity: Identifiable, Equatable, Codable {
 
     private var inferredKind: ChatSource.Kind? {
         if name.contains("decision") { return .decision }
-        if name.contains("thread") { return .thread }
+        if name.contains("thread") || name.contains("track") { return .thread }
         if name.contains("note") { return .note }
         if name.contains("project") { return .project }
         return nil

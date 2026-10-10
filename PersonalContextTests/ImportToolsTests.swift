@@ -20,7 +20,7 @@ final class ImportToolsTests: XCTestCase {
         )
         let info = (response["result"] as? [String: Any])?["serverInfo"] as? [String: Any]
         XCTAssertEqual(info?["name"] as? String, "membrae-import")
-        XCTAssertEqual(info?["version"] as? String, "1.1.0")
+        XCTAssertEqual(info?["version"] as? String, "1.2.0")
     }
 
     func testServerDiscoverAdvertisesChatGPTVersion() throws {
@@ -42,7 +42,7 @@ final class ImportToolsTests: XCTestCase {
             "2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"
         ])
         let info = (result["_meta"] as? [String: Any])?["io.modelcontextprotocol/serverInfo"] as? [String: Any]
-        XCTAssertEqual(info?["version"] as? String, "1.1.0")
+        XCTAssertEqual(info?["version"] as? String, "1.2.0")
     }
 
     func testToolsListIncludesTitles() throws {
@@ -117,7 +117,7 @@ final class ImportToolsTests: XCTestCase {
             rpc: call("create_note", [
                 "project_id": seed.project.id.uuidString,
                 "content": "secret",
-                "thread_id": seed.auth.id.uuidString,
+                "track_id": seed.auth.id.uuidString,
                 "source": "the-model"
             ]),
             client: "Claude",
@@ -127,7 +127,7 @@ final class ImportToolsTests: XCTestCase {
         XCTAssertTrue(((forbidden["result"] as? [String: Any])?["isError"] as? Bool) ?? false)
 
         let created = ImportToolHost.handle(
-            rpc: call("create_thread", [
+            rpc: call("create_track", [
                 "project_id": seed.project.id.uuidString,
                 "title": "From Claude"
             ]),
@@ -140,7 +140,7 @@ final class ImportToolsTests: XCTestCase {
             rpc: call("create_note", [
                 "project_id": seed.project.id.uuidString,
                 "content": "Filed from the chat",
-                "thread_id": thread["id"] as? String ?? "",
+                "track_id": thread["id"] as? String ?? "",
                 "source": "the-model"
             ]),
             client: "Claude",

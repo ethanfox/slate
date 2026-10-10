@@ -351,11 +351,21 @@ final class Decision {
 
 enum DeletionTargetKind: String, Codable, CaseIterable, Identifiable, Hashable {
     case note
-    case thread
+    case thread = "track"
     case decision
     case conversation
 
     var id: String { rawValue }
+
+    init?(rawValue: String) {
+        switch rawValue {
+        case "note": self = .note
+        case "track", "thread": self = .thread
+        case "decision": self = .decision
+        case "conversation": self = .conversation
+        default: return nil
+        }
+    }
 
     var label: String {
         switch self {

@@ -14,7 +14,7 @@ TEST_RUNNER_MEMBRAE_EVAL_IDS=1,2,9 TEST_RUNNER_MEMBRAE_EVAL_REPEATS=3 TEST_RUNNE
 
 Default model is `gpt-5.5`. ChatGPT must already be connected in Membrae. The scorer tests always run and do not call a model. Scenario 9 always prints tool arguments and outputs so extra retrieval stays visible even when findings are correct.
 
-Score outcomes, not one rigid tool sequence. `get_thread` and scoped `list_tasks` can both be valid. Reading an already supplied focused-track body does not require a redundant fetch.
+Score outcomes, not one rigid tool sequence. `get_track` and scoped `list_tasks` can both be valid. Reading an already supplied focused-track body does not require a redundant fetch.
 
 ## Fixture
 

@@ -440,7 +440,7 @@ extension RunToolPolicy {
         "list_tasks", "get_task", "create_task", "update_task",
         "list_completions", "get_completion",
         "list_decisions", "get_decision", "create_decision", "update_decision",
-        "list_threads", "get_thread", "create_thread", "update_thread",
+        "list_tracks", "get_track", "create_track", "update_track",
         "list_notes", "get_note", "create_note", "update_note",
         "list_runs", "get_run",
         "list_code_references", "get_code_reference_entry"

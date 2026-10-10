@@ -228,35 +228,35 @@ Include every project, including paused and done. Status is allowed so the model
 
 Writes to paused or done projects are allowed.
 
-### 9.2 `create_thread`
+### 9.2 `create_track`
 
 Allowed arguments: `project_id`, `title` (required), `kind`, `status`, `summary`, `body`, `parent_id`.
 
 Defaults match local create: kind `topic`, status `exploring`.
 
-Returns the same thread shape as local `create_thread` (including `id`) so a later call can nest.
+Returns the same track shape as local `create_track` (including `id`) so a later call can nest.
 
-`parent_id` is accepted only if it is in the allowlist for the current key: thread ids created through this import path while this key has been live. Persist that list with the key metadata so a Membrae relaunch in the middle of a chat still allows a subtrack. Replacing or expiring the key clears the list.
+`parent_id` is accepted only if it is in the allowlist for the current key: track ids created through this import path while this key has been live. Persist that list with the key metadata so a Membrae relaunch in the middle of a chat still allows a subtrack. Replacing or expiring the key clears the list.
 
 Any other `parent_id` — including a real track the model guessed — fails with the existing-track error in §10.
 
 ### 9.3 `create_note`
 
-Allowed arguments: `project_id`, `title`, `content` (required), `thread_id`.
+Allowed arguments: `project_id`, `title`, `content` (required), `track_id`.
 
 `source` from the model is ignored. Membrae sets it (§8).
 
-`thread_id` omitted: project-level note. `thread_id` set: must be on the allowlist. Same error as a bad `parent_id` otherwise.
+`track_id` omitted: project-level note. `track_id` set: must be on the allowlist. Same error as a bad `parent_id` otherwise.
 
 Returns the local `create_note` shape.
 
 ### 9.4 `create_decision`
 
-Allowed arguments: `project_id`, `title` (required), `decision` (required), `rationale`, `thread_id`.
+Allowed arguments: `project_id`, `title` (required), `decision` (required), `rationale`, `track_id`.
 
 `supersedes_id` is rejected. The chat cannot see existing decisions, so it cannot replace one.
 
-`thread_id` follows the same allowlist as notes.
+`track_id` follows the same allowlist as notes.
 
 Returns the local `create_decision` shape.
 
@@ -264,7 +264,7 @@ Returns the local `create_decision` shape.
 
 Every create requires a `project_id` that exists. There is no default project in Settings. Do not create a project because the model guessed a name.
 
-Typical sequence: `list_projects` → `create_thread` → `create_note` / `create_decision` with that `thread_id`.
+Typical sequence: `list_projects` → `create_track` → `create_note` / `create_decision` with that `track_id`.
 
 A second import of the same conversation creates another track. No dedup.
 
@@ -281,7 +281,7 @@ Plain sentences. Do not leak Keychain, hashes, or internal paths.
 | Key past expiry | This import key is expired. |
 | Unknown tool | This tool is not available. |
 | Unknown `project_id` | That project does not exist. |
-| `parent_id` / `thread_id` not on the allowlist | Create a new track in this import, then file under it. Existing tracks are not available. |
+| `parent_id` / `track_id` not on the allowlist | Create a new track in this import, then file under it. Existing tracks are not available. |
 | `supersedes_id` sent | Import cannot replace an existing decision. Create a new one. |
 | Timeout | The import relay could not reach Membrae in time. |
 | Payload too large | That import is too large. |
@@ -292,7 +292,7 @@ Local validation errors (empty title, invalid kind) can use the same wording as 
 
 ## 11. Lifecycle walkthrough
 
-**First time.** Settings → Import → leave lifetime at 7 days → Create key. Copy URL and key. Follow Set up ChatGPT (or Claude). Leave Membrae open. In the browser chat, enable Membrae, ask it to file the work in the named project. `list_projects` returns names. `create_thread` adds a track. Notes and decisions land under it. Opening that project shows them. Import page shows Last import.
+**First time.** Settings → Import → leave lifetime at 7 days → Create key. Copy URL and key. Follow Set up ChatGPT (or Claude). Leave Membrae open. In the browser chat, enable Membrae, ask it to file the work in the named project. `list_projects` returns names. `create_track` adds a track. Notes and decisions land under it. Opening that project shows them. Import page shows Last import.
 
 **Come back tomorrow, same key.** Membrae was quit overnight. Launch Membrae. Status goes Connecting → Ready. ChatGPT still has the old key. Imports work. The key row is Hidden.
 

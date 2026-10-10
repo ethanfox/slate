@@ -57,7 +57,7 @@ final class CodeReferenceTests: XCTestCase {
         XCTAssertFalse(policy.allows("create_note"))
         XCTAssertFalse(policy.allows("list_notes"))
         XCTAssertFalse(policy.allows("create_task"))
-        XCTAssertFalse(policy.allows("update_thread"))
+        XCTAssertFalse(policy.allows("update_track"))
         XCTAssertFalse(policy.allows("project_write_file"))
         XCTAssertFalse(policy.allows("complete_task"))
 

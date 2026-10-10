@@ -351,7 +351,7 @@ struct ChatGPTProvider: ChatProvider {
         let kind: String
         if lower.contains("decision") {
             kind = "decision"
-        } else if lower.contains("thread") {
+        } else if lower.contains("thread") || lower.contains("track") {
             kind = "thread"
         } else if lower.contains("note") {
             kind = "note"

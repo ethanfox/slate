@@ -14,7 +14,7 @@ final class TrackFirstEvalTests: XCTestCase {
             seed: seed,
             container: container,
             answer: "Updated the Auth track.",
-            calls: [call("update_thread")]
+            calls: [call("update_track")]
         )
         XCTAssertEqual(score.total, 12)
         XCTAssertTrue(score.hardFailures.isEmpty)
@@ -30,7 +30,7 @@ final class TrackFirstEvalTests: XCTestCase {
             seed: seed,
             container: container,
             answer: "Rewrote Auth.",
-            calls: [call("update_thread")]
+            calls: [call("update_track")]
         )
         XCTAssertTrue(score.failed)
         XCTAssertTrue(score.hardFailures.contains { $0.contains("Lost existing Auth spec") })

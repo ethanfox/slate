@@ -97,7 +97,7 @@ Suggested body:
   "source": "membrae",
   "project_id": "…",
   "project_name": "…",
-  "thread_id": "…",
+  "track_id": "…",
   "track": {
     "title": "…",
     "kind": "feature",
@@ -118,8 +118,8 @@ Include the track snapshot in the POST. Grok Bot cannot read Membrae’s local s
 
 - `name` (required)
 - `instruction` (optional)
-- `thread_id` (optional; if set, attach that track’s snapshot)
-- `project_id` (optional; if no thread, attach project context)
+- `track_id` (optional; if set, attach that track’s snapshot)
+- `project_id` (optional; if no track, attach project context)
 
 Used by the Membrae chat agent so it can hand work off without the user leaving chat. Same POST as the track button. Same outbox row.
 
@@ -146,7 +146,7 @@ On a track: **Send to Grok Bot**. Fields: job name (default to the track title),
 
 Do not send the live SwiftData file. Send a snapshot. If the track changes after send, that is a new job.
 
-Side-chat on a track can call the same MCP tool with that `thread_id`.
+Side-chat on a track can call the same MCP tool with that `track_id`.
 
 ## What the user sees after send
 
