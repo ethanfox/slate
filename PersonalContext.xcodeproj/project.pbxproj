@@ -155,6 +155,7 @@
 		C52A9F2D94DBAB602C52778B /* CursorUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82F6A6B950DCC61E7FC6A7CA /* CursorUsage.swift */; };
 		C56C26ED6A7BBE605258380B /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68295CFD02295B5FC4CAD0AF /* AppModel.swift */; };
 		E1A2B3C4D5E6F708192A3B02 /* ChatEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3C4D5E6F708192A3B01 /* ChatEngine.swift */; };
+		E1A2B3C4D5E6F708192A3B08 /* DraftTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3C4D5E6F708192A3B07 /* DraftTrace.swift */; };
 		E1A2B3C4D5E6F708192A3B04 /* ChatEngineTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3C4D5E6F708192A3B03 /* ChatEngineTypes.swift */; };
 		E1A2B3C4D5E6F708192A3B06 /* ChatEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3C4D5E6F708192A3B05 /* ChatEngineTests.swift */; };
 		C88EEE49F71B88FD1B0A1D34 /* LinkPresentation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ABB935F4B84FA0030048EC33 /* LinkPresentation.framework */; };
@@ -247,6 +248,7 @@
 		A91E2F3A4B5C6D7E8F901001 /* AgentToolGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentToolGateway.swift; sourceTree = "<group>"; };
 		A91E2F3A4B5C6D7E8F901003 /* AgentRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntime.swift; sourceTree = "<group>"; };
 		E1A2B3C4D5E6F708192A3B01 /* ChatEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatEngine.swift; sourceTree = "<group>"; };
+		E1A2B3C4D5E6F708192A3B07 /* DraftTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftTrace.swift; sourceTree = "<group>"; };
 		E1A2B3C4D5E6F708192A3B03 /* ChatEngineTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatEngineTypes.swift; sourceTree = "<group>"; };
 		E1A2B3C4D5E6F708192A3B05 /* ChatEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatEngineTests.swift; sourceTree = "<group>"; };
 		A91E2F3A4B5C6D7E8F901005 /* AgentRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntimeTests.swift; sourceTree = "<group>"; };
@@ -503,6 +505,7 @@
 				A91E2F3A4B5C6D7E8F901003 /* AgentRuntime.swift */,
 				E1A2B3C4D5E6F708192A3B01 /* ChatEngine.swift */,
 				E1A2B3C4D5E6F708192A3B03 /* ChatEngineTypes.swift */,
+				E1A2B3C4D5E6F708192A3B07 /* DraftTrace.swift */,
 				B81A0C1D2E3F405162738A07 /* RunToolPolicy.swift */,
 				C0DE1A2B3C4D5E6F70819204 /* CodeReferenceStore.swift */,
 				C0DE1A2B3C4D5E6F70819207 /* RepositoryIndex.swift */,
@@ -1004,6 +1007,7 @@
 				A91E2F3A4B5C6D7E8F901004 /* AgentRuntime.swift in Sources */,
 				E1A2B3C4D5E6F708192A3B02 /* ChatEngine.swift in Sources */,
 				E1A2B3C4D5E6F708192A3B04 /* ChatEngineTypes.swift in Sources */,
+				E1A2B3C4D5E6F708192A3B08 /* DraftTrace.swift in Sources */,
 				B81A0C1D2E3F405162738A08 /* RunToolPolicy.swift in Sources */,
 				B81A0C1D2E3F405162738A0A /* RunGateway.swift in Sources */,
 				B81A0C1D2E3F405162738A0C /* RunCoordinator.swift in Sources */,

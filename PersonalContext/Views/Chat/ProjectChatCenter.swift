@@ -5,6 +5,7 @@ struct ProjectChatCenter: View {
     var project: Project
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
+    @State private var draft = ""
 
     var body: some View {
         if let id = app.selectedConversation,
@@ -22,10 +23,13 @@ struct ProjectChatCenter: View {
                 Spacer(minLength: 0)
                 Hairline()
                 ChatInput(
+                    text: $draft,
                     modelID: Bindable(app).talkModelID,
                     providerID: Bindable(app).talkProviderID,
                     placeholder: "Message \(project.name)",
-                    onSend: startChat
+                    onSend: startChat,
+                    draftKind: "project-new",
+                    draftObjectID: project.id.uuidString
                 )
                 .frame(maxWidth: 680)
                 .padding(.horizontal, 32)

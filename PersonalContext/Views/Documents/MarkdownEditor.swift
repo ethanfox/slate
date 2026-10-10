@@ -7,6 +7,8 @@ struct MarkdownEditor: NSViewRepresentable {
     var fontSize: CGFloat = 15
     var minHeight: CGFloat = 0
     var findField: ObjectFind.Field? = nil
+    var traceKind = "markdown"
+    var traceObjectID = ""
     @Environment(AppModel.self) private var app
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -18,11 +20,35 @@ struct MarkdownEditor: NSViewRepresentable {
         view.delegate = context.coordinator
         view.textStorage?.delegate = context.coordinator
         view.string = text
+        context.coordinator.storeGeneration = app.storeGeneration
+        DraftTrace.appear(
+            kind: traceKind,
+            object: traceObjectID,
+            runtime: "-",
+            storeGeneration: app.storeGeneration,
+            draftChars: text.count
+        )
         return view
+    }
+
+    static func dismantleNSView(_ view: MarkdownTextView, coordinator: Coordinator) {
+        DraftTrace.disappear(
+            kind: coordinator.parent.traceKind,
+            object: coordinator.parent.traceObjectID,
+            runtime: "-",
+            storeGeneration: coordinator.storeGeneration,
+            draftChars: view.string.count
+        )
     }
 
     func updateNSView(_ view: MarkdownTextView, context: Context) {
         context.coordinator.parent = self
+        if context.coordinator.storeGeneration != app.storeGeneration {
+            DraftTrace.event(
+                "storeGeneration kind=\(traceKind) object=\(traceObjectID) runtime=- old=\(String(context.coordinator.storeGeneration.uuidString.prefix(8))) new=\(String(app.storeGeneration.uuidString.prefix(8))) draftChars=\(view.string.count)"
+            )
+        }
+        context.coordinator.storeGeneration = app.storeGeneration
         view.placeholder = placeholder
         let find = app.objectFind
         let ranges = findField.flatMap { find.isOpen ? find.ranges(in: $0) : [] } ?? []
@@ -34,6 +60,15 @@ struct MarkdownEditor: NSViewRepresentable {
         view.onFindNext = { find.next() }
         view.onFindPrevious = { find.previous() }
         if view.string != text, !view.hasMarkedText() {
+            DraftTrace.change(
+                kind: traceKind,
+                object: traceObjectID,
+                runtime: "-",
+                oldChars: view.string.count,
+                newChars: text.count,
+                source: "binding",
+                storeGeneration: app.storeGeneration
+            )
             view.string = text
         } else if findChanged {
             view.applyFindHighlights(reveal: true)
@@ -53,6 +88,7 @@ struct MarkdownEditor: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate, NSTextStorageDelegate {
         var parent: MarkdownEditor
+        var storeGeneration = UUID()
 
         init(_ parent: MarkdownEditor) {
             self.parent = parent
@@ -60,6 +96,15 @@ struct MarkdownEditor: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let view = notification.object as? MarkdownTextView else { return }
+            DraftTrace.change(
+                kind: parent.traceKind,
+                object: parent.traceObjectID,
+                runtime: "-",
+                oldChars: parent.text.count,
+                newChars: view.string.count,
+                source: "editor",
+                storeGeneration: parent.app.storeGeneration
+            )
             parent.text = view.string
             view.invalidateIntrinsicContentSize()
         }

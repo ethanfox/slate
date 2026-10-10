@@ -215,6 +215,67 @@ final class ChatEngineTests: XCTestCase {
         XCTAssertEqual(runtime.lastUserText, "lost")
     }
 
+    func testDraftSurvivesReattachAndStaysIsolated() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let first = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        let second = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        container.mainContext.insert(first)
+        container.mainContext.insert(second)
+
+        let runtimeA = ChatRuntime(
+            conversation: first,
+            project: nil,
+            provider: ScriptedChatProvider(chunks: ["ok"])
+        )
+        let runtimeB = ChatRuntime(
+            conversation: second,
+            project: nil,
+            provider: ScriptedChatProvider(chunks: ["ok"])
+        )
+        runtimeA.draft = "keep A"
+        runtimeB.draft = "keep B"
+
+        runtimeA.reattach(in: container.mainContext)
+        runtimeB.reattach(in: container.mainContext)
+        runtimeA.persist()
+
+        XCTAssertEqual(runtimeA.draft, "keep A")
+        XCTAssertEqual(runtimeB.draft, "keep B")
+        XCTAssertFalse(first.messages.contains { $0.content == "keep A" })
+
+        runtimeB.draft = ""
+        XCTAssertEqual(runtimeA.draft, "keep A")
+        XCTAssertEqual(runtimeB.draft, "")
+    }
+
+    func testSendDoesNotClearThisOrAnotherDraft() async throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let first = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        let second = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        container.mainContext.insert(first)
+        container.mainContext.insert(second)
+
+        let runtimeA = ChatRuntime(
+            conversation: first,
+            project: nil,
+            provider: ScriptedChatProvider(chunks: ["ok"])
+        )
+        let runtimeB = ChatRuntime(
+            conversation: second,
+            project: nil,
+            provider: ScriptedChatProvider(chunks: ["ok"])
+        )
+        runtimeA.draft = "unsent A"
+        runtimeB.draft = "unsent B"
+
+        XCTAssertTrue(runtimeA.send("go"))
+        await waitUntilIdle(runtimeA.session)
+        XCTAssertEqual(runtimeA.draft, "unsent A")
+        XCTAssertEqual(runtimeB.draft, "unsent B")
+    }
+
     private func waitUntilIdle(_ engine: ChatEngine, file: StaticString = #filePath, line: UInt = #line) async {
         let deadline = Date().addingTimeInterval(2)
         while engine.isGenerating, Date() < deadline {

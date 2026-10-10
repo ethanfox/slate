@@ -11,6 +11,8 @@ final class ChatEngine {
     var provider: any ChatProvider
     var model: String
     var onChange: (() -> Void)?
+    var traceObjectID = ""
+    var traceRuntime = "-"
 
     private var history: [TalkMessage] = []
     private let stream = StreamWork()
@@ -80,6 +82,7 @@ final class ChatEngine {
         error = nil
         activeAssistantID = nil
         rawText = ""
+        DraftTrace.streamStart(object: traceObjectID, runtime: traceRuntime, model: model)
         noteChange()
 
         let events = provider.stream(

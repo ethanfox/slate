@@ -44,7 +44,7 @@ struct NotePage: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 8)
-            MarkdownEditor(text: $note.content, findField: .body)
+            MarkdownEditor(text: $note.content, findField: .body, traceKind: "note", traceObjectID: note.id.uuidString)
                 .padding(.top, 16)
                 .findAnchor(.body)
 

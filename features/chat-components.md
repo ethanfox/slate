@@ -12,12 +12,11 @@ It contains:
 
 - model picker
 - usage
-- draft text
 - send or stop button
 - error message
 - completed-change status
 
-It does not create, select, or persist a conversation. The caller supplies the model binding and the send and stop actions. This lets the same input start a new conversation on Home or Overview and send directly to an existing conversation elsewhere.
+It does not create, select, or persist a conversation, and it does not own the unsent draft. The caller supplies the text binding, the model binding, and the send and stop actions. This lets the same input start a new conversation on Home or Overview and send directly to an existing conversation elsewhere.
 
 `ChatInput` owns its internal appearance. The screen that places it owns only its outer width, padding, separator, and position.
 
@@ -39,7 +38,7 @@ It gets that conversation's `ChatRuntime`, then places:
 2. `ChatMessages`
 3. `ChatInput`
 
-It also connects the input to that runtime's send, stop, model, error, and change state.
+It also connects the input to that runtime's draft, send, stop, model, error, and change state.
 
 ### `ChatRuntime`
 
@@ -50,6 +49,7 @@ Every `Conversation.id` gets a separate `ChatRuntime` through `AppModel.chatRunt
 - `ChatSession`
 - history
 - selected model
+- unsent draft
 - generation and cancellation state
 - errors
 - tool bridge

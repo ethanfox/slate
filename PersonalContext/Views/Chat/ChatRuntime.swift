@@ -74,6 +74,7 @@ final class ChatRuntime {
     let bridge: CursorConversationBridge
     let session: ChatEngine
     var modelID: String
+    var draft = ""
     var answers: [UUID: ChatTranscript.Unpacked] = [:]
     @ObservationIgnored private var conversation: Conversation?
     @ObservationIgnored private var persistTask: Task<Void, Never>?
@@ -96,6 +97,8 @@ final class ChatRuntime {
         session.onChange = { [weak self] in
             self?.onTick?()
         }
+        session.traceObjectID = conversation.id.uuidString
+        session.traceRuntime = DraftTrace.runtimeID(self)
     }
 
     func attach(conversation: Conversation, project: Project?) {
@@ -216,6 +219,13 @@ final class ChatRuntime {
         bridge.debugLog.snapshot(session, label: "session before send")
         rememberAnswer()
         let sent = session.send(submission)
+        DraftTrace.send(
+            kind: "runtime",
+            object: conversationID.uuidString,
+            runtime: DraftTrace.runtimeID(self),
+            chars: submission.trimmedText.count,
+            accepted: sent
+        )
         if sent {
             bridge.beginTurn()
             persist()

@@ -117,6 +117,7 @@ private struct ConversationSessionView: View {
                 answers: runtime.answers
             )
             ChatInput(
+                text: $runtime.draft,
                 modelID: Bindable(runtime).modelID,
                 providerID: .constant(runtime.providerID),
                 allowsProviderChange: false,
@@ -127,7 +128,10 @@ private struct ConversationSessionView: View {
                 onStop: { session.cancel() },
                 onRetryStuck: retryStuck,
                 onStartRun: onStartRun,
-                debugLog: runtime.bridge.debugLog
+                debugLog: runtime.bridge.debugLog,
+                draftKind: "chat",
+                draftObjectID: runtime.conversationID.uuidString,
+                draftRuntime: DraftTrace.runtimeID(runtime)
             )
             .padding(.horizontal, compact ? 16 : 32)
             .padding(.vertical, 14)

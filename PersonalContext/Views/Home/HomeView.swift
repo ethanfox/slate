@@ -9,6 +9,7 @@ struct HomeView: View {
     @Query(sort: \Note.updatedAt, order: .reverse) private var notes: [Note]
     @Query(sort: \Decision.createdAt, order: .reverse) private var decisions: [Decision]
     @Query(sort: \ProjectThread.updatedAt, order: .reverse) private var threads: [ProjectThread]
+    @State private var draft = ""
 
     private var activeProjects: [Project] {
         projects
@@ -85,12 +86,15 @@ struct HomeView: View {
 
     private var quickAsk: some View {
         ChatInput(
+            text: $draft,
             modelID: Bindable(app).talkModelID,
             providerID: Bindable(app).talkProviderID,
             label: "Quick Ask",
             placeholder: "Ask anything, not attached to a project",
             lineLimit: 1...8,
-            onSend: submitAsk
+            onSend: submitAsk,
+            draftKind: "home",
+            draftObjectID: "home"
         )
     }
 

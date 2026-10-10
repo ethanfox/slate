@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// The shared chat controls. Callers provide conversation-specific state and actions;
-/// this view owns only the draft text and the controls' internal appearance.
+/// this view owns only the controls' internal appearance.
 struct ChatInput: View {
+    @Binding var text: String
     @Binding var modelID: String
     @Binding var providerID: String
     var allowsProviderChange = true
@@ -17,10 +18,13 @@ struct ChatInput: View {
     var onRetryStuck: (() -> Void)?
     var onStartRun: (() -> Void)?
     var debugLog: ChatDebugLog?
+    var draftKind = "composer"
+    var draftObjectID = ""
+    var draftRuntime = "-"
 
     @Environment(AppModel.self) private var app
-    @State private var text = ""
     @State private var showDebug = false
+    @State private var draftMutationSource = "editor"
 
     private var canSend: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isGenerating
@@ -103,7 +107,43 @@ struct ChatInput: View {
         .padding(12)
         .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(CraftColor.hairline))
-        .onAppear(perform: prepareProviders)
+        .onAppear {
+            prepareProviders()
+            DraftTrace.appear(
+                kind: draftKind,
+                object: draftObjectID,
+                runtime: draftRuntime,
+                storeGeneration: app.storeGeneration,
+                draftChars: text.count
+            )
+        }
+        .onDisappear {
+            DraftTrace.disappear(
+                kind: draftKind,
+                object: draftObjectID,
+                runtime: draftRuntime,
+                storeGeneration: app.storeGeneration,
+                draftChars: text.count
+            )
+        }
+        .onChange(of: text) { old, new in
+            let source = draftMutationSource
+            draftMutationSource = "editor"
+            DraftTrace.change(
+                kind: draftKind,
+                object: draftObjectID,
+                runtime: draftRuntime,
+                oldChars: old.count,
+                newChars: new.count,
+                source: source,
+                storeGeneration: app.storeGeneration
+            )
+        }
+        .onChange(of: app.storeGeneration) { old, new in
+            DraftTrace.event(
+                "storeGeneration kind=\(draftKind) object=\(draftObjectID) runtime=\(draftRuntime) old=\(String(old.uuidString.prefix(8))) new=\(String(new.uuidString.prefix(8))) draftChars=\(text.count)"
+            )
+        }
         .onChange(of: providerID) { _, _ in
             prepareProviders()
         }
@@ -160,7 +200,24 @@ struct ChatInput: View {
     private func send() {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isGenerating else { return }
-        if onSend(trimmed) {
+        let accepted = onSend(trimmed)
+        DraftTrace.send(
+            kind: draftKind,
+            object: draftObjectID,
+            runtime: draftRuntime,
+            chars: trimmed.count,
+            accepted: accepted
+        )
+        if accepted {
+            let oldChars = text.count
+            draftMutationSource = "send-clear"
+            DraftTrace.clear(
+                kind: draftKind,
+                object: draftObjectID,
+                runtime: draftRuntime,
+                oldChars: oldChars,
+                source: "send-clear"
+            )
             text = ""
         }
     }

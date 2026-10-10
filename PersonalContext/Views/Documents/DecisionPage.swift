@@ -49,11 +49,11 @@ struct DecisionPage: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 8)
-            MarkdownEditor(text: $decision.decision, placeholder: "What was decided", findField: .body)
+            MarkdownEditor(text: $decision.decision, placeholder: "What was decided", findField: .body, traceKind: "decision", traceObjectID: decision.id.uuidString)
                 .padding(.top, 16)
                 .findAnchor(.body)
             DocumentSection("Why") {
-                MarkdownEditor(text: $decision.rationale, placeholder: "The reasoning behind it", findField: .rationale)
+                MarkdownEditor(text: $decision.rationale, placeholder: "The reasoning behind it", findField: .rationale, traceKind: "decision-rationale", traceObjectID: decision.id.uuidString)
                     .findAnchor(.rationale)
             }
         }

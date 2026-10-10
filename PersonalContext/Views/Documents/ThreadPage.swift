@@ -66,7 +66,7 @@ struct ThreadPage: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 8)
 
-            MarkdownEditor(text: $thread.body, minHeight: 360, findField: .body)
+            MarkdownEditor(text: $thread.body, minHeight: 360, findField: .body, traceKind: "thread", traceObjectID: thread.id.uuidString)
                 .padding(.top, 16)
                 .findAnchor(.body)
 

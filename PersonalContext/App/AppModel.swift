@@ -373,6 +373,16 @@ final class AppModel {
                 runtime.reattach(in: reopened.mainContext)
                 runtime.persist()
             }
+            DraftTrace.storeReopen(
+                generation: storeGeneration,
+                runtimes: chatRuntimes.values.map {
+                    (
+                        object: $0.conversationID.uuidString,
+                        runtime: DraftTrace.runtimeID($0),
+                        draftChars: $0.draft.count
+                    )
+                }
+            )
             ChatTrace.event("store reopened after outside change")
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(2))

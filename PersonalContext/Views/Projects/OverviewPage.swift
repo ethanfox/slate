@@ -5,6 +5,7 @@ struct OverviewPage: View {
     @Bindable var project: Project
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
+    @State private var draft = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -12,10 +13,13 @@ struct OverviewPage: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             Hairline()
             ChatInput(
+                text: $draft,
                 modelID: Bindable(app).talkModelID,
                 providerID: Bindable(app).talkProviderID,
                 placeholder: "Message \(project.name)",
-                onSend: startChat
+                onSend: startChat,
+                draftKind: "overview",
+                draftObjectID: project.id.uuidString
             )
             .frame(maxWidth: 680)
             .padding(.horizontal, 32)
