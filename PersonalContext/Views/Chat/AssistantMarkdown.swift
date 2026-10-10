@@ -189,6 +189,7 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
 
     private func paintIncremental(_ text: String) -> Bool {
         guard pendingSources.isEmpty else { return false }
+        guard !ChatMarkdown.containsStructuredBlocks(text) else { return false }
         guard text.hasPrefix(paintedPrefix) || paintedPrefix.isEmpty else { return false }
         let start = ChatMarkdown.incompleteStart(in: text)
         let prefix = String(text[..<start])
@@ -260,7 +261,11 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         }
         layoutManager.ensureLayout(for: textContainer)
         fittedWidth = width
-        fittedHeight = ceil(max(layoutManager.usedRect(for: textContainer).height, 22))
+        fittedHeight = ChatMarkdown.layoutHeight(
+            layoutManager: layoutManager,
+            textContainer: textContainer,
+            storage: textStorage
+        )
         return fittedHeight
     }
 
@@ -518,6 +523,36 @@ enum ChatMarkdown {
             ? NSColor(white: 1, alpha: 0.06)
             : NSColor(white: 0, alpha: 0.045)
     }
+    static func containsStructuredBlocks(_ source: String) -> Bool {
+        !fenceBlocks(in: source).isEmpty || !tableBlocks(in: source).isEmpty
+    }
+
+    static func layoutHeight(
+        layoutManager: NSLayoutManager,
+        textContainer: NSTextContainer,
+        storage: NSTextStorage? = nil
+    ) -> CGFloat {
+        layoutManager.ensureLayout(for: textContainer)
+        let used = layoutManager.usedRect(for: textContainer)
+        let glyphs = layoutManager.glyphRange(for: textContainer)
+        let bounds = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+        var blockBottom: CGFloat = 0
+        if let storage, storage.length > 0 {
+            storage.enumerateAttribute(.paragraphStyle, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+                guard let style = value as? NSParagraphStyle, !style.textBlocks.isEmpty else { return }
+                let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+                layoutManager.enumerateEnclosingRects(
+                    forGlyphRange: glyphRange,
+                    withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+                    in: textContainer
+                ) { rect, _ in
+                    blockBottom = max(blockBottom, rect.maxY)
+                }
+            }
+        }
+        return ceil(max(used.maxY, bounds.maxY, blockBottom, 22))
+    }
+
     static func incompleteStart(in source: String) -> String.Index {
         var inFence = false
         var fenceStart = source.startIndex

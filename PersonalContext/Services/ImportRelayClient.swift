@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 @MainActor
@@ -24,13 +25,18 @@ final class ImportRelayController {
     @ObservationIgnored private var backoff = [1, 2, 5, 10, 15]
     @ObservationIgnored private var backoffIndex = 0
     @ObservationIgnored private var receiveLoop: Task<Void, Never>?
+    @ObservationIgnored private let approval = ImportApprovalServer()
 
     var endpoint: String {
         let override = relayOverride.trimmingCharacters(in: .whitespacesAndNewlines)
         return override.isEmpty ? ImportKeyStore.defaultRelayURL : override
     }
 
-    var mcpURL: String { endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/mcp" }
+    var mcpURL: String { trimmedEndpoint + "/mcp" }
+
+    private var trimmedEndpoint: String {
+        endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
 
     init() {
         if UserDefaults.standard.object(forKey: Keys.importEnabled) == nil {
@@ -45,17 +51,47 @@ final class ImportRelayController {
 
     func attach(_ app: AppModel) {
         self.app = app
+        approval.approve = { [weak self] query in
+            guard let self else { return .denied("Membrae is not open on the Mac.") }
+            return await self.approveOAuth(query)
+        }
         start()
     }
 
     func start() {
         refreshExpiry()
-        guard enabled, ImportKeyStore.readKey() != nil, !isExpired else {
+        if enabled {
+            approval.start()
+        } else {
+            approval.stop()
             disconnect()
             refreshStatus(socketUp: false)
             return
         }
+        guard ImportKeyStore.readKey() != nil, !isExpired else {
+            refreshStatus(socketUp: false)
+            return
+        }
         connect()
+    }
+
+    func ensureKey(days: Int = 180) {
+        refreshExpiry()
+        if ImportKeyStore.readKey() != nil { return }
+        do {
+            let created = try ImportKeyStore.createKey(days: days)
+            metadata = created.metadata
+            revealedKey = nil
+            keyError = nil
+        } catch {
+            keyError = error.localizedDescription
+        }
+    }
+
+    func prepareForImport() {
+        enabled = true
+        ensureKey()
+        retryNow()
     }
 
     func handleWake() { retryNow() }
@@ -100,6 +136,45 @@ final class ImportRelayController {
         revealedKey = nil
         metadata = ImportKeyStore.loadMetadata()
         status = .noKey
+        if enabled { approval.start() }
+    }
+
+    func approveOAuth(_ query: [String: String]) async -> ApprovalOutcome {
+        guard let request = ImportOAuthRequest.parse(query: query) else {
+            return .denied("That approval request is invalid.")
+        }
+        if !enabled {
+            return .denied("Turn on import in Settings → Import and try again.")
+        }
+        ensureKey()
+        guard let key = ImportKeyStore.readKey() else {
+            return .denied(keyError ?? "Membrae could not create an import key.")
+        }
+        if socket == nil { connect() }
+        for _ in 0..<40 {
+            if status == .ready { break }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        guard let consent = URL(string: trimmedEndpoint + "/oauth/consent") else {
+            return .denied("Can’t reach the import relay")
+        }
+        var http = URLRequest(url: consent)
+        http.httpMethod = "POST"
+        http.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        http.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        http.httpBody = try? JSONSerialization.data(withJSONObject: request.consentBody)
+        do {
+            let (data, response) = try await URLSession.shared.data(for: http)
+            guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode),
+                  let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let ticket = body["ticket"] as? String, !ticket.isEmpty,
+                  let complete = request.completeURL(ticket: ticket) else {
+                return .denied("Membrae could not approve this chat.")
+            }
+            return .redirect(complete)
+        } catch {
+            return .denied("Can’t reach the import relay")
+        }
     }
 
     private var isExpired: Bool {
@@ -188,8 +263,14 @@ final class ImportRelayController {
         case .data(let data): text = String(decoding: data, as: UTF8.self)
         @unknown default: return
         }
-        guard let object = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any],
-              object["type"] as? String == "request",
+        guard let object = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] else { return }
+        if object["type"] as? String == "ready" {
+            status = .ready
+            backoffIndex = 0
+            metadata?.lastOfflineError = nil
+            return
+        }
+        guard object["type"] as? String == "request",
               let requestId = object["requestId"] as? String,
               let rpc = object["rpc"] as? [String: Any],
               let app else { return }
@@ -240,6 +321,7 @@ final class ImportRelayController {
         socket = nil
         session?.invalidateAndCancel()
         session = nil
+        if !enabled { approval.stop() }
         if !keepStatus { refreshStatus(socketUp: false) }
     }
 

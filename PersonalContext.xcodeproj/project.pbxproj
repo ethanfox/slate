@@ -213,6 +213,7 @@
 		F11E5704B0000032 /* ImportToolHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000032 /* ImportToolHost.swift */; };
 		F11E5704B0000033 /* SettingsImportPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000033 /* SettingsImportPage.swift */; };
 		F11E5704B0000034 /* ImportToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000034 /* ImportToolsTests.swift */; };
+		F11E5704B0000035 /* ImportApprovalServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000035 /* ImportApprovalServer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -440,6 +441,7 @@
 		F11E5704A0000032 /* ImportToolHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportToolHost.swift; sourceTree = "<group>"; };
 		F11E5704A0000033 /* SettingsImportPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsImportPage.swift; sourceTree = "<group>"; };
 		F11E5704A0000034 /* ImportToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportToolsTests.swift; sourceTree = "<group>"; };
+		F11E5704A0000035 /* ImportApprovalServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportApprovalServer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -587,6 +589,7 @@
 				718061204D90BCFCD66D501C /* KeychainStore.swift */,
 				F11E5704A0000030 /* ImportKeyStore.swift */,
 				F11E5704A0000031 /* ImportRelayClient.swift */,
+				F11E5704A0000035 /* ImportApprovalServer.swift */,
 				F11E5704A0000032 /* ImportToolHost.swift */,
 				F93C81A0E693EB3D6CE616F2 /* LoopbackAuth.swift */,
 				F11E5704A0000020 /* GitHistory.swift */,
@@ -1057,6 +1060,7 @@
 				6271F4DD4DF1EF931FFE51BD /* KeychainStore.swift in Sources */,
 				F11E5704B0000030 /* ImportKeyStore.swift in Sources */,
 				F11E5704B0000031 /* ImportRelayClient.swift in Sources */,
+				F11E5704B0000035 /* ImportApprovalServer.swift in Sources */,
 				F11E5704B0000032 /* ImportToolHost.swift in Sources */,
 				8EF3176206A8C89215961D73 /* LiquidOrb.swift in Sources */,
 				166DC65EE5FB938E78BAB773 /* LiquidOrbMetalA.swift in Sources */,

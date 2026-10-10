@@ -127,4 +127,29 @@ final class MarkdownTableTests: XCTestCase {
         let font = storage.attribute(.font, at: inner.location, effectiveRange: nil) as? NSFont
         XCTAssertFalse(font?.fontDescriptor.symbolicTraits.contains(.bold) == true)
     }
+
+    func testStructuredBlocksSkipIncrementalPaint() {
+        XCTAssertTrue(ChatMarkdown.containsStructuredBlocks("```\nlet x = 1\n```"))
+        XCTAssertTrue(ChatMarkdown.containsStructuredBlocks("| Field | Rule |\n| --- | --- |\n| Brief | Required. |"))
+        XCTAssertFalse(ChatMarkdown.containsStructuredBlocks("Just a sentence with a | pipe."))
+    }
+
+    func testFenceAndTableNeedMoreThanOneLineOfHeight() {
+        let line = measure(ChatMarkdown.attributed("Hello"))
+        let fence = measure(ChatMarkdown.attributed("```\nline one\nline two\nline three\n```"))
+        let table = measure(ChatMarkdown.attributed("| Field | Rule |\n| --- | --- |\n| Brief | Required. |"))
+        XCTAssertGreaterThan(fence, line + 20)
+        XCTAssertGreaterThan(table, line + 20)
+    }
+
+    private func measure(_ attributed: NSAttributedString) -> CGFloat {
+        let storage = NSTextStorage(attributedString: attributed)
+        let layout = NSLayoutManager()
+        storage.addLayoutManager(layout)
+        let container = NSTextContainer(size: NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        container.widthTracksTextView = false
+        layout.addTextContainer(container)
+        return ChatMarkdown.layoutHeight(layoutManager: layout, textContainer: container, storage: storage)
+    }
 }

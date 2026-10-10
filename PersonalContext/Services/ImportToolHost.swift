@@ -2,11 +2,11 @@ import Foundation
 import SwiftData
 
 enum ImportToolHost {
-    static let allowed = ["list_projects", "create_thread", "create_note", "create_decision"]
+    static let allowed = ["list_projects", "create_project", "create_thread", "create_note", "create_decision"]
 
     static let instructions = """
-    Membrae import is one-way. Pick a project by name from list_projects, create a new track \
-    for this conversation, then add notes and decisions under that track. Do not invent a \
+    Membrae import is one-way. Use list_projects or create_project, then create a new track \
+    for this conversation and add notes and decisions under that track. Do not invent a \
     project id. Existing tracks, notes, and decisions are not available.
     """
 
@@ -22,16 +22,29 @@ enum ImportToolHost {
         switch method {
         case "initialize":
             let requested = params["protocolVersion"] as? String ?? ""
+            let versions = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
             return result(id, [
-                "protocolVersion": ["2025-06-18", "2025-03-26", "2024-11-05"].contains(requested) ? requested : "2025-06-18",
+                "protocolVersion": versions.contains(requested) ? requested : "2025-06-18",
                 "capabilities": ["tools": ["listChanged": false]],
-                "serverInfo": ["name": "membrae-import", "version": "1.0"],
+                "serverInfo": ["name": "membrae-import", "version": "1.1.0"],
                 "instructions": instructions
+            ])
+        case "server/discover":
+            return result(id, [
+                "resultType": "complete",
+                "supportedVersions": ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"],
+                "capabilities": ["tools": ["listChanged": false]],
+                "instructions": instructions,
+                "_meta": ["io.modelcontextprotocol/serverInfo": ["name": "membrae-import", "version": "1.1.0"]]
             ])
         case "ping", "initialized", "notifications/initialized":
             return result(id, [:] as [String: Any])
         case "tools/list":
             return result(id, ["tools": definitions])
+        case "resources/list":
+            return result(id, ["resources": [] as [Any]])
+        case "prompts/list":
+            return result(id, ["prompts": [] as [Any]])
         case "tools/call":
             let name = params["name"] as? String ?? ""
             let arguments = params["arguments"] as? [String: Any] ?? [:]
@@ -103,6 +116,16 @@ enum ImportToolHost {
             return try context.fetch(FetchDescriptor<Project>())
                 .sorted { $0.lastActivity > $1.lastActivity }
                 .map { ["id": $0.id.uuidString, "name": $0.name, "summary": $0.summary] }
+        case "create_project":
+            let project = Project(
+                name: try args.required("name"),
+                symbol: args.string("symbol") ?? "folder",
+                summary: args.string("summary") ?? ""
+            )
+            project.currentDirection = args.string("current_direction") ?? ""
+            context.insert(project)
+            ImportKeyStore.recordImport(.init(kind: "Project", title: project.name, projectName: project.name, at: .now), in: &metadata)
+            return ["id": project.id.uuidString, "name": project.name, "summary": project.summary]
         case "create_thread":
             let project = try project(args.uuid("project_id"), in: context)
             let parent = try allowedThread(args.optionalUUID("parent_id"), project: project, metadata: metadata)
@@ -172,9 +195,15 @@ enum ImportToolHost {
 
     private static var definitions: [[String: Any]] {
         [
-            tool("list_projects", "List every project. Each item is id, name, and summary only. Pick a project by name, then create a new track for this import. Do not invent a project id.", [:], [], true),
-            tool("create_thread", "Start a new track in this import.", [
-                "project_id": text("Project id from list_projects."),
+            tool("list_projects", "List projects", "List every project. Each item is id, name, and summary only. Pick a project by name, or create_project. Do not invent a project id.", [:], [], true),
+            tool("create_project", "Create project", "Create a project, then file a new track and notes under it.", [
+                "name": text("Project name."),
+                "summary": text("What the project is."),
+                "current_direction": text("Where the project is heading right now."),
+                "symbol": text("SF Symbol name for the icon. Defaults to folder.")
+            ], ["name"], false),
+            tool("create_thread", "Create track", "Start a new track in this import.", [
+                "project_id": text("Project id from list_projects or create_project."),
                 "title": text("Thread title."),
                 "kind": enumText(ThreadKind.self, "Kind of thread. Defaults to topic."),
                 "status": enumText(ThreadStatus.self, "Defaults to exploring."),
@@ -182,14 +211,14 @@ enum ImportToolHost {
                 "body": text("Markdown spec."),
                 "parent_id": text("Parent track id created in this import.")
             ], ["project_id", "title"], false),
-            tool("create_note", "Add a note. source is ignored; Membrae sets it.", [
-                "project_id": text("Project id from list_projects."),
+            tool("create_note", "Create note", "Add a note. source is ignored; Membrae sets it.", [
+                "project_id": text("Project id from list_projects or create_project."),
                 "title": text("Note title."),
                 "content": text("Markdown content."),
                 "thread_id": text("Track id created in this import. Omit for a project-level note.")
             ], ["project_id", "content"], false),
-            tool("create_decision", "Record a new decision. Cannot replace an existing one.", [
-                "project_id": text("Project id from list_projects."),
+            tool("create_decision", "Create decision", "Record a new decision. Cannot replace an existing one.", [
+                "project_id": text("Project id from list_projects or create_project."),
                 "title": text("Short name for the decision."),
                 "decision": text("What was decided."),
                 "rationale": text("Why."),
@@ -198,9 +227,10 @@ enum ImportToolHost {
         ]
     }
 
-    private static func tool(_ name: String, _ description: String, _ properties: [String: Any], _ required: [String], _ readOnly: Bool) -> [String: Any] {
+    private static func tool(_ name: String, _ title: String, _ description: String, _ properties: [String: Any], _ required: [String], _ readOnly: Bool) -> [String: Any] {
         [
             "name": name,
+            "title": title,
             "description": description,
             "inputSchema": [
                 "type": "object",
@@ -208,7 +238,7 @@ enum ImportToolHost {
                 "required": required,
                 "additionalProperties": false
             ],
-            "annotations": ["readOnlyHint": readOnly, "destructiveHint": false]
+            "annotations": ["readOnlyHint": readOnly, "destructiveHint": false, "openWorldHint": false]
         ]
     }
 

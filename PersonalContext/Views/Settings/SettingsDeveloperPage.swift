@@ -3,13 +3,99 @@ import SwiftUI
 
 struct SettingsDeveloperPage: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.modalHost) private var modalHost
     @Query(sort: \Project.name) private var projects: [Project]
     @State private var previewProjectID: UUID?
+    @State private var lifetimeDays = 7
+    @State private var customDays = "7"
+    @State private var copiedKey = false
 
     var body: some View {
         @Bindable var app = app
         @Bindable var relay = app.importRelay
         SettingsPage {
+            SettingsGroup("Import key") {
+                SettingsRow {
+                    Text("Manual key for Gemini CLI and other clients that send a header. ChatGPT and Claude use Settings → Import.")
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if hasLiveKey {
+                    Hairline().padding(.horizontal, 16)
+                    SettingsRow {
+                        Text("Key")
+                        Spacer(minLength: 16)
+                        if let key = relay.revealedKey {
+                            Text(key)
+                                .font(.system(size: 12, design: .monospaced))
+                                .textSelection(.enabled)
+                                .lineLimit(2)
+                            Button(copiedKey ? "Copied" : "Copy") {
+                                CraftClipboard.copy(key)
+                                copiedKey = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                    copiedKey = false
+                                }
+                            }
+                        } else {
+                            Text("Hidden · last four \(relay.metadata?.lastFour ?? "————")")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Hairline().padding(.horizontal, 16)
+                    SettingsRow {
+                        Button("New key…") { app.present(.replaceImportKey, in: modalHost) }
+                        Spacer(minLength: 16)
+                        Button("Expire") { relay.revokeKey() }
+                    }
+                } else {
+                    Hairline().padding(.horizontal, 16)
+                    SettingsRow {
+                        Text("Lifetime")
+                        Spacer(minLength: 16)
+                        Picker("Lifetime", selection: $lifetimeDays) {
+                            ForEach(ImportLifetime.presets, id: \.self) { days in
+                                Text(days == 1 ? "1 day" : "\(days) days").tag(days)
+                            }
+                            Text("Custom").tag(-1)
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                        if lifetimeDays == -1 {
+                            TextField("Days", text: $customDays)
+                                .frame(width: 48)
+                        }
+                    }
+                    Hairline().padding(.horizontal, 16)
+                    SettingsRow {
+                        Button("Create key") {
+                            let days = lifetimeDays == -1 ? ImportLifetime.clamped(Int(customDays) ?? 7) : lifetimeDays
+                            relay.createKey(days: days)
+                        }
+                        Spacer()
+                    }
+                    if let error = relay.keyError {
+                        Text(error)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
+                    }
+                }
+            }
+
+            SettingsGroup("Gemini CLI") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("1. Install Gemini CLI.")
+                    Text("2. Add \(relay.mcpURL) and an Authorization header to ~/.gemini/settings.json.")
+                    Text("3. Use the key on this page. Gemini in the browser is not set up here.")
+                }
+                .font(CraftFont.body)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(16)
+            }
+
             SettingsGroup("Developer") {
                 SettingsRow {
                     Text("Show Cursor agent IDs")
@@ -61,5 +147,10 @@ struct SettingsDeveloperPage: View {
                 previewProjectID = projects.first?.id
             }
         }
+        .onDisappear { app.importRelay.hideKey() }
+    }
+
+    private var hasLiveKey: Bool {
+        ImportKeyStore.readKey() != nil && app.importRelay.metadata?.expiresAt ?? .distantPast > .now
     }
 }

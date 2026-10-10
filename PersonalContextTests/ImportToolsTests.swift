@@ -10,6 +10,56 @@ final class ImportToolsTests: XCTestCase {
         container = try ModelContainer(for: Store.schema, configurations: ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true))
     }
 
+    func testInitializeAdvertisesPluginVersion() throws {
+        var metadata = emptyMetadata()
+        let response = ImportToolHost.handle(
+            rpc: ["jsonrpc": "2.0", "id": 1, "method": "initialize", "params": ["protocolVersion": "2025-06-18"]],
+            client: "ChatGPT",
+            container: container,
+            metadata: &metadata
+        )
+        let info = (response["result"] as? [String: Any])?["serverInfo"] as? [String: Any]
+        XCTAssertEqual(info?["name"] as? String, "membrae-import")
+        XCTAssertEqual(info?["version"] as? String, "1.1.0")
+    }
+
+    func testServerDiscoverAdvertisesChatGPTVersion() throws {
+        var metadata = emptyMetadata()
+        let response = ImportToolHost.handle(
+            rpc: [
+                "jsonrpc": "2.0",
+                "id": "openai-mcp-discover",
+                "method": "server/discover",
+                "params": ["_meta": ["io.modelcontextprotocol/protocolVersion": "2026-07-28"]]
+            ],
+            client: "ChatGPT",
+            container: container,
+            metadata: &metadata
+        )
+        let result = try XCTUnwrap(response["result"] as? [String: Any])
+        XCTAssertEqual(result["resultType"] as? String, "complete")
+        XCTAssertEqual(result["supportedVersions"] as? [String], [
+            "2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"
+        ])
+        let info = (result["_meta"] as? [String: Any])?["io.modelcontextprotocol/serverInfo"] as? [String: Any]
+        XCTAssertEqual(info?["version"] as? String, "1.1.0")
+    }
+
+    func testToolsListIncludesTitles() throws {
+        var metadata = emptyMetadata()
+        let response = ImportToolHost.handle(
+            rpc: ["jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": [:]],
+            client: "ChatGPT",
+            container: container,
+            metadata: &metadata
+        )
+        let tools = try XCTUnwrap((response["result"] as? [String: Any])?["tools"] as? [[String: Any]])
+        XCTAssertEqual(tools.map { $0["name"] as? String }, ImportToolHost.allowed)
+        XCTAssertEqual(tools.compactMap { $0["title"] as? String }, [
+            "List projects", "Create project", "Create track", "Create note", "Create decision"
+        ])
+    }
+
     func testListProjectsReturnsIdentityOnly() throws {
         let seed = HarborEvalFixture.seed(in: container.mainContext)
         try container.mainContext.save()
@@ -27,6 +77,25 @@ final class ImportToolsTests: XCTestCase {
         XCTAssertNil(projects.first?["current_direction"])
         XCTAssertNil(projects.first?["counts"])
         XCTAssertNil(projects.first?["status"])
+    }
+
+    func testCreateProjectThenNote() throws {
+        var metadata = emptyMetadata()
+        let created = try object(ImportToolHost.handle(
+            rpc: call("create_project", ["name": "From ChatGPT", "summary": "Imported"]),
+            client: "ChatGPT",
+            container: container,
+            metadata: &metadata
+        ))
+        XCTAssertEqual(created["name"] as? String, "From ChatGPT")
+        let projectID = try XCTUnwrap(created["id"] as? String)
+        let note = try object(ImportToolHost.handle(
+            rpc: call("create_note", ["project_id": projectID, "content": "First note"]),
+            client: "ChatGPT",
+            container: container,
+            metadata: &metadata
+        ))
+        XCTAssertEqual(note["project_id"] as? String, projectID)
     }
 
     func testForbiddenToolIsRejected() throws {
@@ -94,6 +163,23 @@ final class ImportToolsTests: XCTestCase {
         _ = ImportToolHost.handle(rpc: call("create_note", arguments), client: "Imported", container: container, metadata: &metadata)
         let notes = try container.mainContext.fetch(FetchDescriptor<Note>()).filter { $0.content == "Same payload" }
         XCTAssertEqual(notes.count, 1)
+    }
+
+    func testOAuthApprovalBuildsCompleteURL() {
+        let request = ImportOAuthRequest.parse(query: [
+            "client_id": "dcr_ab",
+            "redirect_uri": "https://chatgpt.com/connector_platform_oauth_redirect",
+            "code_challenge": "challenge",
+            "state": "abc",
+            "resource": "https://mcp.membrae.com/mcp",
+            "complete": "https://mcp.membrae.com/oauth/complete"
+        ])
+        XCTAssertEqual(request?.clientID, "dcr_ab")
+        XCTAssertEqual(
+            request?.completeURL(ticket: "tkt_1")?.absoluteString,
+            "https://mcp.membrae.com/oauth/complete?ticket=tkt_1"
+        )
+        XCTAssertNil(ImportOAuthRequest.parse(query: ["client_id": "x"]))
     }
 
     func testSupersedesIsRejected() throws {
