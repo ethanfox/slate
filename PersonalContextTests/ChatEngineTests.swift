@@ -13,30 +13,15 @@ final class ChatEngineTests: XCTestCase {
         XCTAssertFalse(engine.isGenerating)
     }
 
-    func testAttachmentSubmissionIsRejectedExplicitly() {
-        let engine = ChatEngine(provider: ScriptedChatProvider(chunks: ["ok"]), model: "m")
-        let sent = engine.send(
-            ChatSubmission(
-                text: "see this",
-                attachments: [
-                    ChatAttachmentRef(id: UUID(), kind: .image, filename: "shot.png", mimeType: "image/png")
-                ]
-            )
-        )
-        XCTAssertFalse(sent)
-        XCTAssertTrue(engine.entries.isEmpty)
-        XCTAssertEqual(engine.error as? ChatEngineError, .attachmentsNotImplemented)
-    }
-
-    func testAttachmentOnlyIsValidShapeButRejectedThisPhase() {
-        let engine = ChatEngine(provider: ScriptedChatProvider(chunks: ["ok"]), model: "m")
-        let submission = ChatSubmission(
-            text: "",
-            attachments: [ChatAttachmentRef(id: UUID(), kind: .file, filename: "a.pdf", mimeType: "application/pdf")]
-        )
+    func testAttachmentOnlySubmissionIsAcceptedByTheEngine() async {
+        let engine = ChatEngine(provider: ScriptedChatProvider(chunks: ["saw it"]), model: "m")
+        let attachment = ChatAttachmentRef(id: UUID(), kind: .image, filename: "shot.png", mimeType: "image/png")
+        let submission = ChatSubmission(text: "", attachments: [attachment])
         XCTAssertTrue(submission.hasContent)
-        XCTAssertFalse(engine.send(submission))
-        XCTAssertEqual(engine.error as? ChatEngineError, .attachmentsNotImplemented)
+        XCTAssertTrue(engine.send(submission))
+        await waitUntilIdle(engine)
+        XCTAssertEqual(engine.providerHistory.first?.attachments, [attachment])
+        XCTAssertEqual(assistantTexts(in: engine), ["saw it"])
     }
 
     func testTextTurnStreamsAndCompletesInOrder() async {

@@ -15,6 +15,8 @@ enum Store {
         Decision.self,
         Conversation.self,
         ChatMessage.self,
+        StoredAsset.self,
+        AssetReference.self,
         Tag.self,
         AgendaItem.self,
         AgendaTrackLink.self,
@@ -61,6 +63,7 @@ enum Store {
         context.autosaveEnabled = false
         legacyBackfillIndexingMetadata(in: context)
         try backfillCodeReferenceOwnership(in: context)
+        try? FileStore.default(context: context).cleanup()
         return container
     }
 

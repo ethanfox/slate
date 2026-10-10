@@ -55,6 +55,7 @@ struct ConversationChat: View {
         let project = hostProject
         if app.selectedConversation == conversation.id { app.selectedConversation = nil }
         DeletionMarks.remove(targetingIDs: [conversation.id], in: context)
+        try? FileStore.default(context: context).releaseConversation(conversation)
         context.delete(conversation)
         project?.touch()
         try? context.save()
@@ -116,6 +117,7 @@ private struct ConversationSessionView: View {
                 workedSeconds: runtime.bridge.workedSeconds,
                 answers: runtime.answers
             )
+            Hairline()
             ChatInput(
                 text: $runtime.draft,
                 modelID: Bindable(runtime).modelID,
@@ -125,6 +127,9 @@ private struct ConversationSessionView: View {
                 changes: runtime.bridge.changes,
                 errorMessage: session.error?.localizedDescription,
                 onSend: send,
+                composerOwnerID: runtime.conversationID,
+                composerOwnerKind: .chatDraft,
+                attachments: Bindable(runtime).draftAttachments,
                 onStop: { session.cancel() },
                 onRetryStuck: retryStuck,
                 onStartRun: onStartRun,
@@ -148,13 +153,16 @@ private struct ConversationSessionView: View {
         .onChange(of: runtime.modelID) { _, _ in runtime.applyModel() }
         .onChange(of: session.isGenerating) { _, generating in
             runtime.bridge.debugLog.snapshot(session, label: "generating=\(generating) entries=\(session.entries.count)")
-            if !generating { runtime.rememberAnswer() }
+            if !generating {
+                runtime.rememberAnswer()
+                runtime.restoreFailedDraft()
+            }
         }
     }
 
-    private func send(_ text: String) -> Bool {
-        ChatTrace.event("composer send chars=\(text.count) generating=\(session.isGenerating)")
-        let sent = runtime.send(text)
+    private func send(_ submission: ChatSubmission) -> Bool {
+        ChatTrace.event("composer send chars=\(submission.trimmedText.count) files=\(submission.attachments.count) generating=\(session.isGenerating)")
+        let sent = runtime.send(submission)
         ChatTrace.event("composer session.send=\(sent)")
         return sent
     }
@@ -162,6 +170,6 @@ private struct ConversationSessionView: View {
     private func retryStuck() {
         ChatTrace.event("composer retry stuck run")
         guard let text = runtime.lastUserText, !text.isEmpty else { return }
-        _ = send(text)
+        _ = send(ChatSubmission(text: text))
     }
 }

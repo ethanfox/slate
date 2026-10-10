@@ -295,6 +295,7 @@ private func sameEntry(_ left: ChatEntry, _ right: ChatEntry) -> Bool {
     case (.userMessage(let left), .userMessage(let right)):
         left.id == right.id
             && left.text == right.text
+            && left.attachments == right.attachments
             && left.isCancelled == right.isCancelled
             && left.isFailed == right.isFailed
     case (.aiMessage(let left), .aiMessage(let right)):
@@ -484,19 +485,23 @@ private struct UserMessageBubble: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 8) {
-            Text(message.text)
-                .font(CraftFont.chatBody)
-                .lineSpacing(7)
-                .textSelection(.enabled)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(CraftColor.hairline)
-                )
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: layout.userMaxWidth, alignment: .trailing)
+            if !message.text.isEmpty {
+                Text(message.text)
+                    .font(CraftFont.chatBody)
+                    .lineSpacing(7)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(CraftColor.hairline)
+                    )
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: layout.userMaxWidth, alignment: .trailing)
+                    .opacity(message.isCancelled || message.isFailed ? 0.55 : 1)
+            }
+            HistoryAttachmentStrip(attachments: message.attachments)
                 .opacity(message.isCancelled || message.isFailed ? 0.55 : 1)
             if message.isCancelled || message.isFailed {
                 Text(message.isCancelled ? "Cancelled" : "Not answered")

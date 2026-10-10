@@ -170,6 +170,7 @@ enum ProjectSort: String, CaseIterable, Identifiable, Hashable {
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     case chatgpt
     case cursor
+    case compatible
     case sources
     case calendar
     case tags
@@ -184,6 +185,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .chatgpt: "ChatGPT"
         case .cursor: "Cursor"
+        case .compatible: "Compatible endpoint"
         case .sources: "Sources"
         case .calendar: "Calendar"
         case .tags: "Tags"
@@ -198,6 +200,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .chatgpt: "bubble.left"
         case .cursor: "sparkle"
+        case .compatible: "link.circle"
         case .sources: "link"
         case .calendar: "calendar"
         case .tags: "tag"
@@ -221,6 +224,7 @@ enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
     case unconfigured
     case chatgpt
     case cursor
+    case compatible
 
     var id: String { rawValue }
 
@@ -229,6 +233,7 @@ enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
         case .unconfigured: "Choose provider"
         case .chatgpt: "ChatGPT"
         case .cursor: "Cursor"
+        case .compatible: "Compatible endpoint"
         }
     }
 
@@ -237,6 +242,7 @@ enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
         case .unconfigured: nil
         case .chatgpt: .chatgpt
         case .cursor: .cursor
+        case .compatible: nil
         }
     }
 }

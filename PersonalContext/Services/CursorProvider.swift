@@ -20,6 +20,12 @@ struct RunnerRequest: Encodable, Sendable {
     var cloudRepos: [RunnerCloudRepo]
     var codeSnapshots: [RunnerCodeSnapshot] = []
     var readProvenancePath: String = ""
+    var images: [RunnerImage] = []
+}
+
+struct RunnerImage: Encodable, Sendable {
+    var data: String
+    var mimeType: String
 }
 
 struct RunnerCodeSnapshot: Encodable, Sendable {
@@ -811,7 +817,13 @@ struct CursorChatProvider: ChatProvider {
         model: String,
         options: ChatTurnOptions
     ) -> AsyncThrowingStream<ChatStreamEvent, Error> {
-        let userText = messages.last(where: { $0.role == .user })?.text ?? ""
+        let extracted = AttachmentPrep.labelledExtraction(in: options.attachments)
+        let rawUser = messages.last(where: { $0.role == .user })?.text ?? ""
+        let userText = [rawUser, extracted].filter { !$0.isEmpty }.joined(separator: "\n\n")
+        let images = options.attachments.compactMap { item -> RunnerImage? in
+            guard case .nativeImage = item.route else { return nil }
+            return RunnerImage(data: item.data.base64EncodedString(), mimeType: item.ref.mimeType)
+        }
         let bridge = bridge
 
         ChatTrace.event("provider.stream model=\(model) messages=\(messages.count) userChars=\(userText.count)")
@@ -852,8 +864,8 @@ struct CursorChatProvider: ChatProvider {
                             ? ProjectCodeWorkspace.localRoots(for: bridge.project)
                             : []
                         bridge.keepAccess(to: roots)
-                        let request = try bridge.prepare(
-                            userText: userText,
+                        var request = try bridge.prepare(
+                            userText: userText.isEmpty ? " " : userText,
                             apiKey: apiKey,
                             model: model,
                             codeRoots: roots,
@@ -862,7 +874,8 @@ struct CursorChatProvider: ChatProvider {
                             resumeSession: resumeConversation,
                             runtime: runtime
                         )
-                        bridge.debugLog.add("prepare opening=\(request.agentId == nil) model=\(request.model) promptChars=\(request.text.count)")
+                        request.images = images
+                        bridge.debugLog.add("prepare opening=\(request.agentId == nil) model=\(request.model) promptChars=\(request.text.count) images=\(images.count)")
                         return request
                     }
                     pace.markPrepared()

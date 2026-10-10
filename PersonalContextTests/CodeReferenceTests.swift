@@ -481,6 +481,20 @@ final class CodeReferenceTests: XCTestCase {
         XCTAssertTrue(log.contains("fixture"), log)
     }
 
+    func testGitHistorySurfacesRepositoryOpenFailure() {
+        let root = ProjectCodeRoot(title: "plain", locator: fixtureRoot.path, path: fixtureRoot.path)
+        XCTAssertThrowsError(try ProjectCodeWorkspace.gitHistory(for: [root], requested: nil)) { error in
+            let text = error.localizedDescription
+            XCTAssertTrue(text.contains(fixtureRoot.path), text)
+            XCTAssertTrue(
+                text.contains("Could not open git repository") || text.contains("No git repository"),
+                text
+            )
+            XCTAssertFalse(text.contains("xcrun"), text)
+            XCTAssertFalse(text.contains("Git history is unavailable"), text)
+        }
+    }
+
     func testNeverIndexedAttachmentIsDiagnosable() throws {
         let (project, attachment) = seedProject()
         let listed = CodeReferenceStore.summaries(project: project, attachmentID: nil, in: context)

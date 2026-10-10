@@ -31,26 +31,29 @@ final class ChatEngine {
         send(ChatSubmission(text: text))
     }
 
-    /// Accepts structured submissions. Attachment-only is valid at this boundary;
-    /// this phase rejects any attachment explicitly instead of stripping it.
     @discardableResult
-    func send(_ submission: ChatSubmission) -> Bool {
+    func send(_ submission: ChatSubmission, options: ChatTurnOptions = ChatTurnOptions()) -> Bool {
         guard !isGenerating else { return false }
         guard submission.hasContent else { return false }
-        guard submission.attachments.isEmpty else {
-            error = ChatEngineError.attachmentsNotImplemented
-            noteChange()
-            return false
-        }
 
         let text = submission.trimmedText
         error = nil
         let userID = UUID()
-        entries.append(.userMessage(.init(id: userID, text: text)))
-        history.append(TalkMessage(id: userID, role: .user, text: text))
+        var content: [TalkContent] = []
+        if !text.isEmpty {
+            content.append(.text(text))
+        }
+        content.append(contentsOf: submission.attachments.map { .attachment($0) })
+        entries.append(.userMessage(.init(id: userID, text: text, attachments: submission.attachments)))
+        history.append(TalkMessage(id: userID, role: .user, content: content))
         noteChange()
-        startGeneration()
+        startGeneration(options: options)
         return true
+    }
+
+    func failValidation(_ error: Error) {
+        self.error = error
+        noteChange()
     }
 
     func cancel() {
@@ -74,7 +77,7 @@ final class ChatEngine {
 
     var providerHistory: [TalkMessage] { history }
 
-    private func startGeneration() {
+    private func startGeneration(options: ChatTurnOptions) {
         stream.cancel()
         generationID += 1
         let myGeneration = generationID
@@ -88,7 +91,7 @@ final class ChatEngine {
         let events = provider.stream(
             messages: history,
             model: model,
-            options: ChatTurnOptions()
+            options: options
         )
         stream.task = Task { [weak self] in
             do {

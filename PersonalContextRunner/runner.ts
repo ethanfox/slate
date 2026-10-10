@@ -38,6 +38,7 @@ type Request = {
     commitsURL?: string;
   }[];
   readProvenancePath?: string;
+  images?: { data: string; mimeType: string }[];
 };
 
 type Source = { id?: string; title: string; url?: string; kind: string; pin?: boolean };
@@ -97,16 +98,30 @@ async function expireActiveRuns(agentId: string, cwd: string) {
   }
 }
 
+function sendPayload(request: Request) {
+  if (request.images && request.images.length > 0) {
+    return {
+      text: request.text || " ",
+      images: request.images.map((image) => ({
+        data: image.data,
+        mimeType: image.mimeType,
+      })),
+    };
+  }
+  return request.text;
+}
+
 async function startRun(agent: SDKAgent, request: Request): Promise<Run> {
-  if (request.runtime === "cloud") return await agent.send(request.text);
+  const payload = sendPayload(request);
+  if (request.runtime === "cloud") return await agent.send(payload);
   const options = { local: { force: true } };
   try {
-    return await agent.send(request.text, options);
+    return await agent.send(payload, options);
   } catch (error) {
     if (!isBusy(error)) throw error;
     log("busy", { agentId: agent.agentId, error: describe(error) });
     await expireActiveRuns(agent.agentId, request.cwd);
-    return await agent.send(request.text, options);
+    return await agent.send(payload, options);
   }
 }
 
@@ -369,6 +384,14 @@ function toolText(value: unknown): SDKCustomToolResult {
   return { content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }] } as SDKCustomToolResult;
 }
 
+function gitLogFailure(root: Request["codeRoots"][number], error: unknown): Error {
+  const err = error as { code?: string | number; stderr?: string; message?: string };
+  const stderr = String(err.stderr ?? "").trim();
+  const code = err.code ?? "unknown";
+  const detail = stderr || err.message || String(error);
+  return new Error(`git log failed in ${root.path} (exit ${code}): ${detail}`);
+}
+
 async function commitsForRoot(root: Request["codeRoots"][number]): Promise<Record<string, unknown>[]> {
   try {
     const items = JSON.parse(await readFile(resolve(root.path, ".slate-commits.json"), "utf8"));
@@ -389,8 +412,8 @@ async function commitsForRoot(root: Request["codeRoots"][number]): Promise<Recor
       if (parts.length < 4) return [];
       return [{ sha: parts[0], author: parts[1], date: parts[2], message: parts[3], root: root.title }];
     });
-  } catch {
-    return [];
+  } catch (error) {
+    throw gitLogFailure(root, error);
   }
 }
 
@@ -661,12 +684,23 @@ function projectCodeTools(session: { request: Request }): Record<string, SDKCust
         const requested = field(asRecord(args), "root");
         const selected = selectedRoots(roots, requested);
         const commits: Record<string, unknown>[] = [];
+        const failures: string[] = [];
         for (const root of selected) {
-          commits.push(...(await commitsForRoot(root)));
+          try {
+            commits.push(...(await commitsForRoot(root)));
+          } catch (error) {
+            failures.push(error instanceof Error ? error.message : String(error));
+          }
         }
         if (!roots.length) throw new Error("No code is attached to this Slate project.");
         if (!selected.length) throw new Error(`Unknown code root. Use one of: ${roots.map((root) => root.title).join(", ")}.`);
-        if (!commits.length) throw new Error("Git history is unavailable for this attachment.");
+        if (!commits.length) {
+          throw new Error(
+            failures.length
+              ? failures.join("\n")
+              : `No git commits in ${selected.map((root) => root.path).join(", ")}.`
+          );
+        }
         emit(toolEvent("project_git_log", "completed", args, commits.slice(0, 40)));
         return toolText(commits.slice(0, 40));
       },

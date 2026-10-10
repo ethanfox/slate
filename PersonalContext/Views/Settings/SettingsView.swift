@@ -26,6 +26,8 @@ struct SettingsView: View {
             SettingsChatGPTPage()
         case .cursor:
             SettingsCursorPage()
+        case .compatible:
+            SettingsCompatiblePage()
         case .sources:
             SettingsSourcesPage()
         case .calendar:

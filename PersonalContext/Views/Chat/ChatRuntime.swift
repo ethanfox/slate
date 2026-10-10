@@ -75,6 +75,7 @@ final class ChatRuntime {
     let session: ChatEngine
     var modelID: String
     var draft = ""
+    var draftAttachments: [ComposerAttachment] = []
     var answers: [UUID: ChatTranscript.Unpacked] = [:]
     @ObservationIgnored private var conversation: Conversation?
     @ObservationIgnored private var persistTask: Task<Void, Never>?
@@ -168,7 +169,9 @@ final class ChatRuntime {
             let stored: ChatMessage?
             switch entry {
             case .userMessage(let user) where !user.isCancelled && !user.isFailed:
-                stored = ChatMessage(id: user.id, role: .user, content: user.text)
+                stored = (!user.text.isEmpty || !user.attachments.isEmpty)
+                    ? ChatMessage(id: user.id, role: .user, content: user.text)
+                    : nil
             case .aiMessage(let reply) where !reply.text.isEmpty:
                 stored = ChatMessage(id: reply.id, role: .assistant, content: packed(reply))
             default:
@@ -186,9 +189,35 @@ final class ChatRuntime {
             }
         }
         let stale = conversation.messages.filter { !keepIDs.contains($0.id) }
-        for message in stale {
-            conversation.messages.removeAll { $0.id == message.id }
-            conversation.modelContext?.delete(message)
+        if let context = conversation.modelContext {
+            let store = FileStore.default(context: context)
+            for message in stale {
+                try? store.release(ownerKind: .chatMessage, ownerID: message.id)
+                conversation.messages.removeAll { $0.id == message.id }
+                context.delete(message)
+            }
+            for entry in session.entries {
+                if case .userMessage(let user) = entry, !user.isCancelled, !user.isFailed {
+                    try? store.replace(
+                        assetIDs: user.attachments.map(\.id),
+                        ownerKind: .chatMessage,
+                        ownerID: user.id
+                    )
+                }
+            }
+            if !session.isGenerating {
+                let lastUser = session.entries.reversed().compactMap { entry -> ChatEntry.User? in
+                    if case .userMessage(let user) = entry { return user }
+                    return nil
+                }.first
+                if lastUser?.isFailed != true, lastUser?.isCancelled != true {
+                    try? store.release(ownerKind: .chatDraft, ownerID: conversationID)
+                }
+            }
+        } else {
+            for message in stale {
+                conversation.messages.removeAll { $0.id == message.id }
+            }
         }
         conversation.updatedAt = .now
         try? conversation.modelContext?.save()
@@ -218,7 +247,14 @@ final class ChatRuntime {
         bridge.debugLog.add("SEND model=\(modelID) generating=\(session.isGenerating) \(ChatTrace.clip(submission.trimmedText, 120))")
         bridge.debugLog.snapshot(session, label: "session before send")
         rememberAnswer()
-        let sent = session.send(submission)
+        let options: ChatTurnOptions
+        do {
+            options = try prepareTurn(submission)
+        } catch {
+            session.failValidation(error)
+            return false
+        }
+        let sent = session.send(submission, options: options)
         DraftTrace.send(
             kind: "runtime",
             object: conversationID.uuidString,
@@ -240,12 +276,17 @@ final class ChatRuntime {
         return sent
     }
 
-    static func makeChatProvider(bridge: CursorConversationBridge, conversation: Conversation) -> any ChatProvider {
+        static func makeChatProvider(bridge: CursorConversationBridge, conversation: Conversation) -> any ChatProvider {
         switch TalkProvider(rawValue: conversation.providerID) {
         case .cursor:
             return CursorChatProvider(bridge: bridge)
         case .chatgpt:
             return ChatGPTProvider(bridge: bridge)
+        case .compatible:
+            return GenericChatProvider(
+                endpoint: UserDefaults.standard.string(forKey: Keys.compatibleEndpoint) ?? "",
+                apiKey: KeychainStore.read(.compatibleAPIKey)
+            )
         case .unconfigured, .none:
             return UnavailableChatProvider(
                 id: conversation.providerID,
@@ -253,6 +294,44 @@ final class ChatRuntime {
                 message: "Choose a chat provider in Settings, then start a new chat."
             )
         }
+    }
+
+    private func prepareTurn(_ submission: ChatSubmission) throws -> ChatTurnOptions {
+        guard !submission.attachments.isEmpty || session.providerHistory.contains(where: { !$0.attachments.isEmpty }) else {
+            return ChatTurnOptions()
+        }
+        guard let context = conversation?.modelContext else {
+            throw AttachmentError.missingAsset(submission.attachments.first?.filename ?? "attachment")
+        }
+        let store = FileStore.default(context: context)
+        let provider = TalkProvider(rawValue: providerID) ?? .unconfigured
+        let endpoint = provider == .compatible
+            ? (UserDefaults.standard.string(forKey: Keys.compatibleEndpoint) ?? "")
+            : ""
+        let includeHistory: Bool
+        switch provider {
+        case .chatgpt, .compatible:
+            includeHistory = true
+        case .cursor:
+            includeHistory = conversation?.externalSessionID.isEmpty != false
+        case .unconfigured:
+            includeHistory = false
+        }
+        let prepared = try AttachmentPrep.prepare(
+            refs: submission.attachments,
+            history: session.providerHistory,
+            provider: provider,
+            model: modelID,
+            endpoint: endpoint,
+            store: store,
+            includeHistory: includeHistory
+        )
+        try store.replace(
+            assetIDs: submission.attachments.map(\.id),
+            ownerKind: .chatDraft,
+            ownerID: conversationID
+        )
+        return ChatTurnOptions(attachments: prepared)
     }
 
     private static func makeSession(
@@ -266,11 +345,17 @@ final class ChatRuntime {
         )
         var entries: [ChatEntry] = []
         var history: [TalkMessage] = []
-        for message in conversation.orderedMessages where !message.content.isEmpty {
+        let store = conversation.modelContext.map(FileStore.default(context:))
+        for message in conversation.orderedMessages {
+            let attachments = store?.attachments(ownerKind: .chatMessage, ownerID: message.id) ?? []
+            if message.content.isEmpty && attachments.isEmpty { continue }
             switch message.role {
             case .user:
-                entries.append(.userMessage(.init(id: message.id, text: message.content)))
-                history.append(TalkMessage(id: message.id, role: .user, text: message.content))
+                var content: [TalkContent] = []
+                if !message.content.isEmpty { content.append(.text(message.content)) }
+                content.append(contentsOf: attachments.map { .attachment($0) })
+                entries.append(.userMessage(.init(id: message.id, text: message.content, attachments: attachments)))
+                history.append(TalkMessage(id: message.id, role: .user, content: content))
             case .assistant:
                 let answer = ChatTranscript.unpack(message.content)
                 entries.append(.aiMessage(.init(id: message.id, text: message.content, isStreaming: false)))
@@ -279,6 +364,26 @@ final class ChatRuntime {
         }
         session.loadSnapshot(entries: entries, history: history)
         return session
+    }
+
+    func restoreFailedDraft() {
+        for entry in session.entries.reversed() {
+            if case .userMessage(let user) = entry {
+                if user.isFailed || user.isCancelled, !user.attachments.isEmpty {
+                    draft = user.text
+                    draftAttachments = user.attachments.map {
+                        ComposerAttachment(
+                            id: $0.id,
+                            filename: $0.filename,
+                            mimeType: $0.mimeType,
+                            kind: $0.kind,
+                            status: .ready
+                        )
+                    }
+                }
+                return
+            }
+        }
     }
 
     func rememberAnswer() {

@@ -4,6 +4,7 @@ import Security
 enum KeychainAccount: String {
     case cursorAPIKey = "cursor-api-key"
     case chatGPT = "chatgpt-session"
+    case compatibleAPIKey = "compatible-api-key"
     case github = "github-token"
     case gitlab = "gitlab-token"
 }

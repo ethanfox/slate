@@ -127,13 +127,19 @@ enum ProjectCodeWorkspace {
             )
         }
         var commits: [[String: Any]] = []
+        var failures: [String] = []
         for root in selected {
-            commits += historyEntries(in: root)
+            do {
+                commits += try historyEntries(in: root)
+            } catch {
+                failures.append(error.localizedDescription)
+            }
         }
-        guard !commits.isEmpty else {
-            throw ProjectWorkspaceError("Git history is unavailable for this attachment.")
+        if !commits.isEmpty { return commits }
+        if !failures.isEmpty {
+            throw ProjectWorkspaceError(failures.joined(separator: "\n"))
         }
-        return commits
+        return []
     }
 
     static func remoteSnapshots(for project: Project?, storeURL: URL?) -> [RunnerCodeSnapshot] {
@@ -178,42 +184,27 @@ enum ProjectCodeWorkspace {
         return nil
     }
 
-    private static func historyEntries(in root: ProjectCodeRoot) -> [[String: Any]] {
+    private static func historyEntries(in root: ProjectCodeRoot) throws -> [[String: Any]] {
         let stored = URL(fileURLWithPath: root.path).appendingPathComponent(".slate-commits.json")
         if let data = try? Data(contentsOf: stored),
-           let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+           let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+           !items.isEmpty {
             return items.map { item in
                 var item = item
                 item["root"] = root.title
                 return item
             }
         }
-        return gitLog(at: root.path, title: root.title)
+        return try gitLog(at: root.path, title: root.title)
     }
 
-    private static func gitLog(at path: String, title: String) -> [[String: Any]] {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", path, "log", "-20", "--pretty=format:%H%x1f%an%x1f%aI%x1f%s"]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            return []
-        }
-        guard process.terminationStatus == 0 else { return [] }
-        let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        return text.split(whereSeparator: \.isNewline).compactMap { line in
-            let parts = line.split(separator: "\u{1f}", omittingEmptySubsequences: false).map(String.init)
-            guard parts.count >= 4 else { return nil }
-            return [
-                "sha": parts[0],
-                "author": parts[1],
-                "date": parts[2],
-                "message": parts[3],
+    private static func gitLog(at path: String, title: String) throws -> [[String: Any]] {
+        try GitHistory.commits(in: path).map { commit in
+            [
+                "sha": commit.sha,
+                "author": commit.author,
+                "date": commit.date,
+                "message": commit.message,
                 "root": title
             ]
         }

@@ -6,6 +6,8 @@ struct ProjectChatCenter: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @State private var draft = ""
+    @State private var draftAttachments: [ComposerAttachment] = []
+    @State private var composerID = UUID()
 
     var body: some View {
         if let id = app.selectedConversation,
@@ -28,6 +30,8 @@ struct ProjectChatCenter: View {
                     providerID: Bindable(app).talkProviderID,
                     placeholder: "Message \(project.name)",
                     onSend: startChat,
+                    composerOwnerID: composerID,
+                    attachments: $draftAttachments,
                     draftKind: "project-new",
                     draftObjectID: project.id.uuidString
                 )
@@ -39,10 +43,22 @@ struct ProjectChatCenter: View {
         }
     }
 
-    private func startChat(_ text: String) -> Bool {
+    private func startChat(_ submission: ChatSubmission) -> Bool {
         let conversation = app.makeConversation(in: project, context: context)
-        app.pendingSend = PendingSend(conversationID: conversation.id, text: text)
-        ChatTrace.event("project composer queued conversation=\(conversation.id) project=\(project.name) chars=\(text.count)")
+        let store = FileStore.default(context: context)
+        try? store.retain(
+            assetIDs: submission.attachments.map(\.id),
+            ownerKind: .chatDraft,
+            ownerID: conversation.id
+        )
+        try? store.release(ownerKind: .composer, ownerID: composerID)
+        app.pendingSend = PendingSend(
+            conversationID: conversation.id,
+            text: submission.text,
+            attachments: submission.attachments
+        )
+        ChatTrace.event("project composer queued conversation=\(conversation.id) project=\(project.name) chars=\(submission.trimmedText.count) files=\(submission.attachments.count)")
+        composerID = UUID()
         return true
     }
 }

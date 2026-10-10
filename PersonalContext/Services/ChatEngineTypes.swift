@@ -1,6 +1,6 @@
 import Foundation
 
-/// Composer payload. Text works now; attachments are a typed placeholder for the next phase.
+/// Composer payload: text and ordered attachment references.
 struct ChatSubmission: Equatable, Sendable {
     var text: String
     var attachments: [ChatAttachmentRef] = []
@@ -12,19 +12,6 @@ struct ChatSubmission: Equatable, Sendable {
     var hasContent: Bool {
         !trimmedText.isEmpty || !attachments.isEmpty
     }
-}
-
-/// Durable attachment identity for a later storage/encoding phase. No bytes here.
-struct ChatAttachmentRef: Equatable, Identifiable, Sendable {
-    enum Kind: String, Sendable {
-        case image
-        case file
-    }
-
-    var id: UUID
-    var kind: Kind
-    var filename: String
-    var mimeType: String
 }
 
 enum TalkRole: String, Sendable {
@@ -86,10 +73,6 @@ struct TalkMessage: Identifiable, Sendable {
     }
 }
 
-struct ChatTurnOptions: Sendable, Equatable {
-    init() {}
-}
-
 enum ChatStreamEvent: Sendable, Equatable {
     case text(String)
     case done
@@ -108,16 +91,10 @@ protocol ChatProvider: Sendable {
 }
 
 enum ChatEngineError: LocalizedError, Equatable {
-    case attachmentsNotImplemented
     case emptySubmission
 
     var errorDescription: String? {
-        switch self {
-        case .attachmentsNotImplemented:
-            return "Attachments aren’t available yet. Send text only."
-        case .emptySubmission:
-            return "Type a message to send."
-        }
+        "Type a message or attach a file."
     }
 }
 

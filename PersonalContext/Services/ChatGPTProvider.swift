@@ -64,7 +64,7 @@ struct ChatGPTProvider: ChatProvider {
                             ),
                             includeFinishRun: false
                         )
-                        return (instructions, gateway, messages.map(Self.responseInput))
+                        return (instructions, gateway, messages.map { Self.responseInput($0, options: options) })
                     }
                     let instructions = prepared.0
                     let gateway = prepared.1
@@ -221,11 +221,52 @@ struct ChatGPTProvider: ChatProvider {
         return payload
     }
 
-    private static func responseInput(_ message: TalkMessage) -> [String: Any] {
+    static func responseInput(_ message: TalkMessage, options: ChatTurnOptions = ChatTurnOptions()) -> [String: Any] {
         [
             "role": message.role == .assistant ? "assistant" : "user",
-            "content": text(from: message)
+            "content": content(for: message, options: options)
         ]
+    }
+
+    static func content(for message: TalkMessage, options: ChatTurnOptions) -> Any {
+        guard message.role != .assistant, !message.attachments.isEmpty else {
+            return text(from: message)
+        }
+        var parts: [[String: Any]] = []
+        let text = text(from: message)
+        if !text.isEmpty {
+            parts.append(["type": "input_text", "text": text])
+        }
+        for attachment in message.attachments {
+            guard let prepared = options.payload(for: attachment.id) else {
+                parts.append([
+                    "type": "input_text",
+                    "text": "Attachment \(attachment.filename) is missing and was not sent."
+                ])
+                continue
+            }
+            switch prepared.route {
+            case .nativeImage:
+                let encoded = prepared.data.base64EncodedString()
+                parts.append([
+                    "type": "input_image",
+                    "image_url": "data:\(prepared.ref.mimeType);base64,\(encoded)"
+                ])
+            case .nativeFile:
+                let encoded = prepared.data.base64EncodedString()
+                parts.append([
+                    "type": "input_file",
+                    "filename": prepared.ref.filename,
+                    "file_data": "data:\(prepared.ref.mimeType);base64,\(encoded)"
+                ])
+            case .extracted(let extracted):
+                parts.append([
+                    "type": "input_text",
+                    "text": "Attached file: \(extracted.filename)\n\(extracted.text)"
+                ])
+            }
+        }
+        return parts.isEmpty ? text : parts
     }
 
     static func replayItem(_ item: [String: Any]) -> [String: Any] {
@@ -280,6 +321,9 @@ struct ChatGPTProvider: ChatProvider {
         let param = error["param"] as? String
         var parts: [String] = []
         if let message, !message.isEmpty { parts.append(message) }
+        if code == "subscription_sharing_unsupported_capability" {
+            return "This ChatGPT model or account can’t use that attachment. The draft is still here—remove the file or pick another model."
+        }
         if let code, !code.isEmpty, message?.contains(code) != true { parts.append(code) }
         if let param, !param.isEmpty { parts.append("param: \(param)") }
         return parts.isEmpty ? nil : parts.joined(separator: " ")

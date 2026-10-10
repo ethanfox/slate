@@ -74,6 +74,14 @@ final class AppModel {
     var chatGPTModelID: String {
         didSet { defaults.set(chatGPTModelID, forKey: Keys.chatGPTModel) }
     }
+    var compatibleEndpoint: String {
+        didSet { defaults.set(compatibleEndpoint, forKey: Keys.compatibleEndpoint) }
+    }
+    var compatibleModelID: String {
+        didSet { defaults.set(compatibleModelID, forKey: Keys.compatibleModel) }
+    }
+    var compatibleModels: [(id: String, name: String)] = []
+    var compatibleKeyPresent = false
     private(set) var cursorCloudRepositories: CursorCloudRepositoriesState = .idle
     @ObservationIgnored private var cursorCloudFetchStartedAt: Date?
     private(set) var chatGPTModels: [ChatGPTModel] = []
@@ -243,6 +251,9 @@ final class AppModel {
         defaultModelID = UserDefaults.standard.string(forKey: Keys.defaultModel) ?? ""
         talkProvider = TalkProvider(rawValue: UserDefaults.standard.string(forKey: Keys.talkProvider) ?? "") ?? .unconfigured
         chatGPTModelID = UserDefaults.standard.string(forKey: Keys.chatGPTModel) ?? ""
+        compatibleEndpoint = UserDefaults.standard.string(forKey: Keys.compatibleEndpoint) ?? ""
+        compatibleModelID = UserDefaults.standard.string(forKey: Keys.compatibleModel) ?? ""
+        compatibleKeyPresent = KeychainStore.read(.compatibleAPIKey) != nil
         if let checkedAt = defaults.object(forKey: Keys.cursorCloudCheckedAt) as? TimeInterval,
            let urls = defaults.stringArray(forKey: Keys.cursorCloudRepoURLs) {
             cursorCloudRepositories = .ready(urls: urls, checkedAt: Date(timeIntervalSince1970: checkedAt))
@@ -534,6 +545,9 @@ final class AppModel {
         var list: [TalkProvider] = []
         if sources.hasChatGPT { list.append(.chatgpt) }
         if hasAPIKey { list.append(.cursor) }
+        if !compatibleEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            list.append(.compatible)
+        }
         return list
     }
 
@@ -545,6 +559,8 @@ final class AppModel {
                 return talkModels.first?.id ?? ""
             case .cursor:
                 return defaultModelID
+            case .compatible:
+                return compatibleModelID
             case .unconfigured:
                 return ""
             }
@@ -555,6 +571,8 @@ final class AppModel {
                 chatGPTModelID = newValue
             case .cursor:
                 defaultModelID = newValue
+            case .compatible:
+                compatibleModelID = newValue
             case .unconfigured:
                 break
             }
@@ -573,6 +591,12 @@ final class AppModel {
             return chatGPTModels.map { (id: $0.id, name: $0.displayName) }
         case .cursor:
             return models.map { (id: $0.id, name: $0.displayName) }
+        case .compatible:
+            var list = compatibleModels
+            if !compatibleModelID.isEmpty, !list.contains(where: { $0.id == compatibleModelID }) {
+                list.insert((id: compatibleModelID, name: compatibleModelID), at: 0)
+            }
+            return list
         case .none:
             return []
         }
@@ -585,6 +609,8 @@ final class AppModel {
             return chatGPTModels.first(where: { $0.id == id })?.displayName ?? id
         case .cursor:
             return models.first(where: { $0.id == id })?.displayName ?? id
+        case .compatible:
+            return compatibleModels.first(where: { $0.id == id })?.name ?? id
         default:
             if let name = chatGPTModels.first(where: { $0.id == id })?.displayName { return name }
             return models.first { $0.id == id }?.displayName ?? id
@@ -606,6 +632,34 @@ final class AppModel {
             } catch {
                 chatGPTModels = []
                 ChatTrace.event("chatgpt models failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func refreshCompatibleModels() {
+        let endpoint = compatibleEndpoint
+        let key = KeychainStore.read(.compatibleAPIKey)
+        compatibleKeyPresent = key != nil
+        guard AttachmentCapabilityStore.isOpenRouter(endpoint) else { return }
+        Task {
+            do {
+                let fetched = try await GenericChatProvider.fetchOpenRouterModels(endpoint: endpoint, apiKey: key)
+                compatibleModels = fetched.map { (id: $0.id, name: $0.name) }
+                for model in fetched {
+                    AttachmentCapabilityStore.applyEndpoint(
+                        provider: .compatible,
+                        model: model.id,
+                        endpoint: endpoint,
+                        image: model.image ? .supported : .unsupported,
+                        document: model.file ? .supported : .unsupported,
+                        pdfParser: model.file
+                    )
+                }
+                if compatibleModelID.isEmpty, let first = compatibleModels.first {
+                    compatibleModelID = first.id
+                }
+            } catch {
+                ChatTrace.event("compatible models failed: \(error.localizedDescription)")
             }
         }
     }
@@ -759,6 +813,7 @@ final class AppModel {
         switch TalkProvider(rawValue: id) {
         case .chatgpt: sources.hasChatGPT
         case .cursor: hasAPIKey
+        case .compatible: !compatibleEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         default: false
         }
     }
@@ -799,6 +854,8 @@ enum Keys {
     static let defaultModel = "defaultModelID"
     static let talkProvider = "talkProvider"
     static let chatGPTModel = "chatGPTModelID"
+    static let compatibleEndpoint = "compatibleEndpoint"
+    static let compatibleModel = "compatibleModelID"
     static let cursorCloudRepoURLs = "cursorCloudRepoURLs"
     static let cursorCloudCheckedAt = "cursorCloudCheckedAt"
     static let showAgentIDs = "showAgentIDs"

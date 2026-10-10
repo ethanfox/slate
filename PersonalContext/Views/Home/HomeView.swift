@@ -10,6 +10,8 @@ struct HomeView: View {
     @Query(sort: \Decision.createdAt, order: .reverse) private var decisions: [Decision]
     @Query(sort: \ProjectThread.updatedAt, order: .reverse) private var threads: [ProjectThread]
     @State private var draft = ""
+    @State private var draftAttachments: [ComposerAttachment] = []
+    @State private var composerID = UUID()
 
     private var activeProjects: [Project] {
         projects
@@ -93,6 +95,8 @@ struct HomeView: View {
             placeholder: "Ask anything, not attached to a project",
             lineLimit: 1...8,
             onSend: submitAsk,
+            composerOwnerID: composerID,
+            attachments: $draftAttachments,
             draftKind: "home",
             draftObjectID: "home"
         )
@@ -164,11 +168,27 @@ struct HomeView: View {
         }
     }
 
-    private func submitAsk(_ text: String) -> Bool {
+    private func submitAsk(_ submission: ChatSubmission) -> Bool {
         let conversation = app.makeConversation(in: nil, context: context)
-        app.pendingSend = PendingSend(conversationID: conversation.id, text: text)
-        ChatTrace.event("quick ask queued conversation=\(conversation.id) chars=\(text.count)")
+        transferDraft(to: conversation, attachments: submission.attachments)
+        app.pendingSend = PendingSend(
+            conversationID: conversation.id,
+            text: submission.text,
+            attachments: submission.attachments
+        )
+        ChatTrace.event("quick ask queued conversation=\(conversation.id) chars=\(submission.trimmedText.count) files=\(submission.attachments.count)")
+        composerID = UUID()
         return true
+    }
+
+    private func transferDraft(to conversation: Conversation, attachments: [ChatAttachmentRef]) {
+        let store = FileStore.default(context: context)
+        try? store.retain(
+            assetIDs: attachments.map(\.id),
+            ownerKind: .chatDraft,
+            ownerID: conversation.id
+        )
+        try? store.release(ownerKind: .composer, ownerID: composerID)
     }
 }
 

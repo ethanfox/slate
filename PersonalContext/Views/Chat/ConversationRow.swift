@@ -65,6 +65,7 @@ struct ConversationRow: View {
                 let project = conversation.project
                 if app.selectedConversation == conversation.id { app.selectedConversation = nil }
                 DeletionMarks.remove(targetingIDs: [conversation.id], in: context)
+                try? FileStore.default(context: context).releaseConversation(conversation)
                 context.delete(conversation)
                 project?.touch()
                 try? context.save()

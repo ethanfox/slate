@@ -116,6 +116,7 @@
 		83B3538C787ACDDD267EF567 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = D287C789B72E1A5CE8DC14AA /* Store.swift */; };
 		88D51B6E75045B1424C83192 /* CalendarParts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 336663AE5AC294B2BA0386CC /* CalendarParts.swift */; };
 		8E104282BF89B60E38AB01B8 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 855CC522E2C68F2262E913DC /* MarkdownUI */; };
+		F11E5704D0000003 /* SwiftGitX in Frameworks */ = {isa = PBXBuildFile; productRef = F11E5704D0000002 /* SwiftGitX */; };
 		8EF3176206A8C89215961D73 /* LiquidOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B1DE9ED0526412EC9393D2 /* LiquidOrb.swift */; };
 		8F429C23A9BB6C0EA77BD96E /* ChatGPTProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF040EA1BCECFFBD441F0F91 /* ChatGPTProvider.swift */; };
 		8F74E8CF9CC8040D5B9F908F /* SaveSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ECF851614787529168C56C0 /* SaveSheet.swift */; };
@@ -158,6 +159,30 @@
 		E1A2B3C4D5E6F708192A3B08 /* DraftTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3C4D5E6F708192A3B07 /* DraftTrace.swift */; };
 		E1A2B3C4D5E6F708192A3B04 /* ChatEngineTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3C4D5E6F708192A3B03 /* ChatEngineTypes.swift */; };
 		E1A2B3C4D5E6F708192A3B06 /* ChatEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3C4D5E6F708192A3B05 /* ChatEngineTests.swift */; };
+		F11E5704B0000001 /* StoredAsset.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000001 /* StoredAsset.swift */; };
+		F11E5704B0000002 /* FileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000002 /* FileStore.swift */; };
+		F11E5704B0000003 /* FileTypeDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000003 /* FileTypeDetector.swift */; };
+		F11E5704B0000004 /* ZipMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000004 /* ZipMemory.swift */; };
+		F11E5704B0000005 /* FileExtraction.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000005 /* FileExtraction.swift */; };
+		F11E5704B0000006 /* AttachmentLimits.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000006 /* AttachmentLimits.swift */; };
+		F11E5704B0000007 /* AttachmentCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000007 /* AttachmentCapabilities.swift */; };
+		F11E5704B0000008 /* AttachmentRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000008 /* AttachmentRouting.swift */; };
+		F11E5704B0000009 /* GenericChatProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000009 /* GenericChatProvider.swift */; };
+		F11E5704B000000A /* ComposerAttachments.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A000000A /* ComposerAttachments.swift */; };
+		F11E5704B0000013 /* ComposerPaste.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000013 /* ComposerPaste.swift */; };
+		F11E5704B0000014 /* ComposerPasteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000014 /* ComposerPasteTests.swift */; };
+		F11E5704B000000B /* SettingsCompatiblePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A000000B /* SettingsCompatiblePage.swift */; };
+		F11E5704B0000010 /* FileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000010 /* FileStoreTests.swift */; };
+		F11E5704B0000011 /* AttachmentRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000011 /* AttachmentRoutingTests.swift */; };
+		F11E5704B0000012 /* FileExtractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000012 /* FileExtractionTests.swift */; };
+		F11E5704B0000020 /* GitHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000020 /* GitHistory.swift */; };
+		F11E5704B0000021 /* GitHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000021 /* GitHistoryTests.swift */; };
+		F11E5704C0000001 /* StoredAsset.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000001 /* StoredAsset.swift */; };
+		F11E5704C0000002 /* FileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000002 /* FileStore.swift */; };
+		F11E5704C0000003 /* FileTypeDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000003 /* FileTypeDetector.swift */; };
+		F11E5704C0000004 /* ZipMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000004 /* ZipMemory.swift */; };
+		F11E5704C0000006 /* AttachmentLimits.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000006 /* AttachmentLimits.swift */; };
+		F11E5704C000000D /* ChatEngineTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3C4D5E6F708192A3B03 /* ChatEngineTypes.swift */; };
 		C88EEE49F71B88FD1B0A1D34 /* LinkPresentation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ABB935F4B84FA0030048EC33 /* LinkPresentation.framework */; };
 		C9F9E10E1FA8E62D94FE7BC1 /* SettingsChatGPTPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE2EE3AFC598B7A5100F5A68 /* SettingsChatGPTPage.swift */; };
 		CA068E7D29AD93EE8C1E9CD7 /* ProviderNeutralTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 588C1D051000807F84657854 /* ProviderNeutralTests.swift */; };
@@ -251,6 +276,24 @@
 		E1A2B3C4D5E6F708192A3B07 /* DraftTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftTrace.swift; sourceTree = "<group>"; };
 		E1A2B3C4D5E6F708192A3B03 /* ChatEngineTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatEngineTypes.swift; sourceTree = "<group>"; };
 		E1A2B3C4D5E6F708192A3B05 /* ChatEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatEngineTests.swift; sourceTree = "<group>"; };
+		F11E5704A0000001 /* StoredAsset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoredAsset.swift; sourceTree = "<group>"; };
+		F11E5704A0000002 /* FileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileStore.swift; sourceTree = "<group>"; };
+		F11E5704A0000003 /* FileTypeDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTypeDetector.swift; sourceTree = "<group>"; };
+		F11E5704A0000004 /* ZipMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipMemory.swift; sourceTree = "<group>"; };
+		F11E5704A0000005 /* FileExtraction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileExtraction.swift; sourceTree = "<group>"; };
+		F11E5704A0000006 /* AttachmentLimits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentLimits.swift; sourceTree = "<group>"; };
+		F11E5704A0000007 /* AttachmentCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentCapabilities.swift; sourceTree = "<group>"; };
+		F11E5704A0000008 /* AttachmentRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentRouting.swift; sourceTree = "<group>"; };
+		F11E5704A0000009 /* GenericChatProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericChatProvider.swift; sourceTree = "<group>"; };
+		F11E5704A000000A /* ComposerAttachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerAttachments.swift; sourceTree = "<group>"; };
+		F11E5704A0000013 /* ComposerPaste.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerPaste.swift; sourceTree = "<group>"; };
+		F11E5704A0000014 /* ComposerPasteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerPasteTests.swift; sourceTree = "<group>"; };
+		F11E5704A000000B /* SettingsCompatiblePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCompatiblePage.swift; sourceTree = "<group>"; };
+		F11E5704A0000010 /* FileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileStoreTests.swift; sourceTree = "<group>"; };
+		F11E5704A0000011 /* AttachmentRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentRoutingTests.swift; sourceTree = "<group>"; };
+		F11E5704A0000012 /* FileExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileExtractionTests.swift; sourceTree = "<group>"; };
+		F11E5704A0000020 /* GitHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHistory.swift; sourceTree = "<group>"; };
+		F11E5704A0000021 /* GitHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHistoryTests.swift; sourceTree = "<group>"; };
 		A91E2F3A4B5C6D7E8F901005 /* AgentRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntimeTests.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A09 /* RunGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunGateway.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A0B /* RunCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunCoordinator.swift; sourceTree = "<group>"; };
@@ -398,6 +441,7 @@
 				760DDFD8D6967066C5710C5E /* MetalKit.framework in Frameworks */,
 				C88EEE49F71B88FD1B0A1D34 /* LinkPresentation.framework in Frameworks */,
 				8E104282BF89B60E38AB01B8 /* MarkdownUI in Frameworks */,
+				F11E5704D0000003 /* SwiftGitX in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -460,6 +504,7 @@
 			children = (
 				4433E89BB7AF1A5C5E09EF95 /* AssistantMarkdown.swift */,
 				5991E95904B11AEBA3B96BDE /* ChatInput.swift */,
+				F11E5704A000000A /* ComposerAttachments.swift */,
 				F65DEA7985A36C0955B7C5DA /* ChatMessages.swift */,
 				DCA29163C23868CA9F844257 /* ChatObjectLink.swift */,
 				51AEE9771680CE63EEA8864D /* ChatRuntime.swift */,
@@ -505,6 +550,15 @@
 				A91E2F3A4B5C6D7E8F901003 /* AgentRuntime.swift */,
 				E1A2B3C4D5E6F708192A3B01 /* ChatEngine.swift */,
 				E1A2B3C4D5E6F708192A3B03 /* ChatEngineTypes.swift */,
+				F11E5704A0000002 /* FileStore.swift */,
+				F11E5704A0000003 /* FileTypeDetector.swift */,
+				F11E5704A0000013 /* ComposerPaste.swift */,
+				F11E5704A0000004 /* ZipMemory.swift */,
+				F11E5704A0000005 /* FileExtraction.swift */,
+				F11E5704A0000006 /* AttachmentLimits.swift */,
+				F11E5704A0000007 /* AttachmentCapabilities.swift */,
+				F11E5704A0000008 /* AttachmentRouting.swift */,
+				F11E5704A0000009 /* GenericChatProvider.swift */,
 				E1A2B3C4D5E6F708192A3B07 /* DraftTrace.swift */,
 				B81A0C1D2E3F405162738A07 /* RunToolPolicy.swift */,
 				C0DE1A2B3C4D5E6F70819204 /* CodeReferenceStore.swift */,
@@ -522,6 +576,7 @@
 				37FCD90F1DD6475A4AD5AC1C /* GitForgeClient.swift */,
 				718061204D90BCFCD66D501C /* KeychainStore.swift */,
 				F93C81A0E693EB3D6CE616F2 /* LoopbackAuth.swift */,
+				F11E5704A0000020 /* GitHistory.swift */,
 				7EAF9BCF07A6C20AF5CD7FA0 /* ProjectCodeWorkspace.swift */,
 				4ED0D31A8A2D0F3A0FC48424 /* ProjectWorkerProvider.swift */,
 				E2A1B3C405F67D8E9A0B1C2D /* SlateMCPClient.swift */,
@@ -631,6 +686,7 @@
 			isa = PBXGroup;
 			children = (
 				E0C540C9CE3A784CC7E9EBD1 /* Records.swift */,
+				F11E5704A0000001 /* StoredAsset.swift */,
 				B81A0C1D2E3F405162738A01 /* AgentRun.swift */,
 				C0DE1A2B3C4D5E6F70819201 /* CodeReference.swift */,
 				D287C789B72E1A5CE8DC14AA /* Store.swift */,
@@ -646,6 +702,7 @@
 				2B4F19BD6D45E8CB70440A62 /* SettingsAppearancePage.swift */,
 				B53F847FAC96205C323B63B7 /* SettingsCalendarPage.swift */,
 				BE2EE3AFC598B7A5100F5A68 /* SettingsChatGPTPage.swift */,
+				F11E5704A000000B /* SettingsCompatiblePage.swift */,
 				022EAD2D997C0A29F21400CA /* SettingsChrome.swift */,
 				F95931057DAA72031D16DD3F /* SettingsColumn.swift */,
 				3F3CB7A7C440980D6F3F0544 /* SettingsCursorPage.swift */,
@@ -708,6 +765,11 @@
 				B81A0C1D2E3F405162738A17 /* RunToolPolicyTests.swift */,
 				A91E2F3A4B5C6D7E8F901005 /* AgentRuntimeTests.swift */,
 				E1A2B3C4D5E6F708192A3B05 /* ChatEngineTests.swift */,
+				F11E5704A0000010 /* FileStoreTests.swift */,
+				F11E5704A0000011 /* AttachmentRoutingTests.swift */,
+				F11E5704A0000012 /* FileExtractionTests.swift */,
+				F11E5704A0000014 /* ComposerPasteTests.swift */,
+				F11E5704A0000021 /* GitHistoryTests.swift */,
 				C0DE1A2B3C4D5E6F7081920B /* CodeReferenceTests.swift */,
 				C0DE1A2B3C4D5E6F7081920D /* CodeIndexEval.swift */,
 				C0DE1A2B3C4D5E6F7081920F /* CodeIndexEvalTests.swift */,
@@ -732,6 +794,7 @@
 			);
 			name = PersonalContextTests;
 			packageProductDependencies = (
+				F11E5704D0000004 /* SwiftGitX */,
 			);
 			productName = PersonalContextTests;
 			productReference = 9DCF857159F2CA0D9169DC1D /* PersonalContextTests.xctest */;
@@ -755,6 +818,7 @@
 			name = PersonalContext;
 			packageProductDependencies = (
 				855CC522E2C68F2262E913DC /* MarkdownUI */,
+				F11E5704D0000002 /* SwiftGitX */,
 			);
 			productName = PersonalContext;
 			productReference = 7CB763C78357F21BD7C53F4E /* PersonalContext.app */;
@@ -811,6 +875,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				D1335075231F5CB3B2EC0865 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+				F11E5704D0000001 /* XCRemoteSwiftPackageReference "SwiftGitX" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A6F0F78B1FF320F0D90320EB /* Products */;
@@ -874,6 +939,11 @@
 				D73D56957AE1419967DCB01B /* ContextBuilder.swift in Sources */,
 				7D9F8C63712BBB12934A5FDE /* Records.swift in Sources */,
 				C47AD6C7A2C240B194DCC9B1 /* Store.swift in Sources */,
+				F11E5704C0000001 /* StoredAsset.swift in Sources */,
+				F11E5704C0000006 /* AttachmentLimits.swift in Sources */,
+				F11E5704C0000004 /* ZipMemory.swift in Sources */,
+				F11E5704C0000003 /* FileTypeDetector.swift in Sources */,
+				F11E5704C0000002 /* FileStore.swift in Sources */,
 				AC3E4F5B6D708192A3B4C5D6 /* TaskStore.swift in Sources */,
 				B81A0C1D2E3F405162738A03 /* AgentRun.swift in Sources */,
 				C0DE1A2B3C4D5E6F70819203 /* CodeReference.swift in Sources */,
@@ -902,6 +972,11 @@
 				B81A0C1D2E3F405162738A18 /* RunToolPolicyTests.swift in Sources */,
 				A91E2F3A4B5C6D7E8F901006 /* AgentRuntimeTests.swift in Sources */,
 				E1A2B3C4D5E6F708192A3B06 /* ChatEngineTests.swift in Sources */,
+				F11E5704B0000010 /* FileStoreTests.swift in Sources */,
+				F11E5704B0000011 /* AttachmentRoutingTests.swift in Sources */,
+				F11E5704B0000012 /* FileExtractionTests.swift in Sources */,
+				F11E5704B0000014 /* ComposerPasteTests.swift in Sources */,
+				F11E5704B0000021 /* GitHistoryTests.swift in Sources */,
 				C0DE1A2B3C4D5E6F7081920C /* CodeReferenceTests.swift in Sources */,
 				C0DE1A2B3C4D5E6F7081920E /* CodeIndexEval.swift in Sources */,
 				C0DE1A2B3C4D5E6F70819210 /* CodeIndexEvalTests.swift in Sources */,
@@ -990,6 +1065,7 @@
 				544D9789E60CFA90EE44F440 /* OverviewWidgets.swift in Sources */,
 				30B1DB553DC0EB0931DAC3EE /* PersonalContextApp.swift in Sources */,
 				08ED1A6DE7655C4501620914 /* ProjectChatCenter.swift in Sources */,
+				F11E5704B0000020 /* GitHistory.swift in Sources */,
 				3CBFBB43F65CC52F93EA805A /* ProjectCodeWorkspace.swift in Sources */,
 				F7923FE98A551FFBCE7186A4 /* ProjectColumn.swift in Sources */,
 				52EE7F1BE3AD5886F5CF29D2 /* ProjectHost.swift in Sources */,
@@ -1007,6 +1083,18 @@
 				A91E2F3A4B5C6D7E8F901004 /* AgentRuntime.swift in Sources */,
 				E1A2B3C4D5E6F708192A3B02 /* ChatEngine.swift in Sources */,
 				E1A2B3C4D5E6F708192A3B04 /* ChatEngineTypes.swift in Sources */,
+				F11E5704B0000001 /* StoredAsset.swift in Sources */,
+				F11E5704B0000002 /* FileStore.swift in Sources */,
+				F11E5704B0000003 /* FileTypeDetector.swift in Sources */,
+				F11E5704B0000013 /* ComposerPaste.swift in Sources */,
+				F11E5704B0000004 /* ZipMemory.swift in Sources */,
+				F11E5704B0000005 /* FileExtraction.swift in Sources */,
+				F11E5704B0000006 /* AttachmentLimits.swift in Sources */,
+				F11E5704B0000007 /* AttachmentCapabilities.swift in Sources */,
+				F11E5704B0000008 /* AttachmentRouting.swift in Sources */,
+				F11E5704B0000009 /* GenericChatProvider.swift in Sources */,
+				F11E5704B000000A /* ComposerAttachments.swift in Sources */,
+				F11E5704B000000B /* SettingsCompatiblePage.swift in Sources */,
 				E1A2B3C4D5E6F708192A3B08 /* DraftTrace.swift in Sources */,
 				B81A0C1D2E3F405162738A08 /* RunToolPolicy.swift in Sources */,
 				B81A0C1D2E3F405162738A0A /* RunGateway.swift in Sources */,
@@ -1377,6 +1465,14 @@
 				minimumVersion = 2.4.1;
 			};
 		};
+		F11E5704D0000001 /* XCRemoteSwiftPackageReference "SwiftGitX" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ibrahimcetin/SwiftGitX.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.4.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1384,6 +1480,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D1335075231F5CB3B2EC0865 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
+		};
+		F11E5704D0000002 /* SwiftGitX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F11E5704D0000001 /* XCRemoteSwiftPackageReference "SwiftGitX" */;
+			productName = SwiftGitX;
+		};
+		F11E5704D0000004 /* SwiftGitX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F11E5704D0000001 /* XCRemoteSwiftPackageReference "SwiftGitX" */;
+			productName = SwiftGitX;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -44,6 +44,16 @@ struct SettingsModelPage: View {
                     }
                 }
             }
+
+            if !app.availableTalkProviders.isEmpty {
+                SettingsGroup("This model") {
+                    CapabilitySettings(
+                        provider: app.talkProvider,
+                        model: app.talkModelID,
+                        endpoint: app.talkProvider == .compatible ? app.compatibleEndpoint : ""
+                    )
+                }
+            }
         }
         .onAppear {
             app.normalizeTalkProvider()
@@ -58,6 +68,8 @@ struct SettingsModelPage: View {
             } else if app.talkProvider == .cursor,
                       app.hasAPIKey, app.models.isEmpty, app.connection != .checking {
                 app.refreshConnection()
+            } else if app.talkProvider == .compatible {
+                app.refreshCompatibleModels()
             }
         }
     }
