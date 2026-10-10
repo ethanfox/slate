@@ -7,6 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A11C0DE100000002 /* MCPConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000001 /* MCPConnection.swift */; };
+		A11C0DE100000004 /* MCPSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000003 /* MCPSecrets.swift */; };
+		A11C0DE100000006 /* MCPJSONImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000005 /* MCPJSONImport.swift */; };
+		A11C0DE100000008 /* MCPConnectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000007 /* MCPConnectionStore.swift */; };
+		A11C0DE10000000A /* MCPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000009 /* MCPClient.swift */; };
+		A11C0DE10000000C /* MCPClientManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE10000000B /* MCPClientManager.swift */; };
+		A11C0DE10000000E /* MCPToolRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE10000000D /* MCPToolRegistry.swift */; };
+		A11C0DE100000010 /* MCPRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE10000000F /* MCPRuntime.swift */; };
+		A11C0DE100000012 /* SettingsMCPPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000011 /* SettingsMCPPage.swift */; };
+		A11C0DE100000014 /* MCPConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000013 /* MCPConnectionTests.swift */; };
 		05BA026B4AF137407DFFBB70 /* ColorHex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A843C76D621958EDA8D94D61 /* ColorHex.swift */; };
 		05FD064003B7CEADF8D13FE2 /* SourceChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DBE0B7BED768EB831D55245 /* SourceChip.swift */; };
 		06A4B5A5812EFA0E120BAFC9 /* DocumentSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591D54A725FC8665EAB3A680 /* DocumentSection.swift */; };
@@ -398,6 +408,16 @@
 		AD3FA7A23D2010D975AB8C6D /* EditRecordModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditRecordModal.swift; sourceTree = "<group>"; };
 		B1AFC28C1F00D3700732A654 /* MembraeToolGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembraeToolGateway.swift; sourceTree = "<group>"; };
 		E2A1B3C405F67D8E9A0B1C2D /* MembraeMCPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembraeMCPClient.swift; sourceTree = "<group>"; };
+		A11C0DE100000001 /* MCPConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPConnection.swift; sourceTree = "<group>"; };
+		A11C0DE100000003 /* MCPSecrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSecrets.swift; sourceTree = "<group>"; };
+		A11C0DE100000005 /* MCPJSONImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPJSONImport.swift; sourceTree = "<group>"; };
+		A11C0DE100000007 /* MCPConnectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPConnectionStore.swift; sourceTree = "<group>"; };
+		A11C0DE100000009 /* MCPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPClient.swift; sourceTree = "<group>"; };
+		A11C0DE10000000B /* MCPClientManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPClientManager.swift; sourceTree = "<group>"; };
+		A11C0DE10000000D /* MCPToolRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPToolRegistry.swift; sourceTree = "<group>"; };
+		A11C0DE10000000F /* MCPRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPRuntime.swift; sourceTree = "<group>"; };
+		A11C0DE100000011 /* SettingsMCPPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsMCPPage.swift; sourceTree = "<group>"; };
+		A11C0DE100000013 /* MCPConnectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPConnectionTests.swift; sourceTree = "<group>"; };
 		B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectColumn.swift; sourceTree = "<group>"; };
 		B530330434B899D87B7F9D1D /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 		B53F847FAC96205C323B63B7 /* SettingsCalendarPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCalendarPage.swift; sourceTree = "<group>"; };
@@ -606,6 +626,14 @@
 				7EAF9BCF07A6C20AF5CD7FA0 /* ProjectCodeWorkspace.swift */,
 				4ED0D31A8A2D0F3A0FC48424 /* ProjectWorkerProvider.swift */,
 				E2A1B3C405F67D8E9A0B1C2D /* MembraeMCPClient.swift */,
+				A11C0DE100000001 /* MCPConnection.swift */,
+				A11C0DE100000003 /* MCPSecrets.swift */,
+				A11C0DE100000005 /* MCPJSONImport.swift */,
+				A11C0DE100000007 /* MCPConnectionStore.swift */,
+				A11C0DE100000009 /* MCPClient.swift */,
+				A11C0DE10000000B /* MCPClientManager.swift */,
+				A11C0DE10000000D /* MCPToolRegistry.swift */,
+				A11C0DE10000000F /* MCPRuntime.swift */,
 				B1AFC28C1F00D3700732A654 /* MembraeToolGateway.swift */,
 				251C929D14566FDE88E32BD5 /* SourceConnections.swift */,
 			);
@@ -737,6 +765,7 @@
 				6CB5A9AA568D21B3A29ABC80 /* SettingsModelPage.swift */,
 				D2F383ABB4798F3AF6233DD5 /* SettingsOrbPage.swift */,
 				89C125A02405C5547C442505 /* SettingsSourcesPage.swift */,
+				A11C0DE100000011 /* SettingsMCPPage.swift */,
 				07154E6405D2E7F829D439B4 /* SettingsTagsPage.swift */,
 				981A8176BD67C17EDF603DF6 /* SettingsView.swift */,
 			);
@@ -785,6 +814,7 @@
 				588C1D051000807F84657854 /* ProviderNeutralTests.swift */,
 				DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */,
 				8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */,
+				A11C0DE100000013 /* MCPConnectionTests.swift */,
 				F11E5704A0000034 /* ImportToolsTests.swift */,
 				8F3A1C2E4B5D60718293A004 /* HarborEvalFixture.swift */,
 				8F3A1C2E4B5D60718293A007 /* TrackFirstEval.swift */,
@@ -994,6 +1024,7 @@
 				CA068E7D29AD93EE8C1E9CD7 /* ProviderNeutralTests.swift in Sources */,
 				E07C8D9F3A4B5C6D7E8F901A /* TaskStoreTests.swift in Sources */,
 				8F3A1C2E4B5D60718293A002 /* MCPToolsTests.swift in Sources */,
+				A11C0DE100000014 /* MCPConnectionTests.swift in Sources */,
 				F11E5704B0000034 /* ImportToolsTests.swift in Sources */,
 				8F3A1C2E4B5D60718293A003 /* Tools.swift in Sources */,
 				8F3A1C2E4B5D60718293A005 /* HarborEvalFixture.swift in Sources */,
@@ -1166,6 +1197,15 @@
 				9821685BF325DE132872A5E3 /* SidebarView.swift in Sources */,
 				777EF2FC8B39A970FAC7E1B4 /* MembraeModal.swift in Sources */,
 				F3B2C4D516078E9F0B1C2D3E /* MembraeMCPClient.swift in Sources */,
+				A11C0DE100000002 /* MCPConnection.swift in Sources */,
+				A11C0DE100000004 /* MCPSecrets.swift in Sources */,
+				A11C0DE100000006 /* MCPJSONImport.swift in Sources */,
+				A11C0DE100000008 /* MCPConnectionStore.swift in Sources */,
+				A11C0DE10000000A /* MCPClient.swift in Sources */,
+				A11C0DE10000000C /* MCPClientManager.swift in Sources */,
+				A11C0DE10000000E /* MCPToolRegistry.swift in Sources */,
+				A11C0DE100000010 /* MCPRuntime.swift in Sources */,
+				A11C0DE100000012 /* SettingsMCPPage.swift in Sources */,
 				B8870ECA941ADC69B2339111 /* MembraeToolGateway.swift in Sources */,
 				05FD064003B7CEADF8D13FE2 /* SourceChip.swift in Sources */,
 				1ACA211AEB62C15EB47941E1 /* SourceConnections.swift in Sources */,

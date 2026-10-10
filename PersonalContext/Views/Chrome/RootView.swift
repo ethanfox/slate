@@ -228,6 +228,21 @@ struct RootView: View {
                 modalContent(modal)
             }
         }
+        .confirmationDialog(
+            app.mcp.actions.request.map { "Allow \($0.toolName) on \($0.connectionName)?" } ?? "Allow this MCP action?",
+            isPresented: Binding(
+                get: { app.mcp.actions.request != nil },
+                set: { if !$0 { app.mcp.actions.cancel() } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Allow") { app.mcp.actions.respond(true) }
+            Button("Don’t Allow", role: .cancel) { app.mcp.actions.respond(false) }
+        } message: {
+            if let request = app.mcp.actions.request {
+                Text(request.arguments.isEmpty ? "This action can change data on \(request.connectionName)." : request.arguments)
+            }
+        }
         .overlay(alignment: .bottom) {
             ZStack {
                 if let toast = app.toast {

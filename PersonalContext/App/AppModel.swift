@@ -240,6 +240,7 @@ final class AppModel {
     var storeError: String?
     let eventKit = EventKitService()
     let sources = SourceConnections()
+    let mcp = MCPRuntime.shared
 
     var hasAPIKey: Bool { apiKey?.isEmpty == false }
 

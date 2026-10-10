@@ -39,6 +39,8 @@ type Request = {
   }[];
   readProvenancePath?: string;
   images?: { data: string; mimeType: string }[];
+  externalTools?: { name: string; description: string; parametersJSON: string }[];
+  includeMCPImport?: boolean;
 };
 
 type Source = { id?: string; title: string; url?: string; kind: string; pin?: boolean };
@@ -834,6 +836,57 @@ function finishRunTool(): Record<string, SDKCustomTool> {
   };
 }
 
+function mcpImportTool(): Record<string, SDKCustomTool> {
+  return {
+    import_mcp_servers: {
+      description:
+        "Add MCP connections from standard mcpServers JSON. Saves configuration only. Does not connect, launch, or grant any project access. If a name already exists with different settings, call again with replace=true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          json: { type: "string", description: "The mcpServers JSON object, exactly as pasted." },
+          replace: { type: "boolean", description: "Replace an existing connection with the same name when configuration differs." },
+        },
+        required: ["json"],
+      },
+      execute: async (args) => {
+        const id = randomUUID();
+        emit({ type: "host_tool", name: "import_mcp_servers", id, text: JSON.stringify(args ?? {}) });
+        const reply = await readHostReply(id);
+        if (reply.error) throw new Error(reply.error);
+        return toolText(reply.text ?? "");
+      },
+    },
+  };
+}
+
+function externalMCPTools(tools?: Request["externalTools"]): Record<string, SDKCustomTool> {
+  return Object.fromEntries(
+    (tools ?? []).map((tool) => {
+      let schema: SDKCustomTool["inputSchema"] = { type: "object", properties: {} };
+      try {
+        schema = JSON.parse(tool.parametersJSON) as SDKCustomTool["inputSchema"];
+      } catch {
+        schema = { type: "object", properties: {} };
+      }
+      return [
+        tool.name,
+        {
+          description: tool.description,
+          inputSchema: schema,
+          execute: async (args) => {
+            const id = randomUUID();
+            emit({ type: "host_tool", name: tool.name, id, text: JSON.stringify(args ?? {}) });
+            const reply = await readHostReply(id);
+            if (reply.error) throw new Error(reply.error);
+            return toolText(reply.text ?? "");
+          },
+        } satisfies SDKCustomTool,
+      ];
+    }),
+  );
+}
+
 function workerTool(): Record<string, SDKCustomTool> {
   return {
     consult_code: {
@@ -889,6 +942,8 @@ async function createSession(request: Request): Promise<Session> {
       ...(request.includeProjectTools ? projectCodeTools(session) : {}),
       ...(request.includeWorkerTool ? workerTool() : {}),
       ...(request.includeFinishRun ? finishRunTool() : {}),
+      ...(request.includeMCPImport ? mcpImportTool() : {}),
+      ...externalMCPTools(request.externalTools),
     };
     const options = {
       apiKey,

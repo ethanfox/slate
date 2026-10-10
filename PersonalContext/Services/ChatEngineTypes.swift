@@ -582,6 +582,22 @@ struct ChatToolActivity: Identifiable, Equatable, Codable, Sendable {
     }
 
     static func title(for tool: String, status: Status) -> String {
+        if let parsed = MCPToolName.parse(tool) {
+            let action = parsed.original.replacingOccurrences(of: "_", with: " ")
+            let server = MCPDisplay.connectionNames[parsed.connectionID] ?? "MCP"
+            switch status {
+            case .running: return "\(server) · \(action)"
+            case .succeeded: return "\(server) · \(action)"
+            case .failed: return "\(server) couldn’t run \(action)"
+            }
+        }
+        if tool == MCPToolName.importServers {
+            switch status {
+            case .running: return "Adding MCP connections"
+            case .succeeded: return "Added MCP connections"
+            case .failed: return "Couldn’t add MCP connections"
+            }
+        }
         switch tool {
         case "webSearch":
             return status == .running ? "Searching the web" : status == .failed ? "Couldn’t search the web" : "Searched the web"

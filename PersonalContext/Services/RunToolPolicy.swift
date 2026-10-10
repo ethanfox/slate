@@ -11,6 +11,7 @@ struct RunToolPolicy: Equatable, Sendable {
     var denied: Set<String>
     var requireProject: Bool
     var attachesRunSource: Bool
+    var allowExternalMCP: Bool
 
     var allowsMembraeWrites: Bool { allowMembraeKnowledgeWrite && projectID != nil }
 
@@ -42,7 +43,8 @@ struct RunToolPolicy: Equatable, Sendable {
         scopedAttachmentID: UUID? = nil,
         denied: Set<String> = RunToolPolicy.denied,
         requireProject: Bool = true,
-        attachesRunSource: Bool = true
+        attachesRunSource: Bool = true,
+        allowExternalMCP: Bool = false
     ) {
         self.runID = runID
         self.projectID = projectID
@@ -54,6 +56,7 @@ struct RunToolPolicy: Equatable, Sendable {
         self.denied = denied
         self.requireProject = requireProject
         self.attachesRunSource = attachesRunSource
+        self.allowExternalMCP = allowExternalMCP
     }
 
     static func chat(projectID: UUID?) -> RunToolPolicy {
@@ -66,7 +69,8 @@ struct RunToolPolicy: Equatable, Sendable {
             allowCodeReferenceWrite: false,
             denied: [],
             requireProject: false,
-            attachesRunSource: false
+            attachesRunSource: false,
+            allowExternalMCP: true
         )
     }
 
@@ -87,6 +91,8 @@ struct RunToolPolicy: Equatable, Sendable {
 
     func allows(_ name: String) -> Bool {
         if name == Self.finishRun { return true }
+        if name == MCPToolName.importServers { return allowExternalMCP }
+        if MCPToolName.isExternal(name) { return allowExternalMCP }
         if denied.contains(name) { return false }
         if Self.projectWrites.contains(name) { return false }
         if RepositoryIndex.toolWrites.contains(name) { return allowCodeReferenceWrite }

@@ -21,6 +21,9 @@ struct MembraeApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { app.importRelay.handleForeground() }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                    app.mcp.shutdown()
+                }
                 .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.didWakeNotification)) { _ in
                     app.importRelay.handleWake()
                 }

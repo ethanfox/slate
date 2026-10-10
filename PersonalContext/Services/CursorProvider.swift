@@ -21,11 +21,19 @@ struct RunnerRequest: Encodable, Sendable {
     var codeSnapshots: [RunnerCodeSnapshot] = []
     var readProvenancePath: String = ""
     var images: [RunnerImage] = []
+    var externalTools: [RunnerExternalTool] = []
+    var includeMCPImport = false
 }
 
 struct RunnerImage: Encodable, Sendable {
     var data: String
     var mimeType: String
+}
+
+struct RunnerExternalTool: Encodable, Sendable {
+    var name: String
+    var description: String
+    var parametersJSON: String
 }
 
 struct RunnerCodeSnapshot: Encodable, Sendable {
@@ -49,7 +57,9 @@ extension RunnerRequest {
             includeProjectTools ? "code" : "",
             includeWorkerTool ? "worker" : "",
             includeFinishRun ? "finish" : "",
+            includeMCPImport ? "mcp-import" : "",
             allowedTools.joined(separator: ","),
+            externalTools.map(\.name).joined(separator: ","),
             mcpCommand,
             apiKey
         ].joined(separator: "\u{1e}")
@@ -148,7 +158,7 @@ final class CursorConversationBridge {
         includeProjectTools: Bool = true,
         resumeSession: Bool = true,
         runtime: WorkerPath = .local
-    ) throws -> (request: RunnerRequest, metadata: ChatTurnMetadata) {
+    ) async throws -> (request: RunnerRequest, metadata: ChatTurnMetadata) {
         guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "membrae-mcp") else {
             throw CursorAPIError(status: 0, message: "The Membrae MCP is missing from the app.")
         }
@@ -198,9 +208,25 @@ final class CursorConversationBridge {
             cloudRepos: cloudRepositories(),
             codeSnapshots: includeProjectTools && runtime == .local
                 ? ProjectCodeWorkspace.remoteSnapshots(for: project, storeURL: store)
-                : []
+                : [],
+            externalTools: includeMembraeTools ? await externalMCPTools() : [],
+            includeMCPImport: includeMembraeTools
         )
         return (request, metadata)
+    }
+
+    private func externalMCPTools() async -> [RunnerExternalTool] {
+        guard let projectID = project?.id else { return [] }
+        return await MCPRuntime.shared.definitions(projectID: projectID).map { tool in
+            let parameters = tool.providerDefinition["parameters"] as? [String: Any] ?? tool.schema
+            let schema = (try? JSONSerialization.data(withJSONObject: parameters, options: [.sortedKeys]))
+                .map { String(decoding: $0, as: UTF8.self) } ?? #"{"type":"object","properties":{}}"#
+            return RunnerExternalTool(
+                name: tool.namespacedName,
+                description: tool.providerDefinition["description"] as? String ?? tool.description,
+                parametersJSON: schema
+            )
+        }
     }
 
     private func cloudRepositories() -> [RunnerCloudRepo] {
@@ -474,33 +500,17 @@ struct CursorChatProvider: ChatProvider {
                     }
                 }
                 do {
-                    let prepared = try await MainActor.run {
-                        bridge.debugLog.add("stream start model=\(model) messages=\(messages.count)")
-                        for (index, message) in messages.enumerated() {
-                            bridge.debugLog.add("  msg[\(index)] \(message.role) \(ChatTrace.clip(message.text, 80))")
-                        }
-                        guard let apiKey = KeychainStore.read(.cursorAPIKey) else {
-                            throw CursorAPIError(status: 0, message: "Add a Cursor API key in Settings.")
-                        }
-                        let roots = runtime == .local && includeProjectTools
-                            ? ProjectCodeWorkspace.localRoots(for: bridge.project)
-                            : []
-                        bridge.keepAccess(to: roots)
-                        let prepared = try bridge.prepare(
-                            userText: userText.isEmpty ? " " : userText,
-                            apiKey: apiKey,
-                            model: model,
-                            codeRoots: roots,
-                            includeMembraeTools: includeMembraeTools,
-                            includeProjectTools: includeProjectTools,
-                            resumeSession: resumeConversation,
-                            runtime: runtime
-                        )
-                        var request = prepared.request
-                        request.images = images
-                        bridge.debugLog.add("prepare opening=\(request.agentId == nil) model=\(request.model) promptChars=\(request.text.count) images=\(images.count)")
-                        return (request, prepared.metadata)
-                    }
+                    let prepared = try await prepareCursorTurn(
+                        bridge: bridge,
+                        userText: userText,
+                        model: model,
+                        messages: messages,
+                        images: images,
+                        includeMembraeTools: includeMembraeTools,
+                        includeProjectTools: includeProjectTools,
+                        resumeConversation: resumeConversation,
+                        runtime: runtime
+                    )
                     let request = prepared.0
                     continuation.yield(.metadata(prepared.1))
                     pace.markPrepared()
@@ -558,6 +568,12 @@ struct CursorChatProvider: ChatProvider {
                                 let output: String
                                 if toolName == "resolve_project_code_roots" {
                                     output = try await bridge.encodedCurrentCodeRoots()
+                                } else if toolName == MCPToolName.importServers || MCPToolName.isExternal(toolName) {
+                                    output = try await MCPRuntime.shared.execute(
+                                        name: toolName,
+                                        arguments: jsonObject(brief),
+                                        projectID: bridge.project?.id
+                                    )
                                 } else {
                                     output = try await ProjectWorker.consult(
                                         brief: brief,
@@ -646,4 +662,51 @@ struct CursorChatProvider: ChatProvider {
             }
         }
     }
+}
+
+@MainActor
+private func prepareCursorTurn(
+    bridge: CursorConversationBridge,
+    userText: String,
+    model: String,
+    messages: [TalkMessage],
+    images: [RunnerImage],
+    includeMembraeTools: Bool,
+    includeProjectTools: Bool,
+    resumeConversation: Bool,
+    runtime: WorkerPath
+) async throws -> (RunnerRequest, ChatTurnMetadata) {
+    bridge.debugLog.add("stream start model=\(model) messages=\(messages.count)")
+    for (index, message) in messages.enumerated() {
+        bridge.debugLog.add("  msg[\(index)] \(message.role) \(ChatTrace.clip(message.text, 80))")
+    }
+    guard let apiKey = KeychainStore.read(.cursorAPIKey) else {
+        throw CursorAPIError(status: 0, message: "Add a Cursor API key in Settings.")
+    }
+    let roots = runtime == .local && includeProjectTools
+        ? ProjectCodeWorkspace.localRoots(for: bridge.project)
+        : []
+    bridge.keepAccess(to: roots)
+    let prepared = try await bridge.prepare(
+        userText: userText.isEmpty ? " " : userText,
+        apiKey: apiKey,
+        model: model,
+        codeRoots: roots,
+        includeMembraeTools: includeMembraeTools,
+        includeProjectTools: includeProjectTools,
+        resumeSession: resumeConversation,
+        runtime: runtime
+    )
+    var request = prepared.request
+    request.images = images
+    bridge.debugLog.add("prepare opening=\(request.agentId == nil) model=\(request.model) promptChars=\(request.text.count) images=\(images.count)")
+    return (request, prepared.metadata)
+}
+
+private func jsonObject(_ text: String) -> [String: Any] {
+    guard let data = text.data(using: .utf8),
+          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return [:]
+    }
+    return object
 }

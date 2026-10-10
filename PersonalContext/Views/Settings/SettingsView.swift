@@ -32,6 +32,8 @@ struct SettingsView: View {
             SettingsCompatiblePage()
         case .sources:
             SettingsSourcesPage()
+        case .mcp:
+            SettingsMCPPage()
         case .calendar:
             SettingsCalendarPage()
         case .tags:

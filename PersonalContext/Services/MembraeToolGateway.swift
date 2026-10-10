@@ -10,6 +10,10 @@ final class MembraeToolGateway: AgentToolGateway {
     private let mcp: MembraeMCPClient?
     private let indexingRunID: UUID?
     private let storeURL: URL?
+    private let projectID: UUID?
+    private let includeExternalMCP: Bool
+    private let includeConfigTools: Bool
+    private let mcpRuntime: MCPRuntime?
 
     init(
         roots: [ProjectCodeRoot] = [],
@@ -19,7 +23,11 @@ final class MembraeToolGateway: AgentToolGateway {
         consult: ((String) async throws -> String)? = nil,
         mcp: MembraeMCPClient? = nil,
         indexingRunID: UUID? = nil,
-        storeURL: URL? = nil
+        storeURL: URL? = nil,
+        projectID: UUID? = nil,
+        includeExternalMCP: Bool = false,
+        includeConfigTools: Bool = false,
+        mcpRuntime: MCPRuntime? = nil
     ) {
         self.roots = roots
         self.includeMembraeTools = includeMembraeTools
@@ -29,6 +37,10 @@ final class MembraeToolGateway: AgentToolGateway {
         self.mcp = mcp ?? (includeMembraeTools ? .shared : nil)
         self.indexingRunID = indexingRunID
         self.storeURL = storeURL
+        self.projectID = projectID
+        self.includeExternalMCP = includeExternalMCP
+        self.includeConfigTools = includeConfigTools
+        self.mcpRuntime = mcpRuntime ?? ((includeExternalMCP || includeConfigTools) ? .shared : nil)
     }
 
     func definitions() async throws -> [[String: Any]] {
@@ -48,10 +60,23 @@ final class MembraeToolGateway: AgentToolGateway {
                 ]
             }
         }
-        return tools
+        if includeConfigTools {
+            tools.append(MCPToolCatalog.importDefinition)
+        }
+        if includeExternalMCP, let mcpRuntime {
+            tools += await mcpRuntime.providerDefinitions(projectID: projectID)
+        }
+        return tools.map { tool in
+            var tool = tool
+            if let name = tool["name"] as? String {
+                tool["name"] = ProviderToolName.legalize(name)
+            }
+            return tool
+        }
     }
 
     func execute(name: String, arguments: [String: Any]) async throws -> String {
+        let name = ProviderToolName.original(name)
         if name.hasPrefix("project_") {
             try await ensureRoots()
         }
@@ -81,7 +106,18 @@ final class MembraeToolGateway: AgentToolGateway {
             }
             let brief = (arguments["brief"] as? String) ?? (arguments["question"] as? String) ?? ""
             return try await consult(brief)
+        case MCPToolName.importServers:
+            guard includeConfigTools, let mcpRuntime else {
+                throw ProjectWorkspaceError("MCP import is not available in this session.")
+            }
+            return try await mcpRuntime.execute(name: name, arguments: arguments, projectID: projectID)
         default:
+            if MCPToolName.isExternal(name) {
+                guard includeExternalMCP, let mcpRuntime else {
+                    throw ProjectWorkspaceError("External MCP tools are not available in this session.")
+                }
+                return try await mcpRuntime.execute(name: name, arguments: arguments, projectID: projectID)
+            }
             guard let mcp else {
                 throw ProjectWorkspaceError("The Membrae tool service is unavailable.")
             }

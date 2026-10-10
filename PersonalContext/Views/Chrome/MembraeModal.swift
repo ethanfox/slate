@@ -300,6 +300,7 @@ struct ModalFooter<Leading: View>: View {
     @ViewBuilder var leading: () -> Leading
 
     @Environment(\.modalDismiss) private var modalDismiss
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 10) {
@@ -307,8 +308,11 @@ struct ModalFooter<Leading: View>: View {
                 .keyboardShortcut(.defaultAction)
 
             HStack(spacing: 10) {
-                ModalFooterButton(title: "Cancel", action: { modalDismiss() })
-                    .keyboardShortcut(.cancelAction)
+                ModalFooterButton(title: "Cancel", action: {
+                    modalDismiss()
+                    dismiss()
+                })
+                .keyboardShortcut(.cancelAction)
                 leading()
             }
         }

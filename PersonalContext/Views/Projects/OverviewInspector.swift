@@ -186,6 +186,31 @@ private struct OverviewInspectorSettings: View {
                 ProjectCodeSection(project: project)
             }
 
+            inspectorField("MCP") {
+                VStack(alignment: .leading, spacing: 8) {
+                    if app.talkProvider == .compatible {
+                        Text("The compatible endpoint cannot run MCP tools.")
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if app.mcp.store.enabledConnections.isEmpty {
+                        Text("Connect a server in Settings → MCP, then enable it here.")
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        ForEach(app.mcp.store.enabledConnections) { record in
+                            Toggle(record.name, isOn: Binding(
+                                get: { app.mcp.store.allows(record.id, in: project.id) },
+                                set: { app.mcp.store.setAllowed(record.id, in: project.id, allowed: $0) }
+                            ))
+                            .toggleStyle(.switch)
+                        }
+                    }
+                }
+            }
+
             inspectorField("Worker") {
                 VStack(alignment: .leading, spacing: 8) {
                     Picker("Worker", selection: workerMode) {

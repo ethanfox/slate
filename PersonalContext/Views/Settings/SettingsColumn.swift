@@ -14,6 +14,7 @@ struct SettingsColumn: View {
                     row(.compatible)
                     section("Sources")
                     row(.sources)
+                    row(.mcp)
                     section("Workspace")
                     row(.calendar)
                     row(.tags)

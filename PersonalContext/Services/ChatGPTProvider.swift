@@ -78,7 +78,10 @@ struct ChatGPTProvider: ChatProvider {
                                         }
                                     }
                                     : nil,
-                                mcp: includeMembraeTools ? workspace.mcp : nil
+                                mcp: includeMembraeTools ? workspace.mcp : nil,
+                                projectID: workspace.project?.id,
+                                includeExternalMCP: includeMembraeTools && workspace.project != nil,
+                                includeConfigTools: includeMembraeTools
                             ),
                             includeFinishRun: false
                         )

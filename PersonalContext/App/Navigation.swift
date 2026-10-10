@@ -173,6 +173,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     case importRelay
     case compatible
     case sources
+    case mcp
     case calendar
     case tags
     case appearance
@@ -189,6 +190,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .importRelay: "Import"
         case .compatible: "Compatible endpoint"
         case .sources: "Sources"
+        case .mcp: "MCP"
         case .calendar: "Calendar"
         case .tags: "Tags"
         case .appearance: "Appearance"
@@ -205,6 +207,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .importRelay: "square.and.arrow.down"
         case .compatible: "link.circle"
         case .sources: "link"
+        case .mcp: "cable.connector"
         case .calendar: "calendar"
         case .tags: "tag"
         case .appearance: "circle.lefthalf.filled"
