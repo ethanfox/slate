@@ -294,6 +294,7 @@ enum ChatSourceMatcher {
 
 extension NSAttributedString.Key {
     static let chatSources = NSAttributedString.Key("membrae.chatSources")
+    static let chatInlineCode = NSAttributedString.Key("membrae.chatInlineCode")
 }
 
 actor FaviconStore {

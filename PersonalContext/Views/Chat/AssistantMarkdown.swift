@@ -18,13 +18,11 @@ struct AssistantMarkdown: View {
             ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
                 switch block.content {
                 case .text(let value):
-                    MarkdownBlock(
-                        text: value,
+                    markdownSegments(
+                        value,
                         sources: leftover,
                         pinUnused: pinUnused && isLastText(index, in: blocks),
-                        streaming: streaming && isLastText(index, in: blocks) && !reduceMotion,
-                        modelContext: modelContext,
-                        onOpen: { $0.open(app: app, context: modelContext) }
+                        streaming: streaming && isLastText(index, in: blocks) && !reduceMotion
                     )
                 case .object(let source):
                     ObjectLinkCard(source: source) {
@@ -35,6 +33,45 @@ struct AssistantMarkdown: View {
         }
         .transaction { transaction in
             if streaming { transaction.animation = nil }
+        }
+    }
+
+    @ViewBuilder
+    private func markdownSegments(
+        _ value: String,
+        sources leftover: [ChatSource],
+        pinUnused: Bool,
+        streaming: Bool
+    ) -> some View {
+        let segments = ChatMarkdown.segments(in: value)
+        ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
+            let last = index == segments.count - 1
+            switch segment {
+            case .prose(let prose):
+                MarkdownBlock(
+                    text: prose,
+                    sources: leftover,
+                    pinUnused: pinUnused && last,
+                    streaming: streaming && last && !reduceMotion,
+                    modelContext: modelContext,
+                    onOpen: { $0.open(app: app, context: modelContext) }
+                )
+            case .fence(let language, let body):
+                ChatCodeBlock(language: language, text: body)
+            case .table(let rows, let alignments):
+                ChatMarkdownTable(rows: rows, alignments: alignments)
+            case .quote(let inner):
+                ChatQuoteBubble(copyText: inner) {
+                    MarkdownBlock(
+                        text: inner,
+                        sources: leftover,
+                        pinUnused: pinUnused && last,
+                        streaming: streaming && last && !reduceMotion,
+                        modelContext: modelContext,
+                        onOpen: { $0.open(app: app, context: modelContext) }
+                    )
+                }
+            }
         }
     }
 
@@ -312,6 +349,27 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         pager.hideSoon()
     }
 
+    override func draw(_ dirtyRect: NSRect) {
+        ChatMarkdown.drawInlineCodeBackgrounds(
+            layoutManager: layoutManager,
+            textContainer: textContainer,
+            origin: textContainerOrigin
+        )
+        super.draw(dirtyRect)
+    }
+
+    override func selectionRange(
+        forProposedRange proposedCharRange: NSRange,
+        granularity: NSSelectionGranularity
+    ) -> NSRange {
+        if granularity == .selectByWord,
+           let storage = textStorage,
+           let range = ChatMarkdown.inlineCodeRange(at: proposedCharRange.location, in: storage) {
+            return range
+        }
+        return super.selectionRange(forProposedRange: proposedCharRange, granularity: granularity)
+    }
+
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if let sources = sources(at: point), let first = sources.first {
@@ -320,6 +378,10 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         }
         if let url = link(at: point), let source = ChatObjectLink.parse(url) {
             onOpenSource?(source)
+            return
+        }
+        if event.clickCount == 2, let range = inlineCodeRange(at: point) {
+            setSelectedRange(range)
             return
         }
         super.mouseDown(with: event)
@@ -379,11 +441,12 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
     }
 
     private func chipRect(for sources: [ChatSource]) -> CGRect? {
-        var first: CGRect?
+        var union: CGRect?
         enumerateSourceRects { rect, value in
-            if value.map(\.id) == sources.map(\.id), first == nil { first = rect }
+            guard value.map(\.id) == sources.map(\.id) else { return }
+            union = union.map { $0.union(rect) } ?? rect
         }
-        return first
+        return union
     }
 
     private func enumerateSourceRects(_ body: @escaping (CGRect, [ChatSource]) -> Void) {
@@ -392,13 +455,9 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
         textStorage.enumerateAttribute(.chatSources, in: full) { value, range, _ in
             guard let sources = value as? [ChatSource] else { return }
             let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            layoutManager.enumerateEnclosingRects(
-                forGlyphRange: glyphs,
-                withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
-                in: textContainer
-            ) { rect, _ in
-                body(rect.offsetBy(dx: self.textContainerOrigin.x, dy: self.textContainerOrigin.y), sources)
-            }
+            let bounds = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+            guard bounds.width > 1, bounds.height > 1 else { return }
+            body(bounds.offsetBy(dx: self.textContainerOrigin.x, dy: self.textContainerOrigin.y), sources)
         }
     }
 
@@ -416,6 +475,25 @@ fileprivate final class AssistantMarkdownTextView: NSTextView {
                 self.invalidateIntrinsicContentSize()
             }
         }
+    }
+
+    private func inlineCodeRange(at point: NSPoint) -> NSRange? {
+        guard let layoutManager, let textContainer, let textStorage else { return nil }
+        var hit: NSRange?
+        for range in ChatMarkdown.inlineCodeRanges(in: textStorage) {
+            let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            layoutManager.enumerateEnclosingRects(
+                forGlyphRange: glyphs,
+                withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+                in: textContainer
+            ) { rect, _ in
+                let chip = rect
+                    .offsetBy(dx: self.textContainerOrigin.x, dy: self.textContainerOrigin.y)
+                    .insetBy(dx: -4, dy: -2)
+                if chip.contains(point) { hit = range }
+            }
+        }
+        return hit
     }
 
     private func link(at point: NSPoint) -> URL? {
@@ -510,24 +588,72 @@ struct MarkdownFenceBlock: Equatable {
     var close: NSRange?
 }
 
+enum ChatMarkdownSegment: Equatable {
+    case prose(String)
+    case fence(language: String, body: String)
+    case table(rows: [[String]], alignments: [NSTextAlignment])
+    case quote(String)
+}
+
 /// Styles markers in the source text. Does not join lines or drop spaces.
 enum ChatMarkdown {
     static let inlineFill = NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(white: 1, alpha: 0.14)
-            : NSColor(white: 0, alpha: 0.08)
+            ? NSColor(white: 1, alpha: 0.08)
+            : NSColor(white: 0, alpha: 0.04)
     }
 
     static let blockFill = NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(white: 1, alpha: 0.06)
-            : NSColor(white: 0, alpha: 0.045)
+            ? NSColor(white: 1, alpha: 0.04)
+            : NSColor(srgbRed: 0.953, green: 0.953, blue: 0.945, alpha: 1)
     }
 
     static let quoteBar = NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             ? NSColor(white: 1, alpha: 0.32)
             : NSColor(white: 0, alpha: 0.22)
+    }
+
+    static func segments(in source: String) -> [ChatMarkdownSegment] {
+        let lines = source.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        var segments: [ChatMarkdownSegment] = []
+        var prose: [String] = []
+        var index = 0
+
+        func flushProse() {
+            let text = prose.joined(separator: "\n")
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                segments.append(.prose(text))
+            }
+            prose.removeAll(keepingCapacity: true)
+        }
+
+        while index < lines.count {
+            if let fence = takeFence(lines, from: index) {
+                flushProse()
+                let language = String(lines[index].dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                segments.append(.fence(language: language, body: fence.lines.joined(separator: "\n")))
+                index = fence.end
+                continue
+            }
+            if let quote = takeQuote(lines, from: index) {
+                flushProse()
+                segments.append(.quote(quote.inner))
+                index = quote.end
+                continue
+            }
+            if let table = takeTable(lines, from: index) {
+                flushProse()
+                segments.append(.table(rows: table.rows, alignments: table.alignments))
+                index = table.end
+                continue
+            }
+            prose.append(lines[index])
+            index += 1
+        }
+        flushProse()
+        return segments
     }
 
     static func containsStructuredBlocks(_ source: String) -> Bool {
@@ -644,7 +770,69 @@ enum ChatMarkdown {
             }
             index += 1
         }
+        applyInlineCodeMetrics(result)
         return result
+    }
+
+    static func drawInlineCodeBackgrounds(
+        layoutManager: NSLayoutManager?,
+        textContainer: NSTextContainer?,
+        origin: NSPoint
+    ) {
+        guard let layoutManager, let textContainer, let storage = layoutManager.textStorage, storage.length > 0 else {
+            return
+        }
+        for range in inlineCodeRanges(in: storage) {
+            let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            layoutManager.enumerateEnclosingRects(
+                forGlyphRange: glyphs,
+                withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+                in: textContainer
+            ) { rect, _ in
+                let chip = rect.offsetBy(dx: origin.x, dy: origin.y).insetBy(dx: -4, dy: -1)
+                inlineFill.setFill()
+                NSBezierPath(roundedRect: chip, xRadius: 3, yRadius: 3).fill()
+            }
+        }
+    }
+
+    static func inlineCodeRange(at location: Int, in storage: NSAttributedString) -> NSRange? {
+        guard storage.length > 0 else { return nil }
+        let index = min(max(location, 0), storage.length - 1)
+        return inlineCodeRanges(in: storage).first { NSLocationInRange(index, $0) }
+    }
+
+    static func inlineCodeRanges(in storage: NSAttributedString) -> [NSRange] {
+        let limit = NSRange(location: 0, length: storage.length)
+        var ranges: [NSRange] = []
+        var cursor = 0
+        while cursor < storage.length {
+            var span = NSRange()
+            if storage.attribute(
+                .chatInlineCode,
+                at: cursor,
+                longestEffectiveRange: &span,
+                in: limit
+            ) != nil, span.length > 0 {
+                ranges.append(span)
+                cursor = span.upperBound
+            } else {
+                cursor = span.upperBound > cursor ? span.upperBound : cursor + 1
+            }
+        }
+        return ranges
+    }
+
+    private static func applyInlineCodeMetrics(_ text: NSMutableAttributedString) {
+        let ranges = inlineCodeRanges(in: text)
+        let pad: CGFloat = 4
+        for range in ranges {
+            text.addAttribute(.kern, value: pad, range: NSRange(location: range.location + range.length - 1, length: 1))
+            if range.location > 0 {
+                text.addAttribute(.kern, value: pad, range: NSRange(location: range.location - 1, length: 1))
+            }
+            text.addAttribute(.chatInlineCode, value: true, range: range)
+        }
     }
 
     static func tableBlocks(in source: String) -> [MarkdownTableBlock] {
@@ -923,7 +1111,7 @@ enum ChatMarkdown {
                 block.setWidth(8, type: .absoluteValueType, for: .padding)
                 block.setValue(100 / CGFloat(columns), type: .percentageValueType, for: .width)
                 if row == 0 {
-                    block.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06)
+                    block.backgroundColor = blockFill
                 }
                 let paragraph = NSMutableParagraphStyle()
                 paragraph.textBlocks = [block]
@@ -1339,7 +1527,7 @@ enum ChatMarkdown {
             .paragraphStyle: paragraph
         ]
         if code {
-            attrs[.backgroundColor] = inlineFill
+            attrs[.chatInlineCode] = true
         }
         if let url {
             attrs[.link] = url

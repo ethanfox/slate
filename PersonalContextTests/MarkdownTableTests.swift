@@ -112,6 +112,19 @@ final class MarkdownTableTests: XCTestCase {
         XCTAssertTrue(rendered.string.contains("2. Finish widgets"))
     }
 
+    func testMarksInlineCodeSpanForChipAndSelection() {
+        let rendered = ChatMarkdown.attributed("See `this kind of text` now")
+        let range = (rendered.string as NSString).range(of: "this kind of text")
+        XCTAssertNotEqual(range.location, NSNotFound)
+        XCTAssertEqual(rendered.attribute(.chatInlineCode, at: range.location, effectiveRange: nil) as? Bool, true)
+        XCTAssertNil(rendered.attribute(.backgroundColor, at: range.location, effectiveRange: nil))
+        let space = (rendered.string as NSString).range(of: "kind of")
+        let span = ChatMarkdown.inlineCodeRange(at: space.location, in: rendered)
+        XCTAssertEqual(span, ChatMarkdown.inlineCodeRange(at: range.location, in: rendered))
+        XCTAssertEqual((rendered.string as NSString).substring(with: span ?? NSRange()), "this kind of text")
+        XCTAssertNil(ChatMarkdown.inlineCodeRange(at: 0, in: rendered))
+    }
+
     func testKeepsInlineCodeInsideListItem() {
         let rendered = ChatMarkdown.attributed("- Forward to `membrae-mcp` while open")
         let range = (rendered.string as NSString).range(of: "membrae-mcp")
@@ -134,6 +147,33 @@ final class MarkdownTableTests: XCTestCase {
         XCTAssertTrue(ChatMarkdown.containsStructuredBlocks("> quoted"))
         XCTAssertTrue(ChatMarkdown.containsStructuredBlocks("---"))
         XCTAssertFalse(ChatMarkdown.containsStructuredBlocks("Just a sentence with a | pipe."))
+    }
+
+    func testSplitsStructuredSegments() {
+        let source = """
+        Intro
+
+        > Keep one composer.
+
+        ```swift
+        struct ChatInput: View {}
+        ```
+
+        | Surface | Owner |
+        | --- | --- |
+        | Composer | ChatInput |
+        """
+        let segments = ChatMarkdown.segments(in: source)
+        XCTAssertEqual(segments.count, 4)
+        guard case .prose(let prose) = segments[0] else { return XCTFail("prose") }
+        XCTAssertTrue(prose.contains("Intro"))
+        guard case .quote(let quote) = segments[1] else { return XCTFail("quote") }
+        XCTAssertEqual(quote, "Keep one composer.")
+        guard case .fence(let language, let body) = segments[2] else { return XCTFail("fence") }
+        XCTAssertEqual(language, "swift")
+        XCTAssertTrue(body.contains("struct ChatInput"))
+        guard case .table(let rows, _) = segments[3] else { return XCTFail("table") }
+        XCTAssertEqual(rows.first, ["Surface", "Owner"])
     }
 
     func testRendersBlockquoteWithoutMarker() {

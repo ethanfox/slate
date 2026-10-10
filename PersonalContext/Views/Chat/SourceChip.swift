@@ -82,15 +82,35 @@ final class SourcePagerAnchor {
     private func place(_ panel: NSPanel?, from view: NSView, rect: CGRect) {
         guard let panel, let window = view.window else { return }
         let size = panel.frame.size
-        let screen = window.convertToScreen(view.convert(rect, to: nil))
-        var origin = NSPoint(x: screen.minX, y: screen.minY - size.height - 4)
-        if let visible = window.screen?.visibleFrame {
-            origin.x = min(max(origin.x, visible.minX), max(visible.maxX - size.width, visible.minX))
-            if origin.y < visible.minY {
-                origin.y = screen.maxY + 4
+        let screen = screenBounds(of: rect, in: view)
+        var origin = NSPoint(x: screen.minX, y: screen.minY - size.height - 3)
+        if let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+            origin.x = min(max(origin.x, visible.minX + 8), max(visible.maxX - size.width - 8, visible.minX + 8))
+            if origin.y < visible.minY + 8 {
+                origin.y = screen.maxY + 3
             }
         }
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
+    }
+
+    private func screenBounds(of rect: CGRect, in view: NSView) -> CGRect {
+        let corners = [
+            NSPoint(x: rect.minX, y: rect.minY),
+            NSPoint(x: rect.maxX, y: rect.minY),
+            NSPoint(x: rect.minX, y: rect.maxY),
+            NSPoint(x: rect.maxX, y: rect.maxY)
+        ]
+        let points = corners.map { corner in
+            view.window?.convertPoint(toScreen: view.convert(corner, to: nil)) ?? corner
+        }
+        let xs = points.map(\.x)
+        let ys = points.map(\.y)
+        return CGRect(
+            x: xs.min() ?? 0,
+            y: ys.min() ?? 0,
+            width: (xs.max() ?? 0) - (xs.min() ?? 0),
+            height: (ys.max() ?? 0) - (ys.min() ?? 0)
+        )
     }
 
     private func makePanel() -> NSPanel {
@@ -119,18 +139,18 @@ struct SourceChipLabel: View {
     var icon: NSImage?
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             mark
             Text(label)
-                .font(CraftFont.caption)
+                .font(CraftFont.body)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .strokeBorder(CraftColor.hairline)
         )
         .accessibilityLabel(accessibility)
@@ -141,13 +161,15 @@ struct SourceChipLabel: View {
             Image(nsImage: icon)
                 .resizable()
                 .interpolation(.high)
-                .frame(width: 12, height: 12)
-                .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+                .renderingMode(.template)
+                .foregroundStyle(.secondary)
+                .frame(width: 14, height: 14)
+                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
         } else if let source = sources.first {
             Image(systemName: source.symbol)
-                .font(.system(size: 9, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
-                .frame(width: 12, height: 12)
+                .frame(width: 14, height: 14)
         }
     }
 
@@ -269,33 +291,32 @@ enum SourceChipImage {
     static func make(sources: [ChatSource], icon: NSImage?) -> NSImage {
         let first = sources.first
         let text = chipLabel(sources)
-        let font = NSFont.systemFont(ofSize: 11)
+        let font = NSFont.systemFont(ofSize: 13)
         let textSize = (text as NSString).size(withAttributes: [.font: font])
-        let width = ceil(6 + 12 + 5 + textSize.width + 6)
-        let height: CGFloat = 16
+        let width = ceil(8 + 14 + 6 + textSize.width + 8)
+        let height: CGFloat = 22
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
-            let path = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
+            let path = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 6, yRadius: 6)
             NSColor.secondaryLabelColor.withAlphaComponent(0.12).setFill()
             path.fill()
             NSColor.separatorColor.setStroke()
             path.lineWidth = 1
             path.stroke()
 
-            let markRect = NSRect(x: 6, y: (height - 12) / 2, width: 12, height: 12)
+            let markRect = NSRect(x: 8, y: (height - 14) / 2, width: 14, height: 14)
+            let mark: NSImage?
             if let icon {
-                icon.draw(in: markRect, from: .zero, operation: .sourceOver, fraction: 1)
-            } else if let symbol = first?.symbol {
-                let symbolImage = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-                symbolImage?.withSymbolConfiguration(.init(pointSize: 9, weight: .medium))?.draw(
-                    in: markRect,
-                    from: .zero,
-                    operation: .sourceOver,
-                    fraction: 0.7
-                )
+                mark = icon
+            } else if let name = first?.symbol {
+                mark = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+                    .withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
+            } else {
+                mark = nil
             }
+            drawTinted(mark, in: markRect, color: NSColor.secondaryLabelColor)
 
             (text as NSString).draw(
-                in: NSRect(x: 23, y: (height - textSize.height) / 2, width: textSize.width, height: textSize.height),
+                in: NSRect(x: 28, y: (height - textSize.height) / 2, width: textSize.width, height: textSize.height),
                 withAttributes: [
                     .font: font,
                     .foregroundColor: NSColor.secondaryLabelColor
@@ -305,6 +326,17 @@ enum SourceChipImage {
         }
         image.isTemplate = false
         return image
+    }
+
+    private static func drawTinted(_ image: NSImage?, in rect: NSRect, color: NSColor) {
+        guard let image else { return }
+        let stamped = NSImage(size: rect.size, flipped: false) { bounds in
+            image.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1)
+            color.set()
+            bounds.fill(using: .sourceIn)
+            return true
+        }
+        stamped.draw(in: rect)
     }
 
     private static func chipLabel(_ sources: [ChatSource]) -> String {
@@ -334,6 +366,6 @@ final class SourceChipAttachment: NSTextAttachment {
     func refresh() {
         let drawn = SourceChipImage.make(sources: sources, icon: icon)
         image = drawn
-        bounds = CGRect(x: 3, y: -3, width: drawn.size.width, height: drawn.size.height)
+        bounds = CGRect(x: 4, y: -6, width: drawn.size.width, height: drawn.size.height)
     }
 }

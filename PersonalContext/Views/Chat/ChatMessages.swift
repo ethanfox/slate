@@ -419,6 +419,7 @@ private struct ChatToolMark: View {
 
 private struct UserMessageBubble: View {
     let message: ChatEntry.User
+    @Environment(AppModel.self) private var app
     @Environment(\.chatMessageLayout) private var layout
 
     var body: some View {
@@ -427,14 +428,11 @@ private struct UserMessageBubble: View {
                 Text(message.text)
                     .font(CraftFont.chatBody)
                     .lineSpacing(7)
+                    .foregroundStyle(.white)
                     .textSelection(.enabled)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
-                    .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(CraftColor.hairline)
-                    )
+                    .background(app.accent.color, in: RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: layout.userMaxWidth, alignment: .trailing)
                     .opacity(message.isCancelled || message.isFailed ? 0.55 : 1)

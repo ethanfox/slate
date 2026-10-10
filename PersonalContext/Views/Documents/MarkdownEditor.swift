@@ -696,6 +696,7 @@ final class MarkdownTableFace {
         layout.addTextContainer(container)
         layout.ensureLayout(for: container)
         let glyphs = layout.glyphRange(for: container)
+        ChatMarkdown.drawInlineCodeBackgrounds(layoutManager: layout, textContainer: container, origin: rect.origin)
         layout.drawBackground(forGlyphRange: glyphs, at: rect.origin)
         layout.drawGlyphs(forGlyphRange: glyphs, at: rect.origin)
     }

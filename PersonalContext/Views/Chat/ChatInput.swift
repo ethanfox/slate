@@ -49,100 +49,63 @@ struct ChatInput: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                ModelPicker(
-                    providerID: $providerID,
-                    modelID: $modelID,
-                    allowsProviderChange: allowsProviderChange
-                )
-                Spacer(minLength: 8)
-                if let onStartRun {
-                    Button("Start Run…", action: onStartRun)
-                        .buttonStyle(.plain)
-                        .font(CraftFont.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if providerID == TalkProvider.cursor.rawValue, let usage = app.usage {
-                    ChatUsage(usage: usage)
-                }
-                #if DEBUG
-                if let debugLog {
-                    Button {
-                        showDebug.toggle()
-                    } label: {
-                        Image(systemName: "ladybug")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 22, height: 22)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .popover(isPresented: $showDebug, arrowEdge: .top) {
-                        ChatDebugPopover(log: debugLog)
-                    }
-                    .accessibilityLabel("Chat debug log")
-                }
-                #endif
+        VStack(alignment: .leading, spacing: 0) {
+            if let label {
+                Text(label)
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 12)
             }
+
+            prompt
 
             ComposerAttachmentStrip(attachments: attachments, onRemove: removeAttachment)
+                .padding(.horizontal, 14)
+                .padding(.top, attachments.isEmpty ? 0 : 4)
 
-            if let label {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(label)
-                        .font(CraftFont.caption)
-                        .foregroundStyle(.tertiary)
-                    field
-                }
-            } else {
-                field
-            }
+            ComposerToolbar(
+                providerID: $providerID,
+                modelID: $modelID,
+                allowsProviderChange: allowsProviderChange,
+                canSend: canSend,
+                isGenerating: isGenerating,
+                showDebug: $showDebug,
+                debugLog: debugLog,
+                usage: providerID == TalkProvider.cursor.rawValue ? app.usage : nil,
+                onAttach: pickFiles,
+                onSend: send,
+                onStop: onStop,
+                onStartRun: onStartRun
+            )
 
             if let disclosure = attachments.compactMap(\.disclosure).first {
                 Text(disclosure)
                     .font(CraftFont.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 10)
             }
 
             if !changes.isEmpty {
                 Label(changes.joined(separator: " · "), systemImage: "checkmark.circle")
                     .font(CraftFont.caption)
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 10)
             }
 
             if let errorMessage {
-                if isStuckRun(errorMessage), let onRetryStuck {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("The last reply is still running. Try again to take it over.")
-                            .foregroundStyle(.red)
-                        Button("Try again", action: onRetryStuck)
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.primary)
-                    }
-                    .font(CraftFont.caption)
-                    .onAppear { ChatTrace.event("chat ui error: \(errorMessage)") }
-                } else {
-                    Text(errorMessage)
-                        .font(CraftFont.caption)
-                        .foregroundStyle(.red)
-                        .onAppear { ChatTrace.event("chat ui error: \(errorMessage)") }
-                }
+                composerError(errorMessage)
             }
         }
-        .padding(12)
-        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: CraftRadius.composer, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(CraftColor.hairline, lineWidth: 1)
+            RoundedRectangle(cornerRadius: CraftRadius.composer, style: .continuous)
+                .strokeBorder(isDropTarget ? Color.accentColor : CraftColor.hairline, lineWidth: isDropTarget ? 1.5 : 1)
         }
-        .overlay {
-            if isDropTarget {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.accentColor, lineWidth: 1.5)
-            }
-        }
+        .shadow(color: .black.opacity(0.07), radius: 15, y: 8)
         .onDrop(of: [.fileURL], isTargeted: $isDropTarget, perform: handleDrop)
         .onPasteCommand(of: [.fileURL, .image, .png, .jpeg, .tiff], perform: handlePaste)
         .onAppear {
@@ -187,55 +150,48 @@ struct ChatInput: View {
         }
     }
 
-    private var field: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            Button(action: pickFiles) {
-                Image(systemName: "paperclip")
-                    .frame(width: 22, height: 28)
-                    .contentShape(Rectangle())
+    private var prompt: some View {
+        ZStack(alignment: .topLeading) {
+            if text.isEmpty {
+                Text(placeholder)
+                    .font(CraftFont.chatBody)
+                    .foregroundStyle(.tertiary)
+                    .allowsHitTesting(false)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Attach files")
+            ComposerField(
+                text: $text,
+                placeholder: placeholder,
+                lineLimit: lineLimit,
+                onAttachmentPaste: importFromPasteboard,
+                onSubmit: send
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 18)
+        .padding(.top, label == nil ? 16 : 8)
+        .padding(.bottom, 10)
+    }
 
-            ZStack(alignment: .topLeading) {
-                if text.isEmpty {
-                    Text(placeholder)
-                        .font(CraftFont.body)
-                        .foregroundStyle(.tertiary)
-                        .allowsHitTesting(false)
+    @ViewBuilder
+    private func composerError(_ errorMessage: String) -> some View {
+        Group {
+            if isStuckRun(errorMessage), let onRetryStuck {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("The last reply is still running. Try again to take it over.")
+                        .foregroundStyle(.red)
+                    Button("Try again", action: onRetryStuck)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.primary)
                 }
-                ComposerField(
-                    text: $text,
-                    placeholder: placeholder,
-                    lineLimit: lineLimit,
-                    onAttachmentPaste: importFromPasteboard,
-                    onSubmit: send
-                )
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            if isGenerating, let onStop {
-                Button(action: onStop) {
-                    Image(systemName: "stop.fill")
-                        .frame(width: 28, height: 28)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular, in: Circle())
-                .accessibilityLabel("Stop")
             } else {
-                Button(action: send) {
-                    Image(systemName: "arrow.up")
-                        .frame(width: 28, height: 28)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular, in: Circle())
-                .disabled(!canSend)
-                .accessibilityLabel("Send")
-                .keyboardShortcut(.return, modifiers: .command)
+                Text(errorMessage)
+                    .foregroundStyle(.red)
             }
         }
+        .font(CraftFont.caption)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 12)
+        .onAppear { ChatTrace.event("chat ui error: \(errorMessage)") }
     }
 
     private func prepareProviders() {
@@ -546,7 +502,7 @@ final class ComposerNSTextView: NSTextView {
         importsGraphics = false
         allowsUndo = true
         isAutomaticQuoteSubstitutionEnabled = false
-        font = .systemFont(ofSize: 13)
+        font = .systemFont(ofSize: 15)
         textColor = .labelColor
         insertionPointColor = .labelColor
         focusRingType = .none
@@ -601,6 +557,122 @@ final class ComposerNSTextView: NSTextView {
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { [] }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool { false }
+}
+
+private struct ComposerToolbar: View {
+    @Binding var providerID: String
+    @Binding var modelID: String
+    var allowsProviderChange: Bool
+    var canSend: Bool
+    var isGenerating: Bool
+    @Binding var showDebug: Bool
+    var debugLog: ChatDebugLog?
+    var usage: CursorUsage?
+    var onAttach: () -> Void
+    var onSend: () -> Void
+    var onStop: (() -> Void)?
+    var onStartRun: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(action: onAttach) {
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Attach files")
+
+            Rectangle()
+                .fill(CraftColor.hairline)
+                .frame(width: 1, height: 16)
+
+            ModelPicker(
+                providerID: $providerID,
+                modelID: $modelID,
+                allowsProviderChange: allowsProviderChange
+            )
+
+            Spacer(minLength: 8)
+
+            if let onStartRun {
+                Button("Start Run…", action: onStartRun)
+                    .buttonStyle(.plain)
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let usage {
+                ChatUsage(usage: usage)
+            }
+
+            #if DEBUG
+            if let debugLog {
+                Button {
+                    showDebug.toggle()
+                } label: {
+                    Image(systemName: "ladybug")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showDebug, arrowEdge: .top) {
+                    ChatDebugPopover(log: debugLog)
+                }
+                .accessibilityLabel("Chat debug log")
+            }
+            #endif
+
+            ComposerSendButton(
+                canSend: canSend,
+                isGenerating: isGenerating,
+                onSend: onSend,
+                onStop: onStop
+            )
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 4)
+        .padding(.bottom, 14)
+    }
+}
+
+private struct ComposerSendButton: View {
+    var canSend: Bool
+    var isGenerating: Bool
+    var onSend: () -> Void
+    var onStop: (() -> Void)?
+
+    var body: some View {
+        if isGenerating, let onStop {
+            Button(action: onStop) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(CraftColor.elevated)
+                    .frame(width: 28, height: 28)
+                    .background(Color.primary, in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Stop")
+        } else {
+            Button(action: onSend) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(CraftColor.elevated)
+                    .frame(width: 28, height: 28)
+                    .background(Color.primary, in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .opacity(canSend ? 1 : 0.35)
+            .disabled(!canSend)
+            .accessibilityLabel("Send")
+            .keyboardShortcut(.return, modifiers: .command)
+        }
+    }
 }
 
 private struct ChatUsage: View {

@@ -26,6 +26,14 @@ enum CraftColor {
         dark: NSColor(white: 1, alpha: 0.04),
         light: NSColor(white: 1, alpha: 1)
     )
+    static let wash = dynamic(
+        dark: NSColor(white: 1, alpha: 0.04),
+        light: NSColor(srgbRed: 0.953, green: 0.953, blue: 0.945, alpha: 1)
+    )
+    static let incoming = dynamic(
+        dark: NSColor(srgbRed: 0.227, green: 0.227, blue: 0.235, alpha: 1),
+        light: NSColor(srgbRed: 0.914, green: 0.914, blue: 0.922, alpha: 1)
+    )
     static let scrim = dynamic(
         dark: NSColor(white: 0, alpha: 0.25),
         light: NSColor(white: 0, alpha: 0.12)
@@ -85,6 +93,13 @@ extension TaskWorkflowStatus {
         case .done: AccentPreference.green.color
         }
     }
+}
+
+enum CraftRadius {
+    static let row: CGFloat = 8
+    static let plate: CGFloat = 12
+    static let bubble: CGFloat = 18
+    static let composer: CGFloat = 28
 }
 
 enum CraftFont {

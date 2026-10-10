@@ -101,6 +101,7 @@
 		544D9789E60CFA90EE44F440 /* OverviewWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E95839E9F07CBA87BC01981 /* OverviewWidgets.swift */; };
 		55D821BAAFC11B0776685369 /* SelectableText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 321A7F2216EB9AE585A3B8E3 /* SelectableText.swift */; };
 		5607183847AB410FD65F258B /* AssistantMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4433E89BB7AF1A5C5E09EF95 /* AssistantMarkdown.swift */; };
+		C8A7B3D4E5F60718293A4B02 /* ChatMarkdownBlocks.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8A7B3D4E5F60718293A4B01 /* ChatMarkdownBlocks.swift */; };
 		5970F19FA847557162751BF3 /* ChatInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5991E95904B11AEBA3B96BDE /* ChatInput.swift */; };
 		5B69D4033AA633125A4A2FAB /* ObjectLinkCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E415EBBA67C5F2F8A3F3A20 /* ObjectLinkCard.swift */; };
 		B02D4F8C5E3091B27C6F5D4A /* ObjectFind.swift in Sources */ = {isa = PBXBuildFile; fileRef = A91C3E7B4D2F80A16B5E4C39 /* ObjectFind.swift */; };
@@ -342,6 +343,7 @@
 		3F3CB7A7C440980D6F3F0544 /* SettingsCursorPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCursorPage.swift; sourceTree = "<group>"; };
 		420D87C639AC3397CA1531FC /* QuickAskHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickAskHost.swift; sourceTree = "<group>"; };
 		4433E89BB7AF1A5C5E09EF95 /* AssistantMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantMarkdown.swift; sourceTree = "<group>"; };
+		C8A7B3D4E5F60718293A4B01 /* ChatMarkdownBlocks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMarkdownBlocks.swift; sourceTree = "<group>"; };
 		48D2751AE227D1D7C67EBCF3 /* ConversationRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationRow.swift; sourceTree = "<group>"; };
 		4A07E5F475297DE983C9EAB1 /* SettingsDeveloperPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsDeveloperPage.swift; sourceTree = "<group>"; };
 		4A5537B9B75008C51A4CCB08 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
@@ -542,6 +544,7 @@
 			isa = PBXGroup;
 			children = (
 				4433E89BB7AF1A5C5E09EF95 /* AssistantMarkdown.swift */,
+				C8A7B3D4E5F60718293A4B01 /* ChatMarkdownBlocks.swift */,
 				5991E95904B11AEBA3B96BDE /* ChatInput.swift */,
 				F11E5704A000000A /* ComposerAttachments.swift */,
 				F65DEA7985A36C0955B7C5DA /* ChatMessages.swift */,
@@ -1052,6 +1055,7 @@
 				0AD6FB2A5BC4ADE164AF0AA3 /* AgendaLinkedSection.swift in Sources */,
 				C56C26ED6A7BBE605258380B /* AppModel.swift in Sources */,
 				5607183847AB410FD65F258B /* AssistantMarkdown.swift in Sources */,
+				C8A7B3D4E5F60718293A4B02 /* ChatMarkdownBlocks.swift in Sources */,
 				20F1B247DA79052068395E36 /* AssociationFields.swift in Sources */,
 				25C4BD4D7FD810C6EFF76195 /* AssociationService.swift in Sources */,
 				9B2D3F4A5C6E708192A3B4C5 /* TaskStore.swift in Sources */,
