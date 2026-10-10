@@ -36,6 +36,8 @@ final class ProviderNeutralTests: XCTestCase {
         let bridge = CursorConversationBridge(conversation: conversation, project: project)
         let first = bridge.prepareProviderTurn(userText: "hi")
         XCTAssertTrue(first.contains("You are the assistant inside Membrae"))
+        XCTAssertTrue(first.contains(ContextBuilder.replyFirst))
+        XCTAssertTrue(first.contains(ContextBuilder.responseStyle))
         XCTAssertTrue(first.contains("Do not walk the whole project"))
         XCTAssertTrue(first.contains("Harbor"))
         XCTAssertTrue(first.contains("<project-context>"))
@@ -44,6 +46,8 @@ final class ProviderNeutralTests: XCTestCase {
 
         let later = bridge.prepareProviderTurn(userText: "again")
         XCTAssertFalse(later.contains("You are the assistant inside Membrae"))
+        XCTAssertTrue(later.contains(ContextBuilder.replyFirst))
+        XCTAssertTrue(later.contains(ContextBuilder.responseStyle))
         XCTAssertTrue(later.contains("Harbor"))
         XCTAssertFalse(later.contains("Active decisions"))
         XCTAssertFalse(later.contains("Ship the Mac app in Swift"))
@@ -204,10 +208,14 @@ final class ProviderNeutralTests: XCTestCase {
         let bridge = CursorConversationBridge(conversation: conversation, project: seed.project)
         let first = bridge.prepareProviderTurn(userText: "hi")
         XCTAssertTrue(first.contains(ContextBuilder.knowledgeRules))
+        XCTAssertTrue(first.contains(ContextBuilder.replyFirst))
+        XCTAssertTrue(first.contains(ContextBuilder.responseStyle))
         XCTAssertTrue(first.contains("You are the assistant inside Membrae"))
 
         let later = bridge.prepareProviderTurn(userText: "again")
         XCTAssertFalse(later.contains("You are the assistant inside Membrae"))
+        XCTAssertTrue(later.contains(ContextBuilder.replyFirst))
+        XCTAssertTrue(later.contains(ContextBuilder.responseStyle))
         XCTAssertTrue(later.contains(ContextBuilder.knowledgeRules))
         XCTAssertTrue(later.contains("track bodies"))
     }

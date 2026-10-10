@@ -315,12 +315,14 @@ private struct WorkAccordion: View {
     var tools: [ChatToolActivity]
     var sources: [ChatSource] = []
     @State private var opened = false
+    @State private var hoveringPill = false
 
-    private var canOpen: Bool { !isGenerating && hasBody }
+    private var canOpen: Bool { hasBody }
     private var expanded: Bool { opened && canOpen }
     private var currentTool: ChatToolActivity? {
         tools.last(where: { $0.status == .running }) ?? tools.last
     }
+    private var extraToolCount: Int { max(tools.count - 1, 0) }
 
     private var label: String {
         if isGenerating {
@@ -332,10 +334,6 @@ private struct WorkAccordion: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
-            if isGenerating, let currentTool {
-                ChatToolRow(tool: currentTool, sources: sources)
-                    .padding(.leading, 22)
-            }
             if expanded {
                 VStack(alignment: .leading, spacing: 8) {
                     if !thinking.isEmpty {
@@ -362,7 +360,7 @@ private struct WorkAccordion: View {
     private var header: some View {
         if canOpen {
             Button(action: toggle) {
-                line(showsChevron: true)
+                headerContent
             }
             .buttonStyle(.plain)
             .accessibilityAddTraits(expanded ? [.isSelected] : [])
@@ -370,6 +368,54 @@ private struct WorkAccordion: View {
         } else {
             line(showsChevron: false)
         }
+    }
+
+    @ViewBuilder
+    private var headerContent: some View {
+        if isGenerating, let currentTool {
+            currentToolPill(currentTool)
+        } else {
+            line(showsChevron: true)
+        }
+    }
+
+    private func currentToolPill(_ tool: ChatToolActivity) -> some View {
+        HStack(spacing: 6) {
+            ChatToolMark(symbol: tool.symbol)
+            Text(tool.title)
+                .font(CraftFont.body)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            if extraToolCount > 0 {
+                Text("+\(extraToolCount)")
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+            }
+            if tool.status == .running {
+                ProgressView()
+                    .controlSize(.small)
+            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .rotationEffect(.degrees(expanded ? 90 : 0))
+        }
+        .padding(.horizontal, 10)
+        .frame(minHeight: 28)
+        .background {
+            Capsule().fill(CraftColor.selection)
+            if hoveringPill {
+                Capsule().fill(CraftColor.hover)
+            }
+        }
+        .overlay {
+            Capsule().strokeBorder(CraftColor.hairline)
+        }
+        .onHover { hoveringPill = $0 }
+        .contentShape(Capsule())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(pillLabel(for: tool))
     }
 
     private func line(showsChevron: Bool) -> some View {
@@ -395,6 +441,11 @@ private struct WorkAccordion: View {
 
     private var hasBody: Bool {
         !thinking.isEmpty || !tools.isEmpty
+    }
+
+    private func pillLabel(for tool: ChatToolActivity) -> String {
+        if extraToolCount == 0 { return tool.title }
+        return "\(tool.title), \(extraToolCount) more"
     }
 
     private func toggle() {
