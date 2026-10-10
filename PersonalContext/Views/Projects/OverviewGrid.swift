@@ -81,15 +81,6 @@ struct OverviewPlate: Identifiable, Codable, Equatable, Hashable {
         try container.encode(settingsJSON, forKey: .settingsJSON)
     }
 
-    static let starter: [OverviewPlate] = [
-        OverviewPlate(size: .medium),
-        OverviewPlate(size: .small),
-        OverviewPlate(size: .small),
-        OverviewPlate(size: .large),
-        OverviewPlate(size: .small),
-        OverviewPlate(size: .medium)
-    ]
-
     static func moving(_ plates: [OverviewPlate], id: UUID?, before target: UUID?) -> [OverviewPlate] {
         guard let id, let target, id != target else { return plates }
         var next = plates
@@ -271,12 +262,6 @@ extension Project {
         }
     }
 
-    func seedOverviewPlatesIfNeeded() {
-        guard overviewLayoutJSON.isEmpty else { return }
-        overviewPlates = OverviewPlate.starter
-        touch()
-    }
-
     @discardableResult
     func addOverviewPlate(_ kind: OverviewWidgetKind, size: OverviewWidgetSize? = nil) -> UUID {
         let plate = OverviewPlate(
@@ -429,7 +414,6 @@ struct OverviewCanvas: View {
                 .accessibilityHidden(true)
         }
         .clipped()
-        .onAppear(perform: project.seedOverviewPlatesIfNeeded)
         .onChange(of: app.inspectorOpen) { _, open in
             if !open {
                 clearDrag()
