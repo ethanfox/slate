@@ -125,7 +125,7 @@ final class ChatEngineTests: XCTestCase {
         XCTAssertTrue(engine.send("go"))
         provider.emit("partial")
         let painted = Date().addingTimeInterval(1)
-        while assistantTexts(in: engine).isEmpty, Date() < painted {
+        while assistantTexts(in: engine).allSatisfy(\.isEmpty), Date() < painted {
             try? await Task.sleep(for: .milliseconds(10))
         }
         engine.cancel()
@@ -183,7 +183,32 @@ final class ChatEngineTests: XCTestCase {
         XCTAssertEqual(stored.map(\.content), ["old question", "old answer", "new question", "new answer"])
     }
 
-    func testRuntimeSkipsFailedUserWhenPersisting() async throws {
+    func testRestoredReplyRendersWhenToolsExist() throws {
+        let work = ChatWork(
+            seconds: 4,
+            thinking: "",
+            tools: [ChatToolActivity(id: "1", name: "list_tracks", status: .succeeded)]
+        )
+        let packed = ChatTranscript.pack(text: "Hello", sources: [], work: work)
+        let message = ChatMessage(id: UUID(), role: .assistant, content: packed)
+        let decoded = try XCTUnwrap(ConversationStore.decode(message, attachments: []))
+        guard case .aiMessage(let assistant) = decoded.entry else {
+            return XCTFail("expected assistant")
+        }
+        XCTAssertTrue(assistant.hasTextItems)
+        XCTAssertEqual(assistant.displayText, "Hello")
+        XCTAssertEqual(assistant.tools.map(\.name), ["list_tracks"])
+
+        var toolsOnly = assistant
+        toolsOnly.items = assistant.items.filter { item in
+            if case .tool = item.kind { return true }
+            return false
+        }
+        XCTAssertFalse(toolsOnly.hasTextItems)
+        XCTAssertEqual(toolsOnly.displayText, "Hello")
+    }
+
+    func testRuntimePersistsFailedUserAndErrorActivity() async throws {
         let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Store.schema, configurations: configuration)
         let conversation = Conversation(providerID: "none", modelID: "")
@@ -196,8 +221,27 @@ final class ChatEngineTests: XCTestCase {
         XCTAssertTrue(runtime.send("lost"))
         await waitUntilIdle(runtime.session)
         runtime.persist()
-        XCTAssertTrue(conversation.messages.isEmpty)
+        XCTAssertEqual(conversation.orderedMessages.count, 2)
+        XCTAssertEqual(ChatTranscript.unpack(conversation.orderedMessages[0].content).state, .failed)
+        XCTAssertTrue(ChatTranscript.unpack(conversation.orderedMessages[1].content).isActivity)
         XCTAssertEqual(runtime.lastUserText, "lost")
+
+        let restored = ChatRuntime(
+            conversation: conversation,
+            project: nil,
+            provider: ScriptedChatProvider(chunks: ["ok"])
+        )
+        XCTAssertEqual(userTexts(in: restored.session), [])
+        XCTAssertEqual(restored.lastUserText, "lost")
+        XCTAssertTrue(restored.session.entries.contains { entry in
+            if case .activity(let activity) = entry { return activity.isError }
+            return false
+        })
+        XCTAssertTrue(restored.session.entries.contains { entry in
+            if case .userMessage(let user) = entry { return user.isFailed && user.text == "lost" }
+            return false
+        })
+        XCTAssertTrue(restored.session.providerHistory.isEmpty)
     }
 
     func testDraftSurvivesReattachAndStaysIsolated() throws {
@@ -232,6 +276,174 @@ final class ChatEngineTests: XCTestCase {
         runtimeB.draft = ""
         XCTAssertEqual(runtimeA.draft, "keep A")
         XCTAssertEqual(runtimeB.draft, "")
+    }
+
+    func testPersistDoesNotDeleteStoreMessagesAbsentFromSession() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        let user = ChatMessage(id: UUID(), role: .user, content: "old question")
+        let assistant = ChatMessage(id: UUID(), role: .assistant, content: "old answer")
+        conversation.messages = [user, assistant]
+        container.mainContext.insert(conversation)
+        try container.mainContext.save()
+
+        let runtime = ChatRuntime(
+            conversation: conversation,
+            project: nil,
+            provider: ScriptedChatProvider(chunks: ["unused"])
+        )
+        let extra = ChatMessage(id: UUID(), role: .user, content: "from another client")
+        conversation.messages.append(extra)
+        try container.mainContext.save()
+
+        runtime.persist()
+        XCTAssertTrue(conversation.orderedMessages.contains { $0.content == "from another client" })
+        XCTAssertEqual(userTexts(in: runtime.session), ["old question"])
+    }
+
+    func testReattachAdoptsExternalMessagesWithoutDeletingThem() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        let user = ChatMessage(id: UUID(), role: .user, content: "old question")
+        let assistant = ChatMessage(id: UUID(), role: .assistant, content: "old answer")
+        conversation.messages = [user, assistant]
+        container.mainContext.insert(conversation)
+        try container.mainContext.save()
+
+        let runtime = ChatRuntime(
+            conversation: conversation,
+            project: nil,
+            provider: ScriptedChatProvider(chunks: ["unused"])
+        )
+        let extra = ChatMessage(id: UUID(), role: .user, content: "from another client")
+        conversation.messages.append(extra)
+        try container.mainContext.save()
+
+        runtime.reattach(in: container.mainContext)
+        XCTAssertEqual(userTexts(in: runtime.session), ["old question", "from another client"])
+        XCTAssertEqual(assistantTexts(in: runtime.session), ["old answer"])
+
+        runtime.persist()
+        XCTAssertEqual(conversation.orderedMessages.map(\.content), [
+            "old question", "old answer", "from another client"
+        ])
+    }
+
+    func testReattachWhileGeneratingKeepsLiveTurnAndAdoptsStoreMessage() async throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        container.mainContext.insert(conversation)
+        try container.mainContext.save()
+
+        let provider = GatedChatProvider()
+        let runtime = ChatRuntime(conversation: conversation, project: nil, provider: provider)
+        XCTAssertTrue(runtime.send("live question"))
+        let deadline = Date().addingTimeInterval(1)
+        while !runtime.session.isGenerating, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(runtime.session.isGenerating)
+
+        let extra = ChatMessage(id: UUID(), role: .user, content: "from another client")
+        conversation.messages.append(extra)
+        try container.mainContext.save()
+
+        runtime.reattach(in: container.mainContext)
+        XCTAssertTrue(runtime.session.isGenerating)
+        XCTAssertTrue(userTexts(in: runtime.session).contains("live question"))
+        XCTAssertTrue(userTexts(in: runtime.session).contains("from another client"))
+
+        provider.release("live answer")
+        await waitUntilIdle(runtime.session)
+        runtime.persist()
+        XCTAssertTrue(conversation.orderedMessages.contains { $0.content == "from another client" })
+        XCTAssertTrue(conversation.orderedMessages.contains { $0.content == "live question" })
+        XCTAssertTrue(conversation.orderedMessages.contains { $0.content == "live answer" })
+    }
+
+    func testWaitAndToolEventsUpdateTurnWithoutText() async {
+        let provider = GatedChatProvider()
+        let engine = ChatEngine(provider: provider, model: "m")
+        XCTAssertTrue(engine.send("go"))
+        provider.emit(.wait(.thinking))
+        provider.emit(.tool(name: "list_tracks", status: "running", id: "a", detail: nil, sources: []))
+        let deadline = Date().addingTimeInterval(1)
+        while engine.currentTurn.tools.isEmpty, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(engine.isGenerating)
+        XCTAssertEqual(engine.currentTurn.waitState, .working)
+        XCTAssertEqual(engine.currentTurn.tools.map(\.name), ["list_tracks"])
+        provider.release("")
+        await waitUntilIdle(engine)
+    }
+
+    func testStreamKeepsOneAssistantIdentity() async {
+        let provider = ScriptedChatProvider(events: [
+            .reasoning("plan"),
+            .tool(name: "get_project", status: "running", id: "p", detail: nil, sources: []),
+            .text("Hello"),
+            .text(" world"),
+            .done
+        ])
+        let engine = ChatEngine(provider: provider, model: "m")
+        XCTAssertTrue(engine.send("hi"))
+        await waitUntilIdle(engine)
+        let assistants = engine.entries.compactMap { entry -> ChatEntry.Assistant? in
+            if case .aiMessage(let assistant) = entry { return assistant }
+            return nil
+        }
+        XCTAssertEqual(assistants.count, 1)
+        XCTAssertEqual(assistants[0].text, "Hello world")
+        XCTAssertEqual(assistants[0].thinking, "plan")
+        XCTAssertEqual(assistants[0].tools.map(\.name), ["get_project"])
+        XCTAssertFalse(assistants[0].isStreaming)
+    }
+
+    func testFinishPersistsWithoutAView() async throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        container.mainContext.insert(conversation)
+        let runtime = ChatRuntime(
+            conversation: conversation,
+            project: nil,
+            provider: ScriptedChatProvider(chunks: ["saved"])
+        )
+        XCTAssertTrue(runtime.send("q"))
+        await waitUntilIdle(runtime.session)
+        XCTAssertEqual(conversation.orderedMessages.map(\.content), ["q", "saved"])
+    }
+
+    func testLateEventsAfterCancelAreIgnored() async {
+        let provider = GatedChatProvider()
+        let engine = ChatEngine(provider: provider, model: "m")
+        XCTAssertTrue(engine.send("go"))
+        engine.cancel()
+        provider.emit("late")
+        provider.release("also late")
+        try? await Task.sleep(for: .milliseconds(40))
+        XCTAssertFalse(assistantTexts(in: engine).contains("late"))
+        XCTAssertFalse(assistantTexts(in: engine).contains("also late"))
+    }
+
+    func testRestoreFailedDraftDoesNotOverwriteNewerEdits() async throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let conversation = Conversation(providerID: "none", modelID: "")
+        container.mainContext.insert(conversation)
+        let runtime = ChatRuntime(
+            conversation: conversation,
+            project: nil,
+            provider: FailingChatProvider(message: "down")
+        )
+        runtime.draft = "newer"
+        XCTAssertTrue(runtime.send("lost"))
+        await waitUntilIdle(runtime.session)
+        XCTAssertEqual(runtime.draft, "newer")
     }
 
     func testSendDoesNotClearThisOrAnotherDraft() async throws {
@@ -293,7 +505,8 @@ private struct ScriptedChatProvider: ChatProvider {
     var id = "script"
     var name = "Script"
     var zeroResponseMessage = "No reply."
-    var chunks: [String]
+    var chunks: [String] = []
+    var events: [ChatStreamEvent]?
     var recorder: StreamRecorder?
 
     func stream(
@@ -302,14 +515,21 @@ private struct ScriptedChatProvider: ChatProvider {
         options: ChatTurnOptions
     ) -> AsyncThrowingStream<ChatStreamEvent, Error> {
         let chunks = chunks
+        let events = events
         let recorder = recorder
         return AsyncThrowingStream { continuation in
             recorder?.turns.append(messages)
             recorder?.models.append(model)
-            for chunk in chunks {
-                continuation.yield(.text(chunk))
+            if let events {
+                for event in events {
+                    continuation.yield(event)
+                }
+            } else {
+                for chunk in chunks {
+                    continuation.yield(.text(chunk))
+                }
+                continuation.yield(.done)
             }
-            continuation.yield(.done)
             continuation.finish()
         }
     }
@@ -352,6 +572,10 @@ private final class GatedChatProvider: ChatProvider, @unchecked Sendable {
 
     func emit(_ text: String) {
         continuation?.yield(.text(text))
+    }
+
+    func emit(_ event: ChatStreamEvent) {
+        continuation?.yield(event)
     }
 
     func release(_ text: String) {

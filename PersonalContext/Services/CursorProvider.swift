@@ -82,302 +82,18 @@ struct RunnerEvent: Decodable, Sendable {
     var sources: [RunnerSource]?
 }
 
-enum ChatWaitState: Equatable {
-    case starting, thinking, working, writing
-
-    var label: String {
-        switch self {
-        case .starting: "Starting"
-        case .thinking: "Thinking"
-        case .working: "Working"
-        case .writing: "Writing"
-        }
-    }
-}
-
-struct ChatTurnItem: Identifiable, Equatable {
-    enum Kind: Equatable {
-        case text(String)
-        case tool(ChatToolActivity)
-    }
-
-    var id: String
-    var kind: Kind
-}
-
-struct ChatToolActivity: Identifiable, Equatable, Codable {
-    enum Status: String, Equatable, Codable {
-        case running, succeeded, failed
-
-        init(event: String) {
-            switch event.lowercased() {
-            case "running", "in_progress", "pending", "started": self = .running
-            case "error", "failed", "cancelled", "canceled": self = .failed
-            default: self = .succeeded
-            }
-        }
-    }
-
-    var id: String
-    var name: String
-    var status: Status
-    var detail: String = ""
-    var sources: [ChatSource] = []
-
-    var title: String { Self.title(for: name, status: status) }
-
-    func destination(from extras: [ChatSource] = []) -> ChatSource? {
-        if sources.count == 1 { return sources[0] }
-        if let first = sources.first, opensRecord { return first }
-        if let match = extras.first(where: matches) { return match }
-        return inferredDestination
-    }
-
-    var isCursorSource: Bool {
-        name == "ask_cursor" || name.contains("cursor")
-    }
-
-    var symbol: String {
-        if isCursorSource { return "chevron.left.forwardslash.chevron.right" }
-        switch name {
-        case "webSearch": return "globe"
-        case "webFetch": return "safari"
-        default: break
-        }
-        if name.contains("note") { return "eyeglasses" }
-        if name.hasPrefix("list_") || name.hasPrefix("get_") { return "doc.text.magnifyingglass" }
-        if name.hasPrefix("create_") { return "plus" }
-        if name.hasPrefix("update_") { return "pencil" }
-        return "wrench.and.screwdriver"
-    }
-
-    static func title(for tool: String, status: Status) -> String {
-        switch tool {
-        case "webSearch":
-            return status == .running ? "Searching the web" : status == .failed ? "Couldn’t search the web" : "Searched the web"
-        case "webFetch":
-            return status == .running ? "Fetching a page" : status == .failed ? "Couldn’t fetch a page" : "Fetched a page"
-        case "mcp":
-            return status == .running ? "Using a tool" : status == .failed ? "A tool failed" : "Used a tool"
-        case "project_search_code":
-            return status == .running ? "Searching code" : status == .failed ? "Couldn’t search code" : "Searched code"
-        case "project_read_file":
-            return status == .running ? "Reading file" : status == .failed ? "Couldn’t read file" : "Read file"
-        case "project_list_files":
-            return status == .running ? "Listing files" : status == .failed ? "Couldn’t list files" : "Listed files"
-        case "project_git_log":
-            return status == .running ? "Reading git history" : status == .failed ? "Couldn’t read git history" : "Read git history"
-        case "consult_code":
-            return status == .running ? "Asking the Worker" : status == .failed ? "The Worker failed" : "Asked the Worker"
-        default:
-            break
-        }
-        let verbs: [(prefix: String, running: String, done: String, fail: String)] = [
-            ("list_", "Listing", "Listed", "list"),
-            ("get_", "Reading", "Read", "read"),
-            ("create_", "Adding", "Added", "add"),
-            ("update_", "Updating", "Updated", "update")
-        ]
-        for verb in verbs {
-            guard let range = tool.range(of: verb.prefix) else { continue }
-            let noun = tool[range.upperBound...]
-                .replacingOccurrences(of: "_", with: " ")
-                .localizedCapitalized
-            switch status {
-            case .running: return "\(verb.running) \(noun)"
-            case .succeeded: return "\(verb.done) \(noun)"
-            case .failed: return "Couldn’t \(verb.fail) \(noun.lowercased())"
-            }
-        }
-        let readable = tool
-            .replacingOccurrences(of: "_", with: " ")
-            .replacingOccurrences(of: "([a-z])([A-Z])", with: "$1 $2", options: .regularExpression)
-        switch status {
-        case .running, .succeeded: return readable.localizedCapitalized
-        case .failed: return "Couldn’t run \(readable.lowercased())"
-        }
-    }
-
-    private var opensRecord: Bool {
-        name.hasPrefix("create_") || name.hasPrefix("update_") || name.hasPrefix("get_")
-    }
-
-    private var inferredKind: ChatSource.Kind? {
-        if name.contains("decision") { return .decision }
-        if name.contains("thread") || name.contains("track") { return .thread }
-        if name.contains("note") { return .note }
-        if name.contains("project") { return .project }
-        return nil
-    }
-
-    private var inferredDestination: ChatSource? {
-        guard status == .succeeded, opensRecord, let kind = inferredKind, !detail.isEmpty else { return nil }
-        return ChatSource(id: detail, title: detail, url: nil, kind: kind, pin: false)
-    }
-
-    private func matches(_ source: ChatSource) -> Bool {
-        guard opensRecord, source.kind == inferredKind, !detail.isEmpty else { return false }
-        return source.title == detail
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, status, detail, sources
-    }
-
-    init(id: String, name: String, status: Status, detail: String = "", sources: [ChatSource] = []) {
-        self.id = id
-        self.name = name
-        self.status = status
-        self.detail = detail
-        self.sources = sources
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
-        name = try container.decode(String.self, forKey: .name)
-        status = try container.decode(Status.self, forKey: .status)
-        detail = try container.decodeIfPresent(String.self, forKey: .detail) ?? ""
-        sources = try container.decodeIfPresent([ChatSource].self, forKey: .sources) ?? []
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(id, forKey: .id)
-        try container.encode(name, forKey: .name)
-        try container.encode(status, forKey: .status)
-        try container.encode(detail, forKey: .detail)
-        if !sources.isEmpty {
-            try container.encode(sources, forKey: .sources)
-        }
-    }
-
-    static func detail(for name: String, arguments: [String: Any] = [:], result: String? = nil) -> String {
-        let fields = stringFields(arguments)
-        switch name {
-        case "project_read_file":
-            return fileDetail(merging(fields, from: result, keys: ["root", "path"]))
-        case "project_search_code":
-            return clip(fields["query"] ?? "", 80)
-        case "project_list_files":
-            if let query = fields["query"], !query.isEmpty { return clip(query, 80) }
-            return fileListDetail(result)
-        case "project_git_log":
-            return fields["root"] ?? ""
-        case "consult_code":
-            return clip(fields["brief"] ?? fields["question"] ?? "", 80)
-        case "webSearch":
-            return clip(fields["query"] ?? fields["search"] ?? fields["q"] ?? "", 80)
-        case "webFetch", "WebFetch":
-            return fields["url"] ?? fields["href"] ?? ""
-        default:
-            break
-        }
-        if let title = fields["title"] ?? fields["name"], !title.isEmpty {
-            return clip(title, 80)
-        }
-        if name.contains("note"), let content = fields["content"], !content.isEmpty {
-            return clip(content, 80)
-        }
-        let titles = titles(from: result).prefix(3)
-        if !titles.isEmpty { return titles.joined(separator: " · ") }
-        return ""
-    }
-
-    private static func fileDetail(_ fields: [String: String]) -> String {
-        guard let path = fields["path"], !path.isEmpty else { return "" }
-        var parts: [String] = []
-        if let root = fields["root"], !root.isEmpty { parts.append(root) }
-        parts.append(path)
-        if let start = fields["start_line"], !start.isEmpty {
-            if let end = fields["end_line"], !end.isEmpty, end != start {
-                parts.append("\(start)–\(end)")
-            } else {
-                parts.append(start)
-            }
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private static func fileListDetail(_ result: String?) -> String {
-        guard let items = jsonObject(result) as? [[String: Any]], !items.isEmpty else { return "" }
-        var seen = Set<String>()
-        var roots: [String] = []
-        for item in items {
-            guard let root = text(item["root"]), seen.insert(root).inserted else { continue }
-            roots.append(root)
-        }
-        let label = items.count == 1 ? "1 file" : "\(items.count) files"
-        if roots.count == 1 { return "\(roots[0]) · \(label)" }
-        return label
-    }
-
-    private static func titles(from result: String?) -> [String] {
-        guard let object = jsonObject(result) else { return [] }
-        return titles(fromJSON: object)
-            .filter { UUID(uuidString: $0) == nil }
-            .map { clip($0, 80) }
-    }
-
-    private static func titles(fromJSON value: Any) -> [String] {
-        if let items = value as? [Any] {
-            return items.flatMap(titles(fromJSON:))
-        }
-        guard let object = value as? [String: Any] else { return [] }
-        if let title = text(object["title"]) ?? text(object["name"]) {
-            return [title]
-        }
-        return object.values.flatMap(titles(fromJSON:))
-    }
-
-    private static func merging(_ fields: [String: String], from result: String?, keys: [String]) -> [String: String] {
-        var next = fields
-        guard let object = jsonObject(result) as? [String: Any] else { return next }
-        for key in keys where next[key] == nil {
-            if let value = text(object[key]) { next[key] = value }
-        }
-        return next
-    }
-
-    private static func stringFields(_ arguments: [String: Any]) -> [String: String] {
-        Dictionary(uniqueKeysWithValues: arguments.compactMap { key, value in
-            text(value).map { (key, $0) }
-        })
-    }
-
-    private static func jsonObject(_ result: String?) -> Any? {
-        guard let result else { return nil }
-        let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let data = trimmed.data(using: .utf8) else { return nil }
-        return try? JSONSerialization.jsonObject(with: data)
-    }
-
-    private static func text(_ value: Any?) -> String? {
-        if let string = value as? String {
-            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
-        }
-        if let number = value as? NSNumber {
-            if CFGetTypeID(number) == CFBooleanGetTypeID() { return nil }
-            return number.stringValue
-        }
-        return nil
-    }
-}
-
 @MainActor
 @Observable
 final class CursorConversationBridge {
-    var conversation: Conversation
-    var project: Project?
-    private(set) var changes: [String] = []
-    private(set) var turn: [ChatTurnItem] = []
-    private(set) var waitState: ChatWaitState = .starting
-    private(set) var sources: [ChatSource] = []
-    private(set) var thinkingText = ""
-    private(set) var turnUserID: UUID?
-    private(set) var startedAt: Date?
-    private(set) var finishedAt: Date?
+    let workspace: ChatWorkspace
+    var conversation: Conversation {
+        get { workspace.conversation }
+        set { workspace.conversation = newValue }
+    }
+    var project: Project? {
+        get { workspace.project }
+        set { workspace.project = newValue }
+    }
     @ObservationIgnored private var process: Process?
     @ObservationIgnored private var processInput: FileHandle?
     @ObservationIgnored private var runnerFingerprint = ""
@@ -387,55 +103,15 @@ final class CursorConversationBridge {
     @ObservationIgnored private var readerTask: Task<Void, Never>?
     @ObservationIgnored private var turnEvents: AsyncThrowingStream<RunnerEvent, Error>.Continuation?
     @ObservationIgnored private var activeCodeRoots: [ProjectCodeRoot] = []
-    @ObservationIgnored private var startNewText = false
-    let debugLog = ChatDebugLog()
-    let mcp = MembraeMCPClient.shared
+    var debugLog: ChatDebugLog { workspace.debugLog }
+    var mcp: MembraeMCPClient { workspace.mcp }
 
-    var workedSeconds: Int {
-        guard let startedAt else { return 0 }
-        return max(0, Int((finishedAt ?? .now).timeIntervalSince(startedAt).rounded()))
+    init(workspace: ChatWorkspace) {
+        self.workspace = workspace
     }
 
-    var work: ChatWork {
-        ChatWork(seconds: workedSeconds, thinking: thinkingText, tools: tools)
-    }
-
-    var tools: [ChatToolActivity] {
-        turn.compactMap { item in
-            if case .tool(let tool) = item.kind { return tool }
-            return nil
-        }
-    }
-
-    var turnText: String {
-        turn.compactMap { item in
-            if case .text(let text) = item.kind { return text }
-            return nil
-        }.joined(separator: "\n\n")
-    }
-
-    init(conversation: Conversation, project: Project?) {
-        self.conversation = conversation
-        self.project = project
-    }
-
-    func beginTurn() {
-        changes = []
-        turn = []
-        sources = []
-        thinkingText = ""
-        turnUserID = nil
-        waitState = .starting
-        startedAt = .now
-        finishedAt = nil
-        startNewText = false
-        debugLog.pace = StreamPace()
-        debugLog.add("beginTurn")
-    }
-
-    func bindTurn(to userID: UUID) {
-        turnUserID = userID
-        debugLog.add("bindTurn user=\(userID.uuidString.prefix(8))")
+    convenience init(conversation: Conversation, project: Project?, debugLog: ChatDebugLog? = nil) {
+        self.init(workspace: ChatWorkspace(conversation: conversation, project: project, debugLog: debugLog ?? ChatDebugLog()))
     }
 
     func prepareCodeRoots() async throws -> [ProjectCodeRoot] {
@@ -472,7 +148,7 @@ final class CursorConversationBridge {
         includeProjectTools: Bool = true,
         resumeSession: Bool = true,
         runtime: WorkerPath = .local
-    ) throws -> RunnerRequest {
+    ) throws -> (request: RunnerRequest, metadata: ChatTurnMetadata) {
         guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "membrae-mcp") else {
             throw CursorAPIError(status: 0, message: "The Membrae MCP is missing from the app.")
         }
@@ -487,25 +163,27 @@ final class CursorConversationBridge {
 
         let opening = !resumeSession || conversation.externalSessionID.isEmpty
         ChatTrace.event("prepare conversation=\(conversation.id) opening=\(opening) agent=\(conversation.externalSessionID) model=\(conversation.modelID) project=\(project?.name ?? "none") roots=\(codeRoots.count) textChars=\(userText.count)")
+        var metadata = ChatTurnMetadata()
+        let title: String
         if conversation.title == "New chat" || conversation.title.isEmpty {
-            conversation.title = conversationTitle(from: userText)
+            title = conversationTitle(from: userText)
+            metadata.title = title
+        } else {
+            title = conversation.title
         }
         let focused = conversation.thread
         let context = project.map(ContextBuilder.identity(for:)) ?? ""
         if opening {
-            conversation.contextSnapshot = context
+            metadata.contextSnapshot = context
         }
-        conversation.updatedAt = .now
-        project?.touch()
-        try? conversation.modelContext?.save()
         let workspace = codeRoots.count == 1
             ? codeRoots[0].path
             : (codeRoots.first.map { URL(fileURLWithPath: $0.path).deletingLastPathComponent().path } ?? folder.path)
-        return RunnerRequest(
+        let request = RunnerRequest(
             apiKey: apiKey,
             env: ProcessInfo.processInfo.environment,
             agentId: opening ? nil : conversation.externalSessionID,
-            name: conversation.title,
+            name: title,
             text: includeMembraeTools
                 ? ContextBuilder.prompt(userText: userText, context: context, opening: opening, focusedThread: focused)
                 : ContextBuilder.codeConsultationPrompt(userText: userText, context: context),
@@ -522,6 +200,7 @@ final class CursorConversationBridge {
                 ? ProjectCodeWorkspace.remoteSnapshots(for: project, storeURL: store)
                 : []
         )
+        return (request, metadata)
     }
 
     private func cloudRepositories() -> [RunnerCloudRepo] {
@@ -543,27 +222,8 @@ final class CursorConversationBridge {
         }
     }
 
-    func prepareProviderTurn(userText: String, includeMembraeTools: Bool = true) -> String {
-        if conversation.title == "New chat" || conversation.title.isEmpty {
-            conversation.title = conversationTitle(from: userText)
-        }
-        let opening = conversation.contextSnapshot.isEmpty
-        let context = project.map(ContextBuilder.identity(for:)) ?? ""
-        if opening {
-            conversation.contextSnapshot = context
-        }
-        conversation.updatedAt = .now
-        project?.touch()
-        try? conversation.modelContext?.save()
-        if includeMembraeTools {
-            return ContextBuilder.prompt(
-                userText: "",
-                context: context,
-                opening: opening,
-                focusedThread: conversation.thread
-            )
-        }
-        return ContextBuilder.codeConsultationPrompt(userText: "", context: context)
+    func prepareProviderTurn(userText: String, includeMembraeTools: Bool = true) -> (prompt: String, metadata: ChatTurnMetadata) {
+        workspace.prepareTurn(userText: userText, includeMembraeTools: includeMembraeTools)
     }
 
     func run(_ request: RunnerRequest) throws -> AsyncThrowingStream<RunnerEvent, Error> {
@@ -584,100 +244,11 @@ final class CursorConversationBridge {
         }
     }
 
-    func agentStarted(_ id: String) {
-        guard conversation.modelContext != nil else { return }
-        guard conversation.externalSessionID != id else { return }
-        ChatTrace.event("agent id=\(id)")
-        conversation.externalSessionID = id
-        try? conversation.modelContext?.save()
-    }
-
-    func appendText(_ text: String) {
-        guard !text.isEmpty else { return }
-        waitState = .writing
-        var items = turn
-        if !startNewText, case .text(let existing) = items.last?.kind {
-            items[items.count - 1].kind = .text(existing + text)
-        } else {
-            startNewText = false
-            items.append(ChatTurnItem(id: UUID().uuidString, kind: .text(text)))
-        }
-        turn = items
-    }
-
-    func markThinking(_ text: String? = nil) {
-        if let text, !text.isEmpty { thinkingText += text }
-        if tools.contains(where: { $0.status == .running }) { return }
-        waitState = .thinking
-    }
-
-    func applyStatus(_ status: String) {
-        switch status.uppercased() {
-        case "CREATING": waitState = .starting
-        case "RUNNING":
-            if waitState == .starting { waitState = .thinking }
-        case "ERROR", "CANCELLED", "CANCELED", "EXPIRED":
-            break
-        default:
-            break
-        }
-    }
-
-    func beginTextSegment() {
-        startNewText = true
-    }
-
-    func applyTool(name: String, status: String, id: String? = nil, detail: String? = nil, sources incoming: [RunnerSource]? = nil) {
-        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        let next = ChatToolActivity.Status(event: status)
-        let detail = detail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        ChatTrace.event("tool \(name) status=\(status)")
-        let attached = incoming.map(chatSources(from:)) ?? []
-        if let incoming { mergeSources(incoming) }
-        if next == .running {
-            startNewText = true
-            waitState = .working
-        }
-        let toolID = id?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matchedID = (toolID?.isEmpty == false) ? toolID : nil
-        if let matchedID, let index = toolIndex(id: matchedID),
-           case .tool(let existing) = turn[index].kind, existing.name == name {
-            updateTool(at: index, status: next, detail: detail, sources: attached)
-            refreshWaitState()
-            return
-        }
-        if next == .running, matchedID == nil, let index = lastRunningTool(named: name) {
-            updateTool(at: index, status: next, detail: detail, sources: attached)
-            return
-        }
-        if next != .running, let index = lastRunningTool(named: name) {
-            updateTool(at: index, status: next, detail: detail, sources: attached)
-            refreshWaitState()
-            return
-        }
-        turn.append(ChatTurnItem(
-            id: UUID().uuidString,
-            kind: .tool(ChatToolActivity(
-                id: matchedID ?? UUID().uuidString,
-                name: name,
-                status: next,
-                detail: detail,
-                sources: attached
-            ))
-        ))
-        recordChange(name: name, status: next)
-        refreshWaitState()
-    }
-
     func stop() {
-        markRunning(as: .failed)
-        if finishedAt == nil { finishedAt = .now }
         closeRunner()
     }
 
     func finished() {
-        if finishedAt == nil { finishedAt = .now }
         if keepRunnerHot, process?.isRunning == true {
             bumpIdle()
             return
@@ -837,96 +408,6 @@ final class CursorConversationBridge {
         var text: String
         var model: String
     }
-
-    func completeRunningTools() {
-        markRunning(as: .succeeded)
-    }
-
-    func failRunningTools() {
-        markRunning(as: .failed)
-    }
-
-    private func markRunning(as status: ChatToolActivity.Status) {
-        for index in turn.indices {
-            guard case .tool(var tool) = turn[index].kind, tool.status == .running else { continue }
-            tool.status = status
-            turn[index].kind = .tool(tool)
-            recordChange(name: tool.name, status: status)
-        }
-    }
-
-    private func toolIndex(id: String) -> Int? {
-        turn.firstIndex { item in
-            if case .tool(let tool) = item.kind { return tool.id == id }
-            return false
-        }
-    }
-
-    private func lastRunningTool(named name: String) -> Int? {
-        turn.lastIndex { item in
-            if case .tool(let tool) = item.kind { return tool.name == name && tool.status == .running }
-            return false
-        }
-    }
-
-    private func updateTool(
-        at index: Int,
-        status: ChatToolActivity.Status,
-        detail: String = "",
-        sources: [ChatSource] = []
-    ) {
-        guard case .tool(var tool) = turn[index].kind else { return }
-        tool.status = status
-        if !detail.isEmpty { tool.detail = detail }
-        if !sources.isEmpty { tool.sources = sources }
-        turn[index].kind = .tool(tool)
-        recordChange(name: tool.name, status: status)
-    }
-
-    private func refreshWaitState() {
-        if tools.contains(where: { $0.status == .running }) {
-            waitState = .working
-        } else if waitState == .working {
-            waitState = .thinking
-        }
-    }
-
-    private func chatSources(from incoming: [RunnerSource]) -> [ChatSource] {
-        incoming.map { raw in
-            let kind = ChatSource.Kind(rawValue: raw.kind ?? "") ?? (raw.url == nil ? .note : .url)
-            let id = raw.id?.isEmpty == false ? raw.id! : raw.url ?? raw.title
-            let url = raw.url ?? (kind == .url ? nil : ChatObjectLink.href(kind: kind, id: id))
-            return ChatSource(
-                id: id,
-                title: raw.title,
-                url: url,
-                kind: kind,
-                pin: raw.pin ?? true
-            )
-        }
-    }
-
-    private func mergeSources(_ incoming: [RunnerSource]) {
-        for source in chatSources(from: incoming) {
-            if let index = sources.firstIndex(where: { $0.isSame(as: source) }) {
-                if source.pin { sources[index].pin = true }
-                if UUID(uuidString: source.id) != nil, UUID(uuidString: sources[index].id) == nil {
-                    sources[index].id = source.id
-                }
-                if sources[index].title.count < source.title.count { sources[index].title = source.title }
-                if sources[index].url == nil { sources[index].url = source.url }
-            } else {
-                sources.append(source)
-            }
-        }
-    }
-
-    private func recordChange(name: String, status: ChatToolActivity.Status) {
-        guard status != .running else { return }
-        guard name.hasPrefix("create_") || name.hasPrefix("update_") else { return }
-        let label = ChatToolActivity.title(for: name, status: status)
-        if !changes.contains(label) { changes.append(label) }
-    }
 }
 
 struct CursorChatProvider: ChatProvider {
@@ -939,6 +420,10 @@ struct CursorChatProvider: ChatProvider {
     var runtime: WorkerPath = .local
 
     var zeroResponseMessage: String { "Cursor didn’t return a reply." }
+
+    func attach(conversation: Conversation, project: Project?) {
+        bridge.workspace.attach(conversation: conversation, project: project)
+    }
 
     func stream(
         messages: [TalkMessage],
@@ -964,7 +449,6 @@ struct CursorChatProvider: ChatProvider {
                     pace = await MainActor.run {
                         var current = snapshot
                         let applyStart = Date()
-                        bridge.appendText(text)
                         continuation.yield(.text(text))
                         current.painted(text.count, applyMs: Date().timeIntervalSince(applyStart) * 1000)
                         bridge.debugLog.pace = current
@@ -974,13 +458,23 @@ struct CursorChatProvider: ChatProvider {
                         return current
                     }
                 }
+
+                func emitTool(name: String, status: String, id: String?, detail: String?, sources: [RunnerSource]? = nil) {
+                    continuation.yield(.tool(
+                        name: name,
+                        status: status,
+                        id: id,
+                        detail: detail,
+                        sources: ChatSource.make(from: sources)
+                    ))
+                }
                 func flushText() async {
                     if let leftover = coalescer.take() {
                         await emitText(leftover)
                     }
                 }
                 do {
-                    let request = try await MainActor.run {
+                    let prepared = try await MainActor.run {
                         bridge.debugLog.add("stream start model=\(model) messages=\(messages.count)")
                         for (index, message) in messages.enumerated() {
                             bridge.debugLog.add("  msg[\(index)] \(message.role) \(ChatTrace.clip(message.text, 80))")
@@ -992,7 +486,7 @@ struct CursorChatProvider: ChatProvider {
                             ? ProjectCodeWorkspace.localRoots(for: bridge.project)
                             : []
                         bridge.keepAccess(to: roots)
-                        var request = try bridge.prepare(
+                        let prepared = try bridge.prepare(
                             userText: userText.isEmpty ? " " : userText,
                             apiKey: apiKey,
                             model: model,
@@ -1002,10 +496,13 @@ struct CursorChatProvider: ChatProvider {
                             resumeSession: resumeConversation,
                             runtime: runtime
                         )
+                        var request = prepared.request
                         request.images = images
                         bridge.debugLog.add("prepare opening=\(request.agentId == nil) model=\(request.model) promptChars=\(request.text.count) images=\(images.count)")
-                        return request
+                        return (request, prepared.metadata)
                     }
+                    let request = prepared.0
+                    continuation.yield(.metadata(prepared.1))
                     pace.markPrepared()
                     await MainActor.run { bridge.debugLog.pace = pace }
                     var emitted = false
@@ -1038,10 +535,14 @@ struct CursorChatProvider: ChatProvider {
                             await flushText()
                             await MainActor.run { bridge.debugLog.add("event break") }
                         case "thinking":
-                            await MainActor.run { bridge.markThinking(event.text) }
+                            if let text = event.text {
+                                continuation.yield(.reasoning(text))
+                            }
                         case "status":
+                            if let status = event.status {
+                                continuation.yield(.status(status))
+                            }
                             await MainActor.run {
-                                if let status = event.status { bridge.applyStatus(status) }
                                 bridge.debugLog.add("event status \(event.status ?? "")")
                             }
                         case "host_tool":
@@ -1049,8 +550,8 @@ struct CursorChatProvider: ChatProvider {
                             let toolID = event.id ?? UUID().uuidString
                             let toolName = event.name ?? "consult_code"
                             let brief = event.text ?? event.detail ?? ""
+                            emitTool(name: toolName, status: "running", id: toolID, detail: clip(brief, 80))
                             await MainActor.run {
-                                bridge.applyTool(name: toolName, status: "running", id: toolID, detail: clip(brief, 80))
                                 bridge.debugLog.add("event host_tool \(toolName) \(ChatTrace.clip(brief, 80))")
                             }
                             do {
@@ -1060,35 +561,41 @@ struct CursorChatProvider: ChatProvider {
                                 } else {
                                     output = try await ProjectWorker.consult(
                                         brief: brief,
-                                        reportingTo: bridge,
+                                        reportingTo: bridge.workspace,
                                         options: options
-                                    )
+                                    ) { name, status, id, detail in
+                                        continuation.yield(.tool(
+                                            name: name,
+                                            status: status,
+                                            id: id,
+                                            detail: detail,
+                                            sources: []
+                                        ))
+                                    }
                                 }
-                                await MainActor.run {
-                                    bridge.applyTool(name: toolName, status: "completed", id: toolID, detail: clip(brief, 80))
-                                    bridge.replyToHostTool(id: toolID, text: output)
-                                }
+                                emitTool(name: toolName, status: "completed", id: toolID, detail: clip(brief, 80))
+                                await MainActor.run { bridge.replyToHostTool(id: toolID, text: output) }
                             } catch {
+                                emitTool(
+                                    name: toolName,
+                                    status: "error",
+                                    id: toolID,
+                                    detail: error.localizedDescription
+                                )
                                 await MainActor.run {
-                                    bridge.applyTool(
-                                        name: toolName,
-                                        status: "error",
-                                        id: toolID,
-                                        detail: error.localizedDescription
-                                    )
                                     bridge.replyToHostTool(id: toolID, error: error.localizedDescription)
                                 }
                             }
                         case "tool":
                             await flushText()
+                            emitTool(
+                                name: event.name ?? "",
+                                status: event.status ?? "",
+                                id: event.id,
+                                detail: event.detail,
+                                sources: event.sources
+                            )
                             await MainActor.run {
-                                bridge.applyTool(
-                                    name: event.name ?? "",
-                                    status: event.status ?? "",
-                                    id: event.id,
-                                    detail: event.detail,
-                                    sources: event.sources
-                                )
                                 bridge.debugLog.add("event tool \(event.name ?? "") \(event.status ?? "") \(ChatTrace.clip(event.detail ?? "", 80))")
                             }
                         case "result":
@@ -1104,7 +611,7 @@ struct CursorChatProvider: ChatProvider {
                                 throw CursorAPIError(status: 0, message: event.error ?? "The run failed.")
                             }
                             if resumeConversation, let agentID {
-                                await MainActor.run { bridge.agentStarted(agentID) }
+                                continuation.yield(.metadata(ChatTurnMetadata(externalSessionID: agentID)))
                             }
                         case "error":
                             await MainActor.run { bridge.debugLog.add("event error \(event.message ?? "")") }
@@ -1118,15 +625,13 @@ struct CursorChatProvider: ChatProvider {
                     await MainActor.run {
                         bridge.debugLog.pace = pace
                         bridge.debugLog.add("pace done \(pace.logLine)")
-                        bridge.debugLog.add("stream complete emitted=\(emitted) textChars=\(textChars) turn=\(bridge.turn.count) wait=\(bridge.waitState)")
-                        bridge.completeRunningTools()
+                        bridge.debugLog.add("stream complete emitted=\(emitted) textChars=\(textChars)")
                         bridge.finished()
                     }
                     continuation.yield(.done)
                     continuation.finish()
                 } catch {
                     await MainActor.run {
-                        bridge.failRunningTools()
                         ChatTrace.event("provider.stream error: \(error.localizedDescription)")
                         bridge.debugLog.add("stream error \(error.localizedDescription)")
                         bridge.finished()

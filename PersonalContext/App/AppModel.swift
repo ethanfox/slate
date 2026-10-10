@@ -369,9 +369,6 @@ final class AppModel {
     }
 
     private func reloadStore() {
-        for runtime in chatRuntimes.values {
-            runtime.persist()
-        }
         Store.disableAutosave(container)
         try? container.mainContext.save()
         do {
@@ -385,7 +382,6 @@ final class AppModel {
             storeError = nil
             for runtime in chatRuntimes.values {
                 runtime.reattach(in: reopened.mainContext)
-                runtime.persist()
             }
             DraftTrace.storeReopen(
                 generation: storeGeneration,
@@ -413,10 +409,14 @@ final class AppModel {
             runtime.attach(conversation: conversation, project: project)
             return runtime
         }
-        let runtime = ChatRuntime(conversation: conversation, project: project)
+        let debugLog = ChatDebugLog()
+        let runtime = ChatRuntime(
+            conversation: conversation,
+            provider: ChatProviderFactory.make(conversation: conversation, project: project, debugLog: debugLog),
+            debugLog: debugLog
+        )
         runtime.onTick = { [weak self, weak runtime] in
             guard let self, let runtime else { return }
-            runtime.schedulePersist()
             self.syncChrome(from: runtime)
             self.syncRunning()
         }

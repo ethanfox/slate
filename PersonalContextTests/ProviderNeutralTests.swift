@@ -34,7 +34,7 @@ final class ProviderNeutralTests: XCTestCase {
         try container.mainContext.save()
 
         let bridge = CursorConversationBridge(conversation: conversation, project: project)
-        let first = bridge.prepareProviderTurn(userText: "hi")
+        let first = bridge.prompt("hi", applyingTo: conversation)
         XCTAssertTrue(first.contains("You are the assistant inside Membrae"))
         XCTAssertTrue(first.contains(ContextBuilder.replyFirst))
         XCTAssertTrue(first.contains(ContextBuilder.responseStyle))
@@ -44,7 +44,7 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertFalse(first.contains("Active decisions"))
         XCTAssertFalse(first.contains("Ship the Mac app in Swift"))
 
-        let later = bridge.prepareProviderTurn(userText: "again")
+        let later = bridge.prompt("again", applyingTo: conversation)
         XCTAssertFalse(later.contains("You are the assistant inside Membrae"))
         XCTAssertTrue(later.contains(ContextBuilder.replyFirst))
         XCTAssertTrue(later.contains(ContextBuilder.responseStyle))
@@ -110,7 +110,7 @@ final class ProviderNeutralTests: XCTestCase {
         try container.mainContext.save()
 
         let bridge = CursorConversationBridge(conversation: conversation, project: project)
-        let first = bridge.prepareProviderTurn(userText: "hi")
+        let first = bridge.prompt("hi", applyingTo: conversation)
         XCTAssertTrue(first.contains("You are the assistant inside Membrae"))
         XCTAssertTrue(first.contains("<focused-track>"))
         XCTAssertTrue(first.contains("append_to_body"))
@@ -121,7 +121,7 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertTrue(first.contains("Tokens"))
         XCTAssertFalse(first.contains("Notes are specs and facts"))
 
-        let later = bridge.prepareProviderTurn(userText: "again")
+        let later = bridge.prompt("again", applyingTo: conversation)
         XCTAssertFalse(later.contains("You are the assistant inside Membrae"))
         XCTAssertTrue(later.contains("<focused-track>"))
         XCTAssertTrue(later.contains("Do not invent a second token."))
@@ -139,14 +139,14 @@ final class ProviderNeutralTests: XCTestCase {
         try container.mainContext.save()
 
         let bridge = CursorConversationBridge(conversation: conversation, project: seed.project)
-        let first = bridge.prepareProviderTurn(userText: "What are the requirements?")
+        let first = bridge.prompt("What are the requirements?")
         XCTAssertTrue(first.contains(HarborEvalFixture.authBody))
         XCTAssertFalse(first.contains("Sign-in must work offline."))
 
         seed.auth.body = HarborEvalFixture.authBodyWithOffline
         try container.mainContext.save()
 
-        let later = bridge.prepareProviderTurn(userText: "What are the requirements now?")
+        let later = bridge.prompt("What are the requirements now?")
         XCTAssertTrue(later.contains("Sign-in must work offline."))
         XCTAssertTrue(later.contains("local session store"))
     }
@@ -162,7 +162,7 @@ final class ProviderNeutralTests: XCTestCase {
         try container.mainContext.save()
 
         let text = CursorConversationBridge(conversation: conversation, project: seed.project)
-            .prepareProviderTurn(userText: "What's left?")
+            .prompt("What's left?")
         XCTAssertTrue(text.contains("<focused-track>"))
         XCTAssertTrue(text.contains("Auth"))
         XCTAssertTrue(text.contains("Tokens"))
@@ -184,13 +184,13 @@ final class ProviderNeutralTests: XCTestCase {
 
         let bridge = CursorConversationBridge(conversation: conversation, project: seed.project)
         let refresh = seed.fixRefresh.id.uuidString
-        let first = bridge.prepareProviderTurn(userText: "What's left?")
+        let first = bridge.prompt("What's left?")
         XCTAssertTrue(first.contains("Fix refresh after wake (id \(refresh), blocked)"))
 
         TaskStore.setStatus(.ready, on: seed.fixRefresh, in: container.mainContext)
         try container.mainContext.save()
 
-        let later = bridge.prepareProviderTurn(userText: "And now?")
+        let later = bridge.prompt("And now?")
         XCTAssertTrue(later.contains("Fix refresh after wake (id \(refresh), ready)"))
         XCTAssertFalse(later.contains("Fix refresh after wake (id \(refresh), blocked)"))
     }
@@ -206,13 +206,13 @@ final class ProviderNeutralTests: XCTestCase {
         try container.mainContext.save()
 
         let bridge = CursorConversationBridge(conversation: conversation, project: seed.project)
-        let first = bridge.prepareProviderTurn(userText: "hi")
+        let first = bridge.prompt("hi", applyingTo: conversation)
         XCTAssertTrue(first.contains(ContextBuilder.knowledgeRules))
         XCTAssertTrue(first.contains(ContextBuilder.replyFirst))
         XCTAssertTrue(first.contains(ContextBuilder.responseStyle))
         XCTAssertTrue(first.contains("You are the assistant inside Membrae"))
 
-        let later = bridge.prepareProviderTurn(userText: "again")
+        let later = bridge.prompt("again", applyingTo: conversation)
         XCTAssertFalse(later.contains("You are the assistant inside Membrae"))
         XCTAssertTrue(later.contains(ContextBuilder.replyFirst))
         XCTAssertTrue(later.contains(ContextBuilder.responseStyle))
@@ -257,8 +257,11 @@ final class ProviderNeutralTests: XCTestCase {
         project.workerProviderID = TalkProvider.cursor.rawValue
         let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
         conversation.project = project
-        let bridge = CursorConversationBridge(conversation: conversation, project: project)
-        let provider = ChatRuntime.makeChatProvider(bridge: bridge, conversation: conversation)
+        let provider = ChatProviderFactory.make(
+            conversation: conversation,
+            project: project,
+            debugLog: ChatDebugLog()
+        )
         XCTAssertTrue(provider is ChatGPTProvider)
         XCTAssertEqual(provider.id, TalkProvider.chatgpt.rawValue)
     }
@@ -447,7 +450,7 @@ final class ProviderNeutralTests: XCTestCase {
         ])
         XCTAssertEqual(
             structured,
-            "This capability is not supported. subscription_sharing_unsupported_capability param: tools"
+            "This ChatGPT model or account can’t use that attachment. The draft is still here—remove the file or pick another model."
         )
 
         let sse = ChatGPTProvider.apiError(from: Data("data: {\"detail\":\"Instructions are required\"}\n".utf8))
@@ -767,27 +770,47 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertEqual(ChatTranscript.unpack(again).text, "Hello")
     }
 
+    func testApplyToolKeepsEarlierCalls() {
+        var turn = ChatTurnState()
+        turn.begin(userID: nil)
+        turn.applyTool(name: "list_tracks", status: "running", id: "a")
+        turn.applyTool(name: "list_tracks", status: "completed", id: "a")
+        turn.applyTool(name: "get_project", status: "running", id: "b")
+        turn.applyTool(name: "get_project", status: "completed", id: "b")
+        XCTAssertEqual(turn.tools.map(\.name), ["list_tracks", "get_project"])
+
+        turn.applyTool(name: "list_tracks", status: "running", id: "")
+        turn.applyTool(name: "list_tracks", status: "completed", id: "")
+        turn.applyTool(name: "get_note", status: "running", id: "")
+        XCTAssertEqual(turn.tools.map(\.name), ["list_tracks", "get_project", "list_tracks", "get_note"])
+    }
+
     @MainActor
-    func testApplyToolKeepsEarlierCalls() throws {
+    func testPrepareProviderTurnDoesNotWriteConversation() throws {
         let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Store.schema, configurations: configuration)
-        let project = Project(name: "Harbor", symbol: "folder", summary: "")
+        let project = Project(name: "Harbor", symbol: "folder", summary: "A marina app.")
         let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test", project: project)
         container.mainContext.insert(project)
         container.mainContext.insert(conversation)
         try container.mainContext.save()
 
-        let bridge = CursorConversationBridge(conversation: conversation, project: project)
-        bridge.beginTurn()
-        bridge.applyTool(name: "list_tracks", status: "running", id: "a")
-        bridge.applyTool(name: "list_tracks", status: "completed", id: "a")
-        bridge.applyTool(name: "get_project", status: "running", id: "b")
-        bridge.applyTool(name: "get_project", status: "completed", id: "b")
-        XCTAssertEqual(bridge.tools.map(\.name), ["list_tracks", "get_project"])
+        let prepared = CursorConversationBridge(conversation: conversation, project: project)
+            .prepareProviderTurn(userText: "hello there")
+        XCTAssertEqual(conversation.title, "New chat")
+        XCTAssertTrue(conversation.contextSnapshot.isEmpty)
+        XCTAssertEqual(prepared.metadata.title, conversationTitle(from: "hello there"))
+        XCTAssertEqual(prepared.metadata.contextSnapshot, ContextBuilder.identity(for: project))
+    }
+}
 
-        bridge.applyTool(name: "list_tracks", status: "running", id: "")
-        bridge.applyTool(name: "list_tracks", status: "completed", id: "")
-        bridge.applyTool(name: "get_note", status: "running", id: "")
-        XCTAssertEqual(bridge.tools.map(\.name), ["list_tracks", "get_project", "list_tracks", "get_note"])
+private extension CursorConversationBridge {
+    func prompt(_ userText: String, applyingTo conversation: Conversation? = nil) -> String {
+        let prepared = prepareProviderTurn(userText: userText)
+        if let conversation {
+            if let title = prepared.metadata.title { conversation.title = title }
+            if let snapshot = prepared.metadata.contextSnapshot { conversation.contextSnapshot = snapshot }
+        }
+        return prepared.prompt
     }
 }

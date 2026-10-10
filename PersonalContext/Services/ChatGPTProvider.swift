@@ -3,33 +3,36 @@ import Foundation
 struct ChatGPTProvider: ChatProvider {
     let id = "chatgpt"
     let name = "ChatGPT"
-    let bridge: CursorConversationBridge
+    let workspace: ChatWorkspace
     var includeMembraeTools = true
     var includeProjectTools = true
 
     var zeroResponseMessage: String { "ChatGPT didn’t return a reply." }
+
+    func attach(conversation: Conversation, project: Project?) {
+        workspace.attach(conversation: conversation, project: project)
+    }
 
     func stream(
         messages: [TalkMessage],
         model: String,
         options: ChatTurnOptions
     ) -> AsyncThrowingStream<ChatStreamEvent, Error> {
-        let bridge = bridge
+        let workspace = workspace
         return AsyncThrowingStream { continuation in
             let task = Task {
                 var coalescer = StreamTextCoalescer()
-                var pace = await MainActor.run { bridge.debugLog.pace ?? StreamPace() }
+                var pace = await MainActor.run { workspace.debugLog.pace ?? StreamPace() }
                 func emitText(_ text: String) async {
                     let snapshot = pace
                     pace = await MainActor.run {
                         var current = snapshot
                         let applyStart = Date()
-                        bridge.appendText(text)
                         continuation.yield(.text(text))
                         current.painted(text.count, applyMs: Date().timeIntervalSince(applyStart) * 1000)
-                        bridge.debugLog.pace = current
+                        workspace.debugLog.pace = current
                         if current.paintEvents == 1 {
-                            bridge.debugLog.add("pace \(current.logLine)")
+                            workspace.debugLog.add("pace \(current.logLine)")
                         }
                         return current
                     }
@@ -43,44 +46,60 @@ struct ChatGPTProvider: ChatProvider {
                     guard !model.isEmpty else {
                         throw ChatGPTAuthError("Choose a ChatGPT model in Settings.")
                     }
-                    let prepared = try await MainActor.run { () throws -> (String, RunGateway, [[String: Any]]) in
+                    let prepared = try await MainActor.run { () throws -> (String, ChatTurnMetadata, RunGateway, [[String: Any]]) in
                         let userText = Self.text(from: messages.last(where: { $0.role == .user }))
-                        let instructions = bridge.prepareProviderTurn(
+                        let turn = workspace.prepareTurn(
                             userText: userText,
                             includeMembraeTools: includeMembraeTools
                         )
+                        let instructions = turn.prompt
                         let gateway = RunGateway(
-                            policy: .chat(projectID: bridge.project?.id),
+                            policy: .chat(projectID: workspace.project?.id),
                             inner: MembraeToolGateway(
                                 includeMembraeTools: includeMembraeTools,
                                 includeProjectTools: includeProjectTools,
                                 prepareRoots: includeProjectTools
-                                    ? { try await bridge.currentCodeRoots() }
+                                    ? { try await workspace.currentCodeRoots() }
                                     : nil,
-                                consult: includeMembraeTools && ProjectWorker.isConfigured(on: bridge.project)
-                                    ? { brief in try await ProjectWorker.consult(brief: brief, reportingTo: bridge, options: options) }
+                                consult: includeMembraeTools && ProjectWorker.isConfigured(on: workspace.project)
+                                    ? { brief in
+                                        try await ProjectWorker.consult(
+                                            brief: brief,
+                                            reportingTo: workspace,
+                                            options: options
+                                        ) { name, status, id, detail in
+                                            continuation.yield(.tool(
+                                                name: name,
+                                                status: status,
+                                                id: id,
+                                                detail: detail,
+                                                sources: []
+                                            ))
+                                        }
+                                    }
                                     : nil,
-                                mcp: includeMembraeTools ? bridge.mcp : nil
+                                mcp: includeMembraeTools ? workspace.mcp : nil
                             ),
                             includeFinishRun: false
                         )
-                        return (instructions, gateway, messages.map { Self.responseInput($0, options: options) })
+                        return (instructions, turn.metadata, gateway, messages.map { Self.responseInput($0, options: options) })
                     }
+                    continuation.yield(.metadata(prepared.1))
                     let instructions = prepared.0
-                    let gateway = prepared.1
+                    let gateway = prepared.2
                     let tools = try await gateway.definitions()
                     await MainActor.run {
-                        bridge.debugLog.add("chatgpt tools=\(tools.count)")
+                        workspace.debugLog.add("chatgpt tools=\(tools.count)")
                     }
                     if pace.preparedAt == nil {
                         pace.markPrepared()
-                        await MainActor.run { bridge.debugLog.pace = pace }
+                        await MainActor.run { workspace.debugLog.pace = pace }
                     }
                     var emitted = false
                     var usedBudget = false
                     try await AgentRuntime.run(
                         instructions: instructions,
-                        input: prepared.2,
+                        input: prepared.3,
                         tools: tools,
                         maxRounds: Self.maxToolRounds,
                         transport: ChatGPTTransport(model: model),
@@ -94,72 +113,66 @@ struct ChatGPTProvider: ChatProvider {
                                     await emitText(chunk)
                                 }
                             case .thinking(let delta):
-                                await MainActor.run { bridge.markThinking(delta) }
+                                if let delta {
+                                    continuation.yield(.reasoning(delta))
+                                }
                             case .callStarted(let call):
+                                continuation.yield(.tool(
+                                    name: call.name,
+                                    status: "running",
+                                    id: call.id,
+                                    detail: ChatToolActivity.detail(for: call.name, arguments: call.arguments),
+                                    sources: []
+                                ))
                                 await MainActor.run {
-                                    bridge.applyTool(
-                                        name: call.name,
-                                        status: "running",
-                                        id: call.id,
-                                        detail: ChatToolActivity.detail(for: call.name, arguments: call.arguments)
-                                    )
-                                    bridge.debugLog.add("chatgpt tool \(call.name)")
+                                    workspace.debugLog.add("chatgpt tool \(call.name)")
                                 }
                             case .callFinished(let call, let output):
                                 usedBudget = true
-                                await MainActor.run {
-                                    if output.hasPrefix("Error:") {
-                                        bridge.applyTool(
-                                            name: call.name,
-                                            status: "error",
-                                            id: call.id,
-                                            detail: output
-                                        )
-                                    } else {
-                                        bridge.applyTool(
-                                            name: call.name,
-                                            status: "completed",
-                                            id: call.id,
-                                            detail: ChatToolActivity.detail(
-                                                for: call.name,
-                                                arguments: call.arguments,
-                                                result: output
-                                            ),
-                                            sources: Self.sources(tool: call.name, result: output)
-                                        )
-                                    }
+                                if output.hasPrefix("Error:") {
+                                    continuation.yield(.tool(
+                                        name: call.name,
+                                        status: "error",
+                                        id: call.id,
+                                        detail: output,
+                                        sources: []
+                                    ))
+                                } else {
+                                    continuation.yield(.tool(
+                                        name: call.name,
+                                        status: "completed",
+                                        id: call.id,
+                                        detail: ChatToolActivity.detail(
+                                            for: call.name,
+                                            arguments: call.arguments,
+                                            result: output
+                                        ),
+                                        sources: ChatSource.make(from: Self.sources(tool: call.name, result: output))
+                                    ))
                                 }
                             }
                         }
                     )
                     if usedBudget {
                         await MainActor.run {
-                            bridge.debugLog.add("chatgpt tools finished")
+                            workspace.debugLog.add("chatgpt tools finished")
                         }
                     }
                     await flushText()
                     await MainActor.run {
-                        bridge.debugLog.pace = pace
-                        bridge.debugLog.add("pace done \(pace.logLine)")
-                        bridge.completeRunningTools()
+                        workspace.debugLog.pace = pace
+                        workspace.debugLog.add("pace done \(pace.logLine)")
                         if !emitted {
-                            bridge.debugLog.add("chatgpt stream completed without text")
+                            workspace.debugLog.add("chatgpt stream completed without text")
                         }
-                        bridge.finished()
                     }
                     continuation.yield(.done)
                     continuation.finish()
                 } catch is CancellationError {
-                    await MainActor.run {
-                        bridge.stop()
-                        bridge.finished()
-                    }
                     continuation.finish()
                 } catch {
                     await MainActor.run {
-                        bridge.failRunningTools()
                         ChatTrace.event("chatgpt stream error: \(error.localizedDescription)")
-                        bridge.finished()
                     }
                     continuation.finish(throwing: error)
                 }

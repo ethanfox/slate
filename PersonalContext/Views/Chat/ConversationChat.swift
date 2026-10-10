@@ -105,18 +105,7 @@ private struct ConversationSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ChatMessages(
-                session: session,
-                compact: compact,
-                turn: runtime.bridge.turn,
-                turnUserID: runtime.bridge.turnUserID,
-                turnText: runtime.bridge.turnText,
-                waitState: runtime.bridge.waitState,
-                sources: runtime.bridge.sources,
-                thinking: runtime.bridge.thinkingText,
-                workedSeconds: runtime.bridge.workedSeconds,
-                answers: runtime.answers
-            )
+            ChatMessages(session: session, compact: compact)
             Hairline()
             ChatInput(
                 text: $runtime.draft,
@@ -124,7 +113,7 @@ private struct ConversationSessionView: View {
                 providerID: .constant(runtime.providerID),
                 allowsProviderChange: false,
                 isGenerating: session.isGenerating,
-                changes: runtime.bridge.changes,
+                changes: runtime.changes,
                 errorMessage: session.error?.localizedDescription,
                 onSend: send,
                 composerOwnerID: runtime.conversationID,
@@ -133,7 +122,7 @@ private struct ConversationSessionView: View {
                 onStop: { session.cancel() },
                 onRetryStuck: retryStuck,
                 onStartRun: onStartRun,
-                debugLog: runtime.bridge.debugLog,
+                debugLog: runtime.debugLog,
                 draftKind: "chat",
                 draftObjectID: runtime.conversationID.uuidString,
                 draftRuntime: DraftTrace.runtimeID(runtime)
@@ -152,11 +141,7 @@ private struct ConversationSessionView: View {
         .onChange(of: app.pendingSend) { _, _ in runtime.consumePending(from: app) }
         .onChange(of: runtime.modelID) { _, _ in runtime.applyModel() }
         .onChange(of: session.isGenerating) { _, generating in
-            runtime.bridge.debugLog.snapshot(session, label: "generating=\(generating) entries=\(session.entries.count)")
-            if !generating {
-                runtime.rememberAnswer()
-                runtime.restoreFailedDraft()
-            }
+            runtime.debugLog.snapshot(session, label: "generating=\(generating) entries=\(session.entries.count)")
         }
     }
 

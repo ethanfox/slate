@@ -9,18 +9,19 @@ enum ProjectWorker {
     @MainActor
     static func consult(
         brief: String,
-        reportingTo bridge: CursorConversationBridge,
-        options: ChatTurnOptions
+        reportingTo workspace: ChatWorkspace,
+        options: ChatTurnOptions,
+        onTool: ((String, String, String?, String?) -> Void)? = nil
     ) async throws -> String {
         let question = brief.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !question.isEmpty else {
             throw ProjectWorkspaceError("brief is required")
         }
-        guard let project = bridge.project, isConfigured(on: project) else {
+        guard let project = workspace.project, isConfigured(on: project) else {
             throw ProjectWorkspaceError("This project has no Worker. Set one in Project Settings.")
         }
         let workerBridge = CursorConversationBridge(
-            conversation: bridge.conversation,
+            conversation: workspace.conversation,
             project: project
         )
         let provider = chatProvider(
@@ -31,7 +32,7 @@ enum ProjectWorker {
             resumeConversation: false,
             path: WorkerPath(rawValue: project.workerPath) ?? .local
         )
-        let model = modelID(project: project, conversation: bridge.conversation)
+        let model = modelID(project: project, conversation: workspace.conversation)
         let prompt = """
         Inspect the attached project code to answer the question below. This is read-only consultation: do not edit files, create commits, or change Membrae records. Return concise findings with repository-relative file paths and line numbers.
 
@@ -40,17 +41,14 @@ enum ProjectWorker {
         let message = TalkMessage(id: UUID(), role: .user, text: prompt)
         var output = ""
         for try await event in provider.stream(messages: [message], model: model, options: options) {
-            if case .text(let text) = event {
+            switch event {
+            case .text(let text):
                 output += text
+            case .tool(let name, let status, let id, let detail, _):
+                onTool?(name, status, id, detail)
+            default:
+                break
             }
-        }
-        for tool in workerBridge.tools {
-            bridge.applyTool(
-                name: tool.name,
-                status: tool.status.rawValue,
-                id: tool.id,
-                detail: tool.detail
-            )
         }
         guard !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ProjectWorkspaceError("The project Worker returned no code context.")
@@ -77,7 +75,7 @@ enum ProjectWorker {
             )
         case .chatgpt:
             return ChatGPTProvider(
-                bridge: bridge,
+                workspace: bridge.workspace,
                 includeMembraeTools: includeMembraeTools,
                 includeProjectTools: includeProjectTools
             )

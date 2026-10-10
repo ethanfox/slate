@@ -1,11 +1,11 @@
 import AppKit
 import Foundation
-import LinkPresentation
 import SwiftData
+import LinkPresentation
 import UniformTypeIdentifiers
 
-struct ChatSource: Identifiable, Equatable, Codable, Hashable {
-    enum Kind: String, Codable {
+struct ChatSource: Identifiable, Equatable, Codable, Hashable, Sendable {
+    enum Kind: String, Codable, Sendable {
         case url, note, thread, decision, project, conversation, task, run
     }
 
@@ -65,7 +65,9 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable {
         if let url, url == other.url { return true }
         return kind == other.kind && !title.isEmpty && title == other.title
     }
+}
 
+extension ChatSource {
     @MainActor
     func open(app: AppModel, context: ModelContext) {
         presented(in: context).source.openResolved(app: app, context: context, newTab: app.openChatLinksInNewTab)
@@ -287,58 +289,6 @@ enum ChatSourceMatcher {
             }
         }
         return ranges
-    }
-}
-
-struct ChatWork: Equatable, Codable {
-    var seconds: Int
-    var thinking: String
-    var tools: [ChatToolActivity]
-
-    var hasContent: Bool {
-        seconds > 0 || !thinking.isEmpty || !tools.isEmpty
-    }
-}
-
-enum ChatTranscript {
-    private static let start = "\n\n<!--membrae:"
-    private static let end = "-->"
-
-    struct Payload: Codable {
-        var sources: [ChatSource]
-        var work: ChatWork?
-    }
-
-    struct Unpacked: Equatable {
-        var text: String
-        var sources: [ChatSource]
-        var work: ChatWork?
-    }
-
-    static func pack(text: String, sources: [ChatSource], work: ChatWork?) -> String {
-        let existing = unpack(text)
-        let nextSources = sources.isEmpty ? existing.sources : sources
-        let nextWork = work?.hasContent == true ? work : existing.work
-        guard let data = try? JSONEncoder().encode(Payload(sources: nextSources, work: nextWork)),
-              let json = String(data: data, encoding: .utf8),
-              !nextSources.isEmpty || nextWork?.hasContent == true
-        else { return existing.text }
-        return existing.text + start + json + end
-    }
-
-    static func unpack(_ raw: String) -> Unpacked {
-        guard let start = raw.range(of: start, options: .backwards),
-              let end = raw.range(of: end, range: start.upperBound..<raw.endIndex)
-        else {
-            return Unpacked(text: raw, sources: [], work: nil)
-        }
-        let json = String(raw[start.upperBound..<end.lowerBound])
-        let payload = (try? JSONDecoder().decode(Payload.self, from: Data(json.utf8))) ?? Payload(sources: [], work: nil)
-        return Unpacked(
-            text: String(raw[..<start.lowerBound]),
-            sources: payload.sources,
-            work: payload.work
-        )
     }
 }
 

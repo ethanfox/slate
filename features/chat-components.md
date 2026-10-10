@@ -24,7 +24,7 @@ It does not create, select, or persist a conversation, and it does not own the u
 
 The shared conversation history.
 
-It renders user messages, assistant responses, the work control (live current-tool pill or past `Worked for Ns`), source chips, object cards, errors, and message actions. Wait-state, sources, and object cards are specified in [`chat-wait-state.md`](chat-wait-state.md). It reads entries from one `ChatSession` plus the current turn on `ChatRuntime`.
+It renders user messages, assistant responses, the work control (live current-tool pill or past `Worked for Ns`), source chips, object cards, errors, and message actions. Wait-state, sources, and object cards are specified in [`chat-wait-state.md`](chat-wait-state.md). It reads canonical turns from one `ChatEngine` session. Live and past replies are the same turn model.
 
 It does not send messages, create conversations, or persist history.
 
@@ -40,20 +40,15 @@ It gets that conversation's `ChatRuntime`, then places:
 
 It also connects the input to that runtime's draft, send, stop, model, error, and change state.
 
-### `ChatRuntime`
+### `ChatRuntime` / `ChatEngine`
 
-The state and persistence for one conversation.
+The session for one conversation. `AppModel.chatRuntime(for:project:)` retains exactly one runtime per `Conversation.id`, independent of any view.
 
-Every `Conversation.id` gets a separate `ChatRuntime` through `AppModel.chatRuntime(for:project:)`. Each runtime has its own:
+`ChatEngine` owns composer-adjacent execution: canonical turns, provider history, generation identity, errors, and terminal finalization. It applies provider-neutral stream events to the current turn. `ChatRuntime` coordinates the engine and `ConversationStore`: draft, model, send/cancel, save scheduling. It does not construct Cursor adapters or encode SwiftData messages.
 
-- `ChatSession`
-- history
-- selected model
-- unsent draft
-- generation and cancellation state
-- errors
-- tool bridge
-- persistence
+`ConversationStore` encodes and decodes turns, applies explicit upserts and deletes, and owns persisted attachments. Missing store messages are not deletions. Completed, failed, and cancelled turns survive reopen; transient activity does not.
+
+Turn types live in `ChatEngineTypes`. `ChatProviderFactory` builds a provider behind the common interface. Shared context and debug live on `ChatWorkspace`. Cursor runner behavior stays in `CursorConversationBridge`. AppModel retains runtimes and observes chrome.
 
 Sharing the components does not share conversation state.
 

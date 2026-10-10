@@ -66,6 +66,6 @@ The final answer is not hidden in the accordion. The accordion is how they waite
 
 ## Where it lives
 
-`ChatMessages` draws it. `ChatRuntime` / the bridge keep the turn log and the clock. Do not add a second chat.
+`ChatMessages` draws it. The conversation session owns the canonical turn log and the clock. Providers emit tool and wait events; they do not keep a parallel live transcript. Do not add a second chat.
 
 See also: [`chat-components.md`](chat-components.md).

@@ -1,24 +1,29 @@
 import Foundation
 import Observation
 
-/// Membrae-owned chat session. Owns submission, provider streaming, and turn lifecycle.
+/// One conversation session's execution owner. Applies provider events to a canonical turn.
 @MainActor
 @Observable
 final class ChatEngine {
     private(set) var entries: [ChatEntry] = []
     private(set) var isGenerating = false
     private(set) var error: Error?
+    private(set) var changes: [String] = []
+    private(set) var pendingMetadata = ChatTurnMetadata()
     var provider: any ChatProvider
     var model: String
     var onChange: (() -> Void)?
+    var onFinish: (() -> Void)?
     var traceObjectID = ""
     var traceRuntime = "-"
 
     private var history: [TalkMessage] = []
     private let stream = StreamWork()
     private var generationID = 0
+    private var removedMessageIDs: [UUID] = []
     private var activeAssistantID: UUID?
     private var rawText = ""
+    private var turn = ChatTurnState()
 
     init(provider: any ChatProvider, model: String) {
         self.provider = provider
@@ -47,7 +52,7 @@ final class ChatEngine {
         entries.append(.userMessage(.init(id: userID, text: text, attachments: submission.attachments)))
         history.append(TalkMessage(id: userID, role: .user, content: content))
         noteChange()
-        startGeneration(options: options)
+        startGeneration(options: options, userID: userID)
         return true
     }
 
@@ -60,6 +65,8 @@ final class ChatEngine {
         guard isGenerating else { return }
         stream.cancel()
         generationID += 1
+        turn.failRunningTools()
+        changes = turn.changes
         finishTurn(cancelled: true, streamError: nil)
     }
 
@@ -70,14 +77,55 @@ final class ChatEngine {
         error = nil
         activeAssistantID = nil
         rawText = ""
+        turn = ChatTurnState()
+        changes = []
+        pendingMetadata = ChatTurnMetadata()
+        removedMessageIDs = []
         self.entries = entries
         self.history = history
         noteChange()
     }
 
+    func takeRemovedIDs() -> [UUID] {
+        let ids = removedMessageIDs
+        removedMessageIDs = []
+        return ids
+    }
+
+    /// Adopts store messages that this session does not already own. Live entries win on ID collision.
+    func mergeFromStore(entries: [ChatEntry], history: [TalkMessage]) {
+        var merged = entries.map { store in
+            guard let id = store.messageID, let live = self.entries.first(where: { $0.messageID == id }) else {
+                return store
+            }
+            return live
+        }
+        merged.append(contentsOf: self.entries.filter { entry in
+            guard let id = entry.messageID else { return true }
+            return !entries.contains { $0.messageID == id }
+        })
+        var mergedHistory = history.map { store in
+            self.history.first(where: { $0.id == store.id }) ?? store
+        }
+        mergedHistory.append(contentsOf: self.history.filter { live in
+            !history.contains { $0.id == live.id }
+        })
+        self.entries = merged
+        self.history = mergedHistory
+        noteChange()
+    }
+
     var providerHistory: [TalkMessage] { history }
 
-    private func startGeneration(options: ChatTurnOptions) {
+    var currentTurn: ChatTurnState { turn }
+
+    func takeMetadata() -> ChatTurnMetadata {
+        let value = pendingMetadata
+        pendingMetadata = ChatTurnMetadata()
+        return value
+    }
+
+    private func startGeneration(options: ChatTurnOptions, userID: UUID) {
         stream.cancel()
         generationID += 1
         let myGeneration = generationID
@@ -85,6 +133,10 @@ final class ChatEngine {
         error = nil
         activeAssistantID = nil
         rawText = ""
+        pendingMetadata = ChatTurnMetadata()
+        turn.begin(userID: userID)
+        changes = []
+        ensureAssistant()
         DraftTrace.streamStart(object: traceObjectID, runtime: traceRuntime, model: model)
         noteChange()
 
@@ -121,8 +173,43 @@ final class ChatEngine {
         switch event {
         case .text(let text):
             rawText += text
+            turn.appendText(text)
             ensureAssistant()
-            appendAssistant(text)
+            publishTurn(streaming: true)
+        case .reasoning(let text):
+            turn.markThinking(text)
+            ensureAssistant()
+            publishTurn(streaming: true)
+        case .wait(let state):
+            turn.waitState = state
+            ensureAssistant()
+            publishTurn(streaming: true)
+        case .status(let status):
+            turn.applyStatus(status)
+            ensureAssistant()
+            publishTurn(streaming: true)
+        case .tool(let name, let status, let id, let detail, let sources):
+            turn.applyTool(name: name, status: status, id: id, detail: detail, sources: sources)
+            changes = turn.changes
+            ensureAssistant()
+            publishTurn(streaming: true)
+        case .sources(let sources):
+            turn.mergeSources(sources)
+            ensureAssistant()
+            publishTurn(streaming: true)
+        case .metadata(let metadata):
+            if let id = metadata.externalSessionID { pendingMetadata.externalSessionID = id }
+            if let title = metadata.title { pendingMetadata.title = title }
+            if let snapshot = metadata.contextSnapshot { pendingMetadata.contextSnapshot = snapshot }
+            noteChange()
+        case .completeRunningTools:
+            turn.completeRunningTools()
+            changes = turn.changes
+            publishTurn(streaming: true)
+        case .failRunningTools:
+            turn.failRunningTools()
+            changes = turn.changes
+            publishTurn(streaming: true)
         case .done:
             break
         }
@@ -130,19 +217,28 @@ final class ChatEngine {
 
     private func finishTurn(cancelled: Bool, streamError: Error?) {
         stream.task = nil
+        if cancelled || streamError != nil {
+            turn.failRunningTools()
+        } else {
+            turn.completeRunningTools()
+        }
+        turn.finish()
+        changes = turn.changes
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         if let assistantID = activeAssistantID {
-            if text.isEmpty {
+            if text.isEmpty, turn.tools.isEmpty, turn.thinking.isEmpty {
                 entries.removeAll { entry in
                     if case .aiMessage(let assistant) = entry { return assistant.id == assistantID }
                     return false
                 }
+                removedMessageIDs.append(assistantID)
             } else {
                 updateAssistant(id: assistantID) { assistant in
-                    assistant.text = rawText
-                    assistant.isStreaming = false
+                    assistant = turn.published(onto: assistant, text: rawText, streaming: false)
                 }
-                history.append(TalkMessage(id: assistantID, role: .assistant, text: rawText))
+                if !text.isEmpty {
+                    history.append(TalkMessage(id: assistantID, role: .assistant, text: rawText))
+                }
             }
         }
 
@@ -168,6 +264,7 @@ final class ChatEngine {
         activeAssistantID = nil
         isGenerating = false
         noteChange()
+        onFinish?()
     }
 
     private func markLastUser(cancelled: Bool = false, failed: Bool = false) {
@@ -186,12 +283,16 @@ final class ChatEngine {
         guard activeAssistantID == nil else { return }
         let id = UUID()
         activeAssistantID = id
-        entries.append(.aiMessage(.init(id: id, text: "", isStreaming: true)))
+        var assistant = ChatEntry.Assistant(id: id, text: "", isStreaming: true)
+        assistant = turn.published(onto: assistant, text: rawText, streaming: true)
+        entries.append(.aiMessage(assistant))
     }
 
-    private func appendAssistant(_ text: String) {
+    private func publishTurn(streaming: Bool) {
         guard let id = activeAssistantID else { return }
-        updateAssistant(id: id) { $0.text += text }
+        updateAssistant(id: id) { assistant in
+            assistant = turn.published(onto: assistant, text: rawText, streaming: streaming)
+        }
         noteChange()
     }
 

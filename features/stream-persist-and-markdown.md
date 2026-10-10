@@ -40,6 +40,6 @@ Apple has no streaming-chat-markdown recipe. TextKit / `NSTextStorage` increment
 
 ## Where it lives
 
-`AppModel.chatRuntime` `onTick`, `ChatRuntime.persist`, `CursorChatProvider.stream` / `ChatGPTProvider.stream` (`@MainActor`, `Task.yield`), `AssistantMarkdown` / `AssistantMarkdownTextView.apply`.
+`ChatRuntime.schedulePersist` on session change, `ChatRuntime.persist`, `CursorChatProvider.stream` / `ChatGPTProvider.stream` (`@MainActor`, `Task.yield`), `AssistantMarkdown` / `AssistantMarkdownTextView.apply`.
 
 See also: [`chat-components.md`](chat-components.md), [`chat-wait-state.md`](chat-wait-state.md).
