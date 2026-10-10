@@ -54,7 +54,12 @@ struct ThreadPage: View {
                         Button(status.label, systemImage: status.symbol) { thread.status = status; touch() }
                     }
                 }
-                PropertyPill(title: thread.parent.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No parent", systemImage: "arrow.turn.left.up", field: .parent) {
+                PropertyPill(
+                    title: thread.parent.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No parent",
+                    systemImage: "arrow.turn.left.up",
+                    field: .parent,
+                    onOpen: thread.parent.map { parent in { app.open(parent) } }
+                ) {
                     Button("No parent") { thread.parent = nil; touch() }
                     ForEach(parentCandidates) { candidate in
                         Button(candidate.title.isEmpty ? "Untitled" : candidate.title) { thread.parent = candidate; touch() }

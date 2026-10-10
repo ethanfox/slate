@@ -29,6 +29,7 @@ struct ProjectsView: View {
                             sortAscending: sortAscending,
                             onSort: sortBy,
                             onOpen: { app.open($0) },
+                            onOpenNewTab: { app.open($0, newTab: true) },
                             onEdit: { app.present(.editProject($0)) },
                             onPin: pin,
                             onDelete: { pendingDelete = $0 }
@@ -88,6 +89,11 @@ struct ProjectsView: View {
             Label("Edit…", systemImage: "pencil")
         }
         Button {
+            app.open(project, newTab: true)
+        } label: {
+            Label("Open in New Tab", systemImage: "plus.square.on.square")
+        }
+        Button {
             pin(project)
         } label: {
             Label(project.isPinned ? "Unpin" : "Pin", systemImage: project.isPinned ? "pin.slash" : "pin")
@@ -134,6 +140,7 @@ private struct ProjectsTable: View {
     var sortAscending: Bool
     var onSort: (ProjectSort) -> Void
     var onOpen: (Project) -> Void
+    var onOpenNewTab: (Project) -> Void
     var onEdit: (Project) -> Void
     var onPin: (Project) -> Void
     var onDelete: (Project) -> Void
@@ -166,6 +173,11 @@ private struct ProjectsTable: View {
                         onEdit(project)
                     } label: {
                         Label("Edit…", systemImage: "pencil")
+                    }
+                    Button {
+                        onOpenNewTab(project)
+                    } label: {
+                        Label("Open in New Tab", systemImage: "plus.square.on.square")
                     }
                     Button {
                         onPin(project)

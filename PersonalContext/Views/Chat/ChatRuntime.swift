@@ -389,11 +389,11 @@ final class ChatRuntime {
     func rememberAnswer() {
         for entry in session.entries.reversed() {
             if case .aiMessage(let reply) = entry, !reply.text.isEmpty {
-                let text = ChatTranscript.unpack(reply.text).text
+                let existing = answers[reply.id] ?? ChatTranscript.unpack(reply.text)
                 answers[reply.id] = ChatTranscript.Unpacked(
-                    text: text,
-                    sources: bridge.sources,
-                    work: bridge.work
+                    text: existing.text,
+                    sources: bridge.sources.isEmpty ? existing.sources : bridge.sources,
+                    work: bridge.work.hasContent ? bridge.work : existing.work
                 )
                 persist()
                 return
@@ -405,10 +405,14 @@ final class ChatRuntime {
         if let answer = answers[reply.id] {
             return ChatTranscript.pack(text: answer.text, sources: answer.sources, work: answer.work)
         }
-        let answer = ChatTranscript.unpack(reply.text)
-        guard !bridge.turnText.isEmpty, answer.text == bridge.turnText || reply.text == bridge.turnText else {
-            return reply.text
+        let existing = ChatTranscript.unpack(reply.text)
+        if !bridge.turnText.isEmpty, existing.text == bridge.turnText || reply.text == bridge.turnText {
+            return ChatTranscript.pack(
+                text: existing.text,
+                sources: bridge.sources.isEmpty ? existing.sources : bridge.sources,
+                work: bridge.work.hasContent ? bridge.work : existing.work
+            )
         }
-        return ChatTranscript.pack(text: answer.text, sources: bridge.sources, work: bridge.work)
+        return reply.text
     }
 }

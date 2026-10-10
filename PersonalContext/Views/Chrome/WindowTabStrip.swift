@@ -35,10 +35,12 @@ struct WindowTabStrip: View {
             TabHistoryControls()
             if app.windowTabs.count < 2 {
                 single
+                NewTabButton()
             } else {
                 strip
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(height: TabDragSpace.chip.height)
+                NewTabButton()
             }
         }
         .frame(maxWidth: app.windowTabs.count < 2 ? nil : .infinity, alignment: .leading)
@@ -454,6 +456,16 @@ private struct TabScrollViewportMask: View {
                 s.append(.init(color: .clear, location: 1))
             }
             return s.sorted { $0.location < $1.location }
+        }
+    }
+}
+
+private struct NewTabButton: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        TabHistoryButton(title: "New Chat", symbol: "plus", enabled: true) {
+            app.openNewChatTab()
         }
     }
 }

@@ -97,7 +97,12 @@ struct ChatGPTProvider: ChatProvider {
                                 await MainActor.run { bridge.markThinking(delta) }
                             case .callStarted(let call):
                                 await MainActor.run {
-                                    bridge.applyTool(name: call.name, status: "running", id: call.id)
+                                    bridge.applyTool(
+                                        name: call.name,
+                                        status: "running",
+                                        id: call.id,
+                                        detail: ChatToolActivity.detail(for: call.name, arguments: call.arguments)
+                                    )
                                     bridge.debugLog.add("chatgpt tool \(call.name)")
                                 }
                             case .callFinished(let call, let output):
@@ -115,6 +120,11 @@ struct ChatGPTProvider: ChatProvider {
                                             name: call.name,
                                             status: "completed",
                                             id: call.id,
+                                            detail: ChatToolActivity.detail(
+                                                for: call.name,
+                                                arguments: call.arguments,
+                                                result: output
+                                            ),
                                             sources: Self.sources(tool: call.name, result: output)
                                         )
                                     }

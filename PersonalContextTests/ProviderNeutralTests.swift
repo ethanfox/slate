@@ -690,4 +690,104 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertNotNil(rendered.attribute(.backgroundColor, at: inner.location, effectiveRange: nil))
         XCTAssertFalse(rendered.string.contains("`"))
     }
+
+    func testToolActivityNamesAReadFile() {
+        XCTAssertEqual(ChatToolActivity.title(for: "project_read_file", status: .succeeded), "Read file")
+        XCTAssertEqual(
+            ChatToolActivity.detail(for: "project_read_file", arguments: [
+                "root": "PC-OS",
+                "path": "PersonalContext/Services/ContextBuilder.swift",
+                "start_line": 48,
+                "end_line": 80
+            ]),
+            "PC-OS · PersonalContext/Services/ContextBuilder.swift · 48–80"
+        )
+    }
+
+    func testToolActivityNamesACodeSearch() {
+        XCTAssertEqual(ChatToolActivity.title(for: "project_search_code", status: .succeeded), "Searched code")
+        XCTAssertEqual(
+            ChatToolActivity.detail(for: "project_search_code", arguments: ["query": "ChatToolActivity"]),
+            "ChatToolActivity"
+        )
+    }
+
+    func testToolActivitySummarizesListedFiles() {
+        XCTAssertEqual(ChatToolActivity.title(for: "project_list_files", status: .succeeded), "Listed files")
+        XCTAssertEqual(
+            ChatToolActivity.detail(
+                for: "project_list_files",
+                result: #"[{"root":"PC-OS","path":"A.swift"},{"root":"PC-OS","path":"B.swift"}]"#
+            ),
+            "PC-OS · 2 files"
+        )
+        XCTAssertEqual(
+            ChatToolActivity.detail(for: "project_list_files", arguments: ["query": "ChatMessages"]),
+            "ChatMessages"
+        )
+    }
+
+    func testToolActivityNamesALiveList() {
+        XCTAssertEqual(ChatToolActivity.title(for: "list_tracks", status: .running), "Listing Tracks")
+        XCTAssertEqual(ChatToolActivity.title(for: "list_tracks", status: .succeeded), "Listed Tracks")
+    }
+
+    func testToolActivityNamesCreatedAndUpdatedRecords() {
+        XCTAssertEqual(ChatToolActivity.title(for: "create_track", status: .succeeded), "Added Track")
+        XCTAssertEqual(ChatToolActivity.detail(for: "create_track", arguments: ["title": "Auth"]), "Auth")
+        XCTAssertEqual(ChatToolActivity.detail(for: "create_task", arguments: ["title": "Ship sign-in"]), "Ship sign-in")
+        XCTAssertEqual(
+            ChatToolActivity.detail(for: "create_note", arguments: ["content": "Findings from the Harbor sign-in pass."]),
+            "Findings from the Harbor sign-in pass."
+        )
+        let id = UUID().uuidString
+        XCTAssertEqual(ChatToolActivity.detail(for: "update_track", arguments: ["track_id": id]), "")
+        XCTAssertEqual(
+            ChatToolActivity.detail(
+                for: "update_track",
+                arguments: ["track_id": id],
+                result: #"{"id":"\#(id)","title":"Auth"}"#
+            ),
+            "Auth"
+        )
+    }
+
+    func testPackDoesNotStripExistingWork() {
+        let work = ChatWork(
+            seconds: 4,
+            thinking: "",
+            tools: [ChatToolActivity(id: "1", name: "list_tracks", status: .succeeded)]
+        )
+        let packed = ChatTranscript.pack(text: "Hello", sources: [], work: work)
+        XCTAssertNotNil(ChatTranscript.unpack(packed).work)
+        XCTAssertEqual(ChatTranscript.unpack(packed).work?.tools.map(\.name), ["list_tracks"])
+
+        let again = ChatTranscript.pack(text: packed, sources: [], work: ChatWork(seconds: 0, thinking: "", tools: []))
+        XCTAssertEqual(ChatTranscript.unpack(again).work?.tools.map(\.name), ["list_tracks"])
+        XCTAssertEqual(ChatTranscript.unpack(again).text, "Hello")
+    }
+
+    @MainActor
+    func testApplyToolKeepsEarlierCalls() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let project = Project(name: "Harbor", symbol: "folder", summary: "")
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test", project: project)
+        container.mainContext.insert(project)
+        container.mainContext.insert(conversation)
+        try container.mainContext.save()
+
+        let bridge = CursorConversationBridge(conversation: conversation, project: project)
+        bridge.beginTurn()
+        bridge.applyTool(name: "list_tracks", status: "running", id: "a")
+        bridge.applyTool(name: "list_tracks", status: "completed", id: "a")
+        bridge.applyTool(name: "get_project", status: "running", id: "b")
+        bridge.applyTool(name: "get_project", status: "completed", id: "b")
+        XCTAssertEqual(bridge.tools.map(\.name), ["list_tracks", "get_project"])
+
+        bridge.applyTool(name: "list_tracks", status: "running", id: "")
+        bridge.applyTool(name: "list_tracks", status: "completed", id: "")
+        bridge.applyTool(name: "get_note", status: "running", id: "")
+        XCTAssertEqual(bridge.tools.map(\.name), ["list_tracks", "get_project", "list_tracks", "get_note"])
+    }
 }

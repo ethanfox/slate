@@ -192,7 +192,10 @@ struct RootView: View {
         }
         .ignoresSafeArea()
         .overlay {
-            HostWindowAccessor { hostWindow = $0 }
+            HostWindowAccessor { window in
+                window?.identifier = WindowChrome.main
+                hostWindow = window
+            }
                 .frame(width: 0, height: 0)
                 .allowsHitTesting(false)
         }

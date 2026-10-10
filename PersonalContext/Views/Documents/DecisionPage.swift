@@ -27,14 +27,24 @@ struct DecisionPage: View {
                     }
                 }
                 if decision.status == .superseded {
-                    PropertyPill(title: supersededTitle, systemImage: "arrow.right", field: .superseded) {
+                    PropertyPill(
+                        title: supersededTitle,
+                        systemImage: "arrow.right",
+                        field: .superseded,
+                        onOpen: supersededDecision.map { other in { app.open(other) } }
+                    ) {
                         Button("None") { decision.supersededByID = nil }
                         ForEach(project.decisions.filter { $0.id != decision.id }) { other in
                             Button(other.title.isEmpty ? "Untitled" : other.title) { decision.supersededByID = other.id }
                         }
                     }
                 }
-                PropertyPill(title: decision.thread.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No track", systemImage: TrackStyle.symbol, field: .track) {
+                PropertyPill(
+                    title: decision.thread.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No track",
+                    systemImage: TrackStyle.symbol,
+                    field: .track,
+                    onOpen: decision.thread.map { thread in { app.open(thread) } }
+                ) {
                     Button("No track") { decision.thread = nil; project.touch() }
                     ForEach(project.threads.sorted { $0.title < $1.title }) { thread in
                         Button(thread.title.isEmpty ? "Untitled" : thread.title) { decision.thread = thread; project.touch() }
@@ -92,10 +102,13 @@ struct DecisionPage: View {
         try? context.save()
     }
 
+    private var supersededDecision: Decision? {
+        guard let id = decision.supersededByID else { return nil }
+        return project.decisions.first { $0.id == id }
+    }
+
     private var supersededTitle: String {
-        guard let id = decision.supersededByID, let other = project.decisions.first(where: { $0.id == id }) else {
-            return "Replaced by…"
-        }
+        guard let other = supersededDecision else { return "Replaced by…" }
         return other.title.isEmpty ? "Untitled" : other.title
     }
 }

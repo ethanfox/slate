@@ -35,9 +35,9 @@ Persist the title and the URL (or the KB id). Do not save favicon files. Resolve
 
 `WorkAccordion` in `ChatMessages` is the only wait-state control. Use it for the live turn and for past replies. Do not add a second view.
 
-**Active (generating):** header stays `Thinking` (`Starting` only before the first event). One tool line sits under it and changes as the current tool changes. Do not grow a list. Do not replace the Thinking label. No chevron while live.
+**Active (generating):** live overlay only. `Starting` / `Thinking` before the first tool. Once a tool runs, the header is a pill of the current tool in the active voice (`Listing Tracks`), even if that call already returned. The label shimmers so it reads as in use. Spinner on the pill. `+N` if others already ran. The pill is expandable while live. Opening it shows thinking (if any) plus every tool from this turn (those rows use the real status). Do not grow a live checklist in the stream. Do not replace the pill with `Writing…`. Reduce Motion: no shimmer. When the turn ends, drop the overlay. The saved reply is the past control.
 
-**Past (closed):** `Worked for 38s` (`Worked` if the clock is 0). Chevron if there is a tool list or thinking. This is history, not the live wait. Keep this look.
+**Past (closed):** `Worked for 38s` (`Worked` if the clock is 0) on the saved message. Chevron if there is a tool list or thinking. This is history, not the live wait. Keep this look. Persist must not strip that work when a later send starts.
 
 **Past (open):** the same control. Body is thinking (if any) plus the tool rows (icon + title + optional detail). Answer stays below, outside the control.
 
@@ -49,11 +49,12 @@ The final answer is not hidden in the accordion. The accordion is how they waite
 
 1. User message
 2. Work control shows `Thinking` (or Starting)
-3. One tool line under Thinking updates as the current tool changes
-4. Interim text if the model speaks before it is done
-5. Control closes and renames to `Worked for Ns`
-6. Final answer, with source chips on the claims
-7. Chevron opens the tool list on that past control
+3. Current-tool pill replaces that label and updates as the current tool changes
+4. Opening the pill lists every tool from this turn
+5. Interim text if the model speaks before it is done
+6. Control closes and renames to `Worked for Ns`
+7. Final answer, with source chips on the claims
+8. Chevron opens the tool list on that past control
 
 ## Not this
 

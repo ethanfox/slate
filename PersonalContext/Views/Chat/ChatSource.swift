@@ -316,13 +316,14 @@ enum ChatTranscript {
     }
 
     static func pack(text: String, sources: [ChatSource], work: ChatWork?) -> String {
-        let clean = unpack(text).text
-        let payload = Payload(sources: sources, work: work)
-        guard let data = try? JSONEncoder().encode(payload),
+        let existing = unpack(text)
+        let nextSources = sources.isEmpty ? existing.sources : sources
+        let nextWork = work?.hasContent == true ? work : existing.work
+        guard let data = try? JSONEncoder().encode(Payload(sources: nextSources, work: nextWork)),
               let json = String(data: data, encoding: .utf8),
-              !sources.isEmpty || work?.hasContent == true
-        else { return clean }
-        return clean + start + json + end
+              !nextSources.isEmpty || nextWork?.hasContent == true
+        else { return existing.text }
+        return existing.text + start + json + end
     }
 
     static func unpack(_ raw: String) -> Unpacked {

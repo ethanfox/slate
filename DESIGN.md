@@ -84,7 +84,7 @@ Do not add hover to section labels. Do not move Settings into the scroll. Do not
 One row. It names the page and holds the actions for that page. When more than one page is open, the title slot becomes the tab strip. Do not add a second bar, and do not use native window tabbing.
 
 - Leading: sidebar toggle, then the title slot.
-- **One page open:** today’s title. Icon + 20 semibold. No box. No close.
+- **One page open:** today’s title. Icon + 20 semibold. No box. No close. A plus after the title opens a new chat tab.
 - Back and forward sit before the first tab (or the single-page title). Each tab keeps its own history. Switching tabs does not push. Closing a tab discards that tab’s history. ⌘[ back, ⌘] forward. Each control is 28×28. The whole square is the hit target, not the chevron. Put the frame and `contentShape` on the button’s label — on macOS, applying them after `Button` leaves only the icon clickable.
 - **Two or more:** a horizontal tab strip in that same slot.
   - Every tab has an icon and a title. Try 15 first (`CraftFont` body / summary-card size). Fall back to 13 only if the bar feels tight.
@@ -92,6 +92,7 @@ One row. It names the page and holds the actions for that page. When more than o
   - Close is an × on the tab. Always visible while the strip is showing. Do not animate the tab when the × is hovered or pressed.
   - Overflow scrolls horizontally. No visible scroller. Keep the current tab in view. A clipped end dissipates with a blurred copy of the same tabs, masked to the viewport edge (scroll-into-blur). A fully visible first or last tab does not blur.
   - Hovering a tab shows a small elevated pane with the full title, and the project (icon + name) underneath when the tab belongs to one. Not the system tooltip.
+  - A plus after the strip opens a new chat tab (⌘T). Same 28×28 hit target as back and forward. It stays put while tabs scroll.
   - Trailing page actions stay pinned. The leftover gap after the tabs is the window-drag region. A scroll view must not eat drag-to-move for the whole bar.
 - Trailing: at most one primary button, then view switches (grid, list) if the page has them.
 - Primary button is a glass capsule (`.glassEffect(.regular, in: Capsule())`), label 13, padding 10 / 6. A circled plus drawn with a hairline stroke is not a button.
@@ -101,7 +102,7 @@ One row. It names the page and holds the actions for that page. When more than o
 
 The toolbar scrolls away only if the page is a long document and the title is already in the document. Settings, lists, and home keep the toolbar fixed.
 
-A tab is one main-column view. Sidebar and other clicks navigate the current tab. A project in the main sidebar always opens that project’s overview — it does not switch to a chat or other inner view already open for that project. Chat object links open in a new tab (setting, default on). ⌘T is a new chat. Same view already open: switch to it. Last tab closed: Home. A generating chat shows a spinner on its tab. Tabs restore on launch and can be dragged. Each tab keeps back/forward history; closing a tab drops it. Sidebar follows the current tab. Spec: `features/window-tabs.md`.
+A tab is one main-column view. Sidebar and other clicks navigate the current tab. ⌘-click or **Open in New Tab** opens a new tab. A project in the main sidebar always opens that project’s overview — it does not switch to a chat or other inner view already open for that project. Chat object links open in a new tab (setting, default on). ⌘T and the tab-bar plus are a new chat. Same view already open: switch to it. Closing a tab selects the most recently viewed remaining tab. Last tab closed: Home. ⌘W closes the current tab, not the window. A generating chat shows a spinner on its tab. Tabs restore on launch and can be dragged. Each tab keeps back/forward history; closing a tab drops it. Sidebar follows the current tab. Spec: `features/window-tabs.md`.
 
 ## Content
 
@@ -376,7 +377,7 @@ Rules:
 - **Modals:** entry `.scale(0.96).combined(with: .opacity)` with `Motion.snappy`; exit `.scale(0.98).combined(with: .opacity)` with `Motion.quick`. Use an asymmetric transition.
 - **Destination changes** (sidebar navigation) are instant. Do not animate the page swap.
 - **Chrome column slide:** sidebar and inspector. Width clip plus opacity, `.easeInOut(duration: 0.22)`, as specified under Window. The page grid may reflow with that same transaction. Do not give the inspector its own animation. The project Tasks inspector uses this same column.
-- No stagger. No hover scale. No looping or ambient animation. Exceptions: the chat orb (its own spec), the Chats sidebar icon while a conversation is generating, and the Runs sidebar or tab spinner while a Run is active. No bounce above the `.snappy` default.
+- No stagger. No hover scale. No looping or ambient animation. Exceptions: the chat orb (its own spec), the Chats sidebar icon while a conversation is generating, the Runs sidebar or tab spinner while a Run is active, and the live chat tool-pill label shimmer while a turn is generating. No bounce above the `.snappy` default.
 - **Reduce Motion:** read `@Environment(\.accessibilityReduceMotion)`. When it is on, every transition becomes `.opacity`, and every animation that moves or scales becomes `Motion.quick` opacity only. Nothing slides, scales, or pushes.
 
 ## Calendar
@@ -392,15 +393,14 @@ Top to bottom, inside the page inset:
    - Today’s number is the accent color. The selected day sits on a `CraftColor.selection` pill, radius 10, which slides between cells (`matchedGeometryEffect`, `Motion.snappy`). Hover on an unselected cell uses the hover fill with `Motion.hover`.
    - The chevrons page by week. The strip content pushes in from the matching edge (`Motion.smooth`). Paging keeps the same weekday selected.
 3. **Next up card**, 24 below, only when the selected day is today and an event is still upcoming or in progress. It follows Summary cards. The meta is “Next up · in 45 min”, or “Now · ends in 20 min” when in progress. Clicking it opens the edit event modal.
-4. **All-day, tasks, and reminders**, 24 below, only when present. Label “All day” (section style). All-day events are rows with the tint bar. Membrae tasks and reminders keep their completion toggle and open the matching edit modal on click. A repeating task only appears on its current due day.
-5. **Timeline**, 24 below.
+4. **All-day, tasks, and reminders**, 24 below, only when present. Label “All day” (section style). All-day events are rows with the tint bar. Membrae tasks and reminders appear only when they have a due date on the selected day; undated work stays in Tasks. They keep their completion toggle and open the matching edit modal on click. A repeating task only appears on its current due day.
+5. **Timeline**, 24 below. Always shown, even when the day has no timed events.
    - Hours from 8 to 20 by default. It widens to include the earliest start and the latest end of the day’s timed events.
    - Each hour is 48 tall. The hour label (11 tertiary, monospaced digits, “9 AM”) is 44 wide, leading, top-aligned to its hour line. The hour line is a hairline running from the label’s trailing edge plus 8 to the inset edge.
    - Event blocks sit to the right of the labels, positioned by start and end (minimum height 22). Overlapping events split the width into equal columns with a 4 gap.
    - A block: radius 8, the tint at 12% fill, a 3pt tint leading bar, padding 6 / 8. Title 12 medium primary, one line. Time range 11 secondary when the block is 40 tall or more. Hover lifts the fill to 18% with `Motion.hover`. Click opens the edit event modal.
    - When the selected day is today, a now-line: 1pt accent line across the event area, with an 7pt accent dot at its leading edge. It updates every minute (`TimelineView(.everyMinute)`).
    - On first appear for today, scroll so the now-line sits about a third of the way down.
-6. **Empty day:** one line, tertiary, “Nothing scheduled.” in place of the timeline.
 
 Keyboard: ← and → move the selected day by one (paging the strip when crossing a week edge), ⌘T returns to today.
 

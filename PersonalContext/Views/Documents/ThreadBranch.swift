@@ -126,6 +126,11 @@ struct ThreadBranch: View {
                     Label("Edit…", systemImage: "pencil")
                 }
                 Button {
+                    app.open(thread, newTab: true)
+                } label: {
+                    Label("Open in New Tab", systemImage: "plus.square.on.square")
+                }
+                Button {
                     onCreateChild(thread)
                 } label: {
                     Label("New Sub-track", systemImage: "plus")

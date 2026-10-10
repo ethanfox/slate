@@ -28,6 +28,11 @@ struct ConversationRow: View {
                 Label("Edit…", systemImage: "pencil")
             }
             Button {
+                app.open(conversation, newTab: true)
+            } label: {
+                Label("Open in New Tab", systemImage: "plus.square.on.square")
+            }
+            Button {
                 let brief = conversation.orderedMessages.last(where: { $0.role == .user })?.content ?? ""
                 app.presentNewRun(origin: .chat, project: conversation.project, chat: conversation, brief: brief)
             } label: {

@@ -132,48 +132,13 @@ struct ProjectColumn: View {
     private var rail: some View {
         VStack(alignment: .center, spacing: 1) {
             ProjectColumnToggle(collapsed: app.projectColumnCollapsed, action: app.toggleProjectColumn)
-            ColumnIconButton(
-                systemImage: "doc.text",
-                isSelected: tab == .overview,
-                label: "Overview",
-                action: { show(.overview) }
-            )
-            ColumnIconButton(
-                systemImage: "checklist",
-                isSelected: tab == .tasks,
-                label: "Tasks",
-                action: { show(.tasks) }
-            )
-            ColumnIconButton(
-                systemImage: ProjectColumnSection.runs.symbol,
-                isSelected: tab == .runs,
-                label: ProjectColumnSection.runs.title,
-                action: { show(.runs) }
-            )
-            ColumnIconButton(
-                systemImage: ProjectColumnSection.chats.symbol,
-                isSelected: tab == .chat,
-                label: ProjectColumnSection.chats.title,
-                action: { show(.chat) }
-            )
-            ColumnIconButton(
-                systemImage: ProjectColumnSection.tracks.symbol,
-                isSelected: tab == .threads,
-                label: ProjectColumnSection.tracks.title,
-                action: { show(.threads) }
-            )
-            ColumnIconButton(
-                systemImage: ProjectColumnSection.notes.symbol,
-                isSelected: tab == .notes,
-                label: ProjectColumnSection.notes.title,
-                action: { show(.notes) }
-            )
-            ColumnIconButton(
-                systemImage: ProjectColumnSection.decisions.symbol,
-                isSelected: tab == .decisions,
-                label: ProjectColumnSection.decisions.title,
-                action: { show(.decisions) }
-            )
+            railButton(.overview, symbol: "doc.text", label: "Overview")
+            railButton(.tasks, symbol: "checklist", label: "Tasks")
+            railButton(.runs, symbol: ProjectColumnSection.runs.symbol, label: ProjectColumnSection.runs.title)
+            railButton(.chat, symbol: ProjectColumnSection.chats.symbol, label: ProjectColumnSection.chats.title)
+            railButton(.threads, symbol: ProjectColumnSection.tracks.symbol, label: ProjectColumnSection.tracks.title)
+            railButton(.notes, symbol: ProjectColumnSection.notes.symbol, label: ProjectColumnSection.notes.title)
+            railButton(.decisions, symbol: ProjectColumnSection.decisions.symbol, label: ProjectColumnSection.decisions.title)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
@@ -191,6 +156,7 @@ struct ProjectColumn: View {
                             SidebarRow(title: "Overview", systemImage: "doc.text", isSelected: tab == .overview)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu { openSectionInNewTab(.overview) }
                         ProjectColumnToggle(collapsed: app.projectColumnCollapsed, action: app.toggleProjectColumn)
                     }
 
@@ -199,6 +165,7 @@ struct ProjectColumn: View {
                             SidebarRow(title: "Tasks", systemImage: "checklist", isSelected: tab == .tasks)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu { openSectionInNewTab(.tasks) }
                         SectionAddButton(title: "Task") { createTask() }
                     }
 
@@ -292,6 +259,11 @@ struct ProjectColumn: View {
                                     Label("Edit…", systemImage: "pencil")
                                 }
                                 Button {
+                                    app.open(note, newTab: true)
+                                } label: {
+                                    Label("Open in New Tab", systemImage: "plus.square.on.square")
+                                }
+                                Button {
                                     app.present(.newTaskFromNote(note))
                                 } label: {
                                     Label("New Task…", systemImage: "checklist")
@@ -334,6 +306,11 @@ struct ProjectColumn: View {
                                 } label: {
                                     Label("Edit…", systemImage: "pencil")
                                 }
+                                Button {
+                                    app.open(decision, newTab: true)
+                                } label: {
+                                    Label("Open in New Tab", systemImage: "plus.square.on.square")
+                                }
                                 Divider()
                                 if markedIDs.contains(decision.id) {
                                     Button {
@@ -366,6 +343,29 @@ struct ProjectColumn: View {
             onToggle: { app.toggleProjectSection(section, tab: tab) }
         ) {
             SectionAddButton(title: String(section.title.dropLast()), action: add)
+        }
+    }
+
+    private func railButton(_ tab: ProjectTab, symbol: String, label: String) -> some View {
+        ColumnIconButton(
+            systemImage: symbol,
+            isSelected: self.tab == tab,
+            label: label,
+            action: { show(tab) }
+        )
+        .contextMenu { openSectionInNewTab(tab) }
+    }
+
+    @ViewBuilder
+    private func openSectionInNewTab(_ tab: ProjectTab) -> some View {
+        Button {
+            if tab == .runs {
+                app.showProjectRuns(in: project, newTab: true)
+            } else {
+                app.open(project, tab: tab, newTab: true)
+            }
+        } label: {
+            Label("Open in New Tab", systemImage: "plus.square.on.square")
         }
     }
 

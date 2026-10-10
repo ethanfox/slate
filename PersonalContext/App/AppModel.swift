@@ -21,6 +21,7 @@ final class AppModel {
     var chromeDestination: Destination = .home
     var windowTabs: [WindowTab] = [AppModel.launchTab]
     var selectedTabID = AppModel.launchTab.id
+    var tabRecency: [UUID] = [AppModel.launchTab.id]
     var tabHistories: [UUID: TabHistory] = [:]
     var canGoBack = false
     var canGoForward = false

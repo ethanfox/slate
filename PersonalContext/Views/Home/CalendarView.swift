@@ -124,20 +124,16 @@ struct CalendarView: View {
                     }
                 )
             }
-            if !selectedTimed.isEmpty {
-                CalendarTimeline(
-                    day: selectedDay,
-                    events: selectedTimed,
-                    now: now,
-                    isToday: calendar.isDateInToday(selectedDay),
-                    scrollProxy: proxy,
-                    shouldScrollToNow: !didScrollToNow && calendar.isDateInToday(selectedDay),
-                    onScrolledToNow: { didScrollToNow = true },
-                    onOpen: { app.present(.editEvent($0)) }
-                )
-            } else if selectedAllDay.isEmpty && selectedReminders.isEmpty && selectedTasks.isEmpty && selectedCompletions.isEmpty {
-                EmptyLine(text: "Nothing scheduled.")
-            }
+            CalendarTimeline(
+                day: selectedDay,
+                events: selectedTimed,
+                now: now,
+                isToday: calendar.isDateInToday(selectedDay),
+                scrollProxy: proxy,
+                shouldScrollToNow: !didScrollToNow && calendar.isDateInToday(selectedDay),
+                onScrolledToNow: { didScrollToNow = true },
+                onOpen: { app.present(.editEvent($0)) }
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .transaction { $0.animation = Motion.quick }
@@ -205,34 +201,30 @@ struct CalendarView: View {
         return result
     }
 
-    private func items(on day: Date, includeUndated: Bool? = nil) -> [DayItem] {
-        let undated = includeUndated ?? calendar.isDateInToday(day)
+    private func items(on day: Date) -> [DayItem] {
         let events = app.eventKit.events
             .filter { eventFalls($0, on: day) }
             .sorted { $0.start < $1.start }
             .map(DayItem.event)
         let reminders = app.eventKit.reminders
             .filter { reminder in
-                if reminder.isCompleted { return false }
-                if let due = reminder.due {
-                    return calendar.isDate(due, inSameDayAs: day)
-                }
-                return undated
+                guard !reminder.isCompleted, let due = reminder.due else { return false }
+                return calendar.isDate(due, inSameDayAs: day)
             }
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
             .map(DayItem.reminder)
         let tasks = membraeTasks
             .filter { task in
-                if task.isCompleted { return false }
-                if let due = task.due {
-                    return calendar.isDate(due, inSameDayAs: day)
-                }
-                return undated
+                guard !task.isCompleted, let due = task.due else { return false }
+                return calendar.isDate(due, inSameDayAs: day)
             }
             .sorted { $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending }
             .map(DayItem.task)
         let done = completions
-            .filter { calendar.isDate($0.completedAt, inSameDayAs: day) }
+            .filter { completion in
+                guard completion.occurredDue != nil else { return false }
+                return calendar.isDate(completion.completedAt, inSameDayAs: day)
+            }
             .sorted { $0.completedAt > $1.completedAt }
             .map(DayItem.completion)
         return reminders + tasks + done + events

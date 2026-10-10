@@ -20,7 +20,8 @@ struct NotePage: View {
                 PropertyPill(
                     title: note.thread.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No track",
                     systemImage: TrackStyle.symbol,
-                    field: .track
+                    field: .track,
+                    onOpen: note.thread.map { thread in { app.open(thread) } }
                 ) {
                     Button("No track") { note.thread = nil; touch() }
                     ForEach(project.threads.sorted { $0.title < $1.title }) { thread in

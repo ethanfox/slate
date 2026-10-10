@@ -236,7 +236,8 @@ private struct TaskDocument: View {
     private var projectPill: some View {
         PropertyPill(
             title: item.project?.displayName ?? "No project",
-            systemImage: item.project.map { $0.symbol.isEmpty ? "square.stack" : $0.symbol } ?? "square.stack"
+            systemImage: item.project.map { $0.symbol.isEmpty ? "square.stack" : $0.symbol } ?? "square.stack",
+            onOpen: item.project.map { project in { app.open(project) } }
         ) {
             Button("No project") {
                 AssociationService.clearProject(from: item)
@@ -254,7 +255,8 @@ private struct TaskDocument: View {
     private var tracksPill: some View {
         PropertyPill(
             title: item.liveTracks.first.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No track",
-            systemImage: TrackStyle.symbol
+            systemImage: TrackStyle.symbol,
+            onOpen: item.liveTracks.first.map { thread in { app.open(thread) } }
         ) {
             Button("No track") {
                 for thread in item.liveTracks {
@@ -273,7 +275,8 @@ private struct TaskDocument: View {
     private var notesPill: some View {
         PropertyPill(
             title: notesPillTitle,
-            systemImage: "note.text"
+            systemImage: "note.text",
+            onOpen: item.liveNotes.first.map { note in { app.open(note) } }
         ) {
             Button("New Note…") { createNote() }
                 .disabled(item.project == nil)

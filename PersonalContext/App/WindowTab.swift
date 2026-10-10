@@ -1,6 +1,25 @@
+import AppKit
 import Foundation
 import SwiftData
 import SwiftUI
+
+enum TabActivation {
+    static var commandClick: Bool {
+        NSApp.currentEvent?.modifierFlags.contains(.command) == true
+    }
+}
+
+enum TabRecency {
+    static func remember(_ id: UUID, in order: [UUID]) -> [UUID] {
+        var next = order.filter { $0 != id }
+        next.append(id)
+        return next
+    }
+
+    static func selection(afterClosing id: UUID, remaining: [UUID], recency: [UUID]) -> UUID? {
+        recency.last { $0 != id && remaining.contains($0) } ?? remaining.last
+    }
+}
 
 struct WindowTab: Identifiable, Hashable, Codable {
     var id: UUID
@@ -145,6 +164,7 @@ private struct StoredWindowTabs: Codable {
     var tabs: [WindowTab]
     var selectedID: UUID
     var histories: [StoredTabHistory]?
+    var recency: [UUID]?
 }
 
 extension AppModel {
@@ -153,11 +173,11 @@ extension AppModel {
         set { navigate(to: newValue) }
     }
 
-    func navigate(to destination: Destination, newTab: Bool = false) {
+    func navigate(to destination: Destination, newTab: Bool = TabActivation.commandClick) {
         reveal(windowTab(for: destination), newTab: newTab)
     }
 
-    func open(_ project: Project, tab: ProjectTab? = nil, newTab: Bool = false) {
+    func open(_ project: Project, tab: ProjectTab? = nil, newTab: Bool = TabActivation.commandClick) {
         reveal(windowTab(for: project, tab: tab), newTab: newTab)
     }
 
@@ -197,7 +217,7 @@ extension AppModel {
         )
     }
 
-    func open(_ thread: ProjectThread, newTab: Bool = false) {
+    func open(_ thread: ProjectThread, newTab: Bool = TabActivation.commandClick) {
         guard let project = thread.project else { return }
         openProjectSection(.tracks)
         reveal(
@@ -214,7 +234,7 @@ extension AppModel {
         )
     }
 
-    func open(_ note: Note, newTab: Bool = false) {
+    func open(_ note: Note, newTab: Bool = TabActivation.commandClick) {
         guard let project = note.project else { return }
         openProjectSection(.notes)
         reveal(
@@ -231,7 +251,7 @@ extension AppModel {
         )
     }
 
-    func open(_ decision: Decision, newTab: Bool = false) {
+    func open(_ decision: Decision, newTab: Bool = TabActivation.commandClick) {
         guard let project = decision.project else { return }
         openProjectSection(.decisions)
         reveal(
@@ -248,7 +268,7 @@ extension AppModel {
         )
     }
 
-    func open(_ run: AgentRun, newTab: Bool = false) {
+    func open(_ run: AgentRun, newTab: Bool = TabActivation.commandClick) {
         if let project = run.project {
             openProjectSection(.runs)
             reveal(
@@ -281,7 +301,7 @@ extension AppModel {
         }
     }
 
-    func showProjectRuns(in project: Project, newTab: Bool = false) {
+    func showProjectRuns(in project: Project, newTab: Bool = TabActivation.commandClick) {
         openProjectSection(.runs)
         reveal(
             WindowTab(
@@ -298,7 +318,7 @@ extension AppModel {
         )
     }
 
-    func open(_ conversation: Conversation, newTab: Bool = false) {
+    func open(_ conversation: Conversation, newTab: Bool = TabActivation.commandClick) {
         if let project = conversation.project {
             openProjectSection(.chats)
             reveal(
@@ -329,7 +349,7 @@ extension AppModel {
         }
     }
 
-    func showNewChat(in project: Project, newTab: Bool = false) {
+    func showNewChat(in project: Project, newTab: Bool = TabActivation.commandClick) {
         reveal(
             WindowTab(
                 id: UUID(),
@@ -368,6 +388,7 @@ extension AppModel {
         guard id != selectedTabID, windowTabs.contains(where: { $0.id == id }) else { return }
         persistCurrentIntoSelectedTab()
         selectedTabID = id
+        rememberSelectedTab()
         if let tab = windowTabs.first(where: { $0.id == id }) {
             withoutHistory {
                 apply(tab, persist: true)
@@ -393,25 +414,17 @@ extension AppModel {
 
     func closeTab(_ id: UUID) {
         persistCurrentIntoSelectedTab()
-        guard let index = windowTabs.firstIndex(where: { $0.id == id }) else { return }
+        guard windowTabs.contains(where: { $0.id == id }) else { return }
         let wasSelected = selectedTabID == id
-        windowTabs.remove(at: index)
+        windowTabs.removeAll { $0.id == id }
         discardHistory(id)
+        tabRecency.removeAll { $0 == id }
         if windowTabs.isEmpty {
-            let home = WindowTab.home()
-            windowTabs = [home]
-            selectedTabID = home.id
-            withoutHistory {
-                apply(home, persist: true)
-            }
+            showLoneHome()
             return
         }
         if wasSelected {
-            let next = index < windowTabs.count ? windowTabs[index] : windowTabs[index - 1]
-            selectedTabID = next.id
-            withoutHistory {
-                apply(next, persist: true)
-            }
+            activateRemainingTab()
         } else {
             persistWindowTabs()
             syncHistoryButtons()
@@ -429,26 +442,18 @@ extension AppModel {
             return true
         }
         if remaining.count == windowTabs.count { return }
-        for tab in windowTabs where !remaining.contains(where: { $0.id == tab.id }) {
+        let removed = windowTabs.filter { tab in !remaining.contains(where: { $0.id == tab.id }) }
+        for tab in removed {
             discardHistory(tab.id)
         }
         windowTabs = remaining
+        tabRecency.removeAll { id in removed.contains(where: { $0.id == id }) }
         if windowTabs.isEmpty {
-            let home = WindowTab.home()
-            windowTabs = [home]
-            selectedTabID = home.id
-            withoutHistory {
-                apply(home, persist: true)
-            }
+            showLoneHome()
             return
         }
         if !windowTabs.contains(where: { $0.id == selectedTabID }) {
-            selectedTabID = windowTabs[min(windowTabs.count - 1, 0)].id
-            if let tab = windowTabs.first(where: { $0.id == selectedTabID }) {
-                withoutHistory {
-                    apply(tab, persist: true)
-                }
-            }
+            activateRemainingTab()
         } else {
             persistWindowTabs()
             syncHistoryButtons()
@@ -468,6 +473,7 @@ extension AppModel {
         if let existing = windowTabs.first(where: { $0.viewKey == incoming.viewKey }) {
             if newTab || existing.id == selectedTabID {
                 selectedTabID = existing.id
+                rememberSelectedTab()
                 withoutHistory {
                     apply(existing, persist: true)
                 }
@@ -475,6 +481,7 @@ extension AppModel {
             }
             discardHistory(existing.id)
             windowTabs.removeAll { $0.id == existing.id }
+            tabRecency.removeAll { $0 == existing.id }
         }
         if newTab, !windowTabs.isEmpty {
             var tab = incoming
@@ -483,6 +490,7 @@ extension AppModel {
             }
             windowTabs.append(tab)
             selectedTabID = tab.id
+            rememberSelectedTab()
             apply(tab, persist: true)
             return
         }
@@ -495,6 +503,7 @@ extension AppModel {
         }
         windowTabs = [incoming]
         selectedTabID = incoming.id
+        rememberSelectedTab()
         apply(incoming, persist: true)
     }
 
@@ -512,11 +521,17 @@ extension AppModel {
                     return (record.tabID, TabHistory(back: record.back, forward: record.forward))
                 }
             )
+            let live = stored.tabs.map(\.id)
+            tabRecency = TabRecency.remember(
+                selectedTabID,
+                in: (stored.recency ?? []).filter { live.contains($0) }
+            )
         } else {
             let home = WindowTab.home()
             windowTabs = [home]
             selectedTabID = home.id
             tabHistories = [:]
+            tabRecency = [home.id]
         }
         if let tab = windowTabs.first(where: { $0.id == selectedTabID }) {
             withoutHistory {
@@ -567,14 +582,43 @@ extension AppModel {
 
     private func persistWindowTabs() {
         tabHistories = tabHistories.filter { id, _ in windowTabs.contains { $0.id == id } }
+        tabRecency = tabRecency.filter { id in windowTabs.contains { $0.id == id } }
         let stored = StoredWindowTabs(
             tabs: windowTabs,
             selectedID: selectedTabID,
             histories: tabHistories.map { id, history in
                 StoredTabHistory(tabID: id, back: history.back, forward: history.forward)
-            }
+            },
+            recency: tabRecency
         )
         defaults.set(try? JSONEncoder().encode(stored), forKey: Keys.windowTabs)
+    }
+
+    private func rememberSelectedTab() {
+        tabRecency = TabRecency.remember(selectedTabID, in: tabRecency)
+    }
+
+    private func showLoneHome() {
+        let home = WindowTab.home()
+        windowTabs = [home]
+        selectedTabID = home.id
+        tabRecency = [home.id]
+        withoutHistory {
+            apply(home, persist: true)
+        }
+    }
+
+    private func activateRemainingTab() {
+        guard let nextID = TabRecency.selection(
+            afterClosing: selectedTabID,
+            remaining: windowTabs.map(\.id),
+            recency: tabRecency
+        ), let next = windowTabs.first(where: { $0.id == nextID }) else { return }
+        selectedTabID = next.id
+        rememberSelectedTab()
+        withoutHistory {
+            apply(next, persist: true)
+        }
     }
 
     private func recordNavigation(from previous: WindowTab, to next: WindowTab) {

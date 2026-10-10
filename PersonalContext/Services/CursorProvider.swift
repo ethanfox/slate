@@ -159,6 +159,16 @@ struct ChatToolActivity: Identifiable, Equatable, Codable {
             return status == .running ? "Fetching a page" : status == .failed ? "Couldn’t fetch a page" : "Fetched a page"
         case "mcp":
             return status == .running ? "Using a tool" : status == .failed ? "A tool failed" : "Used a tool"
+        case "project_search_code":
+            return status == .running ? "Searching code" : status == .failed ? "Couldn’t search code" : "Searched code"
+        case "project_read_file":
+            return status == .running ? "Reading file" : status == .failed ? "Couldn’t read file" : "Read file"
+        case "project_list_files":
+            return status == .running ? "Listing files" : status == .failed ? "Couldn’t list files" : "Listed files"
+        case "project_git_log":
+            return status == .running ? "Reading git history" : status == .failed ? "Couldn’t read git history" : "Read git history"
+        case "consult_code":
+            return status == .running ? "Asking the Worker" : status == .failed ? "The Worker failed" : "Asked the Worker"
         default:
             break
         }
@@ -170,11 +180,13 @@ struct ChatToolActivity: Identifiable, Equatable, Codable {
         ]
         for verb in verbs {
             guard let range = tool.range(of: verb.prefix) else { continue }
-            let noun = tool[range.upperBound...].replacingOccurrences(of: "_", with: " ")
+            let noun = tool[range.upperBound...]
+                .replacingOccurrences(of: "_", with: " ")
+                .localizedCapitalized
             switch status {
             case .running: return "\(verb.running) \(noun)"
             case .succeeded: return "\(verb.done) \(noun)"
-            case .failed: return "Couldn’t \(verb.fail) \(noun)"
+            case .failed: return "Couldn’t \(verb.fail) \(noun.lowercased())"
             }
         }
         let readable = tool
@@ -238,6 +250,118 @@ struct ChatToolActivity: Identifiable, Equatable, Codable {
         if !sources.isEmpty {
             try container.encode(sources, forKey: .sources)
         }
+    }
+
+    static func detail(for name: String, arguments: [String: Any] = [:], result: String? = nil) -> String {
+        let fields = stringFields(arguments)
+        switch name {
+        case "project_read_file":
+            return fileDetail(merging(fields, from: result, keys: ["root", "path"]))
+        case "project_search_code":
+            return clip(fields["query"] ?? "", 80)
+        case "project_list_files":
+            if let query = fields["query"], !query.isEmpty { return clip(query, 80) }
+            return fileListDetail(result)
+        case "project_git_log":
+            return fields["root"] ?? ""
+        case "consult_code":
+            return clip(fields["brief"] ?? fields["question"] ?? "", 80)
+        case "webSearch":
+            return clip(fields["query"] ?? fields["search"] ?? fields["q"] ?? "", 80)
+        case "webFetch", "WebFetch":
+            return fields["url"] ?? fields["href"] ?? ""
+        default:
+            break
+        }
+        if let title = fields["title"] ?? fields["name"], !title.isEmpty {
+            return clip(title, 80)
+        }
+        if name.contains("note"), let content = fields["content"], !content.isEmpty {
+            return clip(content, 80)
+        }
+        let titles = titles(from: result).prefix(3)
+        if !titles.isEmpty { return titles.joined(separator: " · ") }
+        return ""
+    }
+
+    private static func fileDetail(_ fields: [String: String]) -> String {
+        guard let path = fields["path"], !path.isEmpty else { return "" }
+        var parts: [String] = []
+        if let root = fields["root"], !root.isEmpty { parts.append(root) }
+        parts.append(path)
+        if let start = fields["start_line"], !start.isEmpty {
+            if let end = fields["end_line"], !end.isEmpty, end != start {
+                parts.append("\(start)–\(end)")
+            } else {
+                parts.append(start)
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func fileListDetail(_ result: String?) -> String {
+        guard let items = jsonObject(result) as? [[String: Any]], !items.isEmpty else { return "" }
+        var seen = Set<String>()
+        var roots: [String] = []
+        for item in items {
+            guard let root = text(item["root"]), seen.insert(root).inserted else { continue }
+            roots.append(root)
+        }
+        let label = items.count == 1 ? "1 file" : "\(items.count) files"
+        if roots.count == 1 { return "\(roots[0]) · \(label)" }
+        return label
+    }
+
+    private static func titles(from result: String?) -> [String] {
+        guard let object = jsonObject(result) else { return [] }
+        return titles(fromJSON: object)
+            .filter { UUID(uuidString: $0) == nil }
+            .map { clip($0, 80) }
+    }
+
+    private static func titles(fromJSON value: Any) -> [String] {
+        if let items = value as? [Any] {
+            return items.flatMap(titles(fromJSON:))
+        }
+        guard let object = value as? [String: Any] else { return [] }
+        if let title = text(object["title"]) ?? text(object["name"]) {
+            return [title]
+        }
+        return object.values.flatMap(titles(fromJSON:))
+    }
+
+    private static func merging(_ fields: [String: String], from result: String?, keys: [String]) -> [String: String] {
+        var next = fields
+        guard let object = jsonObject(result) as? [String: Any] else { return next }
+        for key in keys where next[key] == nil {
+            if let value = text(object[key]) { next[key] = value }
+        }
+        return next
+    }
+
+    private static func stringFields(_ arguments: [String: Any]) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: arguments.compactMap { key, value in
+            text(value).map { (key, $0) }
+        })
+    }
+
+    private static func jsonObject(_ result: String?) -> Any? {
+        guard let result else { return nil }
+        let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = trimmed.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data)
+    }
+
+    private static func text(_ value: Any?) -> String? {
+        if let string = value as? String {
+            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        if let number = value as? NSNumber {
+            if CFGetTypeID(number) == CFBooleanGetTypeID() { return nil }
+            return number.stringValue
+        }
+        return nil
     }
 }
 
@@ -515,12 +639,15 @@ final class CursorConversationBridge {
             startNewText = true
             waitState = .working
         }
-        if let id, let index = toolIndex(id: id) {
+        let toolID = id?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matchedID = (toolID?.isEmpty == false) ? toolID : nil
+        if let matchedID, let index = toolIndex(id: matchedID),
+           case .tool(let existing) = turn[index].kind, existing.name == name {
             updateTool(at: index, status: next, detail: detail, sources: attached)
             refreshWaitState()
             return
         }
-        if next == .running, let index = lastRunningTool(named: name) {
+        if next == .running, matchedID == nil, let index = lastRunningTool(named: name) {
             updateTool(at: index, status: next, detail: detail, sources: attached)
             return
         }
@@ -529,14 +656,15 @@ final class CursorConversationBridge {
             refreshWaitState()
             return
         }
-        if next != .running, case .tool(let tool) = turn.last?.kind, tool.name == name {
-            updateTool(at: turn.count - 1, status: next, detail: detail, sources: attached)
-            refreshWaitState()
-            return
-        }
         turn.append(ChatTurnItem(
             id: UUID().uuidString,
-            kind: .tool(ChatToolActivity(id: id ?? UUID().uuidString, name: name, status: next, detail: detail, sources: attached))
+            kind: .tool(ChatToolActivity(
+                id: matchedID ?? UUID().uuidString,
+                name: name,
+                status: next,
+                detail: detail,
+                sources: attached
+            ))
         ))
         recordChange(name: name, status: next)
         refreshWaitState()
@@ -922,7 +1050,7 @@ struct CursorChatProvider: ChatProvider {
                             let toolName = event.name ?? "consult_code"
                             let brief = event.text ?? event.detail ?? ""
                             await MainActor.run {
-                                bridge.applyTool(name: toolName, status: "running", id: toolID)
+                                bridge.applyTool(name: toolName, status: "running", id: toolID, detail: clip(brief, 80))
                                 bridge.debugLog.add("event host_tool \(toolName) \(ChatTrace.clip(brief, 80))")
                             }
                             do {
@@ -937,7 +1065,7 @@ struct CursorChatProvider: ChatProvider {
                                     )
                                 }
                                 await MainActor.run {
-                                    bridge.applyTool(name: toolName, status: "completed", id: toolID)
+                                    bridge.applyTool(name: toolName, status: "completed", id: toolID, detail: clip(brief, 80))
                                     bridge.replyToHostTool(id: toolID, text: output)
                                 }
                             } catch {

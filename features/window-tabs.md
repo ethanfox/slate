@@ -15,6 +15,7 @@ This is not native window tabbing, not a second bar, and not Craft’s tab strip
 - Overflow scrolls horizontally. No visible scroller. Current tab stays in view. At a clipped end the tab pixels themselves blur away; a fully visible first or last tab does not.
 - Back and forward sit before the first tab. Each tab keeps its own history. Navigating inside a tab pushes that stack; switching tabs does not. Closing a tab discards its history.
 - Trailing page actions stay pinned. Empty space after the tabs still drags the window.
+- A plus after the title (one page) or after the strip (two or more) opens a new chat tab, same as ⌘T. It stays pinned; overflow tabs scroll underneath it.
 - Drag a tab to reorder. Other tabs slide into the new order while the drag is still down.
 - A tab whose chat is generating shows a spinner.
 - Hovering a tab shows a small elevated pane: the full title, and if the tab belongs to a project, that project’s icon and name underneath. Not the system tooltip.
@@ -35,13 +36,13 @@ A click in the main sidebar changes the current tab. ⌘-click or **Open in New 
 
 A project in the main sidebar is the overview. Click it and the current tab goes to that overview. **Open in New Tab** opens the overview. A chat, note, track, or decision already open for that project is a different tab and stays put.
 
-Project column, Home recents, and other in-app clicks navigate the current tab.
+Project column, Home recents, and other in-app clicks navigate the current tab. ⌘-click those same items, or **Open in New Tab** in their context menu, opens a new tab.
 
 Chat links to notes and other objects open in a new tab. Setting, default on. Turn it off and those links behave like the clicks above.
 
 ⌘T opens a generic chat (Quick Ask). It does not belong to the current project.
 
-Closing a tab selects the neighbor to the right, else the one to the left. Closing the last tab goes to Home. Home is then the single page, so the strip goes away.
+Closing a tab selects the most recently viewed remaining tab. Closing the last tab goes to Home. Home is then the single page, so the strip goes away.
 
 Open tabs restore on launch, in order.
 
@@ -52,7 +53,7 @@ Safari / Chrome pattern:
 | Key | Action |
 | --- | --- |
 | ⌘T | New chat |
-| ⌘W | Close current tab |
+| ⌘W | Close current tab (not the window) |
 | ⌘[ | Back in the current tab |
 | ⌘] | Forward in the current tab |
 | ⌘⇧] or ⌃⇥ | Next tab |

@@ -14,7 +14,10 @@ struct MembraeApp: App {
                 .preferredColorScheme(app.appearance.colorScheme)
                 .modelContainer(app.container)
                 .textSelection(.enabled)
-                .onAppear { FocusDismissal.install() }
+                .onAppear {
+                    FocusDismissal.install()
+                    CloseTabShortcut.install(app)
+                }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { app.importRelay.handleForeground() }
                 }

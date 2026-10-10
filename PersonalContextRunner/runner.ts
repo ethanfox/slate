@@ -176,13 +176,48 @@ function titlesFrom(value: unknown): string[] {
   return title ? [title] : [];
 }
 
+function numberField(record: Record<string, unknown> | undefined, key: string): number | undefined {
+  const value = record?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function fileDetail(fields?: Record<string, unknown>): string {
+  const path = field(fields, "path");
+  if (!path) return "";
+  const parts = [field(fields, "root"), path].filter((part): part is string => Boolean(part));
+  const start = numberField(fields, "start_line");
+  const end = numberField(fields, "end_line");
+  if (start != null && end != null && end !== start) parts.push(`${start}–${end}`);
+  else if (start != null) parts.push(String(start));
+  return parts.join(" · ");
+}
+
+function fileListDetail(result: unknown): string {
+  const items = unwrapResult(result);
+  if (!Array.isArray(items) || items.length === 0) return "";
+  const roots = [...new Set(items.map((item) => field(asRecord(item), "root")).filter((root): root is string => Boolean(root)))];
+  const label = items.length === 1 ? "1 file" : `${items.length} files`;
+  return roots.length === 1 ? `${roots[0]} · ${label}` : label;
+}
+
 function toolDetail(name: string, args: unknown, result?: unknown): string {
   const fields = asRecord(args);
   if (name === "webSearch") return field(fields, "query", "search", "q") ?? "";
   if (name === "webFetch" || name === "WebFetch") return field(fields, "url", "href") ?? "";
-  const fromResult = titlesFrom(unwrapResult(result)).slice(0, 4);
+  if (name === "project_read_file") return fileDetail(fields) || fileDetail(asRecord(unwrapResult(result)));
+  if (name === "project_search_code") return field(fields, "query") ?? "";
+  if (name === "project_list_files") return field(fields, "query") ?? fileListDetail(result);
+  if (name === "project_git_log") return field(fields, "root") ?? "";
+  if (name === "consult_code") return field(fields, "brief", "question") ?? "";
+  const title = field(fields, "title", "name");
+  if (title) return title;
+  if (name.includes("note")) {
+    const content = field(fields, "content");
+    if (content) return content.length > 80 ? `${content.slice(0, 77)}…` : content;
+  }
+  const fromResult = titlesFrom(unwrapResult(result)).slice(0, 3);
   if (fromResult.length) return fromResult.join(" · ");
-  return field(fields, "title", "name", "query", "url") ?? "";
+  return field(fields, "query", "url") ?? "";
 }
 
 function hostName(url: string): string {

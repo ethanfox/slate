@@ -84,7 +84,7 @@ private struct ChatMessageList: View {
                         HistoryRow(
                             entry: entry,
                             stored: storedAnswer(for: entry),
-                            showWork: !showTurn
+                            showWork: true
                         )
                         .equatable()
                         .id(entry.id)
@@ -155,7 +155,7 @@ private struct ChatMessageList: View {
     }
 
     private var showTurn: Bool {
-        session.isGenerating || !liveTurn.isEmpty
+        session.isGenerating
     }
 
     private var liveTurn: [ChatTurnItem] {
@@ -323,6 +323,13 @@ private struct WorkAccordion: View {
         tools.last(where: { $0.status == .running }) ?? tools.last
     }
     private var extraToolCount: Int { max(tools.count - 1, 0) }
+    private var pillTitle: String? {
+        guard let currentTool else { return nil }
+        if isGenerating {
+            return ChatToolActivity.title(for: currentTool.name, status: .running)
+        }
+        return currentTool.title
+    }
 
     private var label: String {
         if isGenerating {
@@ -341,7 +348,7 @@ private struct WorkAccordion: View {
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }
-                    ForEach(tools) { tool in
+                    ForEach(Array(tools.enumerated()), id: \.offset) { _, tool in
                         ChatToolRow(tool: tool, sources: sources)
                     }
                 }
@@ -382,17 +389,18 @@ private struct WorkAccordion: View {
     private func currentToolPill(_ tool: ChatToolActivity) -> some View {
         HStack(spacing: 6) {
             ChatToolMark(symbol: tool.symbol)
-            Text(tool.title)
+            Text(pillTitle ?? tool.title)
                 .font(CraftFont.body)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .modifier(ActiveToolShimmer(active: isGenerating))
             if extraToolCount > 0 {
                 Text("+\(extraToolCount)")
                     .font(CraftFont.caption)
                     .foregroundStyle(.tertiary)
                     .monospacedDigit()
             }
-            if tool.status == .running {
+            if isGenerating {
                 ProgressView()
                     .controlSize(.small)
             }
@@ -403,8 +411,8 @@ private struct WorkAccordion: View {
         }
         .padding(.horizontal, 10)
         .frame(minHeight: 28)
+        .background(CraftColor.selection, in: Capsule())
         .background {
-            Capsule().fill(CraftColor.selection)
             if hoveringPill {
                 Capsule().fill(CraftColor.hover)
             }
@@ -444,12 +452,40 @@ private struct WorkAccordion: View {
     }
 
     private func pillLabel(for tool: ChatToolActivity) -> String {
-        if extraToolCount == 0 { return tool.title }
-        return "\(tool.title), \(extraToolCount) more"
+        let title = pillTitle ?? tool.title
+        if extraToolCount == 0 { return title }
+        return "\(title), \(extraToolCount) more"
     }
 
     private func toggle() {
         opened.toggle()
+    }
+}
+
+private struct ActiveToolShimmer: ViewModifier {
+    var active: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        if active && !reduceMotion {
+            TimelineView(.animation(minimumInterval: 1 / 30)) { context in
+                let cycle = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.4) / 1.4
+                let phase = CGFloat(cycle) * 1.7
+                content.foregroundStyle(
+                    LinearGradient(
+                        colors: [
+                            Color.secondary,
+                            Color.primary.opacity(0.82),
+                            Color.secondary
+                        ],
+                        startPoint: UnitPoint(x: phase - 0.55, y: 0.5),
+                        endPoint: UnitPoint(x: phase + 0.12, y: 0.5)
+                    )
+                )
+            }
+        } else {
+            content
+        }
     }
 }
 

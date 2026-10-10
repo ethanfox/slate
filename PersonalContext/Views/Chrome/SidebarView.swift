@@ -1,4 +1,3 @@
-import AppKit
 import SwiftData
 import SwiftUI
 
@@ -40,7 +39,7 @@ struct SidebarView: View {
                         section("Projects")
                         ForEach(orderedProjects) { project in
                             Button {
-                                app.open(project, newTab: NSEvent.modifierFlags.contains(.command))
+                                app.open(project)
                             } label: {
                                 SidebarRow(
                                     title: project.name.isEmpty ? "Untitled" : project.name,
@@ -116,7 +115,7 @@ struct SidebarView: View {
 
     private func row(_ title: String, _ symbol: String, destination: Destination, badge: Int = 0, busy: Bool = false) -> some View {
         Button {
-            app.navigate(to: destination, newTab: NSEvent.modifierFlags.contains(.command))
+            app.navigate(to: destination)
         } label: {
             SidebarRow(
                 title: title,
