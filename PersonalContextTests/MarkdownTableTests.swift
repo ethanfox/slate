@@ -131,7 +131,94 @@ final class MarkdownTableTests: XCTestCase {
     func testStructuredBlocksSkipIncrementalPaint() {
         XCTAssertTrue(ChatMarkdown.containsStructuredBlocks("```\nlet x = 1\n```"))
         XCTAssertTrue(ChatMarkdown.containsStructuredBlocks("| Field | Rule |\n| --- | --- |\n| Brief | Required. |"))
+        XCTAssertTrue(ChatMarkdown.containsStructuredBlocks("> quoted"))
+        XCTAssertTrue(ChatMarkdown.containsStructuredBlocks("---"))
         XCTAssertFalse(ChatMarkdown.containsStructuredBlocks("Just a sentence with a | pipe."))
+    }
+
+    func testRendersBlockquoteWithoutMarker() {
+        let rendered = ChatMarkdown.attributed("> Hello there")
+        XCTAssertTrue(rendered.string.contains("Hello there"))
+        XCTAssertFalse(rendered.string.contains("> Hello"))
+        let style = rendered.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertFalse(style?.textBlocks.isEmpty ?? true)
+    }
+
+    func testRendersQuotedListAndDropsMarkers() {
+        let rendered = ChatMarkdown.attributed("> 1. First\n> 2. Second")
+        XCTAssertTrue(rendered.string.contains("1. First"))
+        XCTAssertTrue(rendered.string.contains("2. Second"))
+        XCTAssertFalse(rendered.string.contains("> 1."))
+    }
+
+    func testRendersNestedBlockquote() {
+        let rendered = ChatMarkdown.attributed("> outer\n>> inner")
+        XCTAssertTrue(rendered.string.contains("outer"))
+        XCTAssertTrue(rendered.string.contains("inner"))
+        XCTAssertFalse(rendered.string.contains(">"))
+    }
+
+    func testKeepsQuoteMarkerInsideFence() {
+        let rendered = ChatMarkdown.attributed("```\n> not a quote\n```")
+        XCTAssertTrue(rendered.string.contains("> not a quote"))
+    }
+
+    func testRendersStrikethrough() {
+        let rendered = ChatMarkdown.attributed("keep ~~this~~")
+        XCTAssertEqual(rendered.string, "keep this")
+        let range = (rendered.string as NSString).range(of: "this")
+        XCTAssertNotEqual(range.location, NSNotFound)
+        XCTAssertNotNil(rendered.attribute(.strikethroughStyle, at: range.location, effectiveRange: nil))
+    }
+
+    func testRendersThematicBreak() {
+        let rendered = ChatMarkdown.attributed("Before\n---\nAfter")
+        XCTAssertTrue(rendered.string.contains("Before"))
+        XCTAssertTrue(rendered.string.contains("After"))
+        XCTAssertFalse(rendered.string.contains("---"))
+    }
+
+    func testRendersTaskList() {
+        let rendered = ChatMarkdown.attributed("- [ ] open\n- [x] done")
+        XCTAssertTrue(rendered.string.contains("open"))
+        XCTAssertTrue(rendered.string.contains("done"))
+        XCTAssertTrue(rendered.string.contains("☐"))
+        XCTAssertTrue(rendered.string.contains("☑"))
+        XCTAssertFalse(rendered.string.contains("[ ]"))
+        XCTAssertFalse(rendered.string.contains("[x]"))
+    }
+
+    func testRendersNestedList() {
+        let rendered = ChatMarkdown.attributed("- parent\n  - child")
+        XCTAssertTrue(rendered.string.contains("• parent"))
+        XCTAssertTrue(rendered.string.contains("◦ child"))
+    }
+
+    func testRendersAutolinkAndBareURL() {
+        let angled = ChatMarkdown.attributed("See <https://example.com>")
+        XCTAssertFalse(angled.string.contains("<https"))
+        let angledRange = (angled.string as NSString).range(of: "https://example.com")
+        XCTAssertNotEqual(angledRange.location, NSNotFound)
+        XCTAssertNotNil(angled.attribute(.link, at: angledRange.location, effectiveRange: nil))
+
+        let bare = ChatMarkdown.attributed("See https://example.com now")
+        let bareRange = (bare.string as NSString).range(of: "https://example.com")
+        XCTAssertNotEqual(bareRange.location, NSNotFound)
+        XCTAssertNotNil(bare.attribute(.link, at: bareRange.location, effectiveRange: nil))
+    }
+
+    func testRendersBoldItalic() {
+        let rendered = ChatMarkdown.attributed("***both***")
+        XCTAssertEqual(rendered.string, "both")
+        let font = rendered.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.bold) == true)
+        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.italic) == true)
+    }
+
+    func testRendersImageAsLink() {
+        let rendered = ChatMarkdown.attributed("![Alt](https://example.com/a.png)")
+        XCTAssertEqual(rendered.string, "Alt")
+        XCTAssertNotNil(rendered.attribute(.link, at: 0, effectiveRange: nil))
     }
 
     func testFenceAndTableNeedMoreThanOneLineOfHeight() {

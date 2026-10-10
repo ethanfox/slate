@@ -722,6 +722,7 @@ enum MarkdownStyler {
     private static let bullet = try! NSRegularExpression(pattern: #"^\s*([-*+]|\d+\.) "#, options: .anchorsMatchLines)
     private static let bold = try! NSRegularExpression(pattern: #"(\*\*|__)(?=\S)(.+?)(?<=\S)\1"#)
     private static let italic = try! NSRegularExpression(pattern: #"(?<![*_\w])([*_])(?![*_\s])(.+?)(?<![*_\s])\1(?![*_\w])"#)
+    private static let strike = try! NSRegularExpression(pattern: #"(~~)(.+?)(~~)"#)
     private static let code = try! NSRegularExpression(pattern: #"(`)([^`\n]+)(`)"#)
     private static let link = try! NSRegularExpression(pattern: #"(\[)([^\]\n]+)(\]\([^)\n]*\))"#)
 
@@ -756,6 +757,11 @@ enum MarkdownStyler {
         for match in italic.matches(in: text, range: full) where !intersects(match.range, fenceRanges) {
             add(.italicFontMask, to: match.range(at: 2), in: storage)
             dimMarkers(match, in: storage)
+        }
+        for match in strike.matches(in: text, range: full) where !intersects(match.range, fenceRanges) {
+            storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: match.range(at: 2))
+            dim(match.range(at: 1), in: storage)
+            dim(match.range(at: 3), in: storage)
         }
         for match in code.matches(in: text, range: full) where !intersects(match.range, fenceRanges) {
             let inner = match.range(at: 2)

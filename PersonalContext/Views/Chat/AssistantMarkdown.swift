@@ -523,8 +523,21 @@ enum ChatMarkdown {
             ? NSColor(white: 1, alpha: 0.06)
             : NSColor(white: 0, alpha: 0.045)
     }
+
+    static let quoteBar = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 1, alpha: 0.32)
+            : NSColor(white: 0, alpha: 0.22)
+    }
+
     static func containsStructuredBlocks(_ source: String) -> Bool {
-        !fenceBlocks(in: source).isEmpty || !tableBlocks(in: source).isEmpty
+        if !fenceBlocks(in: source).isEmpty || !tableBlocks(in: source).isEmpty {
+            return true
+        }
+        return source.split(separator: "\n", omittingEmptySubsequences: false).contains { line in
+            let text = String(line)
+            return quotePrefix(text) != nil || isRule(text)
+        }
     }
 
     static func layoutHeight(
@@ -589,6 +602,14 @@ enum ChatMarkdown {
                 index = fence.end
                 continue
             }
+            if let quote = takeQuote(lines, from: index) {
+                result.append(renderQuote(quote.inner, fontSize: fontSize))
+                if quote.end < lines.count {
+                    result.append(breakLine(fontSize: fontSize, empty: isBlank(lines[quote.end])))
+                }
+                index = quote.end
+                continue
+            }
             if let table = takeTable(lines, from: index) {
                 result.append(renderTable(table.rows, alignments: table.alignments, fontSize: fontSize))
                 if table.end < lines.count {
@@ -597,8 +618,16 @@ enum ChatMarkdown {
                 index = table.end
                 continue
             }
+            if isRule(line) {
+                result.append(renderRule(fontSize: fontSize))
+                if index < lines.count - 1 {
+                    result.append(breakLine(fontSize: fontSize, empty: isBlank(lines[index + 1])))
+                }
+                index += 1
+                continue
+            }
             if let list = takeList(lines, from: index) {
-                result.append(renderList(list, fontSize: fontSize))
+                result.append(renderList(list.items, fontSize: fontSize))
                 if list.end < lines.count {
                     result.append(breakLine(fontSize: fontSize, empty: isBlank(lines[list.end])))
                 }
@@ -671,6 +700,96 @@ enum ChatMarkdown {
 
     private static func isBlank(_ line: String) -> Bool {
         line.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private static func quotePrefix(_ line: String) -> String? {
+        var rest = Substring(line)
+        var leading = 0
+        while rest.first == " ", leading < 3 {
+            rest = rest.dropFirst()
+            leading += 1
+        }
+        guard rest.first == ">" else { return nil }
+        rest = rest.dropFirst()
+        if rest.first == " " { rest = rest.dropFirst() }
+        return String(rest)
+    }
+
+    private static func isRule(_ line: String) -> Bool {
+        let compact = line.trimmingCharacters(in: .whitespaces).filter { !$0.isWhitespace }
+        return compact.count >= 3
+            && (compact.allSatisfy { $0 == "-" } || compact.allSatisfy { $0 == "*" } || compact.allSatisfy { $0 == "_" })
+    }
+
+    private static func takeQuote(_ lines: [String], from start: Int) -> (inner: String, end: Int)? {
+        guard start < lines.count, quotePrefix(lines[start]) != nil else { return nil }
+        var inner: [String] = []
+        var index = start
+        while index < lines.count {
+            guard let stripped = quotePrefix(lines[index]) else { break }
+            inner.append(stripped)
+            index += 1
+        }
+        return (inner.joined(separator: "\n"), index)
+    }
+
+    private static func renderQuote(_ inner: String, fontSize: CGFloat) -> NSAttributedString {
+        let body = NSMutableAttributedString(attributedString: attributed(inner, fontSize: fontSize))
+        if body.length == 0 {
+            body.append(piece("\u{00a0}", fontSize: fontSize, header: nil, list: false))
+        }
+        applyQuoteChrome(body)
+        return body
+    }
+
+    private static func applyQuoteChrome(_ text: NSMutableAttributedString) {
+        guard text.length > 0 else { return }
+        let table = NSTextTable()
+        table.numberOfColumns = 1
+        table.collapsesBorders = true
+        let ns = text.string as NSString
+        var location = 0
+        var row = 0
+        while location < ns.length {
+            let paragraph = ns.paragraphRange(for: NSRange(location: location, length: 0))
+            let existing = text.attribute(.paragraphStyle, at: location, effectiveRange: nil) as? NSParagraphStyle
+            let style = (existing?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+            if style.textBlocks.isEmpty {
+                let block = NSTextTableBlock(table: table, startingRow: row, rowSpan: 1, startingColumn: 0, columnSpan: 1)
+                block.setWidth(2.5, type: .absoluteValueType, for: .border, edge: .minX)
+                block.setBorderColor(quoteBar, for: .minX)
+                block.setWidth(14, type: .absoluteValueType, for: .padding, edge: .minX)
+                style.textBlocks = [block]
+            } else {
+                style.headIndent += 16
+                style.firstLineHeadIndent += 16
+            }
+            text.addAttribute(.paragraphStyle, value: style, range: paragraph)
+            location = paragraph.upperBound
+            row += 1
+        }
+    }
+
+    private static func renderRule(fontSize: CGFloat) -> NSAttributedString {
+        let table = NSTextTable()
+        table.numberOfColumns = 1
+        table.collapsesBorders = true
+        let block = NSTextTableBlock(table: table, startingRow: 0, rowSpan: 1, startingColumn: 0, columnSpan: 1)
+        block.setWidth(1, type: .absoluteValueType, for: .border, edge: .minY)
+        block.setBorderColor(NSColor.separatorColor, for: .minY)
+        block.setWidth(10, type: .absoluteValueType, for: .padding)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.textBlocks = [block]
+        paragraph.paragraphSpacingBefore = 6
+        paragraph.paragraphSpacing = 6
+        let cell = NSMutableAttributedString(string: "\u{00a0}", attributes: [
+            .font: NSFont.systemFont(ofSize: 4),
+            .foregroundColor: NSColor.clear,
+            .paragraphStyle: paragraph
+        ])
+        cell.append(breakLine(fontSize: 4, empty: false))
+        cell.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: cell.length))
+        return cell
     }
 
     private static func lines(in source: String) -> (ranges: [NSRange], texts: [String]) {
@@ -827,29 +946,38 @@ enum ChatMarkdown {
         return result
     }
 
+    private struct ListLine {
+        var indent: Int
+        var ordered: Bool
+        var number: Int
+        var text: String
+        var checked: Bool?
+    }
+
     private static func takeList(
         _ lines: [String],
         from start: Int
-    ) -> (ordered: Bool, number: Int, items: [String], end: Int)? {
+    ) -> (items: [ListLine], end: Int)? {
         guard start < lines.count, let first = listItem(lines[start]) else { return nil }
-        var items = [first.text]
+        var items = [first]
         var index = start + 1
         while index < lines.count {
             if isBlank(lines[index]) {
-                if let next = nextListItem(lines, after: index), next.ordered == first.ordered {
+                if let next = nextListItem(lines, after: index), next.indent >= first.indent {
                     index += 1
                     continue
                 }
                 break
             }
-            guard let item = listItem(lines[index]), item.ordered == first.ordered else { break }
-            items.append(item.text)
+            guard let item = listItem(lines[index]), item.indent >= first.indent else { break }
+            if item.indent == first.indent && item.ordered != first.ordered { break }
+            items.append(item)
             index += 1
         }
-        return (first.ordered, first.number, items, index)
+        return (items, index)
     }
 
-    private static func nextListItem(_ lines: [String], after index: Int) -> (ordered: Bool, number: Int, text: String)? {
+    private static func nextListItem(_ lines: [String], after index: Int) -> ListLine? {
         var cursor = index + 1
         while cursor < lines.count {
             if isBlank(lines[cursor]) {
@@ -861,36 +989,73 @@ enum ChatMarkdown {
         return nil
     }
 
-    private static func listItem(_ line: String) -> (ordered: Bool, number: Int, text: String)? {
-        let trimmed = line.drop(while: \.isWhitespace)
-        if trimmed.hasPrefix("- ") { return (false, 1, String(trimmed.dropFirst(2))) }
-        if trimmed.hasPrefix("* ") { return (false, 1, String(trimmed.dropFirst(2))) }
-        if trimmed.hasPrefix("+ ") { return (false, 1, String(trimmed.dropFirst(2))) }
+    private static func listItem(_ line: String) -> ListLine? {
+        var indent = 0
+        var index = line.startIndex
+        while index < line.endIndex {
+            if line[index] == " " {
+                indent += 1
+            } else if line[index] == "\t" {
+                indent += 2
+            } else {
+                break
+            }
+            index = line.index(after: index)
+        }
+        let trimmed = line[index...]
+        if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("+ ") {
+            let text = trimmed.dropFirst(2)
+            if let task = taskMarker(text) {
+                return ListLine(indent: indent, ordered: false, number: 1, text: task.text, checked: task.checked)
+            }
+            return ListLine(indent: indent, ordered: false, number: 1, text: String(text), checked: nil)
+        }
         let digits = trimmed.prefix(while: \.isNumber)
         guard !digits.isEmpty else { return nil }
         let after = trimmed.dropFirst(digits.count)
         guard after.hasPrefix(". ") else { return nil }
-        return (true, Int(digits) ?? 1, String(after.dropFirst(2)))
+        return ListLine(indent: indent, ordered: true, number: Int(digits) ?? 1, text: String(after.dropFirst(2)), checked: nil)
     }
 
-    private static func renderList(
-        _ list: (ordered: Bool, number: Int, items: [String], end: Int),
-        fontSize: CGFloat
-    ) -> NSAttributedString {
+    private static func taskMarker(_ text: Substring) -> (checked: Bool, text: String)? {
+        let checked: Bool
+        if text.hasPrefix("[ ]") {
+            checked = false
+        } else if text.hasPrefix("[x]") || text.hasPrefix("[X]") {
+            checked = true
+        } else {
+            return nil
+        }
+        let rest = text.dropFirst(3)
+        if rest.isEmpty { return (checked, "") }
+        guard rest.first == " " else { return nil }
+        return (checked, String(rest.dropFirst()))
+    }
+
+    private static func renderList(_ items: [ListLine], fontSize: CGFloat) -> NSAttributedString {
         let result = NSMutableAttributedString()
-        for (offset, item) in list.items.enumerated() {
-            let marker = list.ordered ? "\(list.number + offset). " : "• "
-            let indent = list.ordered ? 28 : 22
+        let base = items.first?.indent ?? 0
+        for item in items {
+            let depth = max(0, (item.indent - base) / 2)
+            let marker: String
+            if let checked = item.checked {
+                marker = checked ? "☑ " : "☐ "
+            } else if item.ordered {
+                marker = "\(item.number). "
+            } else {
+                marker = depth == 0 ? "• " : "◦ "
+            }
+            let indent = CGFloat((item.ordered ? 28 : 22) + depth * 20)
             let paragraph = NSMutableParagraphStyle()
-            paragraph.headIndent = CGFloat(indent)
-            paragraph.firstLineHeadIndent = 0
+            paragraph.headIndent = indent
+            paragraph.firstLineHeadIndent = CGFloat(depth * 20)
             paragraph.lineSpacing = 4
             paragraph.paragraphSpacing = 4
             let body = NSMutableAttributedString(
                 attributedString: piece(marker, fontSize: fontSize, header: nil, list: true)
             )
-            body.append(renderInline(item, fontSize: fontSize, header: nil, list: true))
-            if item.isEmpty {
+            body.append(renderInline(item.text, fontSize: fontSize, header: nil, list: true))
+            if item.text.isEmpty {
                 body.append(NSAttributedString(string: "\u{00a0}"))
             }
             body.append(breakLine(fontSize: fontSize, empty: false))
@@ -932,15 +1097,49 @@ enum ChatMarkdown {
                 index = link.end
                 continue
             }
+            if let link = takeAngleLink(text, from: index) {
+                result.append(piece(link.label, fontSize: fontSize, header: header, list: list, url: link.url))
+                index = link.end
+                continue
+            }
+            if let link = takeBareURL(text, from: index) {
+                result.append(piece(link.label, fontSize: fontSize, header: header, list: list, url: link.url))
+                index = link.end
+                continue
+            }
+            if let both = take(text, from: index, opening: "***", closing: "***")
+                ?? take(text, from: index, opening: "___", closing: "___") {
+                result.append(applying(
+                    renderInline(both.inner, fontSize: fontSize, header: header, list: list),
+                    bold: true,
+                    italic: true
+                ))
+                index = both.end
+                continue
+            }
+            if let strike = take(text, from: index, opening: "~~", closing: "~~") {
+                result.append(applying(
+                    renderInline(strike.inner, fontSize: fontSize, header: header, list: list),
+                    strike: true
+                ))
+                index = strike.end
+                continue
+            }
             if let bold = take(text, from: index, opening: "**", closing: "**")
                 ?? take(text, from: index, opening: "__", closing: "__") {
-                result.append(piece(bold.inner, fontSize: fontSize, header: header, list: list, bold: true))
+                result.append(applying(
+                    renderInline(bold.inner, fontSize: fontSize, header: header, list: list),
+                    bold: true
+                ))
                 index = bold.end
                 continue
             }
             if let italic = take(text, from: index, opening: "*", closing: "*")
                 ?? take(text, from: index, opening: "_", closing: "_") {
-                result.append(piece(italic.inner, fontSize: fontSize, header: header, list: list, italic: true))
+                result.append(applying(
+                    renderInline(italic.inner, fontSize: fontSize, header: header, list: list),
+                    italic: true
+                ))
                 index = italic.end
                 continue
             }
@@ -979,8 +1178,13 @@ enum ChatMarkdown {
         _ text: String,
         from start: String.Index
     ) -> (label: String, url: URL, end: String.Index)? {
-        guard text[start] == "[" , let close = text[start...].range(of: "](") else { return nil }
-        let labelStart = text.index(after: start)
+        var cursor = start
+        if text[cursor] == "!" {
+            cursor = text.index(after: cursor)
+            guard cursor < text.endIndex else { return nil }
+        }
+        guard text[cursor] == "[", let close = text[cursor...].range(of: "](") else { return nil }
+        let labelStart = text.index(after: cursor)
         guard close.lowerBound > labelStart else { return nil }
         let urlStart = close.upperBound
         guard let end = text[urlStart...].firstIndex(of: ")") else { return nil }
@@ -989,14 +1193,77 @@ enum ChatMarkdown {
         return (label, url, text.index(after: end))
     }
 
+    private static func takeAngleLink(
+        _ text: String,
+        from start: String.Index
+    ) -> (label: String, url: URL, end: String.Index)? {
+        guard text[start] == "<" else { return nil }
+        let innerStart = text.index(after: start)
+        guard let close = text[innerStart...].firstIndex(of: ">") else { return nil }
+        let inner = String(text[innerStart..<close])
+        guard inner.contains("://") || inner.hasPrefix("mailto:"),
+              let url = URL(string: inner) else { return nil }
+        return (inner, url, text.index(after: close))
+    }
+
+    private static func takeBareURL(
+        _ text: String,
+        from start: String.Index
+    ) -> (label: String, url: URL, end: String.Index)? {
+        let rest = text[start...]
+        guard rest.hasPrefix("https://") || rest.hasPrefix("http://") else { return nil }
+        var end = start
+        while end < text.endIndex {
+            let character = text[end]
+            if character.isWhitespace || "<>\"')]".contains(character) { break }
+            end = text.index(after: end)
+        }
+        var label = String(text[start..<end])
+        while let last = label.last, ".,;:!?".contains(last) {
+            label.removeLast()
+            end = text.index(before: end)
+        }
+        guard let url = URL(string: label) else { return nil }
+        return (label, url, end)
+    }
+
+    private static func applying(
+        _ base: NSAttributedString,
+        bold: Bool = false,
+        italic: Bool = false,
+        strike: Bool = false
+    ) -> NSAttributedString {
+        let result = NSMutableAttributedString(attributedString: base)
+        let full = NSRange(location: 0, length: result.length)
+        guard full.length > 0 else { return result }
+        if bold || italic {
+            result.enumerateAttribute(.font, in: full) { value, range, _ in
+                guard let font = value as? NSFont else { return }
+                var traits = font.fontDescriptor.symbolicTraits
+                if bold { traits.insert(.bold) }
+                if italic { traits.insert(.italic) }
+                if let next = NSFont(descriptor: font.fontDescriptor.withSymbolicTraits(traits), size: font.pointSize) {
+                    result.addAttribute(.font, value: next, range: range)
+                }
+            }
+        }
+        if strike {
+            result.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: full)
+        }
+        return result
+    }
+
     private static func specialStart(_ text: String, from start: String.Index) -> String.Index? {
         var index = start
         while index < text.endIndex {
             switch text[index] {
-            case "`", "[", "*":
+            case "`", "[", "*", "_", "~", "!", "<":
                 return index
-            case "_":
-                return index
+            case "h":
+                if text[index...].hasPrefix("https://") || text[index...].hasPrefix("http://") {
+                    return index
+                }
+                index = text.index(after: index)
             default:
                 index = text.index(after: index)
             }
