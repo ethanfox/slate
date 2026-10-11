@@ -4,9 +4,29 @@ import SwiftData
 
 /// The app and the MCP server open the same store. Both carry the same App Group
 /// entitlement, so SwiftData places it in that group's container for either process.
+enum StoreOpenMode: Sendable {
+    /// First launch: schema columns, backfills, product-name rewrite, asset cleanup.
+    case prepare
+    /// After an external writer saved. Skip full-table work.
+    case reopen
+}
+
 enum Store {
     /// Darwin notification posted by the MCP server after it saves, so a running app can refetch.
     static let changedNotification = "com.ethanfox.PersonalContext.storeChanged"
+
+    /// Wait for a burst of MCP writes to finish before remounting the UI.
+    static let reloadDebounce: Duration = .milliseconds(800)
+    /// Keep the previous container only long enough for in-flight SwiftData faults.
+    static let retireDelay: Duration = .milliseconds(400)
+
+    static func announceChange() {
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFNotificationName(changedNotification as CFString),
+            nil, nil, true
+        )
+    }
 
     static let schema = Schema([
         Project.self,
@@ -104,15 +124,15 @@ enum Store {
         return ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
     }
 
-    static func open() throws -> ModelContainer {
-        try open(configuration: configuration)
+    static func open(mode: StoreOpenMode = .prepare) throws -> ModelContainer {
+        try open(configuration: configuration, mode: mode)
     }
 
-    static func open(url: URL) throws -> ModelContainer {
-        try open(configuration: ModelConfiguration(schema: schema, url: url))
+    static func open(url: URL, mode: StoreOpenMode = .prepare) throws -> ModelContainer {
+        try open(configuration: ModelConfiguration(schema: schema, url: url), mode: mode)
     }
 
-    private static func open(configuration: ModelConfiguration) throws -> ModelContainer {
+    private static func open(configuration: ModelConfiguration, mode: StoreOpenMode) throws -> ModelContainer {
         if !configuration.isStoredInMemoryOnly {
             try migrateAgentRunColumns(at: configuration.url)
             try migrateCodeReferenceOwnership(at: configuration.url)
@@ -120,6 +140,7 @@ enum Store {
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = ModelContext(container)
         context.autosaveEnabled = false
+        guard mode == .prepare else { return container }
         legacyBackfillIndexingMetadata(in: context)
         try backfillCodeReferenceOwnership(in: context)
         migrateProductNames(in: context)
@@ -330,4 +351,57 @@ struct StoreMigrationError: LocalizedError {
     var message: String
     init(_ message: String) { self.message = message }
     var errorDescription: String? { message }
+}
+
+/// WAL-aware mtimes so the MCP helper can tell app writes from its own.
+struct StoreFileStamp: Equatable {
+    let values: [String: TimeInterval]
+
+    init(url: URL?) {
+        guard let url else {
+            values = [:]
+            return
+        }
+        let fm = FileManager.default
+        values = [url.path, url.path + "-wal", url.path + "-shm"].reduce(into: [:]) { result, path in
+            if let date = (try? fm.attributesOfItem(atPath: path)[.modificationDate] as? Date) {
+                result[path] = date.timeIntervalSinceReferenceDate
+            }
+        }
+    }
+}
+
+/// Cursor keeps membrae-mcp for hours. Reuse one container and reopen only when the app wrote.
+enum MCPStoreSession {
+    private static var held: ModelContainer?
+    private static var stamp: StoreFileStamp?
+    private static var url: URL?
+
+    static func container(at url: URL? = Store.applicationGroupStoreURL) throws -> ModelContainer {
+        let current = StoreFileStamp(url: url)
+        if let held, self.url == url, stamp == current {
+            return held
+        }
+        let mode: StoreOpenMode = held == nil ? .prepare : .reopen
+        let opened = if let url {
+            try Store.open(url: url, mode: mode)
+        } else {
+            try Store.open(mode: mode)
+        }
+        held = opened
+        self.url = url
+        stamp = StoreFileStamp(url: url)
+        return opened
+    }
+
+    static func noteLocalWrite(at url: URL? = Store.applicationGroupStoreURL) {
+        stamp = StoreFileStamp(url: url)
+        self.url = url
+    }
+
+    static func reset() {
+        held = nil
+        stamp = nil
+        url = nil
+    }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 @MainActor
 final class MembraeToolGateway: AgentToolGateway {
@@ -17,6 +18,7 @@ final class MembraeToolGateway: AgentToolGateway {
     private let runID: UUID?
     private let mcpRuntime: MCPRuntime?
     private let browserRuntime: BrowserRuntime?
+    private let store: ModelContainer?
 
     init(
         roots: [ProjectCodeRoot] = [],
@@ -27,6 +29,7 @@ final class MembraeToolGateway: AgentToolGateway {
         mcp: MembraeMCPClient? = nil,
         indexingRunID: UUID? = nil,
         storeURL: URL? = nil,
+        store: ModelContainer? = nil,
         projectID: UUID? = nil,
         includeExternalMCP: Bool = false,
         includeConfigTools: Bool = false,
@@ -50,6 +53,7 @@ final class MembraeToolGateway: AgentToolGateway {
         self.runID = runID
         self.mcpRuntime = mcpRuntime ?? ((includeExternalMCP || includeConfigTools) ? .shared : nil)
         self.browserRuntime = browserRuntime ?? (includeBrowser ? .shared : nil)
+        self.store = store
     }
 
     func definitions() async throws -> [[String: Any]] {
@@ -57,16 +61,12 @@ final class MembraeToolGateway: AgentToolGateway {
         if consult != nil {
             tools.append(Self.consultDefinition)
         }
-        if includeMembraeTools, let mcp {
-            let listed = try await mcp.toolDefinitions()
-            tools += listed.compactMap { tool in
-                guard let name = tool["name"] as? String else { return nil }
-                return [
-                    "type": "function",
-                    "name": name,
-                    "description": tool["description"] as? String ?? "",
-                    "parameters": tool["inputSchema"] as? [String: Any] ?? ["type": "object", "properties": [:]]
-                ]
+        if includeMembraeTools {
+            if store != nil {
+                tools += Self.membraeDefinitions
+            } else if let mcp {
+                let listed = try await mcp.toolDefinitions()
+                tools += listed.compactMap(Self.asProviderTool)
             }
         }
         if includeConfigTools {
@@ -140,6 +140,11 @@ final class MembraeToolGateway: AgentToolGateway {
                 }
                 return try await mcpRuntime.execute(name: name, arguments: arguments, projectID: projectID)
             }
+            if let store {
+                return try Self.localResult(
+                    Tools.call(name, arguments: arguments, container: store, announce: false)
+                )
+            }
             guard let mcp else {
                 throw ProjectWorkspaceError("The Membrae tool service is unavailable.")
             }
@@ -154,6 +159,28 @@ final class MembraeToolGateway: AgentToolGateway {
             }
             return String(decoding: data, as: UTF8.self)
         }
+    }
+
+    private static let membraeDefinitions: [[String: Any]] = Tools.definitions.compactMap(asProviderTool)
+
+    private static func asProviderTool(_ tool: [String: Any]) -> [String: Any]? {
+        guard let name = tool["name"] as? String else { return nil }
+        return [
+            "type": "function",
+            "name": name,
+            "description": tool["description"] as? String ?? "",
+            "parameters": tool["inputSchema"] as? [String: Any] ?? ["type": "object", "properties": [:]]
+        ]
+    }
+
+    private static func localResult(_ payload: [String: Any]) throws -> String {
+        let text = ((payload["content"] as? [[String: Any]]) ?? [])
+            .compactMap { $0["text"] as? String }
+            .joined(separator: "\n")
+        if payload["isError"] as? Bool == true {
+            throw ProjectWorkspaceError(text.isEmpty ? "A Membrae tool failed." : text)
+        }
+        return text
     }
 
     private func ensureRoots() async throws {

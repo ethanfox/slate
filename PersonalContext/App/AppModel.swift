@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftData
 import SwiftUI
@@ -371,7 +372,7 @@ final class AppModel {
     private func storeDidChangeElsewhere() {
         storeReloadTask?.cancel()
         storeReloadTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(200))
+            try? await Task.sleep(for: Store.reloadDebounce)
             guard let self, !Task.isCancelled else { return }
             self.reloadStore()
             self.storeReloadTask = nil
@@ -379,14 +380,17 @@ final class AppModel {
     }
 
     private func reloadStore() {
+        let keepKey = NSApp.keyWindow.map(WindowChrome.isMain) ?? false
         Store.disableAutosave(container)
-        try? container.mainContext.save()
+        if container.mainContext.hasChanges {
+            try? container.mainContext.save()
+        }
         do {
             let previous = container
             Store.disableAutosave(previous)
-            let reopened = try Store.open()
+            let reopened = try Store.open(mode: .reopen)
             Store.disableAutosave(reopened)
-            retiredContainers.append(previous)
+            retiredContainers = [previous]
             container = reopened
             storeGeneration = UUID()
             storeError = nil
@@ -404,8 +408,11 @@ final class AppModel {
                 }
             )
             ChatTrace.event("store reopened after outside change")
+            if keepKey, let window = NSApp.windows.first(where: WindowChrome.isMain) {
+                window.makeKey()
+            }
             Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: Store.retireDelay)
                 Store.disableAutosave(previous)
                 self?.retiredContainers.removeAll { $0 === previous }
             }

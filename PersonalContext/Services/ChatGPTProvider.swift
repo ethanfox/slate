@@ -79,6 +79,7 @@ struct ChatGPTProvider: ChatProvider {
                                     }
                                     : nil,
                                 mcp: includeMembraeTools ? workspace.mcp : nil,
+                                store: workspace.conversation.modelContext?.container,
                                 projectID: workspace.project?.id,
                                 includeExternalMCP: includeMembraeTools && workspace.project != nil,
                                 includeConfigTools: includeMembraeTools,

@@ -153,7 +153,12 @@ enum Tools {
         }
     }
 
-    static func call(_ name: String, arguments: [String: Any], container: ModelContainer) -> [String: Any] {
+    static func call(
+        _ name: String,
+        arguments: [String: Any],
+        container: ModelContainer,
+        announce: Bool = true
+    ) -> [String: Any] {
         guard let tool = tools.first(where: { $0.name == canonical(name) }) else {
             return failure("Unknown tool: \(name)")
         }
@@ -163,11 +168,9 @@ enum Tools {
             let value = try tool.handler(Args(raw: migrate(arguments)), context)
             if !tool.readOnly {
                 try context.save()
-                CFNotificationCenterPostNotification(
-                    CFNotificationCenterGetDarwinNotifyCenter(),
-                    CFNotificationName(Store.changedNotification as CFString),
-                    nil, nil, true
-                )
+                if announce {
+                    Store.announceChange()
+                }
             }
             let data = try JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
             return ["content": [["type": "text", "text": String(decoding: data, as: UTF8.self)]]]

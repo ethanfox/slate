@@ -79,11 +79,6 @@ enum ImportToolHost {
             let value = try invoke(name, arguments: arguments, client: client, context: context, metadata: &metadata)
             if name != "list_projects" {
                 try context.save()
-                CFNotificationCenterPostNotification(
-                    CFNotificationCenterGetDarwinNotifyCenter(),
-                    CFNotificationName(Store.changedNotification as CFString),
-                    nil, nil, true
-                )
             }
             let encoded = try JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
             let payload: [String: Any] = ["content": [["type": "text", "text": String(decoding: encoded, as: UTF8.self)]]]

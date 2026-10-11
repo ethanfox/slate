@@ -119,6 +119,7 @@ final class RunCoordinator {
                 mcp: includeMembrae ? .shared : nil,
                 indexingRunID: run.purpose == .indexRepository ? run.id : nil,
                 storeURL: context.container.configurations.first?.url,
+                store: context.container,
                 includeBrowser: policy.allowBrowser,
                 runID: run.id
             )

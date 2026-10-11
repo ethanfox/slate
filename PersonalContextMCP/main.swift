@@ -42,16 +42,16 @@ func requestID(_ value: Any?) -> Any? {
     return value
 }
 
-/// Cursor keeps this process for hours. The app writes to the same store and
-/// reopens its container after our saves. A held ModelContainer then traps on
-/// the next property access (EXC_BREAKPOINT in SwiftData getters).
+/// Cursor keeps this process for hours. Reuse one container; reopen only when
+/// the app wrote. A stale held container traps on the next property access.
 func openStore() throws -> ModelContainer {
     var last: Error?
     for attempt in 0..<3 {
         do {
-            return try Store.open()
+            return try MCPStoreSession.container()
         } catch {
             last = error
+            MCPStoreSession.reset()
             if attempt < 2 { Thread.sleep(forTimeInterval: 0.2) }
         }
     }
@@ -86,7 +86,9 @@ while let line = readLine(strippingNewline: true) {
         let arguments = params["arguments"] as? [String: Any] ?? [:]
         do {
             let container = try openStore()
-            respond(id, result: Tools.call(name, arguments: arguments, container: container))
+            let result = Tools.call(name, arguments: arguments, container: container)
+            MCPStoreSession.noteLocalWrite()
+            respond(id, result: result)
         } catch {
             log("store open failed: \(error.localizedDescription)")
             respond(id, result: [

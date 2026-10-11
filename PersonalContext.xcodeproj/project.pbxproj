@@ -60,7 +60,8 @@
 		F18A2B3C4D5E6F708192A3B4 /* ChromeChoiceDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A1B2C3D4E5F60718293A4 /* ChromeChoiceDialog.swift */; };
 		E07C8D9F3A4B5C6D7E8F901A /* TaskStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */; };
 		8F3A1C2E4B5D60718293A002 /* MCPToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */; };
-		8F3A1C2E4B5D60718293A003 /* Tools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75926FA04CD11DF7C22B424B /* Tools.swift */; };
+		A11C0DE100000020 /* Tools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75926FA04CD11DF7C22B424B /* Tools.swift */; };
+		A11C0DE100000022 /* StoreSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000021 /* StoreSyncTests.swift */; };
 		8F3A1C2E4B5D60718293A005 /* HarborEvalFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A1C2E4B5D60718293A004 /* HarborEvalFixture.swift */; };
 		8F3A1C2E4B5D60718293A008 /* TrackFirstEval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A1C2E4B5D60718293A007 /* TrackFirstEval.swift */; };
 		8F3A1C2E4B5D60718293A00A /* TrackFirstEvalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A1C2E4B5D60718293A009 /* TrackFirstEvalTests.swift */; };
@@ -378,6 +379,7 @@
 		E07A1B2C3D4E5F60718293A4 /* ChromeChoiceDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeChoiceDialog.swift; sourceTree = "<group>"; };
 		DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStoreTests.swift; sourceTree = "<group>"; };
 		8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPToolsTests.swift; sourceTree = "<group>"; };
+		A11C0DE100000021 /* StoreSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreSyncTests.swift; sourceTree = "<group>"; };
 		8F3A1C2E4B5D60718293A004 /* HarborEvalFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarborEvalFixture.swift; sourceTree = "<group>"; };
 		8F3A1C2E4B5D60718293A006 /* track-first-eval.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = Scenarios/track-first-eval.md; sourceTree = "<group>"; };
 		8F3A1C2E4B5D60718293A007 /* TrackFirstEval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackFirstEval.swift; sourceTree = "<group>"; };
@@ -874,6 +876,7 @@
 				588C1D051000807F84657854 /* ProviderNeutralTests.swift */,
 				DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */,
 				8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */,
+				A11C0DE100000021 /* StoreSyncTests.swift */,
 				A11C0DE100000013 /* MCPConnectionTests.swift */,
 				B20A01000000000000000015 /* BrowserTests.swift */,
 				F11E5704A0000034 /* ImportToolsTests.swift */,
@@ -1121,10 +1124,10 @@
 				CA068E7D29AD93EE8C1E9CD7 /* ProviderNeutralTests.swift in Sources */,
 				E07C8D9F3A4B5C6D7E8F901A /* TaskStoreTests.swift in Sources */,
 				8F3A1C2E4B5D60718293A002 /* MCPToolsTests.swift in Sources */,
+				A11C0DE100000022 /* StoreSyncTests.swift in Sources */,
 				B20A01000000000000000016 /* BrowserTests.swift in Sources */,
 				A11C0DE100000014 /* MCPConnectionTests.swift in Sources */,
 				F11E5704B0000034 /* ImportToolsTests.swift in Sources */,
-				8F3A1C2E4B5D60718293A003 /* Tools.swift in Sources */,
 				8F3A1C2E4B5D60718293A005 /* HarborEvalFixture.swift in Sources */,
 				8F3A1C2E4B5D60718293A008 /* TrackFirstEval.swift in Sources */,
 				8F3A1C2E4B5D60718293A00A /* TrackFirstEvalTests.swift in Sources */,
@@ -1319,6 +1322,7 @@
 				05FD064003B7CEADF8D13FE2 /* SourceChip.swift in Sources */,
 				1ACA211AEB62C15EB47941E1 /* SourceConnections.swift in Sources */,
 				83B3538C787ACDDD267EF567 /* Store.swift in Sources */,
+				A11C0DE100000020 /* Tools.swift in Sources */,
 				5CEECB088156040C95489B64 /* SymbolPicker.swift in Sources */,
 				65722F53847A018B2E5A216B /* TagField.swift in Sources */,
 				A0C059E2D2C3DD3EBD2AF605 /* TasksView.swift in Sources */,
