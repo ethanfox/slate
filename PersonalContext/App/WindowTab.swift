@@ -146,6 +146,44 @@ enum TabViewKey: Hashable {
     case run(UUID)
 }
 
+struct ProjectViewMemory: Codable, Equatable {
+    var tab: ProjectTab
+    var thread: UUID?
+    var note: UUID?
+    var decision: UUID?
+    var conversation: UUID?
+    var run: UUID?
+
+    static func windowTab(projectID: UUID, tab: ProjectTab?, memory: ProjectViewMemory?) -> WindowTab {
+        let section = tab ?? memory?.tab ?? .overview
+        return WindowTab(
+            id: UUID(),
+            destination: .project(projectID),
+            projectTab: section,
+            selectedThread: section == .threads ? memory?.thread : nil,
+            selectedNote: section == .notes ? memory?.note : nil,
+            selectedDecision: section == .decisions ? memory?.decision : nil,
+            selectedConversation: section == .chat ? memory?.conversation : nil,
+            selectedRun: section == .runs ? memory?.run : nil
+        )
+    }
+
+    static func snapshot(from tab: WindowTab) -> (UUID, ProjectViewMemory)? {
+        guard case .project(let id) = tab.destination else { return nil }
+        return (
+            id,
+            ProjectViewMemory(
+                tab: tab.projectTab,
+                thread: tab.selectedThread,
+                note: tab.selectedNote,
+                decision: tab.selectedDecision,
+                conversation: tab.selectedConversation,
+                run: tab.selectedRun
+            )
+        )
+    }
+}
+
 struct TabHistory: Codable, Equatable {
     var back: [WindowTab] = []
     var forward: [WindowTab] = []
@@ -165,6 +203,7 @@ private struct StoredWindowTabs: Codable {
     var selectedID: UUID
     var histories: [StoredTabHistory]?
     var recency: [UUID]?
+    var projectViews: [UUID: ProjectViewMemory]?
 }
 
 extension AppModel {
@@ -181,10 +220,45 @@ extension AppModel {
         reveal(windowTab(for: project, tab: tab), newTab: newTab)
     }
 
+    func open(_ row: TitleIndex, newTab: Bool = TabActivation.commandClick) {
+        NavTrace.begin("open.\(row.kind.rawValue) id=\(row.id)")
+        NavTrace.keep()
+        let context = container.mainContext
+        switch row.kind {
+        case .project:
+            if let project = NavTrace.measure("fetch.project") { TitleIndexStore.project(row.id, in: context) } {
+                open(project, newTab: newTab)
+            }
+        case .track:
+            if let thread = NavTrace.measure("fetch.track") { TitleIndexStore.thread(row.id, in: context) } {
+                open(thread, newTab: newTab)
+            }
+        case .note:
+            if let note = NavTrace.measure("fetch.note") { TitleIndexStore.note(row.id, in: context) } {
+                open(note, newTab: newTab)
+            }
+        case .decision:
+            if let decision = NavTrace.measure("fetch.decision") { TitleIndexStore.decision(row.id, in: context) } {
+                open(decision, newTab: newTab)
+            }
+        case .chat:
+            if let conversation = NavTrace.measure("fetch.chat") { TitleIndexStore.conversation(row.id, in: context) } {
+                open(conversation, newTab: newTab)
+            }
+        case .task:
+            if let task = NavTrace.measure("fetch.task") { TitleIndexStore.task(row.id, in: context) } {
+                open(task, newTab: newTab)
+            }
+        case .run:
+            if let run = NavTrace.measure("fetch.run") { TitleIndexStore.run(row.id, in: context) } {
+                open(run, newTab: newTab)
+            }
+        }
+    }
+
     private func windowTab(for destination: Destination) -> WindowTab {
-        if case .project(let id) = destination,
-           let project = (try? container.mainContext.fetch(FetchDescriptor<Project>(predicate: #Predicate { $0.id == id })))?.first {
-            return windowTab(for: project, tab: nil)
+        if case .project(let id) = destination {
+            return windowTab(projectID: id, tab: nil)
         }
         return WindowTab(
             id: UUID(),
@@ -199,22 +273,11 @@ extension AppModel {
     }
 
     private func windowTab(for project: Project, tab: ProjectTab?) -> WindowTab {
-        let section = tab ?? .overview
-        let thread = project.threads.contains(where: { $0.id == selectedThread }) ? selectedThread : nil
-        let note = project.notes.contains(where: { $0.id == selectedNote }) ? selectedNote : nil
-        let decision = project.decisions.contains(where: { $0.id == selectedDecision }) ? selectedDecision : nil
-        let conversation = project.conversations.contains(where: { $0.id == selectedConversation }) ? selectedConversation : nil
-        let run = project.runs.contains(where: { $0.id == selectedRun }) ? selectedRun : nil
-        return WindowTab(
-            id: UUID(),
-            destination: .project(project.id),
-            projectTab: section,
-            selectedThread: section == .threads ? thread : nil,
-            selectedNote: section == .notes ? note : nil,
-            selectedDecision: section == .decisions ? decision : nil,
-            selectedConversation: section == .chat ? conversation : nil,
-            selectedRun: section == .runs ? run : nil
-        )
+        windowTab(projectID: project.id, tab: tab)
+    }
+
+    private func windowTab(projectID: UUID, tab: ProjectTab?) -> WindowTab {
+        ProjectViewMemory.windowTab(projectID: projectID, tab: tab, memory: projectViews[projectID])
     }
 
     func open(_ thread: ProjectThread, newTab: Bool = TabActivation.commandClick) {
@@ -489,6 +552,7 @@ extension AppModel {
     }
 
     func reveal(_ incoming: WindowTab, newTab: Bool) {
+        NavTrace.begin("reveal \(incoming.viewKey) newTab=\(newTab)")
         persistCurrentIntoSelectedTab()
         if let existing = windowTabs.first(where: { $0.viewKey == incoming.viewKey }) {
             if newTab || existing.id == selectedTabID {
@@ -546,6 +610,13 @@ extension AppModel {
                 selectedTabID,
                 in: (stored.recency ?? []).filter { live.contains($0) }
             )
+            if let storedViews = stored.projectViews {
+                projectViews = storedViews
+            } else {
+                for tab in stored.tabs {
+                    rememberProjectView(tab)
+                }
+            }
         } else {
             let home = WindowTab.home()
             windowTabs = [home]
@@ -562,7 +633,9 @@ extension AppModel {
 
     private func persistCurrentIntoSelectedTab() {
         guard let index = windowTabs.firstIndex(where: { $0.id == selectedTabID }) else { return }
-        windowTabs[index] = currentWindowTab()
+        let current = currentWindowTab()
+        guard windowTabs[index] != current else { return }
+        windowTabs[index] = current
     }
 
     private func currentWindowTab() -> WindowTab {
@@ -583,21 +656,53 @@ extension AppModel {
     }
 
     private func apply(_ tab: WindowTab, persist: Bool) {
+        let start = ContinuousClock.now
         let previous = currentWindowTab()
-        chromeDestination = tab.destination
-        if case .project(let id) = tab.destination {
-            tabs[id] = tab.projectTab
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            nav = NavSelection(
+                destination: tab.destination,
+                thread: tab.selectedThread,
+                note: tab.selectedNote,
+                decision: tab.selectedDecision,
+                conversation: tab.selectedConversation,
+                run: tab.selectedRun
+            )
+            if case .project(let id) = tab.destination {
+                tabs[id] = tab.projectTab
+            }
         }
-        selectedThread = tab.selectedThread
-        selectedNote = tab.selectedNote
-        selectedDecision = tab.selectedDecision
-        selectedConversation = tab.selectedConversation
-        selectedRun = tab.selectedRun
+        rememberProjectView(tab)
         if !historyLocked, previous.viewKey != tab.viewKey {
             recordNavigation(from: previous, to: tab)
         }
-        if persist { persistWindowTabs() }
+        if persist { schedulePersistWindowTabs() }
         syncHistoryButtons()
+        NavTrace.event("apply \(tab.viewKey) persist=\(persist) \(NavTrace.elapsed(start))")
+        NavTrace.afterTurn("apply.runloop \(tab.viewKey)")
+    }
+
+    private func rememberProjectView(_ tab: WindowTab) {
+        guard let (id, memory) = ProjectViewMemory.snapshot(from: tab) else { return }
+        projectViews[id] = memory
+    }
+
+    func flushWindowTabs() {
+        persistTabsTask?.cancel()
+        persistTabsTask = nil
+        persistCurrentIntoSelectedTab()
+        persistWindowTabs()
+    }
+
+    private func schedulePersistWindowTabs() {
+        persistTabsTask?.cancel()
+        persistTabsTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard let self, !Task.isCancelled else { return }
+            self.persistWindowTabs()
+            self.persistTabsTask = nil
+        }
     }
 
     private func persistWindowTabs() {
@@ -609,7 +714,8 @@ extension AppModel {
             histories: tabHistories.map { id, history in
                 StoredTabHistory(tabID: id, back: history.back, forward: history.forward)
             },
-            recency: tabRecency
+            recency: tabRecency,
+            projectViews: projectViews
         )
         defaults.set(try? JSONEncoder().encode(stored), forKey: Keys.windowTabs)
     }

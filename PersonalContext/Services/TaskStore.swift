@@ -291,7 +291,7 @@ enum TaskStore {
     }
 
     private static func save(_ context: ModelContext) {
-        try? context.save()
+        try? context.persist()
     }
 }
 

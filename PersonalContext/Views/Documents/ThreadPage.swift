@@ -100,6 +100,7 @@ struct ThreadPage: View {
         }
         }
         .objectFindable(id: thread.id, fields: findFields)
+        .onAppear { NavTrace.event("thread appear id=\(thread.id)") }
         .onChange(of: thread.title) { _, _ in touch() }
         .onChange(of: thread.summary) { _, _ in touch() }
         .onChange(of: thread.body) { _, _ in touch() }
@@ -185,7 +186,7 @@ struct ThreadPage: View {
         let child = ProjectThread(title: "", kind: .feature, project: project, parent: thread)
         context.insert(child)
         touch()
-        try? context.save()
+        try? context.persist()
         app.open(child)
     }
 
@@ -193,7 +194,7 @@ struct ThreadPage: View {
         guard let mark = DeletionMarks.existing(for: thread.id, in: project) else { return }
         DeletionMarks.keep(mark, in: context)
         project.touch()
-        try? context.save()
+        try? context.persist()
     }
 
     private func deleteMarked() {
@@ -201,6 +202,6 @@ struct ThreadPage: View {
         DeletionMarks.remove(targetingIDs: thread.deletionTargetIDs, in: context)
         context.delete(thread)
         project.touch()
-        try? context.save()
+        try? context.persist()
     }
 }

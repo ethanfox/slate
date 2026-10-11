@@ -3,7 +3,12 @@ import SwiftUI
 
 struct RunsView: View {
     @Environment(AppModel.self) private var app
-    @Query(sort: \AgentRun.updatedAt, order: .reverse) private var runs: [AgentRun]
+    @Query(
+        filter: #Predicate<TitleIndex> { $0.kindRaw == "run" },
+        sort: \TitleIndex.updatedAt,
+        order: .reverse
+    )
+    private var runs: [TitleIndex]
 
     var body: some View {
         ScrollView {
@@ -25,6 +30,7 @@ struct RunsView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .onAppear { NavTrace.event("runs appear count=\(runs.count)") }
     }
 
     private var emptyState: some View {
@@ -66,27 +72,38 @@ struct RunsView: View {
         }
     }
 
-    private func row(_ run: AgentRun, busy: Bool) -> some View {
+    private func row(_ run: TitleIndex, busy: Bool) -> some View {
         let label = app.runCoordinator.waitLabel(for: run.id)
         return RecordRow(
             systemImage: "play.circle",
             title: run.displayTitle,
-            subtitle: run.project?.name ?? "No project",
-            meta: busy ? (run.status == .queued ? "Queued" : (label ?? "Starting")) : run.updatedAt.relativeLabel,
+            subtitle: run.owner,
+            meta: busy ? (run.runStatus == .queued ? "Queued" : (label ?? "Starting")) : run.updatedAt.relativeLabel,
             isBusy: busy
         ) {
             app.open(run)
         }
-        .contextMenu { RunContextMenu(run: run) }
+        .contextMenu { RunTitleMenu(row: run) }
         .accessibilityHint(busy ? "Opens this running job" : "Opens this run")
     }
 
-    private var active: [AgentRun] {
-        runs.filter(\.status.isActive)
+    private var active: [TitleIndex] {
+        runs.filter(\.isBusy)
     }
 
-    private var recent: [AgentRun] {
-        Array(runs.filter(\.status.isTerminal).prefix(10))
+    private var recent: [TitleIndex] {
+        Array(runs.filter { !$0.isBusy }.prefix(10))
+    }
+}
+
+struct RunTitleMenu: View {
+    var row: TitleIndex
+    @Environment(\.modelContext) private var context
+
+    var body: some View {
+        if let run = TitleIndexStore.run(row.id, in: context) {
+            RunContextMenu(run: run)
+        }
     }
 }
 

@@ -19,7 +19,11 @@ enum ConnectionState: Equatable {
 @Observable
 final class AppModel {
     private(set) var container: ModelContainer
-    var chromeDestination: Destination = .home
+    var nav = NavSelection()
+    var chromeDestination: Destination {
+        get { nav.destination }
+        set { nav.destination = newValue }
+    }
     var windowTabs: [WindowTab] = [AppModel.launchTab]
     var selectedTabID = AppModel.launchTab.id
     var tabRecency: [UUID] = [AppModel.launchTab.id]
@@ -28,11 +32,28 @@ final class AppModel {
     var canGoForward = false
     @ObservationIgnored var historyLocked = false
     var tabs: [UUID: ProjectTab] = [:]
-    var selectedThread: UUID?
-    var selectedNote: UUID?
-    var selectedDecision: UUID?
-    var selectedConversation: UUID?
-    var selectedRun: UUID?
+    @ObservationIgnored var projectViews: [UUID: ProjectViewMemory] = [:]
+    @ObservationIgnored var persistTabsTask: Task<Void, Never>?
+    var selectedThread: UUID? {
+        get { nav.thread }
+        set { nav.thread = newValue }
+    }
+    var selectedNote: UUID? {
+        get { nav.note }
+        set { nav.note = newValue }
+    }
+    var selectedDecision: UUID? {
+        get { nav.decision }
+        set { nav.decision = newValue }
+    }
+    var selectedConversation: UUID? {
+        get { nav.conversation }
+        set { nav.conversation = newValue }
+    }
+    var selectedRun: UUID? {
+        get { nav.run }
+        set { nav.run = newValue }
+    }
     var modal: AppModal?
     var modalHost = ModalHost.main
     var toast: String?
@@ -341,7 +362,7 @@ final class AppModel {
             let context = self.container.mainContext
             guard let run = RunStore.run(runID, in: context) else { return }
             run.append(.browser, detail: event.summary)
-            try? context.save()
+            try? context.persist()
         }
         browser.warm()
         importRelay.attach(self)
@@ -385,7 +406,7 @@ final class AppModel {
         let keepKey = NSApp.keyWindow.map(WindowChrome.isMain) ?? false
         Store.disableAutosave(container)
         if container.mainContext.hasChanges {
-            try? container.mainContext.save()
+            try? container.mainContext.persist()
         }
         do {
             let previous = container
@@ -473,7 +494,7 @@ final class AppModel {
         let conversation = Conversation(providerID: talkProvider.rawValue, modelID: talkModelID, project: project)
         context.insert(conversation)
         project?.touch()
-        try? context.save()
+        try? context.persist()
         open(conversation, newTab: newTab)
         return conversation
     }
@@ -490,7 +511,7 @@ final class AppModel {
         conversation.title = thread.title.isEmpty ? "Track chat" : thread.title
         context.insert(conversation)
         project.touch()
-        try? context.save()
+        try? context.persist()
         return conversation
     }
 

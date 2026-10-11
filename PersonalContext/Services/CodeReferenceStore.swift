@@ -717,6 +717,6 @@ enum CodeReferenceStore {
 
     private static func save(_ context: ModelContext) throws {
         context.autosaveEnabled = false
-        try context.save()
+        try context.persist()
     }
 }

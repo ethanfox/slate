@@ -157,7 +157,8 @@ final class CursorConversationBridge {
         includeMembraeTools: Bool = true,
         includeProjectTools: Bool = true,
         resumeSession: Bool = true,
-        runtime: WorkerPath = .local
+        runtime: WorkerPath = .local,
+        history: [TalkMessage] = []
     ) async throws -> (request: RunnerRequest, metadata: ChatTurnMetadata) {
         guard let mcp = Bundle.main.url(forAuxiliaryExecutable: "membrae-mcp") else {
             throw CursorAPIError(status: 0, message: "The Membrae MCP is missing from the app.")
@@ -195,7 +196,13 @@ final class CursorConversationBridge {
             agentId: opening ? nil : conversation.externalSessionID,
             name: title,
             text: includeMembraeTools
-                ? ContextBuilder.prompt(userText: userText, context: context, opening: opening, focusedThread: focused)
+                ? ContextBuilder.prompt(
+                    userText: userText,
+                    context: context,
+                    opening: opening,
+                    focusedThread: focused,
+                    transcript: opening ? TalkMessage.conversationTranscript(history) : nil
+                )
                 : ContextBuilder.codeConsultationPrompt(userText: userText, context: context),
             model: model,
             cwd: workspace,
@@ -648,7 +655,11 @@ struct CursorChatProvider: ChatProvider {
                         bridge.debugLog.pace = pace
                         bridge.debugLog.add("pace done \(pace.logLine)")
                         bridge.debugLog.add("stream complete emitted=\(emitted) textChars=\(textChars)")
-                        bridge.finished()
+                        if emitted {
+                            bridge.finished()
+                        } else {
+                            bridge.stop()
+                        }
                     }
                     continuation.yield(.done)
                     continuation.finish()
@@ -656,7 +667,7 @@ struct CursorChatProvider: ChatProvider {
                     await MainActor.run {
                         ChatTrace.event("provider.stream error: \(error.localizedDescription)")
                         bridge.debugLog.add("stream error \(error.localizedDescription)")
-                        bridge.finished()
+                        bridge.stop()
                     }
                     continuation.finish(throwing: error)
                 }
@@ -701,7 +712,8 @@ private func prepareCursorTurn(
         includeMembraeTools: includeMembraeTools,
         includeProjectTools: includeProjectTools,
         resumeSession: resumeConversation,
-        runtime: runtime
+        runtime: runtime,
+        history: messages
     )
     var request = prepared.request
     request.images = images

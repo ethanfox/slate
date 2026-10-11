@@ -33,6 +33,7 @@ struct TasksView: View {
                 .opacity(0)
                 .accessibilityHidden(true)
         }
+        .onAppear { NavTrace.event("tasks appear count=\(membraeTasks.count)") }
         .task { await app.eventKit.prepareReminders() }
     }
 
@@ -332,7 +333,7 @@ struct TasksView: View {
             break
         }
         context.insert(item)
-        try? context.save()
+        try? context.persist()
         draft = ""
         composerFocused = true
     }

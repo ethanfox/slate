@@ -18,6 +18,45 @@ enum DecisionListLayout {
         var revealedHistoryGroupIDs: Set<String>
     }
 
+    struct TitleDecision: Identifiable {
+        var id: UUID
+        var title: String
+        var status: DecisionStatus
+        var trackID: UUID?
+        var createdAt: Date
+    }
+
+    struct TitleGroup: Identifiable {
+        var id: String
+        var trackID: UUID?
+        var title: String
+        var decisions: [TitleDecision]
+    }
+
+    struct TitleSnapshot {
+        var active: [TitleGroup]
+        var history: [TitleGroup]
+        var historyCount: Int
+        var revealsHistory: Bool
+        var revealedHistoryGroupIDs: Set<String>
+    }
+
+    static func snapshot(decisions: [TitleDecision], tracks: [TrackNode], query: String) -> TitleSnapshot {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matching = needle.isEmpty ? decisions : decisions.filter { matches($0, query: needle) }
+        let order = TitleIndexStore.flattenedTracks(tracks)
+        let active = titleGroups(in: matching.filter { $0.status == .active }, order: order)
+        let historyItems = matching.filter { $0.status == .superseded }
+        let history = titleGroups(in: historyItems, order: order)
+        return TitleSnapshot(
+            active: active,
+            history: history,
+            historyCount: historyItems.count,
+            revealsHistory: !needle.isEmpty && !historyItems.isEmpty,
+            revealedHistoryGroupIDs: Set(history.map(\.id))
+        )
+    }
+
     static func snapshot(decisions: [Decision], roots: [ProjectThread], query: String) -> Snapshot {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let matching = needle.isEmpty ? decisions : decisions.filter { matches($0, query: needle) }
@@ -38,6 +77,10 @@ enum DecisionListLayout {
         roots.flatMap { [$0] + flattenedTracks($0.orderedChildren) }
     }
 
+    static func matches(_ decision: TitleDecision, query: String) -> Bool {
+        contains(decision.title, query) || contains(decision.status.label, query)
+    }
+
     static func matches(_ decision: Decision, query: String) -> Bool {
         let fields = [
             decision.title,
@@ -48,6 +91,25 @@ enum DecisionListLayout {
             trackTitle(decision.thread),
         ]
         return fields.contains { contains($0, query) }
+    }
+
+    private static func titleGroups(in decisions: [TitleDecision], order: [TrackNode]) -> [TitleGroup] {
+        let newestFirst = decisions.sorted { $0.createdAt > $1.createdAt }
+        var buckets: [String: [TitleDecision]] = [:]
+        for decision in newestFirst {
+            buckets[groupID(decision.trackID), default: []].append(decision)
+        }
+
+        var result: [TitleGroup] = []
+        for track in order {
+            let id = groupID(track.id)
+            guard let items = buckets.removeValue(forKey: id), !items.isEmpty else { continue }
+            result.append(TitleGroup(id: id, trackID: track.id, title: track.title, decisions: items))
+        }
+        if let untracked = buckets.removeValue(forKey: groupID(nil as UUID?)), !untracked.isEmpty {
+            result.append(TitleGroup(id: groupID(nil as UUID?), trackID: nil, title: noTrackTitle, decisions: untracked))
+        }
+        return result
     }
 
     private static func groups(in decisions: [Decision], order: [ProjectThread]) -> [Group] {
@@ -63,10 +125,14 @@ enum DecisionListLayout {
             guard let items = buckets.removeValue(forKey: id), !items.isEmpty else { continue }
             result.append(Group(id: id, trackID: track.id, title: trackTitle(track), decisions: items))
         }
-        if let untracked = buckets.removeValue(forKey: groupID(nil)), !untracked.isEmpty {
-            result.append(Group(id: groupID(nil), trackID: nil, title: noTrackTitle, decisions: untracked))
+        if let untracked = buckets.removeValue(forKey: groupID(nil as ProjectThread?)), !untracked.isEmpty {
+            result.append(Group(id: groupID(nil as ProjectThread?), trackID: nil, title: noTrackTitle, decisions: untracked))
         }
         return result
+    }
+
+    private static func groupID(_ trackID: UUID?) -> String {
+        trackID?.uuidString ?? "no-track"
     }
 
     private static func groupID(_ track: ProjectThread?) -> String {

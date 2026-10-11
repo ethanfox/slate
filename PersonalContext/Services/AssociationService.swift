@@ -47,7 +47,7 @@ enum TagStore {
         guard !name.isEmpty else { return false }
         if let other = existing(named: name, in: context), other.id != tag.id { return false }
         tag.name = name
-        try? context.save()
+        try? context.persist()
         return true
     }
 
@@ -59,7 +59,7 @@ enum TagStore {
         reassign(Array(source.conversations), onto: survivor, tags: \.tags)
         reassign(Array(source.agendaItems), onto: survivor, tags: \.tags)
         context.delete(source)
-        try? context.save()
+        try? context.persist()
     }
 
     @discardableResult
@@ -80,14 +80,14 @@ enum TagStore {
             }
         }
         if merged > 0 {
-            try? context.save()
+            try? context.persist()
         }
         return merged
     }
 
     static func delete(_ tag: Tag, in context: ModelContext) {
         context.delete(tag)
-        try? context.save()
+        try? context.persist()
     }
 
     private static func collisionKey(_ raw: String) -> String {
@@ -157,9 +157,9 @@ enum TagStore {
 
     static func persist(_ context: ModelContext) {
         do {
-            try context.save()
+            try context.persist()
         } catch {
-            try? context.save()
+            try? context.persist()
         }
     }
 
@@ -221,7 +221,7 @@ enum AgendaStore {
             item.isCompleted = true
         }
         item.touch()
-        try? context.save()
+        try? context.persist()
     }
 
     static func findOrCreate(kind: AgendaKind, eventKitID: String, title: String, in context: ModelContext) -> AgendaItem {
@@ -451,7 +451,7 @@ enum AssociationService {
             item.touch()
         }
         plan.project.touch()
-        try? context.save()
+        try? context.persist()
     }
 
     static func deletedEntries(eventKitIDs: Set<String>, in context: ModelContext) -> [DeletedAssociation] {

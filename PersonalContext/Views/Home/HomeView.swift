@@ -4,19 +4,14 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @Query private var projects: [Project]
-    @Query(sort: \Conversation.updatedAt, order: .reverse) private var conversations: [Conversation]
-    @Query(sort: \Note.updatedAt, order: .reverse) private var notes: [Note]
-    @Query(sort: \Decision.createdAt, order: .reverse) private var decisions: [Decision]
-    @Query(sort: \ProjectThread.updatedAt, order: .reverse) private var threads: [ProjectThread]
+    @Query(sort: \TitleIndex.updatedAt, order: .reverse)
+    private var rows: [TitleIndex]
     @State private var draft = ""
     @State private var draftAttachments: [ComposerAttachment] = []
     @State private var composerID = UUID()
 
-    private var activeProjects: [Project] {
-        projects
-            .filter { $0.status == .active }
-            .sorted { $0.lastActivity > $1.lastActivity }
+    private var activeProjects: [TitleIndex] {
+        rows.filter { $0.kind == .project && $0.projectStatus == .active }
     }
 
     var body: some View {
@@ -33,9 +28,11 @@ struct HomeView: View {
                         } else {
                             ForEach(activeProjects.prefix(6)) { project in
                                 Button {
-                                    app.open(project, tab: .overview)
+                                    if let record = TitleIndexStore.project(project.id, in: context) {
+                                        app.open(record, tab: .overview)
+                                    }
                                 } label: {
-                                    ProjectLine(project: project)
+                                    ProjectLine(row: project)
                                 }
                                 .buttonStyle(.plain)
                                 if project.id != activeProjects.prefix(6).last?.id {
@@ -65,6 +62,7 @@ struct HomeView: View {
                 .padding(.vertical, 14)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .onAppear { NavTrace.event("home appear rows=\(rows.count) projects=\(activeProjects.count)") }
     }
 
     @ViewBuilder
@@ -76,11 +74,11 @@ struct HomeView: View {
             ForEach(items) { item in
                 RecordRow(
                     systemImage: item.symbol,
-                    title: item.title.isEmpty ? "Untitled" : item.title,
+                    title: item.title,
                     subtitle: item.subtitle,
                     meta: item.date.relativeLabel
                 ) {
-                    open(item)
+                    app.open(item.row)
                 }
             }
         }
@@ -103,69 +101,25 @@ struct HomeView: View {
     }
 
     private var recentItems: [RecentItem] {
-        var items: [RecentItem] = []
-        for conversation in conversations.prefix(8) where !conversation.isArchived {
-            items.append(RecentItem(
-                id: "c-\(conversation.id)",
-                title: conversation.title,
-                subtitle: conversation.project?.name ?? "Quick Ask",
-                symbol: "bubble.left",
-                date: conversation.updatedAt,
-                kind: .conversation(conversation.id)
-            ))
-        }
-        for thread in threads.prefix(8) {
-            items.append(RecentItem(
-                id: "t-\(thread.id)",
-                title: thread.title,
-                subtitle: [thread.project?.name, thread.kind.label].compactMap { $0 }.joined(separator: " · "),
-                symbol: TrackStyle.symbol,
-                date: thread.updatedAt,
-                kind: .thread(thread.id, thread.project?.id)
-            ))
-        }
-        for note in notes.prefix(8) {
-            items.append(RecentItem(
-                id: "n-\(note.id)",
-                title: note.displayTitle,
-                subtitle: note.project?.name ?? "Note",
-                symbol: "note.text",
-                date: note.updatedAt,
-                kind: .note(note.id, note.project?.id)
-            ))
-        }
-        for decision in decisions.prefix(8) {
-            items.append(RecentItem(
-                id: "d-\(decision.id)",
-                title: decision.title,
-                subtitle: decision.project?.name ?? "Decision",
-                symbol: "checkmark.seal",
-                date: decision.createdAt,
-                kind: .decision(decision.id, decision.project?.id)
-            ))
-        }
-        return items.sorted { $0.date > $1.date }.prefix(12).map { $0 }
-    }
-
-    private func open(_ item: RecentItem) {
-        switch item.kind {
-        case .conversation(let id):
-            if let conversation = conversations.first(where: { $0.id == id }) {
-                app.open(conversation)
+        rows
+            .filter { kind in
+                switch kind.kind {
+                case .chat: return !kind.isArchived
+                case .track, .note, .decision: return true
+                default: return false
+                }
             }
-        case .thread(let id, _):
-            if let thread = threads.first(where: { $0.id == id }) {
-                app.open(thread)
+            .prefix(12)
+            .map { row in
+                RecentItem(
+                    id: row.id,
+                    title: row.displayTitle,
+                    subtitle: row.owner.isEmpty ? row.kind.rawValue.capitalized : row.owner,
+                    symbol: row.symbol.isEmpty ? row.kind.symbol : row.symbol,
+                    date: row.updatedAt,
+                    row: row
+                )
             }
-        case .note(let id, _):
-            if let note = notes.first(where: { $0.id == id }) {
-                app.open(note)
-            }
-        case .decision(let id, _):
-            if let decision = decisions.first(where: { $0.id == id }) {
-                app.open(decision)
-            }
-        }
     }
 
     private func submitAsk(_ submission: ChatSubmission) -> Bool {
@@ -193,17 +147,10 @@ struct HomeView: View {
 }
 
 private struct RecentItem: Identifiable {
-    enum Kind {
-        case conversation(UUID)
-        case thread(UUID, UUID?)
-        case note(UUID, UUID?)
-        case decision(UUID, UUID?)
-    }
-
-    var id: String
+    var id: UUID
     var title: String
     var subtitle: String
     var symbol: String
     var date: Date
-    var kind: Kind
+    var row: TitleIndex
 }

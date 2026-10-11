@@ -107,8 +107,7 @@ private struct HostWindowAccessor: NSViewRepresentable {
 struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Query private var projects: [Project]
-    @Query private var conversations: [Conversation]
+    @Environment(\.modelContext) private var context
     @State private var hostWindow: NSWindow?
     @State private var windowWidth: CGFloat = 0
     @State private var chatProgress: CGFloat = 0
@@ -165,7 +164,7 @@ struct RootView: View {
 
                         if chatMounted, let project = openProject, let thread = focusedThread {
                             ThreadChatPane(thread: thread, project: project)
-                                .id("\(thread.id.uuidString)-\(app.storeGeneration)")
+                                .id(thread.id)
                                 .modifier(PaneChrome())
                                 .allowsHitTesting(chatSettled)
                         }
@@ -446,7 +445,7 @@ struct RootView: View {
 
     private var openProject: Project? {
         guard case .project(let id) = app.destination else { return nil }
-        return projects.first { $0.id == id }
+        return TitleIndexStore.project(id, in: context)
     }
 
     private var showingTrackChat: Bool {
@@ -540,7 +539,7 @@ struct RootView: View {
     private var focusedThread: ProjectThread? {
         guard let project = openProject, app.tab(for: project.id) == .threads,
               let id = app.selectedThread else { return nil }
-        return project.threads.first { $0.id == id }
+        return TitleIndexStore.thread(id, in: context)
     }
 
     /// Widens the window to the right only when it is narrower than `width`. It never shrinks or moves the window
@@ -565,7 +564,7 @@ struct RootView: View {
 
     private var activeConversation: Conversation? {
         guard let id = app.chatConversationID else { return nil }
-        return conversations.first { $0.id == id }
+        return TitleIndexStore.conversation(id, in: context)
     }
 
     private var toastAnimation: Animation {
@@ -646,6 +645,11 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
             destinationDetail
+                .onAppear { NavTrace.event("detail appear \(app.destination)") }
+                .onChange(of: app.destination) { _, next in
+                    NavTrace.event("detail destination \(next)")
+                    NavTrace.afterTurn("detail.runloop \(next)")
+                }
         }
     }
 

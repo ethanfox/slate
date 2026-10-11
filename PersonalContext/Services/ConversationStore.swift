@@ -86,7 +86,7 @@ final class ConversationStore {
             }
         }
         conversation.updatedAt = .now
-        try? conversation.modelContext?.save()
+        try? conversation.modelContext?.persist()
     }
 
     func applyMetadata(_ metadata: ChatTurnMetadata) {
@@ -102,13 +102,19 @@ final class ConversationStore {
         }
         conversation.updatedAt = .now
         conversation.project?.touch()
-        try? conversation.modelContext?.save()
+        try? conversation.modelContext?.persist()
     }
 
     func applyModel(_ modelID: String) {
         guard let conversation, conversation.modelContext != nil else { return }
+        let changed = conversation.modelID != modelID
         conversation.modelID = modelID
-        try? conversation.modelContext?.save()
+        if changed, conversation.providerID == TalkProvider.cursor.rawValue {
+            conversation.externalSessionID = ""
+            conversation.updatedAt = .now
+            conversation.project?.touch()
+        }
+        try? conversation.modelContext?.persist()
     }
 
     func applyProvider(_ providerID: String) -> Conversation? {
@@ -117,7 +123,7 @@ final class ConversationStore {
         conversation.externalSessionID = ""
         conversation.updatedAt = .now
         conversation.project?.touch()
-        try? conversation.modelContext?.save()
+        try? conversation.modelContext?.persist()
         return conversation
     }
 

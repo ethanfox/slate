@@ -32,6 +32,7 @@ struct CalendarView: View {
             .onKeyPress(.leftArrow) { handleArrow(-1) }
             .onKeyPress(.rightArrow) { handleArrow(1) }
             .onAppear { keysFocused = true }
+            .onAppear { NavTrace.event("calendar appear tasks=\(membraeTasks.count)") }
             .background {
                 Button("Today", action: goToToday)
                     .keyboardShortcut("t", modifiers: .command)

@@ -59,7 +59,7 @@ struct FileStore: Sendable {
         )
         context.insert(asset)
         context.insert(AssetReference(assetID: id, ownerKind: ownerKind, ownerID: ownerID, orderIndex: orderIndex))
-        try context.save()
+        try context.persist()
         return asset
     }
 
@@ -109,7 +109,7 @@ struct FileStore: Sendable {
             known.insert(id)
             order += 1
         }
-        try context.save()
+        try context.persist()
     }
 
     func replace(assetIDs: [UUID], ownerKind: AssetOwnerKind, ownerID: UUID) throws {
@@ -119,14 +119,14 @@ struct FileStore: Sendable {
         for (index, id) in assetIDs.enumerated() {
             context.insert(AssetReference(assetID: id, ownerKind: ownerKind, ownerID: ownerID, orderIndex: index))
         }
-        try context.save()
+        try context.persist()
     }
 
     func release(ownerKind: AssetOwnerKind, ownerID: UUID) throws {
         for reference in references(ownerKind: ownerKind, ownerID: ownerID) {
             context.delete(reference)
         }
-        try context.save()
+        try context.persist()
     }
 
     func release(assetID: UUID, ownerKind: AssetOwnerKind, ownerID: UUID) throws {
@@ -136,7 +136,7 @@ struct FileStore: Sendable {
             context.delete(reference)
         }
         _ = owner
-        try context.save()
+        try context.persist()
     }
 
     func releaseConversation(_ conversation: Conversation) throws {
@@ -172,7 +172,7 @@ struct FileStore: Sendable {
             }
             context.delete(asset)
         }
-        try context.save()
+        try context.persist()
     }
 
     private func validateSize(_ bytes: Int, filename: String) throws {

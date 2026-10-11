@@ -1,5 +1,14 @@
 import SwiftUI
 
+struct NavSelection: Equatable {
+    var destination: Destination = .home
+    var thread: UUID?
+    var note: UUID?
+    var decision: UUID?
+    var conversation: UUID?
+    var run: UUID?
+}
+
 enum Destination: Hashable, Codable {
     case home
     case projects

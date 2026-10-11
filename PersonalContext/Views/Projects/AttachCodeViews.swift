@@ -143,7 +143,7 @@ struct ProjectCodeSection: View {
                 CodeReferenceStore.deleteOwnedReferences(for: attachment, in: context)
                 context.delete(attachment)
                 project.touch()
-                try? context.save()
+                try? context.persist()
             }
             .buttonStyle(.plain)
             .font(CraftFont.body)
@@ -282,7 +282,7 @@ struct ProjectCodeSection: View {
         )
         context.insert(attachment)
         project.touch()
-        try? context.save()
+        try? context.persist()
     }
 
     private func showRepos() {
@@ -335,7 +335,7 @@ struct ProjectCodeSection: View {
         )
         context.insert(attachment)
         project.touch()
-        try? context.save()
+        try? context.persist()
         pickingRepo = false
     }
 }

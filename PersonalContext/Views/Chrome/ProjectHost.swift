@@ -5,9 +5,21 @@ struct ProjectHost: View {
     var id: UUID
     @Query private var projects: [Project]
 
+    init(id: UUID) {
+        self.id = id
+        let projectID = id
+        _projects = Query(filter: #Predicate<Project> { $0.id == projectID })
+    }
+
     var body: some View {
-        if let project = projects.first(where: { $0.id == id }) {
+        if let project = projects.first {
             ProjectView(project: project)
+                .onAppear {
+                    NavTrace.event("project.host appear id=\(id) name=\(project.name)")
+                }
+                .onAppear {
+                    NavTrace.afterTurn("project.host.runloop id=\(id)")
+                }
         } else {
             ScrollView {
                 PageBody {

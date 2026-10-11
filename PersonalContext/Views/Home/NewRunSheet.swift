@@ -199,7 +199,7 @@ struct EditRunModal: View {
         run.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         run.touch()
         run.project?.touch()
-        try? context.save()
+        try? context.persist()
         modalDismiss()
     }
 }

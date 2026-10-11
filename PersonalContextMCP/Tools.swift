@@ -167,7 +167,7 @@ enum Tools {
         do {
             let value = try tool.handler(Args(raw: migrate(arguments)), context)
             if !tool.readOnly {
-                try context.save()
+                try context.persist()
                 if announce {
                     Store.announceChange()
                 }

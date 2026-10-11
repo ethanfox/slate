@@ -2,17 +2,18 @@ import SwiftData
 import SwiftUI
 
 struct ThreadBranch: View {
-    var thread: ProjectThread
+    var node: TrackNode
     var depth: Int
     var selectedID: UUID?
-    @Binding var collapsed: Set<UUID>
+    @Binding var expanded: Set<UUID>
     @Binding var expandedCompleted: Set<UUID>
     var markedIDs: Set<UUID>
     var onSelect: (UUID) -> Void
-    var onCreateChild: (ProjectThread) -> Void
-    var onKeep: (ProjectThread) -> Void
-    var onDelete: (ProjectThread) -> Void
+    var onCreateChild: (UUID) -> Void
+    var onKeep: (UUID) -> Void
+    var onDelete: (UUID) -> Void
     @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
     @Environment(\.appearsActive) private var appearsActive
     @State private var hovering = false
 
@@ -22,17 +23,17 @@ struct ThreadBranch: View {
         return AnyShapeStyle(.tertiary)
     }
 
-    private var openChildren: [ProjectThread] {
-        thread.orderedChildren.filter { $0.status != .completed }
+    private var openChildren: [TrackNode] {
+        node.children.filter { $0.status != .completed }
     }
 
-    private var completedChildren: [ProjectThread] {
-        thread.orderedChildren.filter { $0.status == .completed }
+    private var completedChildren: [TrackNode] {
+        node.children.filter { $0.status == .completed }
     }
 
-    private var showsChildren: Bool { !thread.children.isEmpty }
-    private var childrenVisible: Bool { !collapsed.contains(thread.id) }
-    private var completedVisible: Bool { expandedCompleted.contains(thread.id) }
+    private var showsChildren: Bool { !node.children.isEmpty }
+    private var childrenVisible: Bool { expanded.contains(node.id) }
+    private var completedVisible: Bool { expandedCompleted.contains(node.id) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
@@ -40,10 +41,10 @@ struct ThreadBranch: View {
             if childrenVisible {
                 ForEach(openChildren) { child in
                     ThreadBranch(
-                        thread: child,
+                        node: child,
                         depth: depth + 1,
                         selectedID: selectedID,
-                        collapsed: $collapsed,
+                        expanded: $expanded,
                         expandedCompleted: $expandedCompleted,
                         markedIDs: markedIDs,
                         onSelect: onSelect,
@@ -62,10 +63,10 @@ struct ThreadBranch: View {
                     if completedVisible {
                         ForEach(completedChildren) { child in
                             ThreadBranch(
-                                thread: child,
+                                node: child,
                                 depth: depth + 1,
                                 selectedID: selectedID,
-                                collapsed: $collapsed,
+                                expanded: $expanded,
                                 expandedCompleted: $expandedCompleted,
                                 markedIDs: markedIDs,
                                 onSelect: onSelect,
@@ -80,30 +81,30 @@ struct ThreadBranch: View {
         }
     }
 
-    private var isSelected: Bool { selectedID == thread.id }
+    private var isSelected: Bool { selectedID == node.id }
 
-    private var isMarked: Bool { markedIDs.contains(thread.id) }
+    private var isMarked: Bool { markedIDs.contains(node.id) }
 
     private var rowSymbol: String {
         if isMarked { return "xmark.octagon" }
-        return thread.status == .completed ? ThreadStatus.completed.symbol : thread.kind.symbol
+        return node.status == .completed ? ThreadStatus.completed.symbol : node.kind.symbol
     }
 
     private var row: some View {
         HStack(spacing: 4) {
             disclosure
             Button {
-                onSelect(thread.id)
+                onSelect(node.id)
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: rowSymbol)
                         .font(CraftFont.sidebarIcon)
                         .foregroundStyle(isMarked ? AnyShapeStyle(.red) : iconColor)
                         .frame(width: 18)
-                    Text(thread.title.isEmpty ? "Untitled" : thread.title)
+                    Text(node.title)
                         .font(CraftFont.sidebar)
                         .lineLimit(1)
-                        .foregroundStyle(thread.status.isCurrent ? Color.primary : Color.secondary)
+                        .foregroundStyle(node.status.isCurrent ? Color.primary : Color.secondary)
                     Spacer(minLength: 0)
                 }
                 .frame(height: 28)
@@ -121,30 +122,34 @@ struct ThreadBranch: View {
             .accessibilityValue(isMarked ? "Marked for deletion" : "")
             .contextMenu {
                 Button {
-                    app.present(.editThread(thread))
+                    if let thread = TitleIndexStore.thread(node.id, in: context) {
+                        app.present(.editThread(thread))
+                    }
                 } label: {
                     Label("Edit…", systemImage: "pencil")
                 }
                 Button {
-                    app.open(thread, newTab: true)
+                    if let thread = TitleIndexStore.thread(node.id, in: context) {
+                        app.open(thread, newTab: true)
+                    }
                 } label: {
                     Label("Open in New Tab", systemImage: "plus.square.on.square")
                 }
                 Button {
-                    onCreateChild(thread)
+                    onCreateChild(node.id)
                 } label: {
                     Label("New Sub-track", systemImage: "plus")
                 }
                 Divider()
                 if isMarked {
                     Button {
-                        onKeep(thread)
+                        onKeep(node.id)
                     } label: {
                         Label("Keep", systemImage: "arrow.uturn.backward")
                     }
                 }
                 Button(role: .destructive) {
-                    onDelete(thread)
+                    onDelete(node.id)
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
@@ -167,24 +172,24 @@ struct ThreadBranch: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .accessibilityLabel(thread.title.isEmpty ? "Untitled" : thread.title)
+            .accessibilityLabel(node.title)
             .accessibilityValue(childrenVisible ? "Expanded" : "Collapsed")
         }
     }
 
     private func toggleCollapsed() {
-        if collapsed.contains(thread.id) {
-            collapsed.remove(thread.id)
+        if expanded.contains(node.id) {
+            expanded.remove(node.id)
         } else {
-            collapsed.insert(thread.id)
+            expanded.insert(node.id)
         }
     }
 
     private func toggleCompleted() {
-        if expandedCompleted.contains(thread.id) {
-            expandedCompleted.remove(thread.id)
+        if expandedCompleted.contains(node.id) {
+            expandedCompleted.remove(node.id)
         } else {
-            expandedCompleted.insert(thread.id)
+            expandedCompleted.insert(node.id)
         }
     }
 }

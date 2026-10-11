@@ -5,6 +5,7 @@ import SwiftUI
 struct ProjectView: View {
     @Bindable var project: Project
     @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hoverExpanded = false
     @State private var ignoreHoverUntilExit = false
@@ -39,6 +40,9 @@ struct ProjectView: View {
             }
         }
         .clipped()
+        .onAppear {
+            NavTrace.event("project.view appear tab=\(tab.rawValue) thread=\(app.selectedThread?.uuidString ?? "-") note=\(app.selectedNote?.uuidString ?? "-")")
+        }
         .onChange(of: app.projectColumnCollapsed) { _, collapsed in
             cancelHoverTasks()
             hoverExpanded = false
@@ -69,19 +73,19 @@ struct ProjectView: View {
         case .tasks:
             ProjectTasksBoard(project: project)
         case .threads:
-            if let thread = project.threads.first(where: { $0.id == app.selectedThread }) {
+            if let id = app.selectedThread, let thread = TitleIndexStore.thread(id, in: context) {
                 ThreadPage(thread: thread, project: project).id(thread.id)
             } else {
                 ProjectChatCenter(project: project)
             }
         case .notes:
-            if let note = project.notes.first(where: { $0.id == app.selectedNote }) {
+            if let id = app.selectedNote, let note = TitleIndexStore.note(id, in: context) {
                 NotePage(note: note, project: project).id(note.id)
             } else {
                 ProjectChatCenter(project: project)
             }
         case .decisions:
-            if let decision = project.decisions.first(where: { $0.id == app.selectedDecision }) {
+            if let id = app.selectedDecision, let decision = TitleIndexStore.decision(id, in: context) {
                 DecisionPage(decision: decision, project: project).id(decision.id)
             } else {
                 ProjectChatCenter(project: project)
@@ -89,7 +93,7 @@ struct ProjectView: View {
         case .chat:
             ProjectChatCenter(project: project)
         case .runs:
-            if let run = project.runs.first(where: { $0.id == app.selectedRun }) {
+            if let id = app.selectedRun, let run = TitleIndexStore.run(id, in: context) {
                 RunPage(run: run).id(run.id)
             } else {
                 ProjectRunsEmpty(project: project)

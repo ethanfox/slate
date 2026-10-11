@@ -72,6 +72,24 @@ struct TalkMessage: Identifiable, Sendable {
             return nil
         }
     }
+
+    static func conversationTranscript(_ messages: [TalkMessage]) -> String? {
+        var prior = messages
+        if prior.last?.role == .user {
+            prior.removeLast()
+        }
+        let lines = prior.compactMap { message -> String? in
+            let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+            switch message.role {
+            case .user: return "User: \(text)"
+            case .assistant: return "Assistant: \(text)"
+            default: return nil
+            }
+        }
+        guard !lines.isEmpty else { return nil }
+        return lines.joined(separator: "\n\n")
+    }
 }
 
 enum ChatStreamEvent: Sendable, Equatable {
@@ -353,14 +371,47 @@ struct ChatTurnState: Equatable, Sendable {
         startNewText = false
     }
 
+    var joinedText: String {
+        items.compactMap { item -> String? in
+            if case .text(let text) = item.kind { return text }
+            return nil
+        }.joined()
+    }
+
     mutating func appendText(_ text: String) {
         guard !text.isEmpty else { return }
         waitState = .writing
+        if let index = lastTextIndex, case .text(let existing) = items[index].kind {
+            if text == existing || existing.hasPrefix(text) { return }
+            if text.hasPrefix(existing) {
+                items[index].kind = .text(text)
+                startNewText = false
+                return
+            }
+        }
         if !startNewText, case .text(let existing) = items.last?.kind {
             items[items.count - 1].kind = .text(existing + text)
         } else {
             startNewText = false
             items.append(ChatTurnItem(id: UUID().uuidString, kind: .text(text)))
+        }
+    }
+
+    mutating func appendContinuation(_ text: String) {
+        guard !text.isEmpty else { return }
+        waitState = .writing
+        startNewText = false
+        if let index = lastTextIndex, case .text(let existing) = items[index].kind {
+            items[index].kind = .text(existing + text)
+            return
+        }
+        items.append(ChatTurnItem(id: UUID().uuidString, kind: .text(text)))
+    }
+
+    private var lastTextIndex: Int? {
+        items.lastIndex { item in
+            if case .text = item.kind { return true }
+            return false
         }
     }
 

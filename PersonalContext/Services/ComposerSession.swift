@@ -597,7 +597,7 @@ final class ComposerSession {
             existing.isArchived = false
             existing.project = project
             existing.updatedAt = .now
-            try? context.save()
+            try? context.persist()
             app.open(existing)
             close()
             return
@@ -608,7 +608,7 @@ final class ComposerSession {
         conversation.title = String(firstQuestion().prefix(80))
         persistRuntime()
         savedChatID = conversation.id
-        try? context.save()
+        try? context.persist()
         app.open(conversation)
         draftConversationID = nil
         close()
@@ -618,7 +618,7 @@ final class ComposerSession {
         let note = Note(content: conversationTranscript(), project: project, title: String(firstQuestion().prefix(80)))
         context.insert(note)
         project.touch()
-        try? context.save()
+        try? context.persist()
         app.open(note)
         close()
     }
@@ -629,7 +629,7 @@ final class ComposerSession {
         thread.summary = "Saved from composer."
         context.insert(thread)
         project.touch()
-        try? context.save()
+        try? context.persist()
         app.open(thread)
         close()
     }
@@ -640,7 +640,7 @@ final class ComposerSession {
         item.project = project
         context.insert(item)
         project?.touch()
-        try? context.save()
+        try? context.persist()
         app.open(item)
         close()
     }
@@ -731,7 +731,7 @@ final class ComposerSession {
         conversation.isArchived = true
         conversation.title = "Composer"
         context.insert(conversation)
-        try? context.save()
+        try? context.persist()
         draftConversationID = conversation.id
         return conversation
     }
@@ -745,7 +745,7 @@ final class ComposerSession {
         let context = app.container.mainContext
         if let conversation = fetch(Conversation.self, id: id, in: context) {
             context.delete(conversation)
-            try? context.save()
+            try? context.persist()
         }
     }
 

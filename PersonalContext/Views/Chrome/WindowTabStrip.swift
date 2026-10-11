@@ -11,13 +11,9 @@ private enum TabDragSpace {
 
 struct WindowTabStrip: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Query private var projects: [Project]
-    @Query private var notes: [Note]
-    @Query private var threads: [ProjectThread]
-    @Query private var decisions: [Decision]
-    @Query private var conversations: [Conversation]
-    @Query private var runs: [AgentRun]
+    @State private var labels: [UUID: TabLabel] = [:]
     @State private var draggingID: UUID?
     @State private var previewIDs: [UUID]?
     @State private var frames: [UUID: CGRect] = [:]
@@ -44,6 +40,15 @@ struct WindowTabStrip: View {
             }
         }
         .frame(maxWidth: app.windowTabs.count < 2 ? nil : .infinity, alignment: .leading)
+        .onChange(of: app.windowTabs, initial: true) { _, tabs in
+            refreshLabels(tabs)
+        }
+    }
+
+    private func refreshLabels(_ tabs: [WindowTab]) {
+        labels = Dictionary(uniqueKeysWithValues: tabs.map { tab in
+            (tab.id, resolvedLabel(for: tab))
+        })
     }
 
     private var single: some View {
@@ -274,11 +279,11 @@ struct WindowTabStrip: View {
         return app.runCoordinator.running.contains { $0.id == id }
     }
 
-    private func runTitle(_ id: UUID) -> String {
-        runs.first { $0.id == id }?.displayTitle ?? "New run"
+    private func label(for tab: WindowTab) -> TabLabel {
+        labels[tab.id] ?? resolvedLabel(for: tab)
     }
 
-    private func label(for tab: WindowTab) -> TabLabel {
+    private func resolvedLabel(for tab: WindowTab) -> TabLabel {
         switch tab.destination {
         case .home:
             return TabLabel(title: "Home", symbol: "house")
@@ -297,17 +302,17 @@ struct WindowTabStrip: View {
         case .settings:
             return TabLabel(title: "Settings", symbol: "gearshape")
         case .quickAsk(let id):
-            if let conversation = conversations.first(where: { $0.id == id }), !conversation.title.isEmpty {
-                return TabLabel(title: conversation.title, symbol: "bubble.left")
+            if let title = conversationTitle(id), !title.isEmpty {
+                return TabLabel(title: title, symbol: "bubble.left")
             }
             return TabLabel(title: "Quick Ask", symbol: "bubble.left")
         case .project(let id):
-            let project = projects.first { $0.id == id }
+            let project = projectRecord(id)
             let projectName = project?.name.isEmpty == false ? project!.name : "Untitled"
             let projectSymbol = project?.symbol.isEmpty == false ? project!.symbol : "folder"
             switch tab.viewKey {
             case .thread(let threadID):
-                let title = threads.first { $0.id == threadID }?.title
+                let title = threadTitle(threadID)
                 return TabLabel(
                     title: title?.isEmpty == false ? title! : "Untitled",
                     symbol: TrackStyle.symbol,
@@ -315,7 +320,7 @@ struct WindowTabStrip: View {
                     projectSymbol: projectSymbol
                 )
             case .note(let noteID):
-                let title = notes.first { $0.id == noteID }?.displayTitle
+                let title = noteTitle(noteID)
                 return TabLabel(
                     title: title?.isEmpty == false ? title! : "Untitled",
                     symbol: "note.text",
@@ -323,7 +328,7 @@ struct WindowTabStrip: View {
                     projectSymbol: projectSymbol
                 )
             case .decision(let decisionID):
-                let title = decisions.first { $0.id == decisionID }?.title
+                let title = decisionTitle(decisionID)
                 return TabLabel(
                     title: title?.isEmpty == false ? title! : "Untitled",
                     symbol: "checkmark.seal",
@@ -331,7 +336,7 @@ struct WindowTabStrip: View {
                     projectSymbol: projectSymbol
                 )
             case .conversation(let conversationID):
-                let title = conversations.first { $0.id == conversationID }?.title
+                let title = conversationTitle(conversationID)
                 return TabLabel(
                     title: title?.isEmpty == false ? title! : "Chat",
                     symbol: "bubble.left",
@@ -363,6 +368,48 @@ struct WindowTabStrip: View {
                 return TabLabel(title: projectName, symbol: projectSymbol)
             }
         }
+    }
+
+    private func projectRecord(_ id: UUID) -> Project? {
+        let match = id
+        var descriptor = FetchDescriptor<Project>(predicate: #Predicate { $0.id == match })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    private func threadTitle(_ id: UUID) -> String? {
+        let match = id
+        var descriptor = FetchDescriptor<ProjectThread>(predicate: #Predicate { $0.id == match })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first?.title
+    }
+
+    private func noteTitle(_ id: UUID) -> String? {
+        let match = id
+        var descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == match })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first?.displayTitle
+    }
+
+    private func decisionTitle(_ id: UUID) -> String? {
+        let match = id
+        var descriptor = FetchDescriptor<Decision>(predicate: #Predicate { $0.id == match })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first?.title
+    }
+
+    private func conversationTitle(_ id: UUID) -> String? {
+        let match = id
+        var descriptor = FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == match })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first?.title
+    }
+
+    private func runTitle(_ id: UUID) -> String {
+        let match = id
+        var descriptor = FetchDescriptor<AgentRun>(predicate: #Predicate { $0.id == match })
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor).first)?.displayTitle ?? "New run"
     }
 }
 

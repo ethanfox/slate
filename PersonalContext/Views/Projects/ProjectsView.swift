@@ -4,12 +4,13 @@ import SwiftUI
 struct ProjectsView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @Query private var projects: [Project]
-    @State private var pendingDelete: Project?
+    @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "project" })
+    private var projects: [TitleIndex]
+    @State private var pendingDelete: TitleIndex?
     @State private var sort = ProjectSort.updated
     @State private var sortAscending = false
 
-    private var ordered: [Project] {
+    private var ordered: [TitleIndex] {
         projects.sorted { lhs, rhs in
             if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
             return sortAscending ? compare(lhs, rhs) : compare(rhs, lhs)
@@ -30,7 +31,7 @@ struct ProjectsView: View {
                             onSort: sortBy,
                             onOpen: { app.open($0) },
                             onOpenNewTab: { app.open($0, newTab: true) },
-                            onEdit: { app.present(.editProject($0)) },
+                            onEdit: edit,
                             onPin: pin,
                             onDelete: { pendingDelete = $0 }
                         )
@@ -44,18 +45,19 @@ struct ProjectsView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .onAppear { NavTrace.event("projects appear count=\(projects.count)") }
         .alert(
-            "Delete \(pendingDelete?.name ?? "this project")?",
+            "Delete \(pendingDelete?.displayTitle ?? "this project")?",
             isPresented: Binding(
                 get: { pendingDelete != nil },
                 set: { if !$0 { pendingDelete = nil } }
             )
         ) {
             Button("Delete", role: .destructive) {
-                if let project = pendingDelete {
+                if let row = pendingDelete, let project = TitleIndexStore.project(row.id, in: context) {
                     CodeReferenceStore.deleteOwnedReferences(in: project, context: context)
                     context.delete(project)
-                    try? context.save()
+                    try? context.persist()
                 }
                 pendingDelete = nil
             }
@@ -71,7 +73,7 @@ struct ProjectsView: View {
                 Button {
                     app.open(project)
                 } label: {
-                    ProjectCard(project: project)
+                    ProjectCard(row: project)
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
@@ -82,9 +84,9 @@ struct ProjectsView: View {
     }
 
     @ViewBuilder
-    private func projectMenu(_ project: Project) -> some View {
+    private func projectMenu(_ project: TitleIndex) -> some View {
         Button {
-            app.present(.editProject(project))
+            edit(project)
         } label: {
             Label("Edit…", systemImage: "pencil")
         }
@@ -115,19 +117,27 @@ struct ProjectsView: View {
         }
     }
 
-    private func pin(_ project: Project) {
-        project.isPinned.toggle()
-        project.touch()
+    private func edit(_ row: TitleIndex) {
+        if let project = TitleIndexStore.project(row.id, in: context) {
+            app.present(.editProject(project))
+        }
     }
 
-    private func compare(_ lhs: Project, _ rhs: Project) -> Bool {
+    private func pin(_ row: TitleIndex) {
+        guard let project = TitleIndexStore.project(row.id, in: context) else { return }
+        project.isPinned.toggle()
+        project.touch()
+        try? context.persist()
+    }
+
+    private func compare(_ lhs: TitleIndex, _ rhs: TitleIndex) -> Bool {
         switch sort {
         case .name:
-            lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+            lhs.displayTitle.localizedCaseInsensitiveCompare(rhs.displayTitle) == .orderedAscending
         case .status:
-            lhs.status.label.localizedCaseInsensitiveCompare(rhs.status.label) == .orderedAscending
+            lhs.projectStatus.label.localizedCaseInsensitiveCompare(rhs.projectStatus.label) == .orderedAscending
         case .updated:
-            lhs.lastActivity < rhs.lastActivity
+            lhs.updatedAt < rhs.updatedAt
         case .created:
             lhs.createdAt < rhs.createdAt
         }
@@ -135,15 +145,15 @@ struct ProjectsView: View {
 }
 
 private struct ProjectsTable: View {
-    var projects: [Project]
+    var projects: [TitleIndex]
     var sort: ProjectSort
     var sortAscending: Bool
     var onSort: (ProjectSort) -> Void
-    var onOpen: (Project) -> Void
-    var onOpenNewTab: (Project) -> Void
-    var onEdit: (Project) -> Void
-    var onPin: (Project) -> Void
-    var onDelete: (Project) -> Void
+    var onOpen: (TitleIndex) -> Void
+    var onOpenNewTab: (TitleIndex) -> Void
+    var onEdit: (TitleIndex) -> Void
+    var onPin: (TitleIndex) -> Void
+    var onDelete: (TitleIndex) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -215,17 +225,17 @@ private struct ProjectsTable: View {
 }
 
 private struct ProjectTableRow: View {
-    var project: Project
+    var project: TitleIndex
     @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 16) {
             HStack(spacing: 8) {
-                Image(systemName: project.symbol)
+                Image(systemName: project.symbol.isEmpty ? "folder" : project.symbol)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .frame(width: 18, height: 18)
-                Text(project.displayName)
+                Text(project.displayTitle)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
                 if project.isPinned {
@@ -236,12 +246,12 @@ private struct ProjectTableRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(project.status.label)
+            Text(project.projectStatus.label)
                 .font(CraftFont.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 88, alignment: .leading)
 
-            Text(project.lastActivity.relativeLabel)
+            Text(project.updatedAt.relativeLabel)
                 .font(CraftFont.caption)
                 .foregroundStyle(.tertiary)
                 .frame(width: 110, alignment: .trailing)
@@ -264,29 +274,29 @@ private struct ProjectTableRow: View {
 }
 
 private struct ProjectCard: View {
-    var project: Project
+    var row: TitleIndex
     @State private var hovering = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: project.symbol)
+                Image(systemName: row.symbol.isEmpty ? "folder" : row.symbol)
                     .font(.system(size: 18))
                     .foregroundStyle(.secondary)
                     .frame(width: 28, height: 28)
                 Spacer(minLength: 0)
-                if project.isPinned {
+                if row.isPinned {
                     Image(systemName: "pin.fill")
                         .font(.system(size: 9))
                         .foregroundStyle(.tertiary)
                 }
             }
-            Text(project.displayName)
+            Text(row.displayTitle)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
             Spacer(minLength: 0)
-            Text("\(project.status.label) · \(project.lastActivity.relativeLabel)")
+            Text("\(row.projectStatus.label) · \(row.updatedAt.relativeLabel)")
                 .font(CraftFont.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

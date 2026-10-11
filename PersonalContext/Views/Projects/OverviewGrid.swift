@@ -348,63 +348,23 @@ struct OverviewCanvas: View {
 
     var body: some View {
         GeometryReader { geo in
-            let paneWidth = geo.size.width
-            let measureWidth = Self.measureWidth(paneWidth: paneWidth, fraction: project.overviewWidth.fraction)
-            let columns = OverviewGridMetrics.columns(for: measureWidth)
-            let plates = OverviewPlate.moving(project.overviewPlates, id: draggingID, before: hoverID)
-
-            ScrollView(.vertical) {
-                ZStack(alignment: .topLeading) {
-                    OverviewPackLayout(columns: columns, width: measureWidth) {
-                        ForEach(plates) { plate in
-                            OverviewPlateView(
-                                project: project,
-                                plate: plate,
-                                editing: app.inspectorOpen,
-                                isSelected: app.selectedOverviewPlate == plate.id,
-                                isGhost: draggingID == plate.id,
-                                onSelect: { app.selectOverviewPlate(plate.id) },
-                                onClear: { app.selectOverviewPlate(nil) },
-                                onSize: { project.setOverviewPlate(plate.id, size: $0) },
-                                onDelete: { pendingDelete = plate.id },
-                                onFrame: { frames[plate.id] = $0 },
-                                onDragChanged: { dragChanged(plate.id, $0) },
-                                onDragEnded: commitDrag
-                            )
-                            .layoutValue(key: OverviewSpanKey.self, value: plate.size.span(in: columns))
-                            .transition(.opacity.combined(with: .scale(0.96)))
-                        }
-                    }
-                    .frame(width: measureWidth)
-                    .animation(gridMotion, value: hoverID)
-                    .animation(gridMotion, value: project.overviewLayoutSignature)
-
-                    if let draggingID, let plate = project.overviewPlates.first(where: { $0.id == draggingID }) {
-                        OverviewWidgetFace(project: project, plate: plate, selected: true, interactive: false)
-                            .frame(width: max(liftFrame.width, 1), height: max(liftFrame.height, 1))
-                            .offset(
-                                x: liftFrame.minX + dragTranslation.width,
-                                y: liftFrame.minY + dragTranslation.height
-                            )
-                            .compositingGroup()
-                            .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
-                            .allowsHitTesting(false)
-                    }
-                }
-                .coordinateSpace(name: OverviewDragSpace.name)
-                .padding(.horizontal, 32)
-                .padding(.vertical, 28)
-                .frame(width: paneWidth, alignment: .center)
-                .animation(gridMotion, value: project.overviewWidth)
-                .animation(gridMotion, value: measureWidth)
-                .animation(gridMotion, value: app.inspectorOpen)
-            }
-            .background {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture { app.selectOverviewPlate(nil) }
-            }
-            .scrollContentBackground(.hidden)
+            OverviewCanvasScroll(
+                project: project,
+                paneWidth: geo.size.width,
+                motion: gridMotion,
+                plates: OverviewPlate.moving(project.overviewPlates, id: draggingID, before: hoverID),
+                draggingID: draggingID,
+                liftFrame: liftFrame,
+                dragTranslation: dragTranslation,
+                hoverID: hoverID,
+                onSelect: { app.selectOverviewPlate($0) },
+                onClear: { app.selectOverviewPlate(nil) },
+                onSize: { project.setOverviewPlate($0, size: $1) },
+                onDelete: { pendingDelete = $0 },
+                onFrame: { frames[$0] = $1 },
+                onDragChanged: dragChanged,
+                onDragEnded: commitDrag
+            )
         }
         .background {
             Button("Deselect widget") { app.selectOverviewPlate(nil) }
@@ -414,6 +374,7 @@ struct OverviewCanvas: View {
                 .accessibilityHidden(true)
         }
         .clipped()
+        .onAppear { NavTrace.event("overview.canvas appear plates=\(project.overviewPlates.count)") }
         .onChange(of: app.inspectorOpen) { _, open in
             if !open {
                 clearDrag()
@@ -484,10 +445,89 @@ struct OverviewCanvas: View {
         }
     }
 
-    private static func measureWidth(paneWidth: CGFloat, fraction: CGFloat) -> CGFloat {
+    static func measureWidth(paneWidth: CGFloat, fraction: CGFloat) -> CGFloat {
         guard paneWidth > 64 else { return OverviewGridMetrics.minCell }
         let available = paneWidth - 64
         return min(available, max(OverviewGridMetrics.minCell, available * fraction))
+    }
+}
+
+private struct OverviewCanvasScroll: View {
+    @Bindable var project: Project
+    @Environment(AppModel.self) private var app
+    var paneWidth: CGFloat
+    var motion: Animation?
+    var plates: [OverviewPlate]
+    var draggingID: UUID?
+    var liftFrame: CGRect
+    var dragTranslation: CGSize
+    var hoverID: UUID?
+    var onSelect: (UUID) -> Void
+    var onClear: () -> Void
+    var onSize: (UUID, OverviewWidgetSize) -> Void
+    var onDelete: (UUID) -> Void
+    var onFrame: (UUID, CGRect) -> Void
+    var onDragChanged: (UUID, DragGesture.Value) -> Void
+    var onDragEnded: () -> Void
+
+    var body: some View {
+        let measureWidth = OverviewCanvas.measureWidth(paneWidth: paneWidth, fraction: project.overviewWidth.fraction)
+        let columns = OverviewGridMetrics.columns(for: measureWidth)
+        ScrollView(.vertical) {
+            canvas(measureWidth: measureWidth, columns: columns)
+                .coordinateSpace(name: OverviewDragSpace.name)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 28)
+                .frame(width: paneWidth, alignment: .center)
+                .animation(motion, value: project.overviewWidth)
+                .animation(motion, value: measureWidth)
+                .animation(motion, value: app.inspectorOpen)
+        }
+        .background {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onClear)
+        }
+        .scrollContentBackground(.hidden)
+    }
+
+    private func canvas(measureWidth: CGFloat, columns: Int) -> some View {
+        ZStack(alignment: .topLeading) {
+            OverviewPackLayout(columns: columns, width: measureWidth) {
+                ForEach(plates) { plate in
+                    OverviewPlateView(
+                        project: project,
+                        plate: plate,
+                        editing: app.inspectorOpen,
+                        isSelected: app.selectedOverviewPlate == plate.id,
+                        isGhost: draggingID == plate.id,
+                        onSelect: { onSelect(plate.id) },
+                        onClear: onClear,
+                        onSize: { onSize(plate.id, $0) },
+                        onDelete: { onDelete(plate.id) },
+                        onFrame: { onFrame(plate.id, $0) },
+                        onDragChanged: { onDragChanged(plate.id, $0) },
+                        onDragEnded: onDragEnded
+                    )
+                    .layoutValue(key: OverviewSpanKey.self, value: plate.size.span(in: columns))
+                }
+            }
+            .frame(width: measureWidth)
+            .animation(motion, value: hoverID)
+            .animation(motion, value: project.overviewLayoutSignature)
+
+            if let draggingID, let plate = project.overviewPlates.first(where: { $0.id == draggingID }) {
+                OverviewWidgetFace(project: project, plate: plate, selected: true, interactive: false)
+                    .frame(width: max(liftFrame.width, 1), height: max(liftFrame.height, 1))
+                    .offset(
+                        x: liftFrame.minX + dragTranslation.width,
+                        y: liftFrame.minY + dragTranslation.height
+                    )
+                    .compositingGroup()
+                    .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 }
 

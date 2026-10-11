@@ -195,6 +195,33 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertFalse(later.contains("Fix refresh after wake (id \(refresh), blocked)"))
     }
 
+    func testOpeningPromptIncludesPriorTurns() {
+        let history = [
+            TalkMessage(role: .user, text: "What is a Space?"),
+            TalkMessage(role: .assistant, text: "A Space is a home for one life area."),
+            TalkMessage(role: .user, text: "Lock that.")
+        ]
+        let transcript = TalkMessage.conversationTranscript(history)
+        let opening = ContextBuilder.prompt(
+            userText: "Lock that.",
+            context: "",
+            opening: true,
+            transcript: transcript
+        )
+        XCTAssertTrue(opening.contains("<conversation>"))
+        XCTAssertTrue(opening.contains("User: What is a Space?"))
+        XCTAssertTrue(opening.contains("Assistant: A Space is a home for one life area."))
+        XCTAssertTrue(opening.contains("Lock that."))
+
+        let resumed = ContextBuilder.prompt(
+            userText: "Lock that.",
+            context: "",
+            opening: false,
+            transcript: transcript
+        )
+        XCTAssertFalse(resumed.contains("<conversation>"))
+    }
+
     @MainActor
     func testTrackFirstRulesRemainAfterOpeningTurn() throws {
         let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)

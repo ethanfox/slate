@@ -62,6 +62,13 @@
 		8F3A1C2E4B5D60718293A002 /* MCPToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */; };
 		A11C0DE100000020 /* Tools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75926FA04CD11DF7C22B424B /* Tools.swift */; };
 		A11C0DE100000022 /* StoreSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000021 /* StoreSyncTests.swift */; };
+		T17E010000000002 /* TitleIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = T17E010000000001 /* TitleIndex.swift */; };
+		T17E010000000003 /* TitleIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = T17E010000000001 /* TitleIndex.swift */; };
+		T17E010000000005 /* TitleIndexStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = T17E010000000004 /* TitleIndexStore.swift */; };
+		T17E010000000006 /* TitleIndexStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = T17E010000000004 /* TitleIndexStore.swift */; };
+		T17E010000000008 /* TitleIndexStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T17E010000000007 /* TitleIndexStoreTests.swift */; };
+		T17E01000000000A /* NavTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = T17E010000000009 /* NavTrace.swift */; };
+		T17E01000000000B /* NavTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = T17E010000000009 /* NavTrace.swift */; };
 		8F3A1C2E4B5D60718293A005 /* HarborEvalFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A1C2E4B5D60718293A004 /* HarborEvalFixture.swift */; };
 		8F3A1C2E4B5D60718293A008 /* TrackFirstEval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A1C2E4B5D60718293A007 /* TrackFirstEval.swift */; };
 		8F3A1C2E4B5D60718293A00A /* TrackFirstEvalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A1C2E4B5D60718293A009 /* TrackFirstEvalTests.swift */; };
@@ -390,6 +397,10 @@
 		DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStoreTests.swift; sourceTree = "<group>"; };
 		8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPToolsTests.swift; sourceTree = "<group>"; };
 		A11C0DE100000021 /* StoreSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreSyncTests.swift; sourceTree = "<group>"; };
+		T17E010000000001 /* TitleIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleIndex.swift; sourceTree = "<group>"; };
+		T17E010000000004 /* TitleIndexStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleIndexStore.swift; sourceTree = "<group>"; };
+		T17E010000000007 /* TitleIndexStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleIndexStoreTests.swift; sourceTree = "<group>"; };
+		T17E010000000009 /* NavTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavTrace.swift; sourceTree = "<group>"; };
 		8F3A1C2E4B5D60718293A004 /* HarborEvalFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarborEvalFixture.swift; sourceTree = "<group>"; };
 		8F3A1C2E4B5D60718293A006 /* track-first-eval.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = Scenarios/track-first-eval.md; sourceTree = "<group>"; };
 		8F3A1C2E4B5D60718293A007 /* TrackFirstEval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackFirstEval.swift; sourceTree = "<group>"; };
@@ -656,6 +667,7 @@
 				5077C7D2C8E53970BDE445D0 /* AssociationService.swift */,
 				8A1C2E3F4B5D6E708192A3B4 /* TaskStore.swift */,
 				B81A0C1D2E3F405162738A04 /* RunStore.swift */,
+				T17E010000000004 /* TitleIndexStore.swift */,
 				A91E2F3A4B5C6D7E8F901001 /* AgentToolGateway.swift */,
 				A91E2F3A4B5C6D7E8F901003 /* AgentRuntime.swift */,
 				E1A2B3C4D5E6F708192A3B01 /* ChatEngine.swift */,
@@ -673,6 +685,7 @@
 				F11E5704A0000007 /* AttachmentCapabilities.swift */,
 				F11E5704A0000008 /* AttachmentRouting.swift */,
 				F11E5704A0000009 /* GenericChatProvider.swift */,
+				T17E010000000009 /* NavTrace.swift */,
 				E1A2B3C4D5E6F708192A3B07 /* DraftTrace.swift */,
 				B81A0C1D2E3F405162738A07 /* RunToolPolicy.swift */,
 				C0DE1A2B3C4D5E6F70819204 /* CodeReferenceStore.swift */,
@@ -835,6 +848,7 @@
 			isa = PBXGroup;
 			children = (
 				E0C540C9CE3A784CC7E9EBD1 /* Records.swift */,
+				T17E010000000001 /* TitleIndex.swift */,
 				F11E5704A0000001 /* StoredAsset.swift */,
 				B81A0C1D2E3F405162738A01 /* AgentRun.swift */,
 				C0DE1A2B3C4D5E6F70819201 /* CodeReference.swift */,
@@ -915,6 +929,7 @@
 				DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */,
 				8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */,
 				A11C0DE100000021 /* StoreSyncTests.swift */,
+				T17E010000000007 /* TitleIndexStoreTests.swift */,
 				A11C0DE100000013 /* MCPConnectionTests.swift */,
 				B20A01000000000000000015 /* BrowserTests.swift */,
 				F11E5704A0000034 /* ImportToolsTests.swift */,
@@ -1126,6 +1141,9 @@
 				1F2E3D4C5B6A798867564534 /* AssociationService.swift in Sources */,
 				D73D56957AE1419967DCB01B /* ContextBuilder.swift in Sources */,
 				7D9F8C63712BBB12934A5FDE /* Records.swift in Sources */,
+				T17E010000000003 /* TitleIndex.swift in Sources */,
+				T17E010000000006 /* TitleIndexStore.swift in Sources */,
+				T17E01000000000B /* NavTrace.swift in Sources */,
 				C47AD6C7A2C240B194DCC9B1 /* Store.swift in Sources */,
 				F11E5704C0000001 /* StoredAsset.swift in Sources */,
 				F11E5704C0000006 /* AttachmentLimits.swift in Sources */,
@@ -1166,6 +1184,7 @@
 				E07C8D9F3A4B5C6D7E8F901A /* TaskStoreTests.swift in Sources */,
 				8F3A1C2E4B5D60718293A002 /* MCPToolsTests.swift in Sources */,
 				A11C0DE100000022 /* StoreSyncTests.swift in Sources */,
+				T17E010000000008 /* TitleIndexStoreTests.swift in Sources */,
 				B20A01000000000000000016 /* BrowserTests.swift in Sources */,
 				A11C0DE100000014 /* MCPConnectionTests.swift in Sources */,
 				F11E5704B0000034 /* ImportToolsTests.swift in Sources */,
@@ -1291,6 +1310,8 @@
 				3B1D4CE503CCAE5E82A5A16C /* QuickAskHost.swift in Sources */,
 				A5A73498891F3755C5AEFD81 /* RecordRow.swift in Sources */,
 				C3F5F2636A9119A4EC956BB3 /* Records.swift in Sources */,
+				T17E010000000002 /* TitleIndex.swift in Sources */,
+				T17E010000000005 /* TitleIndexStore.swift in Sources */,
 				B81A0C1D2E3F405162738A02 /* AgentRun.swift in Sources */,
 				B81A0C1D2E3F405162738A05 /* RunStore.swift in Sources */,
 				A91E2F3A4B5C6D7E8F901002 /* AgentToolGateway.swift in Sources */,
@@ -1314,6 +1335,7 @@
 				F11E5704B000000A /* ComposerAttachments.swift in Sources */,
 				F11E5704B000000B /* SettingsCompatiblePage.swift in Sources */,
 				E1A2B3C4D5E6F708192A3B08 /* DraftTrace.swift in Sources */,
+				T17E01000000000A /* NavTrace.swift in Sources */,
 				B81A0C1D2E3F405162738A08 /* RunToolPolicy.swift in Sources */,
 				B81A0C1D2E3F405162738A0A /* RunGateway.swift in Sources */,
 				B81A0C1D2E3F405162738A0C /* RunCoordinator.swift in Sources */,

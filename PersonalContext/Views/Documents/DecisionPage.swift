@@ -70,6 +70,7 @@ struct DecisionPage: View {
         }
         }
         .objectFindable(id: decision.id, fields: findFields)
+        .onAppear { NavTrace.event("decision appear id=\(decision.id)") }
         .onChange(of: decision.title) { _, _ in project.touch() }
         .onChange(of: decision.decision) { _, _ in project.touch() }
         .onChange(of: decision.rationale) { _, _ in project.touch() }
@@ -92,7 +93,7 @@ struct DecisionPage: View {
         guard let mark = DeletionMarks.existing(for: decision.id, in: project) else { return }
         DeletionMarks.keep(mark, in: context)
         project.touch()
-        try? context.save()
+        try? context.persist()
     }
 
     private func deleteMarked() {
@@ -100,7 +101,7 @@ struct DecisionPage: View {
         DeletionMarks.remove(targetingIDs: [decision.id], in: context)
         context.delete(decision)
         project.touch()
-        try? context.save()
+        try? context.persist()
     }
 
     private var supersededDecision: Decision? {

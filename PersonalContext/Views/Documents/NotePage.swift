@@ -54,6 +54,7 @@ struct NotePage: View {
         }
         }
         .objectFindable(id: note.id, fields: findFields)
+        .onAppear { NavTrace.event("note appear id=\(note.id)") }
         .onChange(of: note.title) { _, _ in touch() }
         .onChange(of: note.content) { _, _ in touch() }
     }
@@ -82,7 +83,7 @@ struct NotePage: View {
         guard let mark = DeletionMarks.existing(for: note.id, in: project) else { return }
         DeletionMarks.keep(mark, in: context)
         project.touch()
-        try? context.save()
+        try? context.persist()
     }
 
     private func deleteMarked() {
@@ -90,6 +91,6 @@ struct NotePage: View {
         DeletionMarks.remove(targetingIDs: [note.id], in: context)
         context.delete(note)
         project.touch()
-        try? context.save()
+        try? context.persist()
     }
 }

@@ -109,33 +109,33 @@ struct SettingsTagsPage: View {
                 if let link = row.noteLink {
                     Button("Drop link") {
                         AssociationService.dropLink(link, from: row.item, in: context)
-                        try? context.save()
+                        try? context.persist()
                     }
                     Menu("Replace with…") {
                         ForEach(notes) { note in
                             Button(note.displayTitle) {
                                 _ = AssociationService.replaceNote(link, with: note, on: row.item, in: context)
-                                try? context.save()
+                                try? context.persist()
                             }
                         }
                     }
                 } else if let link = row.trackLink {
                     Button("Drop link") {
                         AssociationService.dropLink(link, from: row.item, in: context)
-                        try? context.save()
+                        try? context.persist()
                     }
                     Menu("Replace with…") {
                         ForEach(tracks) { thread in
                             Button(thread.title.isEmpty ? "Untitled" : thread.title) {
                                 _ = AssociationService.replaceTrack(link, with: thread, on: row.item, in: context)
-                                try? context.save()
+                                try? context.persist()
                             }
                         }
                     }
                 } else {
                     Button("Delete Membrae record", role: .destructive) {
                         context.delete(row.item)
-                        try? context.save()
+                        try? context.persist()
                     }
                 }
             }

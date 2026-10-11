@@ -46,7 +46,7 @@ struct NewProjectSheet: View {
         guard !trimmed.isEmpty else { return }
         let project = Project(name: trimmed, symbol: symbol, summary: summary.trimmingCharacters(in: .whitespacesAndNewlines))
         context.insert(project)
-        try? context.save()
+        try? context.persist()
         app.open(project, tab: .overview)
         modalDismiss()
     }

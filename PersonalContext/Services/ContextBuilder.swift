@@ -135,7 +135,13 @@ enum ContextBuilder {
         return lines.joined(separator: "\n")
     }
 
-    static func prompt(userText: String, context: String, opening: Bool, focusedThread: ProjectThread? = nil) -> String {
+    static func prompt(
+        userText: String,
+        context: String,
+        opening: Bool,
+        focusedThread: ProjectThread? = nil,
+        transcript: String? = nil
+    ) -> String {
         var parts: [String] = [responseStyle]
         if opening {
             parts.append("""
@@ -163,6 +169,15 @@ enum ContextBuilder {
             <project-context>
             \(context)
             </project-context>
+            """)
+        }
+        if opening, let transcript, !transcript.isEmpty {
+            parts.append("""
+            This is a continued conversation. Earlier turns are below. Answer the latest user message.
+
+            <conversation>
+            \(transcript)
+            </conversation>
             """)
         }
         parts.append(userText)

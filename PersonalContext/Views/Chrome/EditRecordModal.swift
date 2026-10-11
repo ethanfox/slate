@@ -83,7 +83,7 @@ struct EditProjectModal: View {
         project.isPinned = isPinned
         project.touch()
         TaskStore.syncProjectStatus(project, in: context)
-        try? context.save()
+        try? context.persist()
         modalDismiss()
     }
 }
@@ -135,7 +135,7 @@ struct EditConversationModal: View {
         conversation.isArchived = isArchived
         conversation.updatedAt = .now
         conversation.project?.touch()
-        try? context.save()
+        try? context.persist()
         modalDismiss()
     }
 }
@@ -249,7 +249,7 @@ struct EditThreadModal: View {
             return
         }
         thread.project?.touch()
-        try? context.save()
+        try? context.persist()
         modalDismiss()
     }
 
@@ -334,7 +334,7 @@ struct EditDecisionModal: View {
         decision.decision = decisionText.trimmingCharacters(in: .whitespacesAndNewlines)
         decision.rationale = rationale.trimmingCharacters(in: .whitespacesAndNewlines)
         decision.project?.touch()
-        try? context.save()
+        try? context.persist()
         modalDismiss()
     }
 }
@@ -411,7 +411,7 @@ struct EditNoteModal: View {
             return
         }
         note.project?.touch()
-        try? context.save()
+        try? context.persist()
         modalDismiss()
     }
 

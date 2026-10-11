@@ -208,7 +208,7 @@ struct SaveSheet: View {
             app.flash("Decision saved")
         }
         target.touch()
-        try? context.save()
+        try? context.persist()
         modalDismiss()
     }
 }

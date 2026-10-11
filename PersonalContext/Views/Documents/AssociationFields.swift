@@ -80,7 +80,7 @@ struct AssociationFields: View {
             ForEach(projects) { project in
                 Button {
                     AssociationService.assignUserProject(project, on: item)
-                    try? context.save()
+                    try? context.persist()
                 } label: {
                     Label(project.displayName, systemImage: projectIcon(project))
                 }
@@ -179,51 +179,51 @@ struct AssociationFields: View {
 
     private func clearProject() {
         AssociationService.clearProject(from: item)
-        try? context.save()
+        try? context.persist()
     }
 
     private func unlink(_ thread: ProjectThread) {
         AssociationService.unlink(threadID: thread.id, from: item, in: context)
-        try? context.save()
+        try? context.persist()
     }
 
     private func unlink(_ note: Note) {
         AssociationService.unlink(noteID: note.id, from: item, in: context)
-        try? context.save()
+        try? context.persist()
     }
 
     private func toggle(_ thread: ProjectThread) {
         if item.trackLinks.contains(where: { $0.threadID == thread.id }) {
             AssociationService.unlink(threadID: thread.id, from: item, in: context)
-            try? context.save()
+            try? context.persist()
             return
         }
         if let conflict = AssociationService.link(thread: thread, onto: item) {
             onConflict(conflict) {
                 AssociationService.switchProject(conflict.incoming, on: item)
                 AssociationService.applyLink(thread: thread, onto: item)
-                try? context.save()
+                try? context.persist()
             }
             return
         }
-        try? context.save()
+        try? context.persist()
     }
 
     private func toggle(_ note: Note) {
         if linkedNoteIDs.contains(note.id) {
             AssociationService.unlink(noteID: note.id, from: item, in: context)
-            try? context.save()
+            try? context.persist()
             return
         }
         if let conflict = AssociationService.link(note: note, onto: item) {
             onConflict(conflict) {
                 AssociationService.switchProject(conflict.incoming, on: item)
                 AssociationService.applyLink(note: note, onto: item)
-                try? context.save()
+                try? context.persist()
             }
             return
         }
-        try? context.save()
+        try? context.persist()
     }
 
     private func createNote() {
@@ -234,7 +234,7 @@ struct AssociationFields: View {
         context.insert(note)
         AssociationService.applyLink(note: note, onto: item)
         project.touch()
-        try? context.save()
+        try? context.persist()
     }
 }
 

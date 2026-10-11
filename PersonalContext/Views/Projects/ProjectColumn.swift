@@ -16,13 +16,14 @@ struct ProjectColumn: View {
     var compact: Bool
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @State private var collapsed: Set<UUID> = []
+    @Query private var index: [TitleIndex]
+    @State private var expanded: Set<UUID> = []
     @State private var expandedCompleted: Set<UUID> = []
     @State private var showingAllChats = false
     @State private var showingAllRuns = false
-    @State private var pendingThreadDelete: ProjectThread?
-    @State private var pendingNoteDelete: Note?
-    @State private var pendingDecisionDelete: Decision?
+    @State private var pendingThreadDelete: UUID?
+    @State private var pendingNoteDelete: UUID?
+    @State private var pendingDecisionDelete: UUID?
     @State private var decisionQuery = ""
     @State private var historyExpanded = false
     @State private var collapsedActiveGroups: Set<String> = []
@@ -31,27 +32,44 @@ struct ProjectColumn: View {
     init(project: Project, compact: Bool) {
         self.project = project
         self.compact = compact
-        _collapsed = State(initialValue: Set(project.threads.filter { !$0.children.isEmpty }.map(\.id)))
+        let key = project.id.uuidString.lowercased()
+        _index = Query(
+            filter: #Predicate<TitleIndex> { $0.projectIDString == key },
+            sort: \TitleIndex.updatedAt,
+            order: .reverse
+        )
     }
 
     private var tab: ProjectTab { app.tab(for: project.id) }
 
-    private var conversations: [Conversation] {
-        project.conversations.filter { !$0.isArchived }.sorted { $0.updatedAt > $1.updatedAt }
+    private var conversations: [TitleIndex] {
+        index.filter { $0.kind == .chat && !$0.isArchived }
     }
 
-    private var projectRuns: [AgentRun] {
-        project.runs.sorted { $0.updatedAt > $1.updatedAt }
+    private var projectRuns: [TitleIndex] {
+        index.filter { $0.kind == .run }
     }
 
-    private var notes: [Note] {
-        project.notes.sorted { $0.updatedAt > $1.updatedAt }
+    private var notes: [TitleIndex] {
+        index.filter { $0.kind == .note }
     }
 
-    private var decisionLayout: DecisionListLayout.Snapshot {
+    private var trackRoots: [TrackNode] {
+        TitleIndexStore.trackTree(from: index)
+    }
+
+    private var decisionLayout: DecisionListLayout.TitleSnapshot {
         DecisionListLayout.snapshot(
-            decisions: project.decisions,
-            roots: project.rootThreads,
+            decisions: index.filter { $0.kind == .decision }.map {
+                DecisionListLayout.TitleDecision(
+                    id: $0.id,
+                    title: $0.displayTitle,
+                    status: $0.decisionStatus,
+                    trackID: $0.parentID,
+                    createdAt: $0.createdAt
+                )
+            },
+            tracks: trackRoots,
             query: decisionQuery
         )
     }
@@ -59,11 +77,11 @@ struct ProjectColumn: View {
     private var showsDecisionHistory: Bool {
         if historyExpanded || decisionLayout.revealsHistory { return true }
         guard let id = app.selectedDecision else { return false }
-        return project.decisions.contains { $0.id == id && $0.status == .superseded }
+        return index.contains { $0.id == id && $0.kind == .decision && $0.decisionStatus == .superseded }
     }
 
     private var markedIDs: Set<UUID> {
-        Set(project.deletionMarks.map(\.targetID))
+        Set(index.filter(\.isMarked).map(\.id))
     }
 
     var body: some View {
@@ -75,16 +93,16 @@ struct ProjectColumn: View {
             }
         }
         .alert(
-            "Delete \(pendingThreadDelete?.title ?? "this track")?",
+            "Delete \(index.first { $0.id == pendingThreadDelete }?.displayTitle ?? "this track")?",
             isPresented: Binding(get: { pendingThreadDelete != nil }, set: { if !$0 { pendingThreadDelete = nil } })
         ) {
             Button("Delete", role: .destructive) {
-                if let thread = pendingThreadDelete {
+                if let id = pendingThreadDelete, let thread = TitleIndexStore.thread(id, in: context) {
                     if app.selectedThread == thread.id { app.selectedThread = thread.parent?.id }
                     DeletionMarks.remove(targetingIDs: thread.deletionTargetIDs, in: context)
                     context.delete(thread)
                     project.touch()
-                    try? context.save()
+                    try? context.persist()
                 }
                 pendingThreadDelete = nil
             }
@@ -97,12 +115,12 @@ struct ProjectColumn: View {
             isPresented: Binding(get: { pendingNoteDelete != nil }, set: { if !$0 { pendingNoteDelete = nil } })
         ) {
             Button("Delete", role: .destructive) {
-                if let note = pendingNoteDelete {
+                if let id = pendingNoteDelete, let note = TitleIndexStore.note(id, in: context) {
                     if app.selectedNote == note.id { app.selectedNote = nil }
                     DeletionMarks.remove(targetingIDs: [note.id], in: context)
                     context.delete(note)
                     project.touch()
-                    try? context.save()
+                    try? context.persist()
                 }
                 pendingNoteDelete = nil
             }
@@ -113,16 +131,21 @@ struct ProjectColumn: View {
             isPresented: Binding(get: { pendingDecisionDelete != nil }, set: { if !$0 { pendingDecisionDelete = nil } })
         ) {
             Button("Delete", role: .destructive) {
-                if let decision = pendingDecisionDelete {
+                if let id = pendingDecisionDelete, let decision = TitleIndexStore.decision(id, in: context) {
                     if app.selectedDecision == decision.id { app.selectedDecision = nil }
                     DeletionMarks.remove(targetingIDs: [decision.id], in: context)
                     context.delete(decision)
                     project.touch()
-                    try? context.save()
+                    try? context.persist()
                 }
                 pendingDecisionDelete = nil
             }
             Button("Cancel", role: .cancel) { pendingDecisionDelete = nil }
+        }
+        .onAppear {
+            NavTrace.event(
+                "project.column appear compact=\(compact) rows=\(index.count) chats=\(conversations.count) tracks=\(trackRoots.count) notes=\(notes.count)"
+            )
         }
         .onChange(of: project.id, initial: true) { _, _ in
             showingAllChats = false
@@ -194,11 +217,11 @@ struct ProjectColumn: View {
                                     title: run.displayTitle,
                                     systemImage: "play.circle",
                                     isSelected: tab == .runs && app.selectedRun == run.id,
-                                    isBusy: run.status.isActive
+                                    isBusy: run.isBusy
                                 )
                             }
                             .buttonStyle(.plain)
-                            .contextMenu { RunContextMenu(run: run) }
+                            .contextMenu { RunTitleMenu(row: run) }
                         }
                         if projectRuns.count > ProjectColumnMetrics.chatPreviewLimit {
                             ColumnShowMoreButton(
@@ -213,10 +236,9 @@ struct ProjectColumn: View {
                     header(.chats, add: newChat)
                     if isSectionOpen(.chats) {
                         ForEach(visibleConversations) { conversation in
-                            ConversationRow(
-                                conversation: conversation,
-                                isSelected: tab == .chat && app.selectedConversation == conversation.id,
-                                isMarkedForDeletion: markedIDs.contains(conversation.id)
+                            ConversationTitleRow(
+                                row: conversation,
+                                isSelected: tab == .chat && app.selectedConversation == conversation.id
                             ) {
                                 app.open(conversation)
                             }
@@ -233,17 +255,17 @@ struct ProjectColumn: View {
 
                     header(.tracks, add: { createThread(parent: nil) })
                     if isSectionOpen(.tracks) {
-                        ForEach(project.rootThreads) { thread in
+                        ForEach(trackRoots) { node in
                             ThreadBranch(
-                                thread: thread,
+                                node: node,
                                 depth: 0,
                                 selectedID: tab == .threads ? app.selectedThread : nil,
-                                collapsed: $collapsed,
+                                expanded: $expanded,
                                 expandedCompleted: $expandedCompleted,
                                 markedIDs: markedIDs,
                                 onSelect: { id in
-                                    if let thread = project.threads.first(where: { $0.id == id }) {
-                                        app.open(thread)
+                                    if let row = index.first(where: { $0.id == id }) {
+                                        app.open(row)
                                     }
                                 },
                                 onCreateChild: { createThread(parent: $0) },
@@ -263,13 +285,15 @@ struct ProjectColumn: View {
                                     title: note.displayTitle,
                                     systemImage: "note.text",
                                     isSelected: tab == .notes && app.selectedNote == note.id,
-                                    isMarkedForDeletion: markedIDs.contains(note.id)
+                                    isMarkedForDeletion: note.isMarked
                                 )
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button {
-                                    app.present(.editNote(note))
+                                    if let record = TitleIndexStore.note(note.id, in: context) {
+                                        app.present(.editNote(record))
+                                    }
                                 } label: {
                                     Label("Edit…", systemImage: "pencil")
                                 }
@@ -279,12 +303,14 @@ struct ProjectColumn: View {
                                     Label("Open in New Tab", systemImage: "plus.square.on.square")
                                 }
                                 Button {
-                                    app.present(.newTaskFromNote(note))
+                                    if let record = TitleIndexStore.note(note.id, in: context) {
+                                        app.present(.newTaskFromNote(record))
+                                    }
                                 } label: {
                                     Label("New Task…", systemImage: "checklist")
                                 }
                                 Divider()
-                                if markedIDs.contains(note.id) {
+                                if note.isMarked {
                                     Button {
                                         keepMark(note.id)
                                     } label: {
@@ -292,7 +318,7 @@ struct ProjectColumn: View {
                                     }
                                 }
                                 Button(role: .destructive) {
-                                    pendingNoteDelete = note
+                                    pendingNoteDelete = note.id
                                 } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
@@ -379,28 +405,32 @@ struct ProjectColumn: View {
         app.isProjectSectionOpen(section, tab: tab)
     }
 
-    private var visibleConversations: [Conversation] {
+    private var visibleConversations: [TitleIndex] {
         if showingAllChats { return conversations }
         return Array(conversations.prefix(ProjectColumnMetrics.chatPreviewLimit))
     }
 
-    private var visibleRuns: [AgentRun] {
+    private var visibleRuns: [TitleIndex] {
         if showingAllRuns { return projectRuns }
         return Array(projectRuns.prefix(ProjectColumnMetrics.chatPreviewLimit))
     }
 
     private func revealTracks(reset: Bool) {
         if reset {
-            collapsed = Set(project.threads.filter { !$0.children.isEmpty }.map(\.id))
+            expanded = []
         }
+        guard isSectionOpen(.tracks) else { return }
         expandTrackPath(to: tab == .threads ? app.selectedThread : nil)
     }
 
     private func expandTrackPath(to id: UUID?) {
-        var current = project.threads.first { $0.id == id }
-        while let thread = current {
-            collapsed.remove(thread.id)
-            current = thread.parent
+        guard var current = id else { return }
+        var guardrail = 0
+        while guardrail < 32 {
+            expanded.insert(current)
+            guard let parent = index.first(where: { $0.id == current })?.parentID else { break }
+            current = parent
+            guardrail += 1
         }
     }
 
@@ -434,13 +464,19 @@ struct ProjectColumn: View {
         app.showNewChat(in: project)
     }
 
-    private func createThread(parent: ProjectThread?) {
+    private func createThread(parent: UUID?) {
         app.openProjectSection(.tracks)
-        let thread = ProjectThread(title: "", kind: parent == nil ? .direction : .feature, project: project, parent: parent)
+        let parentThread = parent.flatMap { TitleIndexStore.thread($0, in: context) }
+        let thread = ProjectThread(
+            title: "",
+            kind: parent == nil ? .direction : .feature,
+            project: project,
+            parent: parentThread
+        )
         context.insert(thread)
         project.touch()
-        try? context.save()
-        if let parent { collapsed.remove(parent.id) }
+        try? context.persist()
+        if let parent { expanded.insert(parent) }
         app.open(thread)
     }
 
@@ -449,19 +485,15 @@ struct ProjectColumn: View {
         let note = Note(content: "", project: project)
         context.insert(note)
         project.touch()
-        try? context.save()
+        try? context.persist()
         app.open(note)
     }
 
     private func keepMark(_ id: UUID) {
-        guard let mark = DeletionMarks.existing(for: id, in: project) else { return }
+        guard let mark = DeletionMarks.existing(for: id, in: context) else { return }
         DeletionMarks.keep(mark, in: context)
         project.touch()
-        try? context.save()
-    }
-
-    private func keepMark(_ thread: ProjectThread) {
-        keepMark(thread.id)
+        try? context.persist()
     }
 
     private var decisionFilter: some View {
@@ -493,7 +525,7 @@ struct ProjectColumn: View {
     }
 
     @ViewBuilder
-    private func decisionGroups(_ groups: [DecisionListLayout.Group], dimmed: Bool, history: Bool) -> some View {
+    private func decisionGroups(_ groups: [DecisionListLayout.TitleGroup], dimmed: Bool, history: Bool) -> some View {
         ForEach(groups) { group in
             let expanded = showsDecisionGroup(group, history: history)
             DecisionDisclosureHeader(
@@ -514,14 +546,14 @@ struct ProjectColumn: View {
         !decisionQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private func showsDecisionGroup(_ group: DecisionListLayout.Group, history: Bool) -> Bool {
+    private func showsDecisionGroup(_ group: DecisionListLayout.TitleGroup, history: Bool) -> Bool {
         if isDecisionSearchActive { return true }
         if group.decisions.contains(where: { $0.id == app.selectedDecision }) { return true }
         let collapsed = history ? collapsedHistoryGroups : collapsedActiveGroups
         return !collapsed.contains(group.id)
     }
 
-    private func toggleDecisionGroup(_ group: DecisionListLayout.Group, history: Bool) {
+    private func toggleDecisionGroup(_ group: DecisionListLayout.TitleGroup, history: Bool) {
         if history {
             if collapsedHistoryGroups.contains(group.id) {
                 collapsedHistoryGroups.remove(group.id)
@@ -535,12 +567,14 @@ struct ProjectColumn: View {
         }
     }
 
-    private func decisionRow(_ decision: Decision, dimmed: Bool) -> some View {
+    private func decisionRow(_ decision: DecisionListLayout.TitleDecision, dimmed: Bool) -> some View {
         Button {
-            app.open(decision)
+            if let row = index.first(where: { $0.id == decision.id }) {
+                app.open(row)
+            }
         } label: {
             SidebarRow(
-                title: decision.title.isEmpty ? "Untitled" : decision.title,
+                title: decision.title,
                 systemImage: decision.status == .active ? "checkmark.seal" : "xmark.seal",
                 isSelected: tab == .decisions && app.selectedDecision == decision.id,
                 isMarkedForDeletion: markedIDs.contains(decision.id)
@@ -550,12 +584,16 @@ struct ProjectColumn: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button {
-                app.present(.editDecision(decision))
+                if let record = TitleIndexStore.decision(decision.id, in: context) {
+                    app.present(.editDecision(record))
+                }
             } label: {
                 Label("Edit…", systemImage: "pencil")
             }
             Button {
-                app.open(decision, newTab: true)
+                if let row = index.first(where: { $0.id == decision.id }) {
+                    app.open(row, newTab: true)
+                }
             } label: {
                 Label("Open in New Tab", systemImage: "plus.square.on.square")
             }
@@ -568,7 +606,7 @@ struct ProjectColumn: View {
                 }
             }
             Button(role: .destructive) {
-                pendingDecisionDelete = decision
+                pendingDecisionDelete = decision.id
             } label: {
                 Label("Delete", systemImage: "trash")
             }
@@ -580,7 +618,7 @@ struct ProjectColumn: View {
         let decision = Decision(title: "", decision: "", project: project)
         context.insert(decision)
         project.touch()
-        try? context.save()
+        try? context.persist()
         app.open(decision)
     }
 }

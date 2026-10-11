@@ -47,7 +47,8 @@ enum Store {
         CodeAttachment.self,
         CodeReference.self,
         CodeReferenceEntry.self,
-        AgentRun.self
+        AgentRun.self,
+        TitleIndex.self
     ])
 
     /// Same identifier the app and membrae-mcp declare in their entitlements.
@@ -138,15 +139,21 @@ enum Store {
             try migrateCodeReferenceOwnership(at: configuration.url)
             try migrateTagColumns(at: configuration.url)
         }
+        let start = ContinuousClock.now
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = ModelContext(container)
         context.autosaveEnabled = false
-        guard mode == .prepare else { return container }
+        guard mode == .prepare else {
+            NavTrace.event("store.open mode=reopen \(NavTrace.elapsed(start))")
+            return container
+        }
         legacyBackfillIndexingMetadata(in: context)
         try backfillCodeReferenceOwnership(in: context)
         migrateProductNames(in: context)
         TagStore.mergeDuplicates(in: context)
+        TitleIndexStore.backfillIfNeeded(in: context)
         try? FileStore.default(context: context).cleanup()
+        NavTrace.event("store.open mode=prepare \(NavTrace.elapsed(start))")
         return container
     }
 

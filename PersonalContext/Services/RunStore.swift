@@ -286,6 +286,6 @@ enum RunStore {
     }
 
     private static func save(_ context: ModelContext) throws {
-        try context.save()
+        try context.persist()
     }
 }

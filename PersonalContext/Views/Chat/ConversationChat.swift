@@ -48,7 +48,7 @@ struct ConversationChat: View {
         guard let mark = deletionMark else { return }
         DeletionMarks.keep(mark, in: context)
         hostProject?.touch()
-        try? context.save()
+        try? context.persist()
     }
 
     private func deleteMarked() {
@@ -58,7 +58,7 @@ struct ConversationChat: View {
         try? FileStore.default(context: context).releaseConversation(conversation)
         context.delete(conversation)
         project?.touch()
-        try? context.save()
+        try? context.persist()
     }
 }
 

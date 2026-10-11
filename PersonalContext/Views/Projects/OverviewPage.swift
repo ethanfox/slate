@@ -30,6 +30,10 @@ struct OverviewPage: View {
             .padding(.vertical, 14)
             .frame(maxWidth: .infinity)
         }
+        .onAppear {
+            NavTrace.event("overview appear plates=\(project.overviewPlates.count)")
+            NavTrace.afterTurn("overview.runloop")
+        }
     }
 
     private func startChat(_ submission: ChatSubmission) -> Bool {

@@ -161,8 +161,15 @@ final class ChatRuntime {
     }
 
     func applyModel() {
+        let changed = session.model != modelID
+        if changed, session.isGenerating {
+            session.cancel()
+        }
         session.model = modelID
         store.applyModel(modelID)
+        if changed, let cursor = session.provider as? CursorChatProvider {
+            cursor.bridge.stop()
+        }
     }
 
     func applyProvider() {

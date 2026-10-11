@@ -168,8 +168,7 @@ final class ChatEngine {
     private func handle(_ event: ChatStreamEvent) {
         switch event {
         case .text(let text):
-            rawText += text
-            turn.appendText(text)
+            guard applyIncomingText(text) else { return }
             ensureAssistant()
             publishTurn(streaming: true)
         case .reasoning(let text):
@@ -209,6 +208,7 @@ final class ChatEngine {
     }
 
     private func finishTurn(cancelled: Bool, streamError: Error?) {
+        guard isGenerating else { return }
         stream.task = nil
         if cancelled || streamError != nil {
             turn.failRunningTools()
@@ -216,7 +216,7 @@ final class ChatEngine {
             turn.completeRunningTools()
         }
         turn.finish()
-        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = visibleReplyText
         if let assistantID = activeAssistantID {
             if text.isEmpty, turn.tools.isEmpty, turn.thinking.isEmpty {
                 entries.removeAll { entry in
@@ -226,10 +226,10 @@ final class ChatEngine {
                 removedMessageIDs.append(assistantID)
             } else {
                 updateAssistant(id: assistantID) { assistant in
-                    assistant = turn.published(onto: assistant, text: rawText, streaming: false)
+                    assistant = turn.published(onto: assistant, text: text, streaming: false)
                 }
-                if !text.isEmpty {
-                    history.append(TalkMessage(id: assistantID, role: .assistant, text: rawText))
+                if !text.isEmpty, !history.contains(where: { $0.id == assistantID }) {
+                    history.append(TalkMessage(id: assistantID, role: .assistant, text: text))
                 }
             }
         }
@@ -242,7 +242,7 @@ final class ChatEngine {
             }
         }
 
-        if let streamError {
+        if let streamError, text.isEmpty {
             error = streamError
             let message = (streamError as? LocalizedError)?.errorDescription ?? streamError.localizedDescription
             entries.append(.activity(.init(id: UUID(), text: "⚠️ \(message)", isError: true)))
@@ -269,6 +269,29 @@ final class ChatEngine {
             entries[index] = .userMessage(user)
             break
         }
+    }
+
+    private var visibleReplyText: String {
+        let raw = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !raw.isEmpty { return raw }
+        return turn.joinedText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    @discardableResult
+    private func applyIncomingText(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        if !rawText.isEmpty, text.hasPrefix(rawText) {
+            let delta = String(text.dropFirst(rawText.count))
+            rawText = text
+            if !delta.isEmpty { turn.appendContinuation(delta) }
+            return !delta.isEmpty
+        }
+        if !rawText.isEmpty, rawText.hasPrefix(text) {
+            return false
+        }
+        rawText += text
+        turn.appendText(text)
+        return true
     }
 
     private func ensureAssistant() {

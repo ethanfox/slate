@@ -246,7 +246,7 @@ struct NewEventSheet: View {
         guard !saved, createdAgenda, let agenda else { return }
         if event == nil || !hasAssociations {
             context.delete(agenda)
-            try? context.save()
+            try? context.persist()
         }
     }
 
@@ -285,10 +285,10 @@ struct NewEventSheet: View {
                 agenda.title = trimmed
                 if hasAssociations || !createdAgenda {
                     agenda.eventKitID = seriesID
-                    try? context.save()
+                    try? context.persist()
                 } else {
                     context.delete(agenda)
-                    try? context.save()
+                    try? context.persist()
                 }
             }
             saved = true

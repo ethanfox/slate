@@ -4,15 +4,16 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @Query private var projects: [Project]
+    @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "project" }, sort: \TitleIndex.title)
+    private var projects: [TitleIndex]
     @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" && $0.isCompleted == false })
     private var openTasks: [AgendaItem]
-    @State private var pendingDelete: Project?
+    @State private var pendingDelete: TitleIndex?
 
-    private var orderedProjects: [Project] {
+    private var orderedProjects: [TitleIndex] {
         projects.sorted { lhs, rhs in
             if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
-            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            return lhs.displayTitle.localizedCaseInsensitiveCompare(rhs.displayTitle) == .orderedAscending
         }
     }
 
@@ -42,8 +43,8 @@ struct SidebarView: View {
                                 app.open(project)
                             } label: {
                                 SidebarRow(
-                                    title: project.name.isEmpty ? "Untitled" : project.name,
-                                    systemImage: project.symbol,
+                                    title: project.displayTitle,
+                                    systemImage: project.symbol.isEmpty ? "folder" : project.symbol,
                                     isSelected: app.destination == .project(project.id),
                                     showsPin: project.isPinned
                                 )
@@ -51,7 +52,9 @@ struct SidebarView: View {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button {
-                                    app.present(.editProject(project))
+                                    if let record = TitleIndexStore.project(project.id, in: context) {
+                                        app.present(.editProject(record))
+                                    }
                                 } label: {
                                     Label("Edit…", systemImage: "pencil")
                                 }
@@ -61,8 +64,11 @@ struct SidebarView: View {
                                     Label("Open in New Tab", systemImage: "plus.square.on.square")
                                 }
                                 Button {
-                                    project.isPinned.toggle()
-                                    project.touch()
+                                    if let record = TitleIndexStore.project(project.id, in: context) {
+                                        record.isPinned.toggle()
+                                        record.touch()
+                                        try? context.persist()
+                                    }
                                 } label: {
                                     Label(project.isPinned ? "Unpin" : "Pin", systemImage: project.isPinned ? "pin.slash" : "pin")
                                 }
@@ -86,16 +92,17 @@ struct SidebarView: View {
                 .padding(.horizontal, 8)
                 .padding(.bottom, 12)
         }
-        .alert(item: $pendingDelete) { project in
+        .alert(item: $pendingDelete) { row in
             Alert(
-                title: Text("Delete \(project.name)?"),
+                title: Text("Delete \(row.displayTitle)?"),
                 message: Text("Tracks, notes, decisions, and conversations in this project will be removed from this Mac."),
                 primaryButton: .destructive(Text("Delete")) {
+                    guard let project = TitleIndexStore.project(row.id, in: context) else { return }
                     RunStore.cancelActive(in: project, context: context)
                     app.closeTabs(forProject: project.id)
                     CodeReferenceStore.deleteOwnedReferences(in: project, context: context)
                     context.delete(project)
-                    try? context.save()
+                    try? context.persist()
                 },
                 secondaryButton: .cancel()
             )

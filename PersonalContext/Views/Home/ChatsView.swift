@@ -4,7 +4,12 @@ import SwiftUI
 /// Workspace page for chats that are still generating, plus the most recent sessions.
 struct ChatsView: View {
     @Environment(AppModel.self) private var app
-    @Query(sort: \Conversation.updatedAt, order: .reverse) private var conversations: [Conversation]
+    @Query(
+        filter: #Predicate<TitleIndex> { $0.kindRaw == "chat" },
+        sort: \TitleIndex.updatedAt,
+        order: .reverse
+    )
+    private var conversations: [TitleIndex]
 
     var body: some View {
         ScrollView {
@@ -26,6 +31,7 @@ struct ChatsView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .onAppear { NavTrace.event("chats appear count=\(conversations.count)") }
     }
 
     private var emptyState: some View {
@@ -67,12 +73,12 @@ struct ChatsView: View {
         }
     }
 
-    private func row(_ conversation: Conversation, busy: Bool) -> some View {
+    private func row(_ conversation: TitleIndex, busy: Bool) -> some View {
         let label = app.runningChats.first { $0.id == conversation.id }?.label
         return RecordRow(
             systemImage: "bubble.left",
-            title: conversation.title.isEmpty ? "New chat" : conversation.title,
-            subtitle: conversation.project?.name ?? "Quick Ask",
+            title: conversation.displayTitle,
+            subtitle: conversation.owner,
             meta: busy ? (label ?? "Working") : conversation.updatedAt.relativeLabel,
             isBusy: busy
         ) {
@@ -85,13 +91,13 @@ struct ChatsView: View {
         Set(app.runningChats.map(\.id))
     }
 
-    private var running: [Conversation] {
+    private var running: [TitleIndex] {
         conversations
             .filter { runningIDs.contains($0.id) }
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    private var recent: [Conversation] {
+    private var recent: [TitleIndex] {
         Array(
             conversations
                 .filter { !$0.isArchived && !runningIDs.contains($0.id) }

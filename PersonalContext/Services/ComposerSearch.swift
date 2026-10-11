@@ -175,6 +175,7 @@ enum ComposerSearch {
         var hits: [(Int, Date, ComposerHit)] = []
         var pendingBodies: [() -> Void] = []
         var pendingTranscripts: [() -> Void] = []
+        let indexed = TitleIndexStore.titles(projectID: allowed, in: context)
 
         func inScope(_ projectID: UUID?) -> Bool {
             if let allowed { return projectID == allowed }
@@ -185,6 +186,16 @@ enum ComposerSearch {
             hits.append((value, date, hit))
         }
 
+        if tagSet.isEmpty, !indexed.isEmpty {
+            for row in indexed where !row.isArchived && row.kind != .run {
+                guard matches(query, in: [row.title, row.displayTitle]) else { continue }
+                add(
+                    score(query: query, title: row.displayTitle, body: ""),
+                    row.updatedAt,
+                    titleHit(row)
+                )
+            }
+        } else {
         for project in fetchAll(Project.self, in: context) {
             guard inScope(project.id) else { continue }
             if tagSet.isEmpty, matches(query, in: [project.name, project.summary, project.currentDirection]) {
@@ -310,6 +321,7 @@ enum ComposerSearch {
                 }
             }
         }
+        }
 
         if hits.count < resultLimit {
             for scan in pendingBodies { scan() }
@@ -330,6 +342,13 @@ enum ComposerSearch {
     @MainActor
     static func recents(scope: ComposerScope, tags: [UUID], in context: ModelContext) -> [ComposerHit] {
         let tagSet = Set(tags)
+        if tagSet.isEmpty {
+            let rows = TitleIndexStore.titles(projectID: scope.projectID, in: context)
+                .filter { !$0.isArchived && $0.kind != .run }
+            if !rows.isEmpty {
+                return rows.prefix(resultLimit).map(titleHit)
+            }
+        }
         var hits: [(Date, ComposerHit)] = []
 
         func take(_ hit: ComposerHit, date: Date) {
@@ -527,6 +546,27 @@ enum ComposerSearch {
         var descriptor = FetchDescriptor<T>(sortBy: [sort])
         descriptor.fetchLimit = resultLimit
         return (try? context.fetch(descriptor)) ?? []
+    }
+
+    private static func titleHit(_ row: TitleIndex) -> ComposerHit {
+        let kind: ComposerHitKind = switch row.kind {
+        case .project: .project
+        case .track: .track
+        case .note: .note
+        case .decision: .decision
+        case .chat: .conversation
+        case .task: .task
+        case .run: .conversation
+        }
+        return hit(
+            kind: kind,
+            title: row.displayTitle,
+            owner: row.owner,
+            excerpt: "",
+            symbol: row.symbol.isEmpty ? kind.symbol : row.symbol,
+            recordID: row.id,
+            projectID: row.kind == .project ? row.id : row.projectID
+        )
     }
 
     private static func threadHit(_ thread: ProjectThread, excerpt: String) -> ComposerHit {

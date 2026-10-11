@@ -138,6 +138,48 @@ final class ChatEngineTests: XCTestCase {
         })
     }
 
+    func testResentAnswerAfterToolsStaysOneReply() async {
+        let engine = ChatEngine(
+            provider: ScriptedChatProvider(events: [
+                .text("Search from Personal Context can find things inside Spaces"),
+                .tool(name: "get_track", status: "running", id: "t1", detail: nil, sources: []),
+                .tool(name: "get_track", status: "completed", id: "t1", detail: "Spaces", sources: []),
+                .text("Search from Personal Context can find things inside Spaces. You only create things for the Space you’re in."),
+                .done
+            ]),
+            model: "m"
+        )
+        XCTAssertTrue(engine.send("lock it"))
+        await waitUntilIdle(engine)
+        XCTAssertEqual(assistantTexts(in: engine), [
+            "Search from Personal Context can find things inside Spaces. You only create things for the Space you’re in."
+        ])
+        XCTAssertEqual(engine.currentTurn.items.filter { if case .text = $0.kind { return true }; return false }.count, 1)
+        XCTAssertFalse(engine.entries.contains { entry in
+            if case .activity(let activity) = entry { return activity.isError }
+            return false
+        })
+        XCTAssertEqual(engine.providerHistory.filter { $0.role == .assistant }.count, 1)
+    }
+
+    func testEmptyFinishAfterVisibleReplyDoesNotAddError() async {
+        let provider = GatedChatProvider()
+        let engine = ChatEngine(provider: provider, model: "m")
+        XCTAssertTrue(engine.send("go"))
+        provider.emit("Visible reply")
+        let painted = Date().addingTimeInterval(1)
+        while assistantTexts(in: engine).allSatisfy(\.isEmpty), Date() < painted {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        provider.release("")
+        await waitUntilIdle(engine)
+        XCTAssertEqual(assistantTexts(in: engine), ["Visible reply"])
+        XCTAssertFalse(engine.entries.contains { entry in
+            if case .activity(let activity) = entry { return activity.isError }
+            return false
+        })
+    }
+
     func testProviderFailureMarksUserFailedAndAllowsRetry() async {
         let engine = ChatEngine(provider: FailingChatProvider(message: "nope"), model: "m")
         XCTAssertTrue(engine.send("please"))
@@ -300,6 +342,46 @@ final class ChatEngineTests: XCTestCase {
 
         runtime.applyProvider()
         XCTAssertEqual(runtime.session.provider.id, TalkProvider.cursor.rawValue)
+    }
+
+    func testRuntimeSwitchesCursorModelAndClearsExternalSession() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let conversation = Conversation(providerID: TalkProvider.cursor.rawValue, modelID: "grok-4.6")
+        conversation.externalSessionID = "agent-old"
+        container.mainContext.insert(conversation)
+        try container.mainContext.save()
+
+        let runtime = ChatRuntime(
+            conversation: conversation,
+            project: nil,
+            provider: ScriptedChatProvider(chunks: ["unused"])
+        )
+        runtime.modelID = "composer-2"
+        runtime.applyModel()
+
+        XCTAssertEqual(conversation.modelID, "composer-2")
+        XCTAssertEqual(conversation.externalSessionID, "")
+    }
+
+    func testRuntimeKeepsChatGPTSessionWhenModelChanges() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        conversation.externalSessionID = "response-123"
+        container.mainContext.insert(conversation)
+        try container.mainContext.save()
+
+        let runtime = ChatRuntime(
+            conversation: conversation,
+            project: nil,
+            provider: ScriptedChatProvider(chunks: ["unused"])
+        )
+        runtime.modelID = "gpt-other"
+        runtime.applyModel()
+
+        XCTAssertEqual(conversation.modelID, "gpt-other")
+        XCTAssertEqual(conversation.externalSessionID, "response-123")
     }
 
     func testPersistDoesNotDeleteStoreMessagesAbsentFromSession() throws {

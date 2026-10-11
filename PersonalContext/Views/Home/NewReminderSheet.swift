@@ -299,7 +299,7 @@ struct NewTaskSheet: View {
     private func discardIfNeeded() {
         guard !saved, createdAgenda, let agenda else { return }
         context.delete(agenda)
-        try? context.save()
+        try? context.persist()
     }
 
     private var meetingURL: URL? {
@@ -366,7 +366,7 @@ struct NewTaskSheet: View {
             TaskStore.clearNext(on: agenda, in: context)
         }
         agenda.touch()
-        try context.save()
+        try context.persist()
     }
 
     private func saveReminder(title: String) throws {
@@ -389,10 +389,10 @@ struct NewTaskSheet: View {
             agenda.notes = scratch
             agenda.repeatRule = rule == .custom ? .none : rule
             agenda.touch()
-            try context.save()
+            try context.persist()
         } else {
             context.delete(agenda)
-            try context.save()
+            try context.persist()
         }
     }
 
@@ -408,7 +408,7 @@ struct NewTaskSheet: View {
             try app.eventKit.deleteReminder(reminder)
             if let agenda {
                 context.delete(agenda)
-                try? context.save()
+                try? context.persist()
             }
             saved = true
             modalDismiss()

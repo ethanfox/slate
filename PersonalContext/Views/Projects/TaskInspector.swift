@@ -81,7 +81,7 @@ private struct TaskDocument: View {
                                     Spacer(minLength: 4)
                                     Button {
                                         AssociationService.unlink(noteID: note.id, from: item, in: context)
-                                        try? context.save()
+                                        try? context.persist()
                                     } label: {
                                         Image(systemName: "xmark.circle.fill")
                                             .font(.system(size: 13))
@@ -243,12 +243,12 @@ private struct TaskDocument: View {
         ) {
             Button("No project") {
                 AssociationService.clearProject(from: item)
-                try? context.save()
+                try? context.persist()
             }
             ForEach(projects) { project in
                 Button(project.displayName) {
                     AssociationService.assignUserProject(project, on: item)
-                    try? context.save()
+                    try? context.persist()
                 }
             }
         }
@@ -264,7 +264,7 @@ private struct TaskDocument: View {
                 for thread in item.liveTracks {
                     AssociationService.unlink(threadID: thread.id, from: item, in: context)
                 }
-                try? context.save()
+                try? context.persist()
             }
             ForEach(tracksInScope) { thread in
                 Button(thread.title.isEmpty ? "Untitled" : thread.title) {
@@ -339,7 +339,7 @@ private struct TaskDocument: View {
     private func toggle(_ thread: ProjectThread) {
         if item.trackLinks.contains(where: { $0.threadID == thread.id }) {
             AssociationService.unlink(threadID: thread.id, from: item, in: context)
-            try? context.save()
+            try? context.persist()
             return
         }
         if let conflict = AssociationService.link(thread: thread, onto: item) {
@@ -347,17 +347,17 @@ private struct TaskDocument: View {
             resolveConflict = {
                 AssociationService.switchProject(conflict.incoming, on: item)
                 AssociationService.applyLink(thread: thread, onto: item)
-                try? context.save()
+                try? context.persist()
             }
             return
         }
-        try? context.save()
+        try? context.persist()
     }
 
     private func toggle(_ note: Note) {
         if item.noteLinks.contains(where: { $0.noteID == note.id }) {
             AssociationService.unlink(noteID: note.id, from: item, in: context)
-            try? context.save()
+            try? context.persist()
             return
         }
         if let conflict = AssociationService.link(note: note, onto: item) {
@@ -365,11 +365,11 @@ private struct TaskDocument: View {
             resolveConflict = {
                 AssociationService.switchProject(conflict.incoming, on: item)
                 AssociationService.applyLink(note: note, onto: item)
-                try? context.save()
+                try? context.persist()
             }
             return
         }
-        try? context.save()
+        try? context.persist()
     }
 
     private func createNote() {
@@ -378,7 +378,7 @@ private struct TaskDocument: View {
         context.insert(note)
         AssociationService.applyLink(note: note, onto: item)
         project.touch()
-        try? context.save()
+        try? context.persist()
         app.open(note)
     }
 }
