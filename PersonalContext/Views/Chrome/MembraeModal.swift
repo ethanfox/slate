@@ -5,6 +5,7 @@ import SwiftUI
 enum AppModal: Identifiable {
     case newProject
     case newSpace
+    case editSpace(Space)
     case newRecord(SpaceType)
     case editRecord(SpaceRecord)
     case newEvent
@@ -32,6 +33,7 @@ enum AppModal: Identifiable {
         switch self {
         case .newProject: "new-project"
         case .newSpace: "new-space"
+        case .editSpace(let space): "edit-space-\(space.id.uuidString)"
         case .newRecord(let type): "new-record-\(type.id.uuidString)"
         case .editRecord(let record): "edit-record-\(record.id.uuidString)"
         case .newEvent: "new-event"

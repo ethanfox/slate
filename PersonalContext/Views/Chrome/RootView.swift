@@ -632,6 +632,8 @@ struct RootView: View {
             NewProjectSheet()
         case .newSpace:
             NewSpaceSheet()
+        case .editSpace(let space):
+            NewSpaceSheet(space: space)
         case .newRecord(let type):
             SpaceRecordForm(type: type)
         case .editRecord(let record):

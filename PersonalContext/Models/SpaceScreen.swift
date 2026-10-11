@@ -119,8 +119,32 @@ struct SpaceScreenDefinition: Codable, Hashable {
     }
 }
 
-/// A calculation named in a component setting, written `name` or `name:eventKey`.
+/// A calculation named in a component setting.
+/// Written `name`, `name:eventKey`, or for logged values `name:eventKey.field:period`.
 struct SpaceCalcRequest: Hashable {
+    /// How far back a calculation over logged values looks.
+    enum Period: String, CaseIterable {
+        case today
+        /// The last seven days, today included.
+        case week
+        /// The last thirty days.
+        case month
+        /// The last 365 days.
+        case year
+        case all
+
+        func start(now: Date = .now, calendar: Calendar = .current) -> Date? {
+            let today = calendar.startOfDay(for: now)
+            switch self {
+            case .today: return today
+            case .week: return calendar.date(byAdding: .day, value: -6, to: today)
+            case .month: return calendar.date(byAdding: .day, value: -29, to: today)
+            case .year: return calendar.date(byAdding: .day, value: -364, to: today)
+            case .all: return nil
+            }
+        }
+    }
+
     enum Name: String, CaseIterable {
         /// How many events.
         case count
@@ -136,19 +160,51 @@ struct SpaceCalcRequest: Hashable {
         case today
         /// Collection only: how many records.
         case records
+        /// A logged number added up over a period.
+        case sum
+        /// The average of a logged number over a period.
+        case avg
+        /// The smallest logged number in a period.
+        case min
+        /// The largest logged number in a period.
+        case max
+        /// How much a logged number has moved since the period began.
+        case change
 
         var needsEvent: Bool { self != .records }
         var collectionOnly: Bool { self == .today || self == .records }
+        /// Works on a logged number, so it needs `eventKey.field`.
+        var needsField: Bool { [.sum, .avg, .min, .max, .change].contains(self) }
+        /// Gives a number a progress bar can use.
+        var isNumber: Bool { needsField || self == .count || self == .week }
     }
 
     var name: Name
     var eventKey: String
+    /// The logged number: a field of the event, or with `onRecord` a field of the record it is about.
+    var field = ""
+    var onRecord = false
+    var period = Period.all
 
     init?(_ raw: String) {
-        let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
-        guard let first = parts.first, let name = Name(rawValue: first) else { return nil }
+        let parts = raw.split(separator: ":").map(String.init)
+        guard let first = parts.first, let name = Name(rawValue: first), parts.count <= 3 else { return nil }
         self.name = name
-        self.eventKey = parts.count > 1 ? parts[1] : ""
+        let path = parts.count > 1 ? parts[1].split(separator: ".").map(String.init) : []
+        self.eventKey = path.first ?? ""
+        switch path.count {
+        case 0, 1: break
+        case 2: field = path[1]
+        case 3 where path[1] == "record":
+            field = path[2]
+            onRecord = true
+        default: return nil
+        }
+        if parts.count == 3 {
+            guard let period = Period(rawValue: parts[2]) else { return nil }
+            self.period = period
+        }
+        if name.needsField, field.isEmpty { return nil }
     }
 }
 
@@ -198,6 +254,39 @@ enum SpaceCalc {
         return dates.filter { $0 >= start && $0 < end }.count
     }
 
+    /// One number from logged values. `values` are in time order, oldest first, with their dates.
+    static func number(
+        _ name: SpaceCalcRequest.Name,
+        _ values: [(date: Date, value: Double)],
+        period: SpaceCalcRequest.Period,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Double? {
+        let start = period.start(now: now, calendar: calendar)
+        let inside = values.filter { start == nil || $0.date >= start! }
+        switch name {
+        case .sum:
+            return inside.reduce(0) { $0 + $1.value }
+        case .avg:
+            return inside.isEmpty ? nil : inside.reduce(0) { $0 + $1.value } / Double(inside.count)
+        case .min:
+            return inside.map(\.value).min()
+        case .max:
+            return inside.map(\.value).max()
+        case .change:
+            guard let last = inside.last else { return nil }
+            let before = values.last { start != nil && $0.date < start! } ?? inside.first
+            return before.map { last.value - $0.value }
+        default:
+            return nil
+        }
+    }
+
+    static func label(_ number: Double, signed: Bool = false) -> String {
+        let text = number.formatted(.number.precision(.fractionLength(0...1)))
+        return signed && number > 0 ? "+\(text)" : text
+    }
+
     static func dayLabel(_ date: Date?, now: Date = .now, calendar: Calendar = .current) -> String {
         guard let date else { return "Never" }
         let today = calendar.startOfDay(for: now)
@@ -222,6 +311,8 @@ enum SpacePropKind: Hashable {
     case fields([SpaceFieldKind])
     case event
     case calc
+    /// Arithmetic over the record's fields. See `SpaceFormula`.
+    case formula
     case text
     case number
 }
@@ -244,7 +335,7 @@ struct SpaceComponentSpec: Hashable {
 }
 
 enum SpaceScreenCatalog {
-    private static let singles: [SpaceFieldKind] = [.text, .number, .boolean, .date, .choice, .quantity]
+    private static let singles: [SpaceFieldKind] = [.text, .number, .boolean, .date, .choice, .quantity, .link, .calc]
     private static let both: Set<SpaceScreenKind> = [.collection, .detail]
 
     static let components: [SpaceComponentSpec] = [
@@ -342,11 +433,22 @@ enum SpaceScreenCatalog {
             props: [SpacePropSpec(name: "events", kind: .event, required: true, note: "The event type.")]
         ),
         SpaceComponentSpec(
+            name: "progress",
+            summary: "A bar showing a number against a target, such as calories against a daily goal.",
+            screens: both,
+            props: [
+                SpacePropSpec(name: "value", kind: .formula, required: true, note: "A field id or formula for the number so far, or a calculation over logs such as sum:eaten.record.calories:today."),
+                SpacePropSpec(name: "target", kind: .formula, required: true, note: "A number, field id or formula for the target, such as goals.calories."),
+                SpacePropSpec(name: "label", kind: .text, note: "What is being measured."),
+                SpacePropSpec(name: "unit", kind: .text, note: "Shown after the numbers, such as g or kcal.")
+            ]
+        ),
+        SpaceComponentSpec(
             name: "metric",
             summary: "One calculated number with a label.",
             screens: both,
             props: [
-                SpacePropSpec(name: "value", kind: .calc, required: true, note: "count, latest, streak, best or week, then :eventKey. In a collection also today:eventKey and records."),
+                SpacePropSpec(name: "value", kind: .calc, required: true, note: "count, latest, streak, best or week, then :eventKey. For logged numbers: sum, avg, min, max or change, then :eventKey.field:period. In a collection also today:eventKey and records."),
                 SpacePropSpec(name: "label", kind: .text, required: true, note: "Text under the number.")
             ]
         ),
@@ -434,8 +536,23 @@ enum SpaceScreenCatalog {
                 if request.name.collectionOnly, kind != .collection {
                     problems.append("\(request.name.rawValue) only works on a collection screen.")
                 }
-                if request.name.needsEvent, !eventKeys.contains(request.eventKey) {
-                    problems.append("\(spec.name).\(prop.name) must name an event type, like \(request.name.rawValue):eventKey.")
+                checkCalc(request, owner: "\(spec.name).\(prop.name)", schema: schema, eventKeys: eventKeys, events: events, into: &problems)
+            case .formula:
+                let raw = component.text(prop.name) ?? component.number(prop.name).map { "\($0)" }
+                if let raw, raw.contains(":") {
+                    guard let request = SpaceCalcRequest(raw), request.name.isNumber else {
+                        problems.append("\(spec.name).\(prop.name) is not a calculation that gives a number.")
+                        continue
+                    }
+                    checkCalc(request, owner: "\(spec.name).\(prop.name)", schema: schema, eventKeys: eventKeys, events: events, into: &problems)
+                    continue
+                }
+                guard let raw, let formula = SpaceFormula(raw) else {
+                    problems.append("\(spec.name).\(prop.name) is not a formula. \(SpaceFormula.grammar)")
+                    continue
+                }
+                if let reason = formula.problem(beside: schema.liveFields, schema: schema) {
+                    problems.append("\(spec.name).\(prop.name): \(reason)")
                 }
             case .text:
                 if component.text(prop.name) == nil {
@@ -449,6 +566,30 @@ enum SpaceScreenCatalog {
         }
         for child in component.children {
             check(child, kind: kind, schema: schema, eventKeys: eventKeys, into: &problems)
+        }
+    }
+
+    private static func checkCalc(
+        _ request: SpaceCalcRequest,
+        owner: String,
+        schema: SpaceSchema,
+        eventKeys: Set<String>,
+        events: [String: SpaceSchema],
+        into problems: inout [String]
+    ) {
+        if request.name.needsEvent, !eventKeys.contains(request.eventKey) {
+            problems.append("\(owner) must name an event type, like \(request.name.rawValue):eventKey.")
+            return
+        }
+        guard request.name.needsField else { return }
+        let numeric: Set<SpaceFieldKind> = [.number, .quantity, .calc]
+        let holder = request.onRecord ? schema : events[request.eventKey]
+        // Without the event's fields to hand there is nothing more to check.
+        guard let holder else { return }
+        guard let field = holder.liveFields.first(where: { $0.id == request.field }), numeric.contains(field.kind) else {
+            let place = request.onRecord ? "this type" : "the event \(request.eventKey)"
+            problems.append("\(owner) needs a number field, and \(place) has no number field \(request.field).")
+            return
         }
     }
 

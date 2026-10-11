@@ -11,6 +11,10 @@ enum SpaceFieldKind: String, Codable, CaseIterable, Identifiable, Hashable {
     case image
     case quantity
     case group
+    /// Points at one record of another type in the same Space.
+    case link
+    /// A number worked out from other fields by a formula. Never typed, never stored.
+    case calc
 
     var id: String { rawValue }
 }
@@ -33,6 +37,10 @@ struct SpaceField: Codable, Hashable, Identifiable {
     var isOrdered: Bool
     /// Hidden, not erased. Values stay on the records.
     var isRemoved: Bool
+    /// Link only: the key of the type its records come from.
+    var target: String
+    /// Calc only. See `SpaceFormula`.
+    var formula: String
 
     init(
         id: String,
@@ -41,7 +49,9 @@ struct SpaceField: Codable, Hashable, Identifiable {
         options: [SpaceOption] = [],
         fields: [SpaceField] = [],
         isOrdered: Bool = false,
-        isRemoved: Bool = false
+        isRemoved: Bool = false,
+        target: String = "",
+        formula: String = ""
     ) {
         self.id = id
         self.name = name
@@ -50,6 +60,8 @@ struct SpaceField: Codable, Hashable, Identifiable {
         self.fields = fields
         self.isOrdered = isOrdered
         self.isRemoved = isRemoved
+        self.target = target
+        self.formula = formula
     }
 
     init(from decoder: Decoder) throws {
@@ -61,6 +73,8 @@ struct SpaceField: Codable, Hashable, Identifiable {
         fields = try container.decodeIfPresent([SpaceField].self, forKey: .fields) ?? []
         isOrdered = try container.decodeIfPresent(Bool.self, forKey: .isOrdered) ?? false
         isRemoved = try container.decodeIfPresent(Bool.self, forKey: .isRemoved) ?? false
+        target = try container.decodeIfPresent(String.self, forKey: .target) ?? ""
+        formula = try container.decodeIfPresent(String.self, forKey: .formula) ?? ""
     }
 }
 
@@ -86,7 +100,7 @@ struct SpaceQuantity: Codable, Hashable {
 
 /// One stored value. Persisted as a single-key object, e.g. `{"number": 2}`.
 enum SpaceValue: Codable, Hashable {
-    /// Text, rich text, a choice's option id, or an image's asset id.
+    /// Text, rich text, a choice's option id, an image's asset id, or a link's record id.
     case text(String)
     case number(Double)
     case boolean(Bool)
@@ -143,6 +157,10 @@ enum SpaceSchemaError: LocalizedError, Equatable {
     case unknownField(String)
     case wrongValue(field: String, expected: SpaceFieldKind)
     case unknownOption(field: String, option: String)
+    case linkNeedsTarget(String)
+    case targetChanged(String)
+    case badFormula(field: String, reason: String)
+    case computed(String)
 
     var errorDescription: String? {
         switch self {
@@ -155,6 +173,10 @@ enum SpaceSchemaError: LocalizedError, Equatable {
         case .unknownField(let id): "There is no field \(id) on this type."
         case .wrongValue(let field, let expected): "\(field) expects a \(expected.rawValue) value."
         case .unknownOption(let field, let option): "\(field) has no option \(option)."
+        case .linkNeedsTarget(let field): "\(field) is a link and needs a target: the key of the type it points at."
+        case .targetChanged(let field): "\(field) already links to another type. Add a new field instead."
+        case .badFormula(let field, let reason): "\(field) has a formula that does not work: \(reason)"
+        case .computed(let field): "\(field) is worked out automatically and cannot be set."
         }
     }
 }
@@ -176,6 +198,23 @@ struct SpaceSchema: Codable, Equatable {
 
     func validate() throws {
         try Self.validate(fields, insideGroup: false)
+        for field in liveFields {
+            if field.kind == .calc {
+                try checkFormula(of: field, beside: liveFields)
+            }
+            for column in field.fields where column.kind == .calc && !column.isRemoved {
+                try checkFormula(of: column, beside: field.fields.filter { !$0.isRemoved })
+            }
+        }
+    }
+
+    private func checkFormula(of field: SpaceField, beside siblings: [SpaceField]) throws {
+        guard let formula = SpaceFormula(field.formula) else {
+            throw SpaceSchemaError.badFormula(field: field.name, reason: "it could not be read. \(SpaceFormula.grammar)")
+        }
+        if let reason = formula.problem(beside: siblings, schema: self) {
+            throw SpaceSchemaError.badFormula(field: field.name, reason: reason)
+        }
     }
 
     private static func validate(_ fields: [SpaceField], insideGroup: Bool) throws {
@@ -193,6 +232,9 @@ struct SpaceSchema: Codable, Equatable {
             var options: Set<String> = []
             for option in field.options where !options.insert(option.id).inserted {
                 throw SpaceSchemaError.duplicateOptionID(field: field.name, option: option.id)
+            }
+            if field.kind == .link, field.target.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw SpaceSchemaError.linkNeedsTarget(field.name)
             }
             if field.kind == .group {
                 guard !insideGroup else { throw SpaceSchemaError.nestedGroup(field.name) }
@@ -212,7 +254,9 @@ struct SpaceSchema: Codable, Equatable {
                 throw SpaceSchemaError.unknownField(id)
             }
             switch (field.kind, value) {
-            case (.text, .text), (.richText, .text), (.image, .text),
+            case (.calc, _):
+                throw SpaceSchemaError.computed(field.name)
+            case (.text, .text), (.richText, .text), (.image, .text), (.link, .text),
                  (.number, .number), (.boolean, .boolean), (.date, .date), (.quantity, .quantity):
                 break
             case (.choice, .text(let option)):
@@ -242,6 +286,9 @@ struct SpaceSchema: Codable, Equatable {
             if let previous = old.first(where: { $0.id == field.id }) {
                 guard previous.kind == field.kind else {
                     throw SpaceSchemaError.kindChanged(field.name)
+                }
+                guard field.kind != .link || previous.target == field.target else {
+                    throw SpaceSchemaError.targetChanged(field.name)
                 }
                 if field.kind == .group {
                     field.fields = try merge(field.fields, over: previous.fields)
@@ -290,11 +337,23 @@ enum SpaceBuiltInKind: String, Codable, CaseIterable, Identifiable, Hashable {
     var id: String { rawValue }
 }
 
+/// Card gradient names, in the order new Spaces take them. The colors live with the views.
+enum SpaceGradientName {
+    static let all = ["matcha", "zen", "indigo", "sand", "mochi", "iris", "tide", "graphite"]
+
+    /// The first name no existing Space uses, then round robin.
+    static func next(after used: [String]) -> String {
+        all.first { !used.contains($0) } ?? all[used.count % all.count]
+    }
+}
+
 enum SpaceTypeRole: String, Codable, CaseIterable, Identifiable, Hashable {
     /// A durable thing: a recipe, a habit.
     case object
     /// A logged occurrence about one or more records: cooked, checked in.
     case event
+    /// One record for the whole Space: targets, preferences.
+    case settings
 
     var id: String { rawValue }
 }
@@ -550,11 +609,64 @@ extension SpaceSchema {
         return ids
     }
 
-    func display(_ value: SpaceValue, for field: SpaceField) -> String {
+    /// Every link a set of values holds, including link columns inside groups.
+    func links(in values: [String: SpaceValue]) -> [(field: SpaceField, recordID: String)] {
+        Self.links(in: values, fields: fields)
+    }
+
+    private static func links(in values: [String: SpaceValue], fields: [SpaceField]) -> [(field: SpaceField, recordID: String)] {
+        var found: [(field: SpaceField, recordID: String)] = []
+        for field in fields {
+            switch (field.kind, values[field.id]) {
+            case (.link, .text(let id)):
+                found.append((field, id))
+            case (.group, .rows(let rows)):
+                for row in rows {
+                    found += links(in: row, fields: field.fields)
+                }
+            default:
+                break
+            }
+        }
+        return found
+    }
+
+    var linkFields: [SpaceField] {
+        fields.flatMap { $0.kind == .group ? $0.fields : [$0] }.filter { $0.kind == .link }
+    }
+
+    /// `values` without any link to `recordID`. Nil when nothing pointed at it.
+    func removingLinks(to recordID: String, from values: [String: SpaceValue]) -> [String: SpaceValue]? {
+        var result = values
+        var changed = false
+        for field in fields {
+            switch (field.kind, values[field.id]) {
+            case (.link, .text(recordID)):
+                result[field.id] = nil
+                changed = true
+            case (.group, .rows(let rows)):
+                let links = field.fields.filter { $0.kind == .link }.map(\.id)
+                let cleaned = rows.map { row in row.filter { !(links.contains($0.key) && $0.value == .text(recordID)) } }
+                if cleaned != rows {
+                    result[field.id] = .rows(cleaned.filter { !$0.isEmpty })
+                    changed = true
+                }
+            default:
+                break
+            }
+        }
+        return changed ? result : nil
+    }
+
+    /// `titles` maps record ids to names, for link fields.
+    func display(_ value: SpaceValue, for field: SpaceField, titles: [String: String] = [:]) -> String {
         switch value {
         case .text(let text):
             if field.kind == .choice {
                 return field.options.first { $0.id == text }?.name ?? text
+            }
+            if field.kind == .link {
+                return titles[text] ?? "Missing record"
             }
             // An image value is an asset id, which is not worth reading.
             return field.kind == .image ? "" : text
@@ -697,4 +809,294 @@ struct SpaceTemplate: Identifiable, Hashable {
     ])
 
     static let all = [empty, recipes, habits]
+}
+
+
+/// The arithmetic behind a calc field or a progress bar.
+///
+/// Terms: a number, a field id beside the formula, `link.field` (a field of the linked record),
+/// `settingsKey.field` (a field of a settings type), and `sum(group.column)`.
+/// Operators: + - * / and parentheses. Ids may hold hyphens, so put spaces around a minus.
+indirect enum SpaceFormula: Equatable {
+    case number(Double)
+    case field(String)
+    case path(String, String)
+    case sum(String, String)
+    case binary(Character, SpaceFormula, SpaceFormula)
+
+    static let grammar = "Use numbers, field ids, link.field, settingsKey.field, sum(group.column), + - * / and parentheses, with spaces around a minus."
+
+    init?(_ raw: String) {
+        var parser = Parser(raw)
+        guard let parsed = parser.expression(), parser.atEnd else { return nil }
+        self = parsed
+    }
+
+    private struct Parser {
+        private var tokens: [String] = []
+        private var index = 0
+
+        init(_ raw: String) {
+            let characters = Array(raw)
+            var position = 0
+            func isWord(_ character: Character) -> Bool { character.isLetter || character.isNumber || character == "_" }
+            while position < characters.count {
+                let character = characters[position]
+                if character.isWhitespace {
+                    position += 1
+                } else if isWord(character) {
+                    var word = ""
+                    while position < characters.count {
+                        let next = characters[position]
+                        let joinsWord = (next == "-" || next == ".") && position + 1 < characters.count
+                            && isWord(characters[position + 1]) && !word.isEmpty
+                        guard isWord(next) || joinsWord else { break }
+                        word.append(next)
+                        position += 1
+                    }
+                    tokens.append(word)
+                } else {
+                    tokens.append(String(character))
+                    position += 1
+                }
+            }
+        }
+
+        var atEnd: Bool { index == tokens.count }
+
+        private mutating func take(_ token: String) -> Bool {
+            guard index < tokens.count, tokens[index] == token else { return false }
+            index += 1
+            return true
+        }
+
+        mutating func expression() -> SpaceFormula? {
+            guard var left = product() else { return nil }
+            while index < tokens.count, tokens[index] == "+" || tokens[index] == "-" {
+                let op = Character(tokens[index])
+                index += 1
+                guard let right = product() else { return nil }
+                left = .binary(op, left, right)
+            }
+            return left
+        }
+
+        private mutating func product() -> SpaceFormula? {
+            guard var left = term() else { return nil }
+            while index < tokens.count, tokens[index] == "*" || tokens[index] == "/" {
+                let op = Character(tokens[index])
+                index += 1
+                guard let right = term() else { return nil }
+                left = .binary(op, left, right)
+            }
+            return left
+        }
+
+        private mutating func term() -> SpaceFormula? {
+            guard index < tokens.count else { return nil }
+            if take("(") {
+                guard let inner = expression(), take(")") else { return nil }
+                return inner
+            }
+            let token = tokens[index]
+            index += 1
+            if token == "sum" {
+                guard take("("), index < tokens.count else { return nil }
+                let parts = tokens[index].split(separator: ".").map(String.init)
+                index += 1
+                guard parts.count == 2, take(")") else { return nil }
+                return .sum(parts[0], parts[1])
+            }
+            if let number = Double(token) { return .number(number) }
+            guard let first = token.first, first.isLetter || first == "_" else { return nil }
+            let parts = token.split(separator: ".").map(String.init)
+            switch parts.count {
+            case 1: return .field(parts[0])
+            case 2: return .path(parts[0], parts[1])
+            default: return nil
+            }
+        }
+    }
+
+    private static let numeric: Set<SpaceFieldKind> = [.number, .quantity, .calc]
+
+    /// What is wrong with the formula as far as one type can tell. Fields of linked and settings
+    /// types are checked by the store, which can see them.
+    func problem(beside siblings: [SpaceField], schema: SpaceSchema) -> String? {
+        switch self {
+        case .number:
+            return nil
+        case .field(let id):
+            guard let field = siblings.first(where: { $0.id == id }) ?? schema.liveFields.first(where: { $0.id == id }) else {
+                return "there is no field \(id)."
+            }
+            return Self.numeric.contains(field.kind) ? nil : "\(field.name) is not a number."
+        case .path:
+            return nil
+        case .sum(let group, let column):
+            guard let field = schema.liveFields.first(where: { $0.id == group }), field.kind == .group else {
+                return "\(group) is not a group."
+            }
+            guard let found = field.fields.first(where: { $0.id == column && !$0.isRemoved }) else {
+                return "\(field.name) has no column \(column)."
+            }
+            return Self.numeric.contains(found.kind) ? nil : "\(found.name) is not a number."
+        case .binary(_, let left, let right):
+            return left.problem(beside: siblings, schema: schema) ?? right.problem(beside: siblings, schema: schema)
+        }
+    }
+
+    /// Every `a.b` the formula reads.
+    var paths: [(String, String)] {
+        switch self {
+        case .path(let head, let field): [(head, field)]
+        case .binary(_, let left, let right): left.paths + right.paths
+        default: []
+        }
+    }
+}
+
+/// Where a formula finds the records it reaches through links and settings.
+protocol SpaceFormulaSource {
+    /// A record by id: its type's schema and stored values.
+    func linked(_ recordID: String) -> (schema: SpaceSchema, values: [String: SpaceValue])?
+    /// The one record of a settings type, by the type's key.
+    func settings(_ typeKey: String) -> (schema: SpaceSchema, values: [String: SpaceValue])?
+}
+
+extension SpaceSchema {
+    /// `values` with every calc field filled in, including calc columns inside groups.
+    func resolved(_ values: [String: SpaceValue], source: SpaceFormulaSource?) -> [String: SpaceValue] {
+        var result = values
+        for field in liveFields {
+            switch field.kind {
+            case .calc:
+                result[field.id] = number(of: field, in: values, top: values, source: source, depth: 0).map(SpaceValue.number)
+            case .group:
+                let columns = field.fields.filter { $0.kind == .calc && !$0.isRemoved }
+                guard !columns.isEmpty, case .rows(let rows) = values[field.id] else { continue }
+                result[field.id] = .rows(rows.map { row in
+                    var filled = row
+                    for column in columns {
+                        filled[column.id] = evaluate(column, siblings: field.fields, row: row, top: values, source: source, depth: 0)
+                            .map(SpaceValue.number)
+                    }
+                    return filled
+                })
+            default:
+                break
+            }
+        }
+        return result
+    }
+
+    /// One formula against a record, for components such as a progress bar.
+    func value(of formula: SpaceFormula, in values: [String: SpaceValue], source: SpaceFormulaSource?) -> Double? {
+        evaluate(formula, siblings: liveFields, row: values, top: values, source: source, depth: 0)
+    }
+
+    private func number(
+        of field: SpaceField,
+        in row: [String: SpaceValue],
+        top: [String: SpaceValue],
+        source: SpaceFormulaSource?,
+        depth: Int
+    ) -> Double? {
+        evaluate(field, siblings: liveFields, row: row, top: top, source: source, depth: depth)
+    }
+
+    private func evaluate(
+        _ field: SpaceField,
+        siblings: [SpaceField],
+        row: [String: SpaceValue],
+        top: [String: SpaceValue],
+        source: SpaceFormulaSource?,
+        depth: Int
+    ) -> Double? {
+        guard let formula = SpaceFormula(field.formula) else { return nil }
+        return evaluate(formula, siblings: siblings, row: row, top: top, source: source, depth: depth)
+    }
+
+    /// Nil when something the formula needs is missing, so a blank shows rather than a wrong number.
+    private func evaluate(
+        _ formula: SpaceFormula,
+        siblings: [SpaceField],
+        row: [String: SpaceValue],
+        top: [String: SpaceValue],
+        source: SpaceFormulaSource?,
+        depth: Int
+    ) -> Double? {
+        guard depth < 8 else { return nil }
+        switch formula {
+        case .number(let number):
+            return number
+        case .field(let id):
+            if let field = siblings.first(where: { $0.id == id && !$0.isRemoved }) {
+                return plain(field, siblings: siblings, row: row, top: top, source: source, depth: depth)
+            }
+            guard let field = liveFields.first(where: { $0.id == id }) else { return nil }
+            return plain(field, siblings: liveFields, row: top, top: top, source: source, depth: depth)
+        case .path(let head, let fieldID):
+            let found: (schema: SpaceSchema, values: [String: SpaceValue])?
+            if siblings.contains(where: { $0.id == head && $0.kind == .link }), case .text(let id) = row[head] {
+                found = source?.linked(id)
+            } else if liveFields.contains(where: { $0.id == head && $0.kind == .link }), case .text(let id) = top[head] {
+                found = source?.linked(id)
+            } else {
+                found = source?.settings(head)
+            }
+            guard let found else { return nil }
+            return found.schema.evaluate(
+                .field(fieldID), siblings: found.schema.liveFields, row: found.values, top: found.values, source: source, depth: depth + 1
+            )
+        case .sum(let groupID, let columnID):
+            guard let group = liveFields.first(where: { $0.id == groupID }), case .rows(let rows) = top[groupID] else { return 0 }
+            return rows.reduce(0) { total, each in
+                total + (evaluate(.field(columnID), siblings: group.fields, row: each, top: top, source: source, depth: depth + 1) ?? 0)
+            }
+        case .binary(let op, let left, let right):
+            guard let a = evaluate(left, siblings: siblings, row: row, top: top, source: source, depth: depth),
+                  let b = evaluate(right, siblings: siblings, row: row, top: top, source: source, depth: depth) else { return nil }
+            switch op {
+            case "+": return a + b
+            case "-": return a - b
+            case "*": return a * b
+            default: return b == 0 ? nil : a / b
+            }
+        }
+    }
+
+    private func plain(
+        _ field: SpaceField,
+        siblings: [SpaceField],
+        row: [String: SpaceValue],
+        top: [String: SpaceValue],
+        source: SpaceFormulaSource?,
+        depth: Int
+    ) -> Double? {
+        if field.kind == .calc {
+            return evaluate(field, siblings: siblings, row: row, top: top, source: source, depth: depth + 1)
+        }
+        switch row[field.id] {
+        case .number(let number): return number
+        case .quantity(let quantity): return quantity.amount
+        default: return nil
+        }
+    }
+
+    /// Every formula on the type: calc fields and calc columns.
+    var formulas: [(field: SpaceField, siblings: [SpaceField], formula: SpaceFormula)] {
+        var found: [(field: SpaceField, siblings: [SpaceField], formula: SpaceFormula)] = []
+        for field in liveFields {
+            if field.kind == .calc, let formula = SpaceFormula(field.formula) {
+                found.append((field, liveFields, formula))
+            }
+            for column in field.fields where column.kind == .calc && !column.isRemoved {
+                if let formula = SpaceFormula(column.formula) {
+                    found.append((column, field.fields, formula))
+                }
+            }
+        }
+        return found
+    }
 }

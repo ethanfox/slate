@@ -20,10 +20,20 @@ struct SpaceScreenContext {
     var records: [SpaceRecord]
     var events: [SpaceEvent]
     var record: SpaceRecord?
+    /// Record ids to names, for link fields.
+    var titles: [String: String] = [:]
+    /// Reaches linked and settings records, so calc fields can be worked out.
+    var lookup: SpaceLookup?
     var accent: Color
     var state: SpaceScreenState
     var context: ModelContext
     var open: (SpaceRecord) -> Void
+
+    /// A record's values with calc fields filled in.
+    func values(_ record: SpaceRecord?) -> [String: SpaceValue] {
+        guard let record else { return [:] }
+        return lookup?.resolved(record) ?? record.values
+    }
 
     func eventType(_ key: String?) -> SpaceType? {
         guard let key else { return nil }
@@ -54,9 +64,9 @@ struct SpaceScreenContext {
     }
 
     func subtitle(for record: SpaceRecord, fields: [String]) -> String {
-        let values = record.values
+        let values = values(record)
         return fields
-            .compactMap { id in schema.field(id).flatMap { field in values[id].map { schema.display($0, for: field) } } }
+            .compactMap { id in schema.field(id).flatMap { field in values[id].map { schema.display($0, for: field, titles: titles) } } }
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
     }
@@ -101,7 +111,7 @@ struct SpaceScreenContext {
         let values = event.values
         let parts = schema.liveFields.compactMap { field -> String? in
             guard let value = values[field.id] else { return nil }
-            let text = schema.display(value, for: field)
+            let text = schema.display(value, for: field, titles: titles)
             return field.kind == .number ? "\(text) \(field.name.lowercased())" : text
         }
         return parts.isEmpty ? type.name : parts.joined(separator: " · ")
@@ -140,6 +150,7 @@ struct SpaceComponentView: View {
         case "timeline": timeline
         case "calendar": SpaceCompletionCalendar(dates: context.events(component.text("events"), about: context.record).map(\.occurredAt), accent: context.accent, state: context.state)
         case "metric": metric
+        case "progress": progress
         case "action": action
         default: EmptyView()
         }
@@ -298,7 +309,7 @@ struct SpaceComponentView: View {
     }
 
     private func labelled(_ ids: [String], spacing: CGFloat) -> some View {
-        let values = context.record?.values ?? [:]
+        let values = context.values(context.record)
         let shown = ids.compactMap { id in context.schema.field(id).flatMap { field in values[id].map { (field, $0) } } }
         return HStack(alignment: .top, spacing: spacing) {
             ForEach(Array(shown.enumerated()), id: \.offset) { _, pair in
@@ -306,7 +317,7 @@ struct SpaceComponentView: View {
                     Text(pair.0.name)
                         .font(CraftFont.caption)
                         .foregroundStyle(.tertiary)
-                    Text(context.schema.display(pair.1, for: pair.0))
+                    Text(context.schema.display(pair.1, for: pair.0, titles: context.titles))
                         .font(CraftFont.body)
                         .textSelection(.enabled)
                 }
@@ -316,7 +327,7 @@ struct SpaceComponentView: View {
 
     @ViewBuilder
     private var fields: some View {
-        let values = context.record?.values ?? [:]
+        let values = context.values(context.record)
         let shown = component.list("fields").compactMap { id in
             context.schema.field(id).flatMap { field in values[id].map { (field, $0) } }
         }
@@ -327,7 +338,7 @@ struct SpaceComponentView: View {
                         Text(pair.0.name)
                             .font(CraftFont.caption)
                             .foregroundStyle(.tertiary)
-                        Text(context.schema.display(pair.1, for: pair.0))
+                        Text(context.schema.display(pair.1, for: pair.0, titles: context.titles))
                             .font(CraftFont.body)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
@@ -381,7 +392,7 @@ struct SpaceComponentView: View {
     }
 
     private func groupRows(_ id: String?) -> (SpaceField, [[String: SpaceValue]])? {
-        guard let id, let field = context.schema.field(id), case .rows(let rows) = context.record?.values[id] else { return nil }
+        guard let id, let field = context.schema.field(id), case .rows(let rows) = context.values(context.record)[id] else { return nil }
         return (field, rows)
     }
 
@@ -407,11 +418,11 @@ struct SpaceComponentView: View {
                             ForEach(columns) { column in
                                 if let value = row[column.id] {
                                     if column.kind == .quantity || column.kind == .number {
-                                        Text(context.schema.display(scaled(value), for: column))
+                                        Text(context.schema.display(scaled(value), for: column, titles: context.titles))
                                             .font(.system(size: 13, weight: .semibold))
                                             .frame(width: 72, alignment: .leading)
                                     } else {
-                                        Text(context.schema.display(value, for: column))
+                                        Text(context.schema.display(value, for: column, titles: context.titles))
                                             .font(CraftFont.body)
                                             .lineLimit(2)
                                     }
@@ -449,7 +460,7 @@ struct SpaceComponentView: View {
                             .frame(width: 22, height: 22)
                             .background(CraftColor.elevated, in: Circle())
                             .overlay(Circle().strokeBorder(CraftColor.hairline))
-                        Text(columns.compactMap { column in row[column.id].map { context.schema.display($0, for: column) } }.joined(separator: " · "))
+                        Text(columns.compactMap { column in row[column.id].map { context.schema.display($0, for: column, titles: context.titles) } }.joined(separator: " · "))
                             .font(CraftFont.body)
                             .lineSpacing(2)
                             .textSelection(.enabled)
@@ -522,6 +533,43 @@ struct SpaceComponentView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(CraftColor.hairline))
+    }
+
+    private func formula(_ name: String) -> Double? {
+        guard let record = context.record,
+              let raw = component.text(name) ?? component.number(name).map({ "\($0)" }),
+              let formula = SpaceFormula(raw) else { return nil }
+        return context.schema.value(of: formula, in: record.values, source: context.lookup)
+    }
+
+    private var progress: some View {
+        let value = formula("value") ?? 0
+        let target = formula("target")
+        let unit = component.text("unit").map { " \($0)" } ?? ""
+        let fraction = target.map { $0 > 0 ? min(max(value / $0, 0), 1) : 0 } ?? 0
+        func text(_ number: Double) -> String { number.formatted(.number.precision(.fractionLength(0...1))) }
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(component.text("label") ?? "")
+                    .font(CraftFont.body)
+                Spacer(minLength: 8)
+                Text(target.map { "\(text(value)) of \(text($0))\(unit)" } ?? "\(text(value))\(unit), no target set")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(CraftColor.hairline)
+                    Capsule()
+                        .fill(context.accent)
+                        .frame(width: proxy.size.width * fraction)
+                }
+            }
+            .frame(height: 6)
+        }
+        .frame(maxWidth: 420, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder

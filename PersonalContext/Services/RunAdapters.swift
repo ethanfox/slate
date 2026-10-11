@@ -48,14 +48,10 @@ final class RunCursorProcess {
             self.events = continuation
             self.readerTask = Task.detached { [weak self] in
                 var sawEnd = false
-                do {
-                    for try await line in output.fileHandleForReading.bytes.lines {
-                        guard let event = try? JSONDecoder().decode(RunnerEvent.self, from: Data(line.utf8)) else { continue }
-                        if event.type == "result" || event.type == "error" { sawEnd = true }
-                        await self?.yield(event)
-                    }
-                } catch {
-                    await self?.fail(error)
+                for await line in PipeLines.stream(output.fileHandleForReading) {
+                    guard let event = try? JSONDecoder().decode(RunnerEvent.self, from: Data(line.utf8)) else { continue }
+                    if event.type == "result" || event.type == "error" { sawEnd = true }
+                    await self?.yield(event)
                 }
                 var status: Int32 = 0
                 for await code in exits { status = code }

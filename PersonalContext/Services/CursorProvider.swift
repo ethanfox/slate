@@ -364,14 +364,10 @@ final class CursorConversationBridge {
     private func startReader(_ reader: FileHandle, exits: AsyncStream<Int32>) {
         readerTask = Task.detached { [weak self] in
             var sawEnd = false
-            do {
-                for try await line in reader.bytes.lines {
-                    guard let event = try? JSONDecoder().decode(RunnerEvent.self, from: Data(line.utf8)) else { continue }
-                    if event.type == "result" || event.type == "error" { sawEnd = true }
-                    await self?.deliver(event)
-                }
-            } catch {
-                await self?.failTurn(error)
+            for await line in PipeLines.stream(reader) {
+                guard let event = try? JSONDecoder().decode(RunnerEvent.self, from: Data(line.utf8)) else { continue }
+                if event.type == "result" || event.type == "error" { sawEnd = true }
+                await self?.deliver(event)
             }
             var status: Int32 = 0
             for await code in exits { status = code }

@@ -8,6 +8,10 @@ enum SpaceStoreError: LocalizedError, Equatable {
     case notAnEventType
     case recordOutsideSpace
     case invalidScreen([String])
+    case unknownLinkTarget(field: String, target: String)
+    case brokenLink(field: String, target: String)
+    case oneRecordOnly(String)
+    case badFormulaPath(field: String, reason: String)
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +21,14 @@ enum SpaceStoreError: LocalizedError, Equatable {
         case .notAnEventType: "Events can only be logged with an event type."
         case .recordOutsideSpace: "An event can only be about records in its own Space."
         case .invalidScreen(let problems): problems.joined(separator: " ")
+        case .unknownLinkTarget(let field, let target):
+            "\(field) links to \(target), which is not an object type in this Space. Create that type first."
+        case .brokenLink(let field, let target):
+            "\(field) must hold the id of a record in \(target). Use list_space_records to find it."
+        case .oneRecordOnly(let type):
+            "\(type) is a settings type and has exactly one record. Use list_space_records to get it, then update_space_record."
+        case .badFormulaPath(let field, let reason):
+            "\(field) has a formula that does not work: \(reason)"
         }
     }
 }
@@ -47,6 +59,23 @@ enum SpaceStore {
         context.insert(space)
         try context.save()
         return space
+    }
+
+    /// Rename, re-icon, recolor, or re-describe. Nil leaves a value as it is.
+    static func update(
+        _ space: Space,
+        name: String? = nil,
+        symbol: String? = nil,
+        summary: String? = nil,
+        gradient: String? = nil,
+        in context: ModelContext
+    ) throws {
+        if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { space.name = name }
+        if let symbol, !symbol.isEmpty { space.symbol = symbol }
+        if let summary { space.summary = summary }
+        if let gradient, SpaceGradientName.all.contains(gradient) { space.gradientRaw = gradient }
+        space.touch()
+        try context.save()
     }
 
     /// Delete means delete: the Space, its types, records, events, and every built-in record it owns.
@@ -139,6 +168,8 @@ enum SpaceStore {
             throw SpaceStoreError.duplicateKey(trimmed)
         }
         try schema.validate()
+        try checkLinkTargets(of: schema, ownKey: trimmed, spaceKey: SpaceJSON.key(space.id), in: context)
+        try checkFormulaPaths(of: schema, ownKey: trimmed, spaceKey: SpaceJSON.key(space.id), in: context)
         let type = SpaceType(spaceID: space.id, key: trimmed, name: name, role: role, schema: schema, origin: origin)
         context.insert(type)
         space.touch()
@@ -229,6 +260,8 @@ enum SpaceStore {
     static func reviseSchema(of type: SpaceType, to schema: SpaceSchema, in context: ModelContext) throws {
         let merged = try schema.replacing(type.schema)
         guard merged != type.schema else { return }
+        try checkLinkTargets(of: schema, ownKey: type.key, spaceKey: type.spaceIDString, in: context)
+        try checkFormulaPaths(of: schema, ownKey: type.key, spaceKey: type.spaceIDString, in: context)
         type.schema = merged
         type.schemaVersion += 1
         type.updatedAt = .now
@@ -291,13 +324,35 @@ enum SpaceStore {
         values: [String: SpaceValue] = [:],
         in context: ModelContext
     ) throws -> SpaceRecord {
+        if type.role == .settings { throw SpaceStoreError.oneRecordOnly(type.name) }
         guard type.role == .object else { throw SpaceStoreError.notAnObjectType }
         try type.schema.validate(values)
+        try checkLinks(in: values, schema: type.schema, spaceKey: type.spaceIDString, in: context)
         let record = SpaceRecord(type: type, title: title, values: values)
         context.insert(record)
         try context.save()
         syncImages(of: record, schema: type.schema, in: context)
         return record
+    }
+
+    /// The one record of a settings type, made the first time it is asked for.
+    @discardableResult
+    static func settingsRecord(of type: SpaceType, in context: ModelContext) throws -> SpaceRecord {
+        guard type.role == .settings else { throw SpaceStoreError.notAnObjectType }
+        if let existing = records(of: type, in: context).first { return existing }
+        let record = SpaceRecord(type: type, title: type.name, values: [:])
+        context.insert(record)
+        try context.save()
+        return record
+    }
+
+    /// Everything formulas in one Space can reach: its records, by id and by settings type.
+    static func lookup(spaceKey: String, in context: ModelContext) -> SpaceLookup {
+        SpaceLookup(
+            spaceKey: spaceKey,
+            records: fetch(#Predicate<SpaceRecord> { $0.spaceIDString == spaceKey }, in: context),
+            types: fetch(#Predicate<SpaceType> { $0.spaceIDString == spaceKey }, in: context)
+        )
     }
 
     /// `values` are merged over what the record holds. Pass `title` to rename it.
@@ -309,6 +364,7 @@ enum SpaceStore {
     ) throws {
         if !values.isEmpty, let typeID = record.typeID, let type = type(typeID, in: context) {
             try type.schema.validate(values)
+            try checkLinks(in: values, schema: type.schema, spaceKey: type.spaceIDString, in: context)
         }
         if let title { record.title = title }
         if !values.isEmpty {
@@ -333,6 +389,7 @@ enum SpaceStore {
         let schema = record.typeID.flatMap { type($0, in: context) }?.schema
         if let schema {
             try schema.validate(values)
+            try checkLinks(in: values, schema: schema, spaceKey: record.spaceIDString, in: context)
             kept = record.values.filter { schema.field($0.key)?.isRemoved == true }
         }
         record.title = title
@@ -373,6 +430,82 @@ enum SpaceStore {
         for event in events(about: record, in: context) {
             event.recordIDs = event.recordIDs.filter { $0 != record.id }
         }
+        // Records that linked to it lose that link, so nothing points at a record that is gone.
+        let space = record.spaceIDString
+        let key = SpaceJSON.key(record.id)
+        let pointing = fetch(#Predicate<SpaceRecord> { $0.spaceIDString == space && $0.valuesJSON.contains(key) }, in: context)
+        for other in pointing where other.id != record.id {
+            guard let schema = other.typeID.flatMap({ type($0, in: context) })?.schema,
+                  let cleaned = schema.removingLinks(to: key, from: other.values) else { continue }
+            other.values = cleaned
+        }
+    }
+
+    // MARK: Links
+
+    /// A link field must name an object type that exists in the same Space. A type may link to itself.
+    private static func checkLinkTargets(of schema: SpaceSchema, ownKey: String, spaceKey: String, in context: ModelContext) throws {
+        let links = schema.linkFields.filter { !$0.isRemoved }
+        guard !links.isEmpty else { return }
+        let role = SpaceTypeRole.object.rawValue
+        let known = Set(fetch(#Predicate<SpaceType> { $0.spaceIDString == spaceKey && $0.roleRaw == role }, in: context).map(\.key))
+        for field in links where field.target != ownKey && !known.contains(field.target) {
+            throw SpaceStoreError.unknownLinkTarget(field: field.name, target: field.target)
+        }
+    }
+
+    /// A formula that reads `a.b` needs `a` to be a link field or a settings type, and `b` a number there.
+    private static func checkFormulaPaths(of schema: SpaceSchema, ownKey: String, spaceKey: String, in context: ModelContext) throws {
+        let formulas = schema.formulas
+        guard formulas.contains(where: { !$0.formula.paths.isEmpty }) else { return }
+        let types = fetch(#Predicate<SpaceType> { $0.spaceIDString == spaceKey }, in: context)
+        let numeric: Set<SpaceFieldKind> = [.number, .quantity, .calc]
+        for entry in formulas {
+            for (head, fieldID) in entry.formula.paths {
+                let link = entry.siblings.first { $0.id == head && $0.kind == .link && !$0.isRemoved }
+                    ?? schema.liveFields.first { $0.id == head && $0.kind == .link }
+                let targetSchema: SpaceSchema?
+                let targetName: String
+                if let link {
+                    targetSchema = link.target == ownKey ? schema : types.first { $0.key == link.target }?.schema
+                    targetName = link.target
+                } else if head == ownKey {
+                    targetSchema = schema
+                    targetName = head
+                } else if let settings = types.first(where: { $0.key == head && $0.role == .settings }) {
+                    targetSchema = settings.schema
+                    targetName = settings.name
+                } else {
+                    throw SpaceStoreError.badFormulaPath(
+                        field: entry.field.name,
+                        reason: "\(head) is neither a link field here nor a settings type in this Space."
+                    )
+                }
+                guard let found = targetSchema?.liveFields.first(where: { $0.id == fieldID }), numeric.contains(found.kind) else {
+                    throw SpaceStoreError.badFormulaPath(
+                        field: entry.field.name,
+                        reason: "\(targetName) has no number field \(fieldID)."
+                    )
+                }
+            }
+        }
+    }
+
+    /// Every link must hold the id of a record that exists, in this Space, of the type the field points at.
+    private static func checkLinks(in values: [String: SpaceValue], schema: SpaceSchema, spaceKey: String, in context: ModelContext) throws {
+        let links = schema.links(in: values)
+        guard !links.isEmpty else { return }
+        let types = fetch(#Predicate<SpaceType> { $0.spaceIDString == spaceKey }, in: context)
+        for link in links {
+            let target = types.first { $0.key == link.field.target }
+            guard let target,
+                  let id = UUID(uuidString: link.recordID),
+                  let record = record(id, in: context),
+                  record.spaceIDString == spaceKey,
+                  record.typeIDString == SpaceJSON.key(target.id) else {
+                throw SpaceStoreError.brokenLink(field: link.field.name, target: target?.name ?? link.field.target)
+            }
+        }
     }
 
     // MARK: Events
@@ -410,6 +543,7 @@ enum SpaceStore {
             throw SpaceStoreError.recordOutsideSpace
         }
         try type.schema.validate(values)
+        try checkLinks(in: values, schema: type.schema, spaceKey: type.spaceIDString, in: context)
         let event = SpaceEvent(type: type, occurredAt: occurredAt, values: values, recordIDs: records.map(\.id))
         context.insert(event)
         try context.save()
@@ -426,6 +560,65 @@ enum SpaceStore {
         in context: ModelContext
     ) -> [Model] {
         (try? context.fetch(FetchDescriptor<Model>(predicate: predicate))) ?? []
+    }
+}
+
+/// Records of one Space, ready for formulas and for showing links by name.
+final class SpaceLookup: SpaceFormulaSource {
+    private let records: [String: SpaceRecord]
+    private let schemas: [String: SpaceSchema]
+    private let settingsTypeIDs: [String: String]
+    private var decoded: [String: [String: SpaceValue]] = [:]
+    private var filled: [String: [String: SpaceValue]] = [:]
+    let titles: [String: String]
+
+    init(spaceKey: String, records: [SpaceRecord], types: [SpaceType]) {
+        var byID: [String: SpaceRecord] = [:]
+        var titles: [String: String] = [:]
+        for record in records where record.spaceIDString == spaceKey {
+            let key = SpaceJSON.key(record.id)
+            byID[key] = record
+            titles[key] = record.displayTitle
+        }
+        var schemas: [String: SpaceSchema] = [:]
+        var settings: [String: String] = [:]
+        for type in types where type.spaceIDString == spaceKey {
+            let key = SpaceJSON.key(type.id)
+            schemas[key] = type.schema
+            if type.role == .settings { settings[type.key] = key }
+        }
+        self.records = byID
+        self.titles = titles
+        self.schemas = schemas
+        self.settingsTypeIDs = settings
+    }
+
+    private func stored(_ key: String, _ record: SpaceRecord) -> [String: SpaceValue] {
+        if let values = decoded[key] { return values }
+        let values = record.values
+        decoded[key] = values
+        return values
+    }
+
+    func linked(_ recordID: String) -> (schema: SpaceSchema, values: [String: SpaceValue])? {
+        guard let record = records[recordID], let schema = schemas[record.typeIDString] else { return nil }
+        return (schema, stored(recordID, record))
+    }
+
+    func settings(_ typeKey: String) -> (schema: SpaceSchema, values: [String: SpaceValue])? {
+        guard let typeID = settingsTypeIDs[typeKey], let schema = schemas[typeID] else { return nil }
+        guard let found = records.first(where: { $0.value.typeIDString == typeID }) else { return (schema, [:]) }
+        return (schema, stored(found.key, found.value))
+    }
+
+    /// A record's values with its calc fields worked out.
+    func resolved(_ record: SpaceRecord) -> [String: SpaceValue] {
+        let key = SpaceJSON.key(record.id)
+        if let values = filled[key] { return values }
+        let values = stored(key, record)
+        let result = schemas[record.typeIDString]?.resolved(values, source: self) ?? values
+        filled[key] = result
+        return result
     }
 }
 

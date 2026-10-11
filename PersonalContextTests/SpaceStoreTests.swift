@@ -702,3 +702,318 @@ final class SpaceImageTests: XCTestCase {
         XCTAssertEqual(schema.display(.text(SpaceJSON.key(id)), for: schema.fields[0]), "")
     }
 }
+
+@MainActor
+final class SpaceToolsTests: XCTestCase {
+    private var container: ModelContainer!
+    private var context: ModelContext { container.mainContext }
+
+    override func setUpWithError() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        container = try ModelContainer(for: Store.schema, configurations: configuration)
+    }
+
+    private func call(_ name: String, _ arguments: [String: Any] = [:]) -> [String: Any] {
+        Tools.call(name, arguments: arguments, container: container, announce: false)
+    }
+
+    private func text(_ result: [String: Any]) throws -> String {
+        try XCTUnwrap((result["content"] as? [[String: Any]])?.first?["text"] as? String)
+    }
+
+    private func object(_ result: [String: Any]) throws -> [String: Any] {
+        XCTAssertNil(result["isError"], (try? text(result)) ?? "")
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text(result).utf8)) as? [String: Any])
+    }
+
+    func testAnAgentCanBuildAReadingSpaceFromNothing() throws {
+        let catalog = try object(call("get_space_catalog"))
+        let names = try XCTUnwrap(catalog["components"] as? [[String: Any]]).compactMap { $0["component"] as? String }
+        XCTAssertEqual(Set(names), Set(SpaceScreenCatalog.components.map(\.name)))
+
+        let space = try object(call("create_space", ["name": "Reading", "summary": "Books I read"]))
+        let spaceID = try XCTUnwrap(space["id"] as? String)
+
+        _ = try object(call("set_space_type", [
+            "space_id": spaceID, "key": "book", "name": "Books",
+            "fields": [
+                ["name": "Author", "kind": "text"],
+                ["name": "Status", "kind": "choice", "options": ["To read", "Reading", "Finished"]],
+                ["name": "Rating", "kind": "number"],
+                ["id": "quotes", "name": "Quotes", "kind": "group", "fields": [["name": "Quote", "kind": "text"]]]
+            ]
+        ]))
+        _ = try object(call("set_space_type", [
+            "space_id": spaceID, "key": "session", "name": "Reading session", "role": "event",
+            "fields": [["name": "Pages", "kind": "number"]]
+        ]))
+
+        // A first attempt with mistakes comes back with every reason and saves nothing.
+        let rejected = call("set_space_screen", [
+            "space_id": spaceID, "type_key": "book", "kind": "detail",
+            "components": [
+                ["component": "header", "fields": ["author", "pages"], "action": "session"],
+                ["component": "table"],
+                ["component": "metric", "value": "streak:reading", "label": "streak"]
+            ]
+        ])
+        XCTAssertEqual(rejected["isError"] as? Bool, true)
+        let reasons = try text(rejected)
+        XCTAssertTrue(reasons.contains("header.fields names a field that does not exist: pages."), reasons)
+        XCTAssertTrue(reasons.contains("There is no component called table."), reasons)
+        XCTAssertTrue(reasons.contains("metric.value must name an event type"), reasons)
+
+        _ = try object(call("set_space_screen", [
+            "space_id": spaceID, "type_key": "book", "kind": "detail",
+            "components": [
+                ["component": "header", "fields": ["author", "status"], "action": "session", "actionLabel": "Log session"],
+                ["component": "columns", "children": [
+                    ["component": "metric", "value": "streak:session", "label": "reading streak"],
+                    ["component": "metric", "value": "count:session", "label": "sessions"]
+                ]],
+                ["component": "section", "title": "Quotes", "children": [["component": "steps", "rows": "quotes"]]],
+                ["component": "timeline", "events": "session"]
+            ]
+        ]))
+        _ = try object(call("set_space_screen", [
+            "space_id": spaceID, "type_key": "book", "kind": "collection",
+            "components": "[{\"component\":\"search\",\"filters\":[\"status\"]},{\"component\":\"rows\",\"subtitle\":[\"author\",\"status\"],\"trail\":\"count:session\"}]"
+        ]))
+
+        let record = try object(call("create_space_record", [
+            "space_id": spaceID, "type_key": "book", "title": "The Timeless Way of Building",
+            "values": ["author": "Christopher Alexander", "Status": "Reading", "rating": 5, "quotes": ["A building is alive when it is whole."]]
+        ]))
+        let recordID = try XCTUnwrap(record["id"] as? String)
+        let values = try XCTUnwrap(record["values"] as? [String: Any])
+        XCTAssertEqual(values["status"] as? String, "reading")
+        XCTAssertEqual((values["quotes"] as? [[String: Any]])?.first?["quote"] as? String, "A building is alive when it is whole.")
+
+        _ = try object(call("log_space_event", ["space_id": spaceID, "type_key": "session", "record_ids": [recordID], "values": ["pages": 24]]))
+
+        // What the app will draw: both screens are stored, valid, and marked as the agent's version.
+        let stored = try XCTUnwrap(SpaceStore.all(in: context).first)
+        let types = SpaceStore.types(in: stored, context: context)
+        let book = try XCTUnwrap(types.first { $0.key == "book" })
+        XCTAssertEqual(book.origin, .agent)
+        let screens = try context.fetch(FetchDescriptor<SpaceScreen>())
+        XCTAssertNotNil(SpaceScreens.definition(for: book, kind: .detail, screens: screens, types: types))
+        XCTAssertNotNil(SpaceScreens.definition(for: book, kind: .collection, screens: screens, types: types))
+        XCTAssertTrue(screens.allSatisfy { !$0.agentJSON.isEmpty })
+        XCTAssertEqual(SpaceStore.events(in: stored, context: context).first?.values["pages"], .number(24))
+
+        let read = try object(call("get_space", ["space_id": spaceID]))
+        let readTypes = try XCTUnwrap(read["types"] as? [[String: Any]])
+        XCTAssertEqual(readTypes.first?["record_count"] as? Int, 1)
+        XCTAssertNotNil((readTypes.first?["screens"] as? [String: Any])?["detail"])
+    }
+
+    func testChangingATypeThroughTheToolKeepsValuesAndRefusesAKindChange() throws {
+        let space = try object(call("create_space", ["name": "Reading"]))
+        let spaceID = try XCTUnwrap(space["id"] as? String)
+        let fields: [[String: Any]] = [["name": "Author", "kind": "text"], ["name": "Rating", "kind": "number"]]
+        _ = try object(call("set_space_type", ["space_id": spaceID, "key": "book", "name": "Books", "fields": fields]))
+        let record = try object(call("create_space_record", ["space_id": spaceID, "type_key": "book", "title": "Dune", "values": ["rating": 4]]))
+
+        let refused = call("set_space_type", ["space_id": spaceID, "key": "book", "name": "Books", "fields": [["name": "Rating", "kind": "text"]]])
+        XCTAssertEqual(refused["isError"] as? Bool, true)
+        XCTAssertTrue(try text(refused).contains("Add a new field instead"))
+
+        let revised = try object(call("set_space_type", ["space_id": spaceID, "key": "book", "name": "Library", "fields": [["name": "Author", "kind": "text"]]]))
+        XCTAssertEqual(revised["name"] as? String, "Library")
+        XCTAssertEqual((revised["fields"] as? [[String: Any]])?.compactMap { $0["id"] as? String }, ["author"])
+        let stored = try XCTUnwrap(SpaceStore.record(try XCTUnwrap(UUID(uuidString: record["id"] as? String ?? "")), in: context))
+        XCTAssertEqual(stored.values["rating"], .number(4))
+
+        let wrong = call("create_space_record", ["space_id": spaceID, "type_key": "book", "title": "X", "values": ["rating": 5]])
+        XCTAssertTrue(try text(wrong).contains("There is no field rating"))
+    }
+
+    func testOneCallCanDefineATypeWithBothScreens() throws {
+        let space = try object(call("create_space", ["name": "Habits"]))
+        let spaceID = try XCTUnwrap(space["id"] as? String)
+        _ = try object(call("set_space_type", ["space_id": spaceID, "key": "check-in", "name": "Check-in", "role": "event", "fields": [[String: Any]]()]))
+        let habit: [String: Any] = [
+            "space_id": spaceID, "key": "habit", "name": "Habits",
+            "fields": [["name": "Target", "kind": "text"]],
+            "collection": [["component": "rows", "subtitle": ["target"], "action": "check-in", "trail": "streak:check-in"]],
+            "detail": [["component": "header", "fields": ["target"], "action": "check-in"], ["component": "calendar", "events": "check-in"]]
+        ]
+
+        var broken = habit
+        broken["detail"] = [["component": "calendar", "events": "nope"]]
+        let refused = call("set_space_type", broken)
+        XCTAssertEqual(refused["isError"] as? Bool, true)
+        let reason = try text(refused)
+        XCTAssertTrue(reason.hasPrefix("The type habit was saved, but its detail screen was not:"), reason)
+
+        let made = try object(call("set_space_type", habit))
+        let screens = try XCTUnwrap(made["screens"] as? [String: Any])
+        XCTAssertEqual(Set(screens.keys), ["collection", "detail"])
+        XCTAssertEqual(SpaceStore.types(in: try XCTUnwrap(SpaceStore.all(in: context).first), context: context).map(\.key), ["check-in", "habit"])
+    }
+
+    func testCreateSpaceTakesTheColorTheUserPicked() throws {
+        _ = try object(call("create_space", ["name": "Kitchen", "symbol": "leaf", "color": "indigo"]))
+        _ = try object(call("create_space", ["name": "Other", "color": "chartreuse"]))
+        let spaces = SpaceStore.all(in: context)
+        XCTAssertEqual(spaces.map(\.gradientRaw), ["indigo", "matcha"])
+        XCTAssertEqual(spaces.first?.symbol, "leaf")
+    }
+
+    func testAMealLinksToRecipesAndWrongLinksAreRefused() throws {
+        let spaceID = try XCTUnwrap(try object(call("create_space", ["name": "Cooking"]))["id"] as? String)
+
+        // A link cannot point at a type that is not there yet.
+        let early = call("set_space_type", [
+            "space_id": spaceID, "key": "meal", "name": "Meals",
+            "fields": [["name": "Recipe", "kind": "link", "target": "recipe"]]
+        ])
+        XCTAssertEqual(early["isError"] as? Bool, true)
+
+        _ = try object(call("set_space_type", [
+            "space_id": spaceID, "key": "recipe", "name": "Recipes", "fields": [["name": "Calories", "kind": "number"]]
+        ]))
+        _ = try object(call("set_space_type", [
+            "space_id": spaceID, "key": "meal", "name": "Meals",
+            "fields": [[
+                "id": "items", "name": "Items", "kind": "group",
+                "fields": [["id": "recipe", "name": "Recipe", "kind": "link", "target": "recipe"], ["name": "Servings", "kind": "number"]]
+            ]]
+        ]))
+        let chili = try XCTUnwrap(try object(call("create_space_record", [
+            "space_id": spaceID, "type_key": "recipe", "title": "Chili", "values": ["calories": 520]
+        ]))["id"] as? String)
+        let dinner = try object(call("create_space_record", [
+            "space_id": spaceID, "type_key": "meal", "title": "Dinner",
+            "values": ["items": [["recipe": chili, "servings": 2]]]
+        ]))
+        let dinnerID = try XCTUnwrap(dinner["id"] as? String)
+
+        // A meal is not a recipe, and a made-up id is nothing at all.
+        for wrong in [dinnerID, UUID().uuidString, "Chili"] {
+            let refused = call("create_space_record", [
+                "space_id": spaceID, "type_key": "meal", "title": "Lunch", "values": ["items": [["recipe": wrong]]]
+            ])
+            XCTAssertEqual(refused["isError"] as? Bool, true, wrong)
+        }
+
+        let space = try XCTUnwrap(SpaceStore.all(in: context).first)
+        let meal = try XCTUnwrap(SpaceStore.types(in: space, context: context).first { $0.key == "meal" })
+        let stored = try XCTUnwrap(SpaceStore.records(of: meal, in: context).first)
+        let column = try XCTUnwrap(meal.schema.field("items")?.fields.first)
+        let titles = [SpaceJSON.key(try XCTUnwrap(UUID(uuidString: chili))): "Chili"]
+        XCTAssertEqual(meal.schema.display(.text(titles.keys.first!), for: column, titles: titles), "Chili")
+
+        // Deleting the recipe takes the link with it and leaves the rest of the row.
+        let recipe = try XCTUnwrap(SpaceStore.record(try XCTUnwrap(UUID(uuidString: chili)), in: context))
+        try SpaceStore.delete(recipe, in: context)
+        XCTAssertEqual(stored.values["items"], .rows([["servings": .number(2)]]))
+    }
+
+    func testAMealTotalsItsRecipesAndMeasuresAgainstGoals() throws {
+        let spaceID = try XCTUnwrap(try object(call("create_space", ["name": "Cooking"]))["id"] as? String)
+        _ = try object(call("set_space_type", [
+            "space_id": spaceID, "key": "goals", "name": "Goals", "role": "settings",
+            "fields": [["name": "Calories", "kind": "number"]]
+        ]))
+        _ = try object(call("set_space_type", [
+            "space_id": spaceID, "key": "recipe", "name": "Recipes", "fields": [["name": "Calories", "kind": "number"]]
+        ]))
+        _ = try object(call("set_space_type", [
+            "space_id": spaceID, "key": "meal", "name": "Meals",
+            "fields": [
+                [
+                    "id": "items", "name": "Recipes", "kind": "group",
+                    "fields": [
+                        ["id": "recipe", "name": "Recipe", "kind": "link", "target": "recipe"],
+                        ["name": "Servings", "kind": "number"],
+                        ["name": "Calories", "kind": "calc", "formula": "recipe.calories * servings"]
+                    ]
+                ],
+                ["name": "Calories", "kind": "calc", "formula": "sum(items.calories)"],
+                ["id": "left", "name": "Left today", "kind": "calc", "formula": "goals.calories - calories"]
+            ],
+            "detail": [["component": "progress", "value": "calories", "target": "goals.calories", "label": "Calories"]]
+        ]))
+
+        func recipe(_ title: String, _ calories: Int) throws -> String {
+            try XCTUnwrap(try object(call("create_space_record", [
+                "space_id": spaceID, "type_key": "recipe", "title": title, "values": ["calories": calories]
+            ]))["id"] as? String)
+        }
+        let chili = try recipe("Chili", 500)
+        let rice = try recipe("Rice", 200)
+
+        // Goals has one record that exists without being created, and cannot be given a second.
+        let goals = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(try text(call("list_space_records", [
+            "space_id": spaceID, "type_key": "goals"
+        ])).utf8)) as? [[String: Any]])
+        XCTAssertEqual(goals.count, 1)
+        let goalsID = try XCTUnwrap(goals.first?["id"] as? String)
+        _ = try object(call("update_space_record", ["space_id": spaceID, "record_id": goalsID, "values": ["calories": 2000]]))
+        XCTAssertEqual(call("create_space_record", ["space_id": spaceID, "type_key": "goals", "title": "More"])["isError"] as? Bool, true)
+
+        let dinner = try object(call("create_space_record", [
+            "space_id": spaceID, "type_key": "meal", "title": "Dinner",
+            "values": ["items": [["recipe": chili, "servings": 2], ["recipe": rice, "servings": 1.5]]]
+        ]))
+        let values = try XCTUnwrap(dinner["values"] as? [String: Any])
+        XCTAssertEqual(values["calories"] as? Double, 1300)
+        XCTAssertEqual(values["left"] as? Double, 700)
+        let rows = try XCTUnwrap(values["items"] as? [[String: Any]])
+        XCTAssertEqual(rows.compactMap { $0["calories"] as? Double }, [1000, 300])
+
+        // A total cannot be typed, and a formula has to add up.
+        let typed = call("create_space_record", ["space_id": spaceID, "type_key": "meal", "title": "Lunch", "values": ["calories": 5]])
+        XCTAssertEqual(typed["isError"] as? Bool, true)
+        for formula in ["recipe.kcal * servings", "nothing + 1", "sum(items.recipe)", "2 +"] {
+            let refused = call("set_space_type", [
+                "space_id": spaceID, "key": "meal2-\(abs(formula.hashValue))", "name": "Other",
+                "fields": [
+                    ["id": "items", "name": "Recipes", "kind": "group", "fields": [
+                        ["id": "recipe", "name": "Recipe", "kind": "link", "target": "recipe"],
+                        ["name": "Servings", "kind": "number"],
+                        ["name": "Calories", "kind": "calc", "formula": formula.hasPrefix("recipe") ? formula : "servings"]
+                    ]],
+                    ["name": "Total", "kind": "calc", "formula": formula.hasPrefix("recipe") ? "sum(items.calories)" : formula]
+                ]
+            ])
+            XCTAssertEqual(refused["isError"] as? Bool, true, formula)
+        }
+    }
+
+    func testFormulasReadIdsWithHyphensAndKeepOrderOfOperations() {
+        XCTAssertEqual(SpaceFormula("a + b * 2"), .binary("+", .field("a"), .binary("*", .field("b"), .number(2))))
+        XCTAssertEqual(SpaceFormula("(a + b) / 2.5"), .binary("/", .binary("+", .field("a"), .field("b")), .number(2.5)))
+        XCTAssertEqual(SpaceFormula("net-carbs - fibre"), .binary("-", .field("net-carbs"), .field("fibre")))
+        XCTAssertEqual(SpaceFormula("sum(items.cost)"), .sum("items", "cost"))
+        XCTAssertNil(SpaceFormula("a +"))
+        XCTAssertNil(SpaceFormula("a.b.c"))
+    }
+
+    func testASpaceCanBeRenamedAndRecolored() throws {
+        let spaceID = try XCTUnwrap(try object(call("create_space", ["name": "Cookoing", "color": "matcha"]))["id"] as? String)
+
+        let renamed = try object(call("update_space", ["space_id": spaceID, "name": "Cooking", "color": "indigo"]))
+        XCTAssertEqual(renamed["name"] as? String, "Cooking")
+        let space = try XCTUnwrap(SpaceStore.all(in: context).first)
+        XCTAssertEqual(space.gradientRaw, "indigo")
+
+        XCTAssertEqual(call("update_space", ["space_id": spaceID, "color": "beige"])["isError"] as? Bool, true)
+        XCTAssertEqual(space.name, "Cooking")
+    }
+
+    func testSetupChatAsksForAPlanBeforeAnythingIsMade() {
+        let message = NewSpaceSheet.setupMessage(name: "Kitchen", symbol: "leaf", color: "zen", brief: "  recipes and a weekly meal plan ")
+        XCTAssertTrue(message.contains("What it is for: recipes and a weekly meal plan\n"))
+        XCTAssertTrue(message.contains("before you make anything"))
+        XCTAssertTrue(ContextBuilder.spaceRules.contains("Do not call create_space, set_space_type, or set_space_screen until they agree"))
+        XCTAssertTrue(SpaceStore.all(in: context).isEmpty)
+    }
+
+    func testGradientNamesMatchTheColorsTheViewsDraw() {
+        XCTAssertEqual(SpaceGradientName.all, SpaceGradient.allCases.map(\.rawValue))
+        XCTAssertEqual(SpaceGradientName.next(after: ["matcha"]), "zen")
+    }
+}

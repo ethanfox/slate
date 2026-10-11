@@ -29,6 +29,13 @@ struct SpaceView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     if space == nil {
                         EmptyLine(text: "This Space no longer exists.")
+                    } else if let type = selectedType, type.role == .settings {
+                        if let record = records.first(where: { $0.typeIDString == SpaceJSON.key(type.id) }) {
+                            SpaceRecordContent(spaceID: id, recordID: record.id)
+                        } else {
+                            EmptyLine(text: "Nothing set yet.")
+                                .task(id: type.id) { try? SpaceStore.settingsRecord(of: type, in: context) }
+                        }
                     } else if let type = selectedType {
                         if let space, let definition = SpaceScreens.definition(for: type, kind: .collection, screens: screens, types: types) {
                             SpaceScreenView(definition: definition, context: screenContext(type, space: space))
@@ -70,6 +77,8 @@ struct SpaceView: View {
             records: records.filter { $0.typeIDString == key }.sorted { $0.createdAt < $1.createdAt },
             events: events.filter { $0.spaceIDString == spaceKey },
             record: nil,
+            titles: SpaceSelection.titles(in: spaceKey, records: records),
+            lookup: SpaceLookup(spaceKey: spaceKey, records: records, types: types),
             accent: space.gradient.accent,
             state: screenState,
             context: context,
@@ -83,6 +92,7 @@ struct SpaceView: View {
         let key = SpaceJSON.key(type.id)
         let rows = records.filter { $0.typeIDString == key }
         let schema = type.schema
+        let titles = SpaceSelection.titles(in: type.spaceIDString, records: records)
         HStack(alignment: .firstTextBaseline) {
             Text(type.name)
                 .font(CraftFont.section)
@@ -105,7 +115,7 @@ struct SpaceView: View {
                                 Text(record.displayTitle)
                                     .font(.system(size: 13, weight: .medium))
                                     .lineLimit(1)
-                                let subtitle = SpaceSelection.subtitle(for: record, schema: schema)
+                                let subtitle = SpaceSelection.subtitle(for: record, schema: schema, titles: titles)
                                 if !subtitle.isEmpty {
                                     Text(subtitle)
                                         .font(.system(size: 12))
@@ -151,15 +161,24 @@ enum SpaceSelection {
 
     static func objectTypes(in spaceID: UUID, types: [SpaceType]) -> [SpaceType] {
         let key = SpaceJSON.key(spaceID)
-        return types.filter { $0.spaceIDString == key && $0.role == .object }
+        return types.filter { $0.spaceIDString == key && $0.role != .event }
     }
 
     /// The first two single-value fields that hold something, for a list row.
-    static func subtitle(for record: SpaceRecord, schema: SpaceSchema) -> String {
+    /// Record ids to names across one Space, for showing links.
+    static func titles(in spaceKey: String, records: [SpaceRecord]) -> [String: String] {
+        var titles: [String: String] = [:]
+        for record in records where record.spaceIDString == spaceKey {
+            titles[SpaceJSON.key(record.id)] = record.displayTitle
+        }
+        return titles
+    }
+
+    static func subtitle(for record: SpaceRecord, schema: SpaceSchema, titles: [String: String] = [:]) -> String {
         let values = record.values
         return schema.liveFields
             .filter { $0.kind != .group && $0.kind != .richText && $0.kind != .image }
-            .compactMap { field in values[field.id].map { schema.display($0, for: field) } }
+            .compactMap { field in values[field.id].map { schema.display($0, for: field, titles: titles) } }
             .filter { !$0.isEmpty }
             .prefix(2)
             .joined(separator: " · ")
@@ -172,6 +191,7 @@ struct SpaceToolbar: View {
 
     @Environment(AppModel.self) private var app
     @Query(sort: \SpaceType.createdAt) private var types: [SpaceType]
+    @Query private var records: [SpaceRecord]
 
     var body: some View {
         let owned = SpaceSelection.objectTypes(in: spaceID, types: types)
@@ -196,7 +216,21 @@ struct SpaceToolbar: View {
                     .padding(2)
                     .glassEffect(.regular, in: Capsule())
                 }
-                if let selected {
+                if let selected, selected.role == .settings {
+                    if let record = records.first(where: { $0.typeIDString == SpaceJSON.key(selected.id) }) {
+                        Button {
+                            app.present(.editRecord(record))
+                        } label: {
+                            Text("Edit")
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .glassEffect(.regular, in: Capsule())
+                        .help("Change \(selected.name)")
+                    }
+                } else if let selected {
                     Button {
                         app.present(.newRecord(selected))
                     } label: {
@@ -231,6 +265,21 @@ struct ChoiceCapsule: View {
 }
 
 struct NewSpaceSheet: View {
+    /// Set to rename, re-icon, or recolor an existing Space.
+    var space: Space?
+
+    /// The first message of a setup chat. The agent proposes, the user confirms, and only then is
+    /// the Space created, so an abandoned chat leaves nothing behind.
+    static func setupMessage(name: String, symbol: String, color: String, brief: String) -> String {
+        """
+        I want a new Space called “\(name)”.
+
+        What it is for: \(brief.trimmingCharacters(in: .whitespacesAndNewlines))
+
+        Tell me what you would make before you make anything, and wait for me to agree. When you create it, use the name “\(name)”, the symbol \(symbol), and the color \(color).
+        """
+    }
+
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @Environment(\.modalDismiss) private var modalDismiss
@@ -241,6 +290,7 @@ struct NewSpaceSheet: View {
     @State private var symbol = "leaf"
     @State private var gradient: SpaceGradient?
     @State private var template = SpaceTemplate.empty
+    @State private var brief = ""
 
     private var chosen: SpaceGradient {
         gradient ?? SpaceGradient.next(after: spaces.map(\.gradientRaw))
@@ -248,7 +298,7 @@ struct NewSpaceSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("New Space")
+            Text(space == nil ? "New Space" : "Edit Space")
                 .font(CraftFont.title)
 
             ModalField("Name") {
@@ -282,6 +332,7 @@ struct NewSpaceSheet: View {
                 }
             }
 
+            if space == nil {
             ModalField("Start with", boxed: false) {
                 HStack(spacing: 6) {
                     ForEach(SpaceTemplate.all) { option in
@@ -295,19 +346,51 @@ struct NewSpaceSheet: View {
                 }
             }
 
-            ModalFooter(actionTitle: "Create", actionEnabled: canCreate, action: create)
+            ModalField("Or describe it") {
+                TextField("Track the books I read, with notes and a rating", text: $brief, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(2...5)
+            }
+            }
+
+            ModalFooter(
+                actionTitle: space != nil ? "Save" : describing ? "Plan it with an agent" : "Create",
+                actionEnabled: canCreate,
+                action: create
+            )
         }
-        .onAppear { focusName = true }
+        .onAppear {
+            if let space, name.isEmpty {
+                name = space.name
+                symbol = space.symbol
+                gradient = space.gradient
+            }
+            focusName = true
+        }
     }
 
     private var canCreate: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// A description hands the setup to an agent instead of a starting template.
+    private var describing: Bool {
+        !brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func create() {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        if let space = try? SpaceStore.create(named: trimmed, symbol: symbol, gradient: chosen.rawValue, in: context) {
+        if let space {
+            try? SpaceStore.update(space, name: trimmed, symbol: symbol, gradient: chosen.rawValue, in: context)
+        } else if describing {
+            let conversation = app.makeConversation(in: nil, context: context)
+            conversation.title = "Set up \(trimmed)"
+            app.pendingSend = PendingSend(
+                conversationID: conversation.id,
+                text: NewSpaceSheet.setupMessage(name: trimmed, symbol: symbol, color: chosen.rawValue, brief: brief)
+            )
+        } else if let space = try? SpaceStore.create(named: trimmed, symbol: symbol, gradient: chosen.rawValue, in: context) {
             try? SpaceStore.apply(template, to: space, in: context)
             app.navigate(to: .space(space.id), newTab: false)
         }

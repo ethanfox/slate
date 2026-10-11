@@ -1,8 +1,25 @@
 import SwiftData
 import SwiftUI
 
-/// The plain detail view every record falls back to.
 struct SpaceRecordView: View {
+    var spaceID: UUID
+    var recordID: UUID
+
+    var body: some View {
+        ScrollView {
+            PageBody {
+                SpaceRecordContent(spaceID: spaceID, recordID: recordID)
+                    .padding(.horizontal, 48)
+                    .padding(.vertical, 36)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .scrollContentBackground(.hidden)
+    }
+}
+
+/// One record: its detail screen, or the plain detail every record falls back to.
+struct SpaceRecordContent: View {
     var spaceID: UUID
     var recordID: UUID
 
@@ -19,31 +36,23 @@ struct SpaceRecordView: View {
     }
 
     var body: some View {
-        ScrollView {
-            PageBody {
-                VStack(alignment: .leading, spacing: 24) {
-                    if let record, let type = types.first(where: { $0.id == record.typeID }) {
-                        if let space = spaces.first(where: { $0.id == spaceID }),
-                           let definition = SpaceScreens.definition(for: type, kind: .detail, screens: screens, types: types) {
-                            SpaceScreenView(definition: definition, context: screenContext(record, type: type, space: space))
-                        } else {
-                            VStack(alignment: .leading, spacing: 24) {
-                                Text(record.displayTitle)
-                                    .font(.system(size: 28, weight: .semibold))
-                                content(record, schema: type.schema)
-                            }
-                            .frame(maxWidth: 640, alignment: .leading)
-                        }
-                    } else {
-                        EmptyLine(text: "This record no longer exists.")
+        VStack(alignment: .leading, spacing: 24) {
+            if let record, let type = types.first(where: { $0.id == record.typeID }) {
+                if let space = spaces.first(where: { $0.id == spaceID }),
+                   let definition = SpaceScreens.definition(for: type, kind: .detail, screens: screens, types: types) {
+                    SpaceScreenView(definition: definition, context: screenContext(record, type: type, space: space))
+                } else {
+                    VStack(alignment: .leading, spacing: 24) {
+                        Text(record.displayTitle)
+                            .font(.system(size: 28, weight: .semibold))
+                        content(record, schema: type.schema)
                     }
+                    .frame(maxWidth: 640, alignment: .leading)
                 }
-                .padding(.horizontal, 48)
-                .padding(.vertical, 36)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                EmptyLine(text: "This record no longer exists.")
             }
         }
-        .scrollContentBackground(.hidden)
     }
 
     private func screenContext(_ record: SpaceRecord, type: SpaceType, space: Space) -> SpaceScreenContext {
@@ -56,6 +65,8 @@ struct SpaceRecordView: View {
             records: [],
             events: events.filter { $0.spaceIDString == spaceKey },
             record: record,
+            titles: SpaceSelection.titles(in: spaceKey, records: records),
+            lookup: SpaceLookup(spaceKey: spaceKey, records: records, types: types),
             accent: space.gradient.accent,
             state: screenState,
             context: context,
@@ -66,7 +77,8 @@ struct SpaceRecordView: View {
     /// The plain detail, shown when a type has no screen or its screen no longer fits.
     @ViewBuilder
     private func content(_ record: SpaceRecord, schema: SpaceSchema) -> some View {
-        let values = record.values
+        let values = SpaceLookup(spaceKey: record.spaceIDString, records: records, types: types).resolved(record)
+        let titles = SpaceSelection.titles(in: record.spaceIDString, records: records)
         let filled = schema.liveFields.filter { values[$0.id] != nil }
         if filled.isEmpty {
             EmptyLine(text: "No details yet. Use Edit to add some.")
@@ -85,7 +97,7 @@ struct SpaceRecordView: View {
                         Text(field.name)
                             .font(CraftFont.caption)
                             .foregroundStyle(.tertiary)
-                        Text(values[field.id].map { schema.display($0, for: field) } ?? "")
+                        Text(values[field.id].map { schema.display($0, for: field, titles: titles) } ?? "")
                             .font(CraftFont.body)
                             .textSelection(.enabled)
                     }
@@ -100,7 +112,7 @@ struct SpaceRecordView: View {
                 if case .rows(let rows) = values[field.id] {
                     VStack(spacing: 0) {
                         ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                            groupRow(row, index: index, field: field, schema: schema)
+                            groupRow(row, index: index, field: field, schema: schema, titles: titles)
                             Hairline()
                         }
                     }
@@ -114,7 +126,7 @@ struct SpaceRecordView: View {
         }
     }
 
-    private func groupRow(_ row: [String: SpaceValue], index: Int, field: SpaceField, schema: SpaceSchema) -> some View {
+    private func groupRow(_ row: [String: SpaceValue], index: Int, field: SpaceField, schema: SpaceSchema, titles: [String: String]) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             if field.isOrdered {
                 Text("\(index + 1)")
@@ -129,7 +141,7 @@ struct SpaceRecordView: View {
                             .font(.system(size: 13, weight: .semibold))
                             .frame(width: 84, alignment: .leading)
                     } else {
-                        Text(schema.display(value, for: column))
+                        Text(schema.display(value, for: column, titles: titles))
                             .font(CraftFont.body)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -188,13 +200,21 @@ struct SpaceRecordForm: View {
 
             ModalScroll {
                 VStack(alignment: .leading, spacing: 16) {
-                    ModalField("Name") {
-                        TextField("Name", text: $title)
-                            .textFieldStyle(.plain)
-                            .focused($focusName)
+                    if type.role != .settings {
+                        ModalField("Name") {
+                            TextField("Name", text: $title)
+                                .textFieldStyle(.plain)
+                                .focused($focusName)
+                        }
                     }
-                    ForEach(type.schema.liveFields) { field in
-                        SpaceFieldEditor(field: field, value: binding(field.id), importImage: importImage)
+                    ForEach(type.schema.liveFields.filter { $0.kind != .calc }) { field in
+                        SpaceFieldEditor(field: field, spaceKey: type.spaceIDString, value: binding(field.id), importImage: importImage)
+                    }
+                    let worked = type.schema.liveFields.filter { $0.kind == .calc }
+                    if !worked.isEmpty {
+                        Text("\(worked.map(\.name).formatted(.list(type: .and))) \(worked.count == 1 ? "is" : "are") worked out for you.")
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.tertiary)
                     }
                 }
             }
@@ -206,7 +226,7 @@ struct SpaceRecordForm: View {
             }
 
             ModalFooter(actionTitle: record == nil ? "Create" : "Save", actionEnabled: canSave, action: save) {
-                if record != nil {
+                if record != nil, type.role != .settings {
                     ModalFooterButton(title: "Delete", role: .destructive, action: delete)
                 }
             }
@@ -216,7 +236,10 @@ struct SpaceRecordForm: View {
             loaded = true
             title = record?.title ?? ""
             let schema = type.schema
-            values = (record?.values ?? [:]).filter { schema.field($0.key)?.isRemoved == false }
+            values = (record?.values ?? [:]).filter {
+                guard let field = schema.field($0.key) else { return false }
+                return !field.isRemoved && field.kind != .calc
+            }
             focusName = record == nil
         }
         .onDisappear {
@@ -300,6 +323,7 @@ struct SpaceRecordForm: View {
 
 private struct SpaceFieldEditor: View {
     var field: SpaceField
+    var spaceKey: String
     @Binding var value: SpaceValue?
     var importImage: (URL) -> String?
     @State private var choosingImage = false
@@ -360,6 +384,14 @@ private struct SpaceFieldEditor: View {
                     }
                 }
             }
+        case .link:
+            ModalField(field.name, boxed: false) {
+                SpaceCell(field: field, spaceKey: spaceKey, value: $value)
+                    .boxed()
+                    .frame(maxWidth: 280, alignment: .leading)
+            }
+        case .calc:
+            EmptyView()
         case .image:
             ModalField(field.name, boxed: false) { imageEditor }
         case .group:
@@ -440,8 +472,8 @@ private struct SpaceFieldEditor: View {
                             .foregroundStyle(.tertiary)
                             .frame(width: 20, alignment: .leading)
                     }
-                    ForEach(field.fields.filter { !$0.isRemoved }) { column in
-                        SpaceCell(field: column, value: cell(index, column.id))
+                    ForEach(field.fields.filter { !$0.isRemoved && $0.kind != .calc }) { column in
+                        SpaceCell(field: column, spaceKey: spaceKey, value: cell(index, column.id))
                             .boxed()
                             .frame(maxWidth: column.kind == .text ? .infinity : nil)
                     }
@@ -488,10 +520,19 @@ private struct SpaceFieldEditor: View {
 /// One single-value input, used on its own and inside group rows.
 private struct SpaceCell: View {
     var field: SpaceField
+    var spaceKey: String = ""
     @Binding var value: SpaceValue?
 
     var body: some View {
         switch field.kind {
+        case .choice:
+            SpacePickerMenu(
+                placeholder: field.name,
+                options: field.options.map { ($0.id, $0.name) },
+                value: $value
+            )
+        case .link:
+            SpaceLinkPicker(field: field, spaceKey: spaceKey, value: $value)
         case .number:
             TextField(field.name, value: number, format: .number)
                 .textFieldStyle(.plain)
@@ -556,5 +597,69 @@ private extension View {
             .frame(minHeight: 32)
             .background(CraftColor.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(CraftColor.hairline))
+    }
+}
+
+
+/// A pop-up of named options that stores the chosen id as text.
+private struct SpacePickerMenu: View {
+    var placeholder: String
+    var options: [(id: String, name: String)]
+    @Binding var value: SpaceValue?
+
+    private var chosen: String? {
+        guard case .text(let id) = value else { return nil }
+        return options.first { $0.id == id }?.name
+    }
+
+    var body: some View {
+        Menu {
+            ForEach(options, id: \.id) { option in
+                Button(option.name) { value = .text(option.id) }
+            }
+            if value != nil {
+                Divider()
+                Button("None") { value = nil }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(chosen ?? placeholder)
+                    .foregroundStyle(chosen == nil ? .tertiary : .primary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .frame(minWidth: 96)
+    }
+}
+
+/// Picks one record of the type a link field points at. Only records of that type are offered.
+private struct SpaceLinkPicker: View {
+    var field: SpaceField
+    var spaceKey: String
+    @Binding var value: SpaceValue?
+
+    @Query(sort: \SpaceType.createdAt) private var types: [SpaceType]
+    @Query(sort: \SpaceRecord.title) private var records: [SpaceRecord]
+
+    var body: some View {
+        let target = types.first { $0.spaceIDString == spaceKey && $0.key == field.target }
+        let typeKey = target.map { SpaceJSON.key($0.id) }
+        let options = records
+            .filter { $0.typeIDString == typeKey }
+            .map { (id: SpaceJSON.key($0.id), name: $0.displayTitle) }
+        SpacePickerMenu(
+            placeholder: options.isEmpty ? "No \(target?.name.lowercased() ?? "records") yet" : field.name,
+            options: options,
+            value: $value
+        )
+        .disabled(options.isEmpty)
     }
 }

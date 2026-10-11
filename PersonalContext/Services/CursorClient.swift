@@ -141,3 +141,46 @@ struct CursorClient: Sendable {
         return "Cursor request failed (\(status))."
     }
 }
+
+/// Lines from a pipe, delivered as the data arrives.
+/// `FileHandle.bytes` reads every handle in the process on one serial queue with a blocking read,
+/// so one idle runner would stop every other runner's output from being read.
+enum PipeLines {
+    static func stream(_ handle: FileHandle) -> AsyncStream<String> {
+        AsyncStream { continuation in
+            let buffer = PipeLineBuffer()
+            handle.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty else {
+                    handle.readabilityHandler = nil
+                    if let rest = buffer.finish() { continuation.yield(rest) }
+                    continuation.finish()
+                    return
+                }
+                for line in buffer.append(data) { continuation.yield(line) }
+            }
+            continuation.onTermination = { _ in handle.readabilityHandler = nil }
+        }
+    }
+}
+
+/// Splits pipe data into lines. Only touched from one handle's readability callbacks, which run one at a time.
+final class PipeLineBuffer: @unchecked Sendable {
+    private var pending = Data()
+
+    func append(_ data: Data) -> [String] {
+        pending.append(data)
+        var lines: [String] = []
+        while let newline = pending.firstIndex(of: 0x0A) {
+            let line = pending[pending.startIndex..<newline]
+            if !line.isEmpty { lines.append(String(decoding: line, as: UTF8.self)) }
+            pending.removeSubrange(pending.startIndex...newline)
+        }
+        return lines
+    }
+
+    func finish() -> String? {
+        defer { pending.removeAll() }
+        return pending.isEmpty ? nil : String(decoding: pending, as: UTF8.self)
+    }
+}

@@ -302,6 +302,11 @@ struct YouView: View {
 
     @ViewBuilder
     private func spaceMenu(_ space: Space) -> some View {
+        Button {
+            app.present(.editSpace(space))
+        } label: {
+            Label("Edit…", systemImage: "pencil")
+        }
         Menu("Color") {
             ForEach(SpaceGradient.allCases) { gradient in
                 Button {

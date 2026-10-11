@@ -215,6 +215,17 @@ enum Tools {
         ["type": "boolean", "description": description]
     }
 
+    private static func objectList(_ description: String) -> [String: Any] {
+        ["type": "array", "items": ["type": "object", "additionalProperties": true], "description": description]
+    }
+
+    private static func object(_ description: String) -> [String: Any] {
+        ["type": "object", "additionalProperties": true, "description": description]
+    }
+
+    private static let spaceID = text("Space id from list_spaces or create_space.")
+    private static let typeKey = text("The type's key, as given to set_space_type.")
+
     private static func options<T: RawRepresentable & CaseIterable>(_ type: T.Type, _ description: String) -> [String: Any] where T.RawValue == String {
         ["type": "string", "enum": T.allCases.map(\.rawValue), "description": description]
     }
@@ -986,6 +997,219 @@ enum Tools {
                 in: context
             )
             return JSONShape.codeReference(reference, full: false, in: context)
+        },
+
+        Tool(
+            name: "list_spaces",
+            description: "List every Space with its id, name, and types. A Space holds an ongoing part of the user's life, such as recipes or habits.",
+            properties: [:], required: [], readOnly: true
+        ) { _, context in
+            SpaceStore.all(in: context).map { SpaceTools.space($0, full: false, in: context) }
+        },
+        Tool(
+            name: "get_space",
+            description: "Get one Space: each type with its fields and its collection and detail screens.",
+            properties: ["space_id": spaceID], required: ["space_id"], readOnly: true
+        ) { args, context in
+            SpaceTools.space(try SpaceTools.space(args, in: context), full: true, in: context)
+        },
+        Tool(
+            name: "get_space_catalog",
+            description: "Read this before set_space_type or set_space_screen. Lists the field kinds, every screen component with the settings it accepts, the calculations, and a worked example.",
+            properties: [:], required: [], readOnly: true
+        ) { _, _ in
+            SpaceTools.catalog
+        },
+        Tool(
+            name: "create_space",
+            description: "Create an empty Space. Follow with set_space_type and set_space_screen.",
+            properties: [
+                "name": text("Short name, such as Kitchen."),
+                "summary": text("One line on what it is for."),
+                "symbol": text("SF Symbol name for its icon."),
+                "color": text("Card color: \(SpaceGradientName.all.joined(separator: ", ")). Leave out to take the next unused one.")
+            ],
+            required: ["name"], readOnly: false
+        ) { args, context in
+            let used = SpaceStore.all(in: context).map(\.gradientRaw)
+            let color = args.string("color").flatMap { SpaceGradientName.all.contains($0) ? $0 : nil }
+            let space = try SpaceStore.create(
+                named: try args.required("name"),
+                symbol: args.string("symbol").flatMap { $0.isEmpty ? nil : $0 } ?? "square.grid.2x2",
+                summary: args.string("summary") ?? "",
+                gradient: color ?? SpaceGradientName.next(after: used),
+                in: context
+            )
+            return SpaceTools.space(space, full: true, in: context)
+        },
+        Tool(
+            name: "update_space",
+            description: "Rename a Space, or change its summary, icon, or card color. Only what you pass changes.",
+            properties: [
+                "space_id": spaceID,
+                "name": text("New name."),
+                "summary": text("One line on what it is for."),
+                "symbol": text("SF Symbol name for its icon."),
+                "color": text("Card color: \(SpaceGradientName.all.joined(separator: ", ")).")
+            ],
+            required: ["space_id"], readOnly: false
+        ) { args, context in
+            let space = try SpaceTools.space(args, in: context)
+            if let color = args.string("color"), !color.isEmpty, !SpaceGradientName.all.contains(color) {
+                throw ToolError("color must be one of: \(SpaceGradientName.all.joined(separator: ", ")).")
+            }
+            try SpaceStore.update(
+                space,
+                name: args.string("name"),
+                symbol: args.string("symbol"),
+                summary: args.string("summary"),
+                gradient: args.string("color"),
+                in: context
+            )
+            return SpaceTools.space(space, full: false, in: context)
+        },
+        Tool(
+            name: "set_space_type",
+            description: "Create a type in a Space, or change the fields of the type with this key. role object is a lasting thing (a recipe, a habit); role event is something logged about objects (cooked, check-in); role settings holds one record for the whole Space (daily targets). A field cannot change kind; a field you leave out is hidden and its values are kept.",
+            properties: [
+                "space_id": spaceID,
+                "key": text("Stable lowercase key, such as recipe or check-in."),
+                "name": text("Name shown to the user, such as Recipes."),
+                "role": options(SpaceTypeRole.self, "object, event, or settings. Defaults to object."),
+                "fields": objectList("Fields: {id, name, kind, options?, fields?, ordered?, target?, formula?}. See get_space_catalog for kinds."),
+                "collection": objectList("Optional. Components for this object type's collection screen, set in the same call."),
+                "detail": objectList("Optional. Components for this object type's detail screen, set in the same call.")
+            ],
+            required: ["space_id", "key", "name", "fields"], readOnly: false
+        ) { args, context in
+            let space = try SpaceTools.space(args, in: context)
+            let key = try args.required("key")
+            let schema = SpaceSchema(fields: try SpaceTools.fields(try SpaceTools.objects(args, "fields")))
+            let type: SpaceType
+            if let existing = SpaceStore.types(in: space, context: context).first(where: { $0.key == key }) {
+                try SpaceStore.reviseSchema(of: existing, to: schema, in: context)
+                existing.name = try args.required("name")
+                type = existing
+            } else {
+                type = try SpaceStore.defineType(
+                    in: space,
+                    key: key,
+                    name: try args.required("name"),
+                    role: try args.choice("role", as: SpaceTypeRole.self) ?? .object,
+                    schema: schema,
+                    origin: .agent,
+                    context: context
+                )
+            }
+            // The type is saved by now. A screen that does not fit reports its problems without undoing it,
+            // so the same call can be sent again with the screens fixed.
+            for kind in SpaceScreenKind.allCases where args.raw[kind.rawValue] != nil {
+                let components = try SpaceTools.components(try SpaceTools.objects(args, kind.rawValue))
+                do {
+                    try SpaceStore.setScreen(SpaceScreenDefinition(components), for: type, kind: kind, byAgent: true, in: context)
+                } catch SpaceStoreError.invalidScreen(let problems) {
+                    throw ToolError("The type \(key) was saved, but its \(kind.rawValue) screen was not: " + problems.joined(separator: " "))
+                }
+            }
+            return SpaceTools.type(type, in: context)
+        },
+        Tool(
+            name: "set_space_screen",
+            description: "Set the collection screen (browsing all records) or the detail screen (one record) of an object type. Built only from catalog components. If anything does not fit the type, nothing is saved and every problem is returned; fix them and call again.",
+            properties: [
+                "space_id": spaceID,
+                "type_key": typeKey,
+                "kind": options(SpaceScreenKind.self, "collection or detail."),
+                "components": objectList("Components in order: {component, ...settings, children?}.")
+            ],
+            required: ["space_id", "type_key", "kind", "components"], readOnly: false
+        ) { args, context in
+            let type = try SpaceTools.type(args, in: context)
+            guard let kind = try args.choice("kind", as: SpaceScreenKind.self) else { throw ToolError("kind is required.") }
+            let components = try SpaceTools.components(try SpaceTools.objects(args, "components"))
+            let screen = try SpaceStore.setScreen(SpaceScreenDefinition(components), for: type, kind: kind, byAgent: true, in: context)
+            return ["type_key": type.key, "kind": kind.rawValue, "components": SpaceTools.json(screen.definition.components)]
+        },
+        Tool(
+            name: "list_space_records",
+            description: "List the records of one type in a Space, with their values.",
+            properties: ["space_id": spaceID, "type_key": typeKey], required: ["space_id", "type_key"], readOnly: true
+        ) { args, context in
+            let type = try SpaceTools.type(args, in: context)
+            let schema = type.schema
+            if type.role == .settings { _ = try? SpaceStore.settingsRecord(of: type, in: context) }
+            return SpaceStore.records(of: type, in: context).map { SpaceTools.record($0, schema: schema, in: context) }
+        },
+        Tool(
+            name: "create_space_record",
+            description: "Add a record to a Space, such as one recipe. values is keyed by field id.",
+            properties: [
+                "space_id": spaceID,
+                "type_key": typeKey,
+                "title": text("The record's name."),
+                "values": object("Field id to value. See get_space_catalog for each kind's value shape.")
+            ],
+            required: ["space_id", "type_key", "title"], readOnly: false
+        ) { args, context in
+            let type = try SpaceTools.type(args, in: context)
+            let schema = type.schema
+            let record = try SpaceStore.createRecord(
+                of: type,
+                title: try args.required("title"),
+                values: try SpaceTools.values(args.raw["values"], schema: schema),
+                in: context
+            )
+            return SpaceTools.record(record, schema: schema, in: context)
+        },
+        Tool(
+            name: "update_space_record",
+            description: "Change a record. Only the title and the values you pass are changed.",
+            properties: [
+                "record_id": text("Record id from list_space_records."),
+                "title": text("New name."),
+                "values": object("Field id to new value.")
+            ],
+            required: ["record_id"], readOnly: false
+        ) { args, context in
+            let id = try args.uuid("record_id")
+            guard let record = SpaceStore.record(id, in: context),
+                  let type = record.typeID.flatMap({ SpaceStore.type($0, in: context) }) else {
+                throw ToolError("No record with id \(id.uuidString).")
+            }
+            let schema = type.schema
+            try SpaceStore.update(
+                record,
+                title: args.string("title").flatMap { $0.isEmpty ? nil : $0 },
+                values: try SpaceTools.values(args.raw["values"], schema: schema),
+                in: context
+            )
+            return SpaceTools.record(record, schema: schema, in: context)
+        },
+        Tool(
+            name: "log_space_event",
+            description: "Log that something happened to one or more records, such as a recipe being cooked or a habit checked in.",
+            properties: [
+                "space_id": spaceID,
+                "type_key": text("Key of an event type in this Space."),
+                "record_ids": ["type": "array", "items": ["type": "string"], "description": "Records this is about."],
+                "occurred_at": text("ISO-8601 time it happened. Defaults to now."),
+                "values": object("Event field id to value.")
+            ],
+            required: ["space_id", "type_key", "record_ids"], readOnly: false
+        ) { args, context in
+            let type = try SpaceTools.type(args, in: context)
+            let records = try (args.uuids("record_ids") ?? []).map { id -> SpaceRecord in
+                guard let record = SpaceStore.record(id, in: context) else { throw ToolError("No record with id \(id.uuidString).") }
+                return record
+            }
+            let event = try SpaceStore.logEvent(
+                of: type,
+                at: (try args.date("occurred_at") ?? nil) ?? .now,
+                values: try SpaceTools.values(args.raw["values"], schema: type.schema),
+                about: records,
+                in: context
+            )
+            return SpaceTools.event(event, schema: type.schema)
         }
     ]
 }
@@ -1507,5 +1731,334 @@ enum JSONShape {
         if let mark = project?.deletionMarks.first(where: { $0.targetID == id }) {
             shape["deletion_mark"] = deletionMark(mark)
         }
+    }
+}
+
+/// Shapes and parsing for the Space tools. An agent sends plain JSON; this turns it into typed values
+/// and says what is wrong in words the agent can act on.
+enum SpaceTools {
+    static func space(_ args: Args, in context: ModelContext) throws -> Space {
+        let id = try args.uuid("space_id")
+        guard let space = SpaceStore.space(id, in: context) else {
+            throw ToolError("No Space with id \(id.uuidString).")
+        }
+        return space
+    }
+
+    static func type(_ args: Args, in context: ModelContext) throws -> SpaceType {
+        let space = try space(args, in: context)
+        let key = try args.required("type_key")
+        guard let type = SpaceStore.types(in: space, context: context).first(where: { $0.key == key }) else {
+            let known = SpaceStore.types(in: space, context: context).map(\.key).joined(separator: ", ")
+            throw ToolError("\(space.displayName) has no type with the key \(key). It has: \(known.isEmpty ? "none" : known).")
+        }
+        return type
+    }
+
+    /// An array argument, also accepted as a JSON string, because some models send one.
+    static func objects(_ args: Args, _ key: String) throws -> [[String: Any]] {
+        if let text = args.raw[key] as? String {
+            guard let parsed = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [[String: Any]] else {
+                throw ToolError("\(key) must be an array of objects.")
+            }
+            return parsed
+        }
+        guard let objects = try args.objects(key) else { throw ToolError("\(key) is required.") }
+        return objects
+    }
+
+    static func slug(_ text: String) -> String {
+        let pieces = text.lowercased().split { !$0.isLetter && !$0.isNumber }
+        return pieces.joined(separator: "-")
+    }
+
+    static func fields(_ raw: [[String: Any]]) throws -> [SpaceField] {
+        try raw.map { object in
+            guard let name = (object["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
+                throw ToolError("Every field needs a name.")
+            }
+            let kindRaw = object["kind"] as? String ?? ""
+            guard let kind = SpaceFieldKind(rawValue: kindRaw) else {
+                let allowed = SpaceFieldKind.allCases.map(\.rawValue).joined(separator: ", ")
+                throw ToolError("\(name) has the kind \(kindRaw.isEmpty ? "(none)" : kindRaw). Use one of: \(allowed).")
+            }
+            let id = (object["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? slug(name)
+            let options: [SpaceOption] = (object["options"] as? [Any] ?? []).compactMap { option in
+                if let text = option as? String { return SpaceOption(id: slug(text), name: text) }
+                guard let pair = option as? [String: Any], let optionName = pair["name"] as? String else { return nil }
+                return SpaceOption(id: (pair["id"] as? String) ?? slug(optionName), name: optionName)
+            }
+            if kind == .choice, options.isEmpty {
+                throw ToolError("\(name) is a choice field and needs options.")
+            }
+            let nested = try fields((object["fields"] as? [Any] ?? []).compactMap { $0 as? [String: Any] })
+            if kind == .group, nested.isEmpty {
+                throw ToolError("\(name) is a group and needs fields for its rows.")
+            }
+            let formula = (object["formula"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if kind == .calc, formula.isEmpty {
+                throw ToolError("\(name) is a calc field and needs a formula. \(SpaceFormula.grammar)")
+            }
+            let target = (object["target"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if kind == .link, target.isEmpty {
+                throw ToolError("\(name) is a link and needs target: the key of the type it points at.")
+            }
+            return SpaceField(
+                id: id,
+                name: name,
+                kind: kind,
+                options: options,
+                fields: nested,
+                isOrdered: (object["ordered"] as? Bool) ?? (object["isOrdered"] as? Bool) ?? false,
+                target: target,
+                formula: formula
+            )
+        }
+    }
+
+    static func components(_ raw: [[String: Any]]) throws -> [SpaceComponent] {
+        guard let data = try? JSONSerialization.data(withJSONObject: raw),
+              let parsed = try? JSONDecoder().decode([SpaceComponent].self, from: data) else {
+            throw ToolError("Each component needs a component name, and its settings must be text, numbers, or lists of text.")
+        }
+        return parsed
+    }
+
+    static func values(_ raw: Any?, schema: SpaceSchema) throws -> [String: SpaceValue] {
+        guard let raw else { return [:] }
+        if let text = raw as? String {
+            guard let parsed = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else {
+                throw ToolError("values must be an object keyed by field id.")
+            }
+            return try values(parsed, fields: schema.liveFields)
+        }
+        guard let object = raw as? [String: Any] else { throw ToolError("values must be an object keyed by field id.") }
+        return try values(object, fields: schema.liveFields)
+    }
+
+    private static func values(_ object: [String: Any], fields: [SpaceField]) throws -> [String: SpaceValue] {
+        var result: [String: SpaceValue] = [:]
+        for (key, raw) in object {
+            guard let field = fields.first(where: { $0.id == key })
+                ?? fields.first(where: { $0.name.caseInsensitiveCompare(key) == .orderedSame }) else {
+                let known = fields.map(\.id).joined(separator: ", ")
+                throw ToolError("There is no field \(key). Fields are: \(known).")
+            }
+            if raw is NSNull { continue }
+            result[field.id] = try value(raw, for: field)
+        }
+        return result
+    }
+
+    private static func value(_ raw: Any, for field: SpaceField) throws -> SpaceValue {
+        func wrong(_ expected: String) -> ToolError {
+            ToolError("\(field.name) needs \(expected).")
+        }
+        switch field.kind {
+        case .text, .richText:
+            guard let text = raw as? String else { throw wrong("text") }
+            return .text(text)
+        case .image:
+            throw ToolError("\(field.name) is an image. Images are added by the user in the app.")
+        case .calc:
+            throw ToolError("\(field.name) is worked out automatically. Leave it out.")
+        case .link:
+            guard let text = raw as? String, let id = UUID(uuidString: text) else {
+                throw wrong("the id of a record in \(field.target), from list_space_records")
+            }
+            return .text(SpaceJSON.key(id))
+        case .choice:
+            guard let text = raw as? String else { throw wrong("one of its options") }
+            guard let option = field.options.first(where: { $0.id == text })
+                ?? field.options.first(where: { $0.name.caseInsensitiveCompare(text) == .orderedSame }) else {
+                throw wrong("one of: \(field.options.map(\.id).joined(separator: ", "))")
+            }
+            return .text(option.id)
+        case .number:
+            if raw is Bool { throw wrong("a number") }
+            guard let number = (raw as? NSNumber)?.doubleValue ?? (raw as? String).flatMap(Double.init) else { throw wrong("a number") }
+            return .number(number)
+        case .boolean:
+            guard let flag = raw as? Bool else { throw wrong("true or false") }
+            return .boolean(flag)
+        case .date:
+            guard let text = raw as? String else { throw wrong("an ISO-8601 date") }
+            let iso = ISO8601DateFormatter()
+            for options: ISO8601DateFormatter.Options in [[.withInternetDateTime], [.withInternetDateTime, .withFractionalSeconds], [.withFullDate]] {
+                iso.formatOptions = options
+                if let date = iso.date(from: text) { return .date(date) }
+            }
+            throw wrong("an ISO-8601 date, such as 2026-10-11")
+        case .quantity:
+            if let number = (raw as? NSNumber)?.doubleValue, !(raw is Bool) {
+                return .quantity(SpaceQuantity(amount: number, unit: ""))
+            }
+            guard let object = raw as? [String: Any], let amount = (object["amount"] as? NSNumber)?.doubleValue else {
+                throw wrong("{amount, unit}")
+            }
+            return .quantity(SpaceQuantity(
+                amount: amount,
+                unit: object["unit"] as? String ?? "",
+                scales: object["scales"] as? Bool ?? true
+            ))
+        case .group:
+            guard let rows = raw as? [Any] else { throw wrong("a list of rows") }
+            let columns = field.fields.filter { !$0.isRemoved }
+            return .rows(try rows.map { row in
+                if let text = row as? String, columns.count == 1 {
+                    return [columns[0].id: try value(text, for: columns[0])]
+                }
+                guard let object = row as? [String: Any] else { throw wrong("rows as objects keyed by field id") }
+                return try values(object, fields: columns)
+            })
+        }
+    }
+
+    // MARK: Shapes
+
+    static func json<T: Encodable>(_ value: T) -> Any {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(value), let object = try? JSONSerialization.jsonObject(with: data) else {
+            return NSNull()
+        }
+        return object
+    }
+
+    static func plain(_ values: [String: SpaceValue]) -> [String: Any] {
+        values.mapValues { value -> Any in
+            switch value {
+            case .text(let text): return text
+            case .number(let number): return number
+            case .boolean(let flag): return flag
+            case .date(let date): return ISO8601DateFormatter().string(from: date)
+            case .quantity(let quantity): return ["amount": quantity.amount, "unit": quantity.unit, "scales": quantity.scales]
+            case .rows(let rows): return rows.map(plain)
+            }
+        }
+    }
+
+    static func field(_ field: SpaceField) -> [String: Any] {
+        var shape: [String: Any] = ["id": field.id, "name": field.name, "kind": field.kind.rawValue]
+        if !field.options.isEmpty { shape["options"] = field.options.map { ["id": $0.id, "name": $0.name] } }
+        if !field.fields.isEmpty { shape["fields"] = field.fields.filter { !$0.isRemoved }.map(SpaceTools.field) }
+        if field.isOrdered { shape["ordered"] = true }
+        if field.kind == .link { shape["target"] = field.target }
+        if field.kind == .calc { shape["formula"] = field.formula }
+        return shape
+    }
+
+    static func type(_ type: SpaceType, in context: ModelContext) -> [String: Any] {
+        var shape: [String: Any] = [
+            "key": type.key,
+            "name": type.name,
+            "role": type.role.rawValue,
+            "fields": type.schema.liveFields.map(field),
+            "record_count": type.role == .object ? SpaceStore.records(of: type, in: context).count : 0
+        ]
+        var screens: [String: Any] = [:]
+        for kind in SpaceScreenKind.allCases {
+            if let screen = SpaceStore.screen(for: type, kind: kind, in: context) {
+                screens[kind.rawValue] = json(screen.definition.components)
+            }
+        }
+        if type.role != .event { shape["screens"] = screens }
+        return shape
+    }
+
+    static func space(_ space: Space, full: Bool, in context: ModelContext) -> [String: Any] {
+        let types = SpaceStore.types(in: space, context: context)
+        return [
+            "id": space.id.uuidString,
+            "name": space.displayName,
+            "summary": space.summary,
+            "types": full
+                ? types.map { type($0, in: context) }
+                : types.map { ["key": $0.key, "name": $0.name, "role": $0.role.rawValue] }
+        ]
+    }
+
+    /// Calc fields are included, worked out, so an agent reads the same numbers the user sees.
+    static func record(_ record: SpaceRecord, schema: SpaceSchema, in context: ModelContext) -> [String: Any] {
+        let live = Set(schema.liveFields.map(\.id))
+        let values = SpaceStore.lookup(spaceKey: record.spaceIDString, in: context).resolved(record)
+        return [
+            "id": record.id.uuidString,
+            "title": record.displayTitle,
+            "values": plain(values.filter { live.contains($0.key) }),
+            "updated_at": ISO8601DateFormatter().string(from: record.updatedAt)
+        ]
+    }
+
+    static func event(_ event: SpaceEvent, schema: SpaceSchema) -> [String: Any] {
+        [
+            "id": event.id.uuidString,
+            "occurred_at": ISO8601DateFormatter().string(from: event.occurredAt),
+            "record_ids": event.recordIDs.map(\.uuidString),
+            "values": plain(event.values)
+        ]
+    }
+
+    private static func accepts(_ kind: SpacePropKind) -> String {
+        switch kind {
+        case .field(let kinds): "one field id of kind: " + kinds.map(\.rawValue).joined(separator: ", ")
+        case .fields(let kinds): "a list of field ids of kind: " + kinds.map(\.rawValue).joined(separator: ", ")
+        case .event: "the key of an event type in the Space"
+        case .calc: "a calculation"
+        case .formula: "a formula: " + SpaceFormula.grammar
+        case .text: "text"
+        case .number: "a number"
+        }
+    }
+
+    static var catalog: [String: Any] {
+        let recipe = SpaceTemplate.recipes.types[0]
+        return [
+            "how_to": "1. create_space, unless you were given a space id. 2. set_space_type for each event type first. 3. set_space_type for each object type, passing its collection and detail screens in the same call. Use set_space_screen later to change one screen. Screens name fields by id and events by key. Every record already has a name; do not add a name field.",
+            "field_kinds": [
+                ["kind": "text", "value": "text"],
+                ["kind": "richText", "value": "long text"],
+                ["kind": "number", "value": "a number"],
+                ["kind": "boolean", "value": "true or false"],
+                ["kind": "date", "value": "ISO-8601 date"],
+                ["kind": "choice", "value": "one option id", "needs": "options: a list of names"],
+                ["kind": "image", "value": "set by the user in the app"],
+                ["kind": "quantity", "value": "{amount, unit}; add scales: false for amounts like a pinch"],
+                ["kind": "group", "value": "a list of rows keyed by the group's field ids", "needs": "fields: the columns of each row; ordered: true for numbered steps. Groups do not nest."],
+                ["kind": "calc", "value": "never set; worked out", "needs": "formula. Use calc for anything that can be worked out, so the user never types a total. In a group row: recipe.calories * servings reads the linked recipe and multiplies by that row's servings. On the record: sum(items.calories) adds a column up. goals.calories reads a settings type. " + SpaceFormula.grammar],
+                ["kind": "link", "value": "the id of one record of the target type", "needs": "target: the key of an object type in the same Space, created first. Use a link whenever one thing refers to another, such as a meal made from recipes, instead of retyping its details. For several, put the link in a group with any per-row fields, such as servings."]
+            ],
+            "components": SpaceScreenCatalog.components.map { spec -> [String: Any] in
+                [
+                    "component": spec.name,
+                    "does": spec.summary,
+                    "screens": spec.screens.map(\.rawValue).sorted(),
+                    "takes_children": spec.takesChildren,
+                    "settings": spec.props.map { prop -> [String: Any] in
+                        ["name": prop.name, "accepts": accepts(prop.kind), "required": prop.required, "note": prop.note]
+                    }
+                ]
+            },
+            "roles": [
+                "object": "a lasting thing with many records, such as recipes",
+                "event": "something logged about records, such as cooked",
+                "settings": "exactly one record for the whole Space, such as daily targets. It gets a detail screen only. Other types read it in formulas as key.field."
+            ],
+            "calculations": [
+                "count:eventKey": "how many events",
+                "latest:eventKey": "when the newest event happened",
+                "streak:eventKey": "days in a row with an event",
+                "best:eventKey": "longest run of days with an event",
+                "week:eventKey": "events in the last seven days",
+                "today:eventKey": "collection only: records with an event today, out of all",
+                "records": "collection only: how many records"
+            ],
+            "example": [
+                "type": ["key": recipe.key, "name": recipe.name, "role": "object", "fields": recipe.fields.map(field)],
+                "event_type": ["key": "cooked", "name": "Cooked", "role": "event"],
+                "collection": json(recipe.collection),
+                "detail": json(recipe.detail)
+            ]
+        ]
     }
 }
