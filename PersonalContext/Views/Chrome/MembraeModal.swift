@@ -4,6 +4,7 @@ import SwiftUI
 
 enum AppModal: Identifiable {
     case newProject
+    case newSpace
     case newEvent
     case editEvent(CalendarEvent)
     case newTask(Project?)
@@ -28,6 +29,7 @@ enum AppModal: Identifiable {
     var id: String {
         switch self {
         case .newProject: "new-project"
+        case .newSpace: "new-space"
         case .newEvent: "new-event"
         case .editEvent(let event): "edit-event-\(event.id)"
         case .newTask(let project): project.map { "new-task-\($0.id.uuidString)" } ?? "new-task"

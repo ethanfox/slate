@@ -286,7 +286,7 @@ struct WindowTabStrip: View {
     private func resolvedLabel(for tab: WindowTab) -> TabLabel {
         switch tab.destination {
         case .home:
-            return TabLabel(title: "Home", symbol: "house")
+            return TabLabel(title: "You", symbol: "person")
         case .projects:
             return TabLabel(title: "Projects", symbol: "square.stack")
         case .tasks:
@@ -301,6 +301,11 @@ struct WindowTabStrip: View {
             return TabLabel(title: runTitle(id), symbol: "play.circle")
         case .settings:
             return TabLabel(title: "Settings", symbol: "gearshape")
+        case .aboutYou:
+            return TabLabel(title: "About you", symbol: "person")
+        case .space(let id):
+            let space = SpaceStore.space(id, in: context)
+            return TabLabel(title: space?.displayName ?? "Space", symbol: space?.symbol ?? "square.grid.2x2")
         case .quickAsk(let id):
             if let title = conversationTitle(id), !title.isEmpty {
                 return TabLabel(title: title, symbol: "bubble.left")

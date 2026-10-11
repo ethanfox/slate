@@ -327,6 +327,30 @@ struct RootView: View {
                     .help("New Project (⌘N)")
                 }
             }
+        } else if case .home = app.destination {
+            Button {
+                app.present(.newSpace)
+            } label: {
+                Label("New Space", systemImage: "plus")
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular, in: Capsule())
+            .help("New Space")
+        } else if case .aboutYou = app.destination {
+            Button {
+                app.navigate(to: .home, newTab: false)
+            } label: {
+                Text("Done")
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular, in: Capsule())
+            .help("Back to You")
         } else if case .calendar = app.destination {
             Button {
                 Task { await presentNewEvent() }
@@ -602,6 +626,8 @@ struct RootView: View {
         switch modal {
         case .newProject:
             NewProjectSheet()
+        case .newSpace:
+            NewSpaceSheet()
         case .newEvent:
             NewEventSheet()
         case .editEvent(let event):
@@ -674,7 +700,11 @@ struct RootView: View {
     private var destinationDetail: some View {
         switch app.destination {
         case .home:
-            HomeView()
+            YouView()
+        case .aboutYou:
+            AboutYouView()
+        case .space(let id):
+            SpaceView(id: id)
         case .projects:
             ProjectsView()
         case .tasks:

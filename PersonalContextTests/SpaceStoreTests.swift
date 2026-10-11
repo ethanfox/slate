@@ -307,3 +307,89 @@ final class SpaceStoreTests: XCTestCase {
         process.waitUntilExit()
     }
 }
+
+@MainActor
+final class YouViewTests: XCTestCase {
+    private var container: ModelContainer!
+    private var context: ModelContext { container.mainContext }
+
+    override func setUpWithError() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        container = try ModelContainer(for: Store.schema, configurations: configuration)
+    }
+
+    func testComingUpMixesTasksEventsAndSpaceDatesInDateOrder() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Chicago")!
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 11, hour: 9)))
+        func day(_ offset: Int, hour: Int = 0) -> Date {
+            calendar.date(byAdding: .hour, value: hour, to: calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: now))!)!
+        }
+        let kitchen = try SpaceStore.create(named: "Kitchen", in: context)
+        let recipe = try SpaceStore.defineType(
+            in: kitchen,
+            key: "recipe",
+            name: "Recipe",
+            schema: SpaceSchema(fields: [SpaceField(id: "planned", name: "Planned", kind: .date)]),
+            context: context
+        )
+        let ragu = try SpaceStore.createRecord(of: recipe, title: "Ragù", values: ["planned": .date(day(5))], in: context)
+        try SpaceStore.createRecord(of: recipe, title: "Long ago", values: ["planned": .date(day(-3))], in: context)
+
+        let today = AgendaItem(kind: .task, eventKitID: "", title: "Stretch")
+        today.due = day(0)
+        let yesterday = AgendaItem(kind: .task, eventKitID: "", title: "Overdue")
+        yesterday.due = day(-1)
+        let done = AgendaItem(kind: .task, eventKitID: "", title: "Done")
+        done.due = day(1)
+        done.isCompleted = true
+        let farOff = AgendaItem(kind: .task, eventKitID: "", title: "Next month")
+        farOff.due = day(30)
+        [today, yesterday, done, farOff].forEach(context.insert)
+
+        let interview = CalendarEvent(
+            id: "e1",
+            title: "Interview",
+            start: day(2, hour: 14),
+            end: day(2, hour: 15),
+            calendarName: "Work"
+        )
+
+        let items = ComingUp.items(
+            tasks: [today, yesterday, done, farOff],
+            events: [interview],
+            records: SpaceStore.records(in: kitchen, context: context),
+            spaces: [kitchen],
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(items.map(\.title), ["Stretch", "Interview", "Ragù"])
+        XCTAssertEqual(items.map { $0.dayLabel(now: now, calendar: calendar) }.first, "Today")
+        XCTAssertEqual(items[0].meta, "Task")
+        XCTAssertTrue(items[1].hasTime)
+        XCTAssertEqual(items[2].meta, "Kitchen")
+        XCTAssertEqual(items[2].target, .record(space: kitchen.id, record: ragu.id))
+    }
+
+    func testNewSpacesTakeTheFirstUnusedGradient() {
+        XCTAssertEqual(SpaceGradient.next(after: []), .matcha)
+        XCTAssertEqual(SpaceGradient.next(after: ["matcha", "zen"]), .indigo)
+        XCTAssertEqual(SpaceGradient.next(after: SpaceGradient.allCases.map(\.rawValue)), .matcha)
+        XCTAssertEqual(SpaceGradient.resolved("sand", fallbackID: UUID()), .sand)
+    }
+
+    func testFactsSkipBlanksAndRepeats() throws {
+        XCTAssertNil(try FactStore.add("   ", in: context))
+        let first = try XCTUnwrap(FactStore.add(" Lives in Chicago ", in: context))
+        let again = try XCTUnwrap(FactStore.add("lives in chicago", in: context))
+        try FactStore.add("Prefers native Mac apps", source: .agent, in: context)
+
+        XCTAssertEqual(first.id, again.id)
+        XCTAssertEqual(FactStore.all(in: context).map(\.text), ["Lives in Chicago", "Prefers native Mac apps"])
+        XCTAssertEqual(FactStore.all(in: context).map(\.source), [.user, .agent])
+
+        try FactStore.delete(first, in: context)
+        XCTAssertEqual(FactStore.all(in: context).count, 1)
+    }
+}

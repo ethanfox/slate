@@ -67,6 +67,30 @@ struct CalendarEvent: Identifiable, Hashable, Sendable {
     var allowsEditing: Bool
     var tint: CalendarTint
 
+    init(
+        id: String,
+        title: String,
+        start: Date,
+        end: Date,
+        isAllDay: Bool = false,
+        calendarName: String = "",
+        tint: CalendarTint = .neutral
+    ) {
+        self.id = id
+        self.seriesID = id
+        self.title = title
+        self.start = start
+        self.end = end
+        self.isAllDay = isAllDay
+        self.calendarID = ""
+        self.calendarName = calendarName
+        self.location = ""
+        self.notes = ""
+        self.url = nil
+        self.allowsEditing = false
+        self.tint = tint
+    }
+
     init(_ event: EKEvent) {
         id = event.calendarItemIdentifier
         seriesID = event.eventIdentifier ?? event.calendarItemIdentifier

@@ -27,7 +27,7 @@ struct SidebarView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 1) {
-                    row("Home", "house", destination: .home)
+                    row("You", "person", destination: .home, selected: isOnYou)
 
                     section("Workspace")
                     row("Projects", "square.stack", destination: .projects)
@@ -120,14 +120,21 @@ struct SidebarView: View {
             .allowsHitTesting(false)
     }
 
-    private func row(_ title: String, _ symbol: String, destination: Destination, badge: Int = 0, busy: Bool = false) -> some View {
+    private func row(
+        _ title: String,
+        _ symbol: String,
+        destination: Destination,
+        badge: Int = 0,
+        busy: Bool = false,
+        selected: Bool? = nil
+    ) -> some View {
         Button {
             app.navigate(to: destination)
         } label: {
             SidebarRow(
                 title: title,
                 systemImage: symbol,
-                isSelected: app.destination == destination,
+                isSelected: selected ?? (app.destination == destination),
                 badge: badge,
                 isBusy: busy
             )
@@ -141,6 +148,14 @@ struct SidebarView: View {
             }
         }
         .accessibilityValue(busy ? "Working" : badge > 0 ? "\(badge) due" : "")
+    }
+
+    /// About you and Spaces are opened from You, so they keep its row lit.
+    private var isOnYou: Bool {
+        switch app.destination {
+        case .home, .aboutYou, .space: true
+        default: false
+        }
     }
 
     private var dueCount: Int {

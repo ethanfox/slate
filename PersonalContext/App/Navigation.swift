@@ -20,6 +20,8 @@ enum Destination: Hashable, Codable {
     case project(UUID)
     case quickAsk(UUID)
     case run(UUID)
+    case aboutYou
+    case space(UUID)
 }
 enum ProjectTab: String, CaseIterable, Identifiable, Hashable, Codable {
     case overview
