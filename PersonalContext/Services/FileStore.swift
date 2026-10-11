@@ -113,7 +113,9 @@ struct FileStore: Sendable {
     }
 
     func replace(assetIDs: [UUID], ownerKind: AssetOwnerKind, ownerID: UUID) throws {
-        for reference in references(ownerKind: ownerKind, ownerID: ownerID) {
+        let current = references(ownerKind: ownerKind, ownerID: ownerID)
+        if current.count == assetIDs.count, current.compactMap(\.assetID) == assetIDs { return }
+        for reference in current {
             context.delete(reference)
         }
         for (index, id) in assetIDs.enumerated() {

@@ -48,7 +48,12 @@ enum Store {
         CodeReference.self,
         CodeReferenceEntry.self,
         AgentRun.self,
-        TitleIndex.self
+        TitleIndex.self,
+        Space.self,
+        SpaceType.self,
+        SpaceRecord.self,
+        SpaceEvent.self,
+        PersonalFact.self
     ])
 
     /// Same identifier the app and membrae-mcp declare in their entitlements.
@@ -138,12 +143,15 @@ enum Store {
             try migrateAgentRunColumns(at: configuration.url)
             try migrateCodeReferenceOwnership(at: configuration.url)
             try migrateTagColumns(at: configuration.url)
+            try migrateSpaceOwnerColumns(at: configuration.url)
         }
         let start = ContinuousClock.now
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = ModelContext(container)
         context.autosaveEnabled = false
         guard mode == .prepare else {
+            // A helper built before the title index existed drops its table when it saves.
+            TitleIndexStore.backfillIfNeeded(in: context)
             NavTrace.event("store.open mode=reopen \(NavTrace.elapsed(start))")
             return container
         }
@@ -179,6 +187,25 @@ enum Store {
         guard sqlite3_open(url.path, &db) == SQLITE_OK, let db else { return }
         defer { sqlite3_close(db) }
         try execIgnoringDuplicateColumn(db, "ALTER TABLE ZTAG ADD COLUMN ZCOLORRAW VARCHAR DEFAULT ''")
+    }
+
+    /// Built-in records gained a Space owner column. Add it to stores created before Spaces.
+    static func migrateSpaceOwnerColumns(at url: URL) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        var db: OpaquePointer?
+        guard sqlite3_open(url.path, &db) == SQLITE_OK, let db else {
+            throw StoreMigrationError("Could not open \(url.lastPathComponent) to migrate Space owner columns.")
+        }
+        defer { sqlite3_close(db) }
+        for table in ["ZPROJECTTHREAD", "ZNOTE", "ZDECISION", "ZCONVERSATION", "ZAGENDAITEM", "ZAGENTRUN"] {
+            let columns = tableColumns(db, table: table)
+            guard !columns.isEmpty, !columns.contains("ZSPACEIDSTRING") else { continue }
+            try execIgnoringDuplicateColumn(db, "ALTER TABLE \(table) ADD COLUMN ZSPACEIDSTRING VARCHAR DEFAULT ''")
+        }
+        let spaceColumns = tableColumns(db, table: "ZSPACE")
+        if !spaceColumns.isEmpty, !spaceColumns.contains("ZGRADIENTRAW") {
+            try execIgnoringDuplicateColumn(db, "ALTER TABLE ZSPACE ADD COLUMN ZGRADIENTRAW VARCHAR DEFAULT ''")
+        }
     }
 
     static func migrateAgentRunColumns(at url: URL) throws {

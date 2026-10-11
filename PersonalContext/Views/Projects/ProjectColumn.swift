@@ -11,6 +11,17 @@ enum ProjectColumnMetrics {
     static let closeMotion = Animation.easeOut(duration: 0.14)
 }
 
+/// What the list derives from the title index, read once per body pass.
+private struct ProjectColumnRows {
+    var conversations: [TitleIndex] = []
+    var runs: [TitleIndex] = []
+    var notes: [TitleIndex] = []
+    var trackRoots: [TrackNode] = []
+    var decisions = DecisionListLayout.snapshot(decisions: [], tracks: [], query: "")
+    var markedIDs: Set<UUID> = []
+    var supersededIDs: Set<UUID> = []
+}
+
 struct ProjectColumn: View {
     @Bindable var project: Project
     var compact: Bool
@@ -26,8 +37,8 @@ struct ProjectColumn: View {
     @State private var pendingDecisionDelete: UUID?
     @State private var decisionQuery = ""
     @State private var historyExpanded = false
-    @State private var collapsedActiveGroups: Set<String> = []
-    @State private var collapsedHistoryGroups: Set<String> = []
+    @State private var expandedActiveGroups: Set<String> = []
+    @State private var expandedHistoryGroups: Set<String> = []
 
     init(project: Project, compact: Bool) {
         self.project = project
@@ -50,38 +61,46 @@ struct ProjectColumn: View {
         index.filter { $0.kind == .run }
     }
 
-    private var notes: [TitleIndex] {
-        index.filter { $0.kind == .note }
-    }
-
-    private var trackRoots: [TrackNode] {
-        TitleIndexStore.trackTree(from: index)
-    }
-
-    private var decisionLayout: DecisionListLayout.TitleSnapshot {
-        DecisionListLayout.snapshot(
-            decisions: index.filter { $0.kind == .decision }.map {
-                DecisionListLayout.TitleDecision(
-                    id: $0.id,
-                    title: $0.displayTitle,
-                    status: $0.decisionStatus,
-                    trackID: $0.parentID,
-                    createdAt: $0.createdAt
+    private var rows: ProjectColumnRows {
+        var rows = ProjectColumnRows()
+        var decisions: [DecisionListLayout.TitleDecision] = []
+        var tracks: [TitleIndex] = []
+        for row in index {
+            if row.isMarked { rows.markedIDs.insert(row.id) }
+            switch row.kind {
+            case .chat:
+                if !row.isArchived { rows.conversations.append(row) }
+            case .run:
+                rows.runs.append(row)
+            case .note:
+                rows.notes.append(row)
+            case .track:
+                tracks.append(row)
+            case .decision:
+                let status = row.decisionStatus
+                if status == .superseded { rows.supersededIDs.insert(row.id) }
+                decisions.append(
+                    DecisionListLayout.TitleDecision(
+                        id: row.id,
+                        title: row.displayTitle,
+                        status: status,
+                        trackID: row.parentID,
+                        createdAt: row.createdAt
+                    )
                 )
-            },
-            tracks: trackRoots,
-            query: decisionQuery
-        )
+            case .project, .task:
+                break
+            }
+        }
+        rows.trackRoots = TitleIndexStore.trackTree(from: tracks)
+        rows.decisions = DecisionListLayout.snapshot(decisions: decisions, tracks: rows.trackRoots, query: decisionQuery)
+        return rows
     }
 
-    private var showsDecisionHistory: Bool {
-        if historyExpanded || decisionLayout.revealsHistory { return true }
+    private func showsDecisionHistory(_ rows: ProjectColumnRows) -> Bool {
+        if historyExpanded || rows.decisions.revealsHistory { return true }
         guard let id = app.selectedDecision else { return false }
-        return index.contains { $0.id == id && $0.kind == .decision && $0.decisionStatus == .superseded }
-    }
-
-    private var markedIDs: Set<UUID> {
-        Set(index.filter(\.isMarked).map(\.id))
+        return rows.supersededIDs.contains(id)
     }
 
     var body: some View {
@@ -144,7 +163,7 @@ struct ProjectColumn: View {
         }
         .onAppear {
             NavTrace.event(
-                "project.column appear compact=\(compact) rows=\(index.count) chats=\(conversations.count) tracks=\(trackRoots.count) notes=\(notes.count)"
+                "project.column appear compact=\(compact) rows=\(index.count)"
             )
         }
         .onChange(of: project.id, initial: true) { _, _ in
@@ -152,8 +171,8 @@ struct ProjectColumn: View {
             showingAllRuns = false
             decisionQuery = ""
             historyExpanded = false
-            collapsedActiveGroups = []
-            collapsedHistoryGroups = []
+            expandedActiveGroups = []
+            expandedHistoryGroups = []
             revealTracks(reset: true)
         }
         .onChange(of: app.selectedThread) { _, id in
@@ -186,7 +205,8 @@ struct ProjectColumn: View {
     }
 
     private var fullList: some View {
-        ScrollView {
+        let rows = rows
+        return ScrollView {
             PageBody {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 0) {
@@ -209,7 +229,7 @@ struct ProjectColumn: View {
 
                     header(.runs, add: newRun)
                     if isSectionOpen(.runs) {
-                        ForEach(visibleRuns) { run in
+                        ForEach(visible(rows.runs, all: showingAllRuns)) { run in
                             Button {
                                 app.open(run)
                             } label: {
@@ -223,10 +243,10 @@ struct ProjectColumn: View {
                             .buttonStyle(.plain)
                             .contextMenu { RunTitleMenu(row: run) }
                         }
-                        if projectRuns.count > ProjectColumnMetrics.chatPreviewLimit {
+                        if rows.runs.count > ProjectColumnMetrics.chatPreviewLimit {
                             ColumnShowMoreButton(
                                 expanded: showingAllRuns,
-                                remaining: projectRuns.count - ProjectColumnMetrics.chatPreviewLimit
+                                remaining: rows.runs.count - ProjectColumnMetrics.chatPreviewLimit
                             ) {
                                 showingAllRuns.toggle()
                             }
@@ -235,7 +255,7 @@ struct ProjectColumn: View {
 
                     header(.chats, add: newChat)
                     if isSectionOpen(.chats) {
-                        ForEach(visibleConversations) { conversation in
+                        ForEach(visible(rows.conversations, all: showingAllChats)) { conversation in
                             ConversationTitleRow(
                                 row: conversation,
                                 isSelected: tab == .chat && app.selectedConversation == conversation.id
@@ -243,10 +263,10 @@ struct ProjectColumn: View {
                                 app.open(conversation)
                             }
                         }
-                        if conversations.count > ProjectColumnMetrics.chatPreviewLimit {
+                        if rows.conversations.count > ProjectColumnMetrics.chatPreviewLimit {
                             ColumnShowMoreButton(
                                 expanded: showingAllChats,
-                                remaining: conversations.count - ProjectColumnMetrics.chatPreviewLimit
+                                remaining: rows.conversations.count - ProjectColumnMetrics.chatPreviewLimit
                             ) {
                                 showingAllChats.toggle()
                             }
@@ -255,14 +275,14 @@ struct ProjectColumn: View {
 
                     header(.tracks, add: { createThread(parent: nil) })
                     if isSectionOpen(.tracks) {
-                        ForEach(trackRoots) { node in
+                        ForEach(rows.trackRoots) { node in
                             ThreadBranch(
                                 node: node,
                                 depth: 0,
                                 selectedID: tab == .threads ? app.selectedThread : nil,
                                 expanded: $expanded,
                                 expandedCompleted: $expandedCompleted,
-                                markedIDs: markedIDs,
+                                markedIDs: rows.markedIDs,
                                 onSelect: { id in
                                     if let row = index.first(where: { $0.id == id }) {
                                         app.open(row)
@@ -277,7 +297,7 @@ struct ProjectColumn: View {
 
                     header(.notes, add: createNote)
                     if isSectionOpen(.notes) {
-                        ForEach(notes) { note in
+                        ForEach(rows.notes) { note in
                             Button {
                                 app.open(note)
                             } label: {
@@ -329,18 +349,18 @@ struct ProjectColumn: View {
                     header(.decisions, add: createDecision)
                     if isSectionOpen(.decisions) {
                         decisionFilter
-                        decisionGroups(decisionLayout.active, dimmed: false, history: false)
-                        if decisionLayout.historyCount > 0 {
+                        decisionGroups(rows.decisions.active, markedIDs: rows.markedIDs, dimmed: false, history: false)
+                        if rows.decisions.historyCount > 0 {
                             DecisionDisclosureHeader(
                                 title: "History",
-                                count: decisionLayout.historyCount,
-                                isExpanded: showsDecisionHistory,
+                                count: rows.decisions.historyCount,
+                                isExpanded: showsDecisionHistory(rows),
                                 onToggle: { historyExpanded.toggle() }
                             )
-                            if showsDecisionHistory {
-                                decisionGroups(decisionLayout.history, dimmed: true, history: true)
+                            if showsDecisionHistory(rows) {
+                                decisionGroups(rows.decisions.history, markedIDs: rows.markedIDs, dimmed: true, history: true)
                             }
-                        } else if decisionLayout.active.isEmpty, !decisionQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        } else if rows.decisions.active.isEmpty, !decisionQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             Text("No matching decisions")
                                 .font(CraftFont.caption)
                                 .foregroundStyle(.tertiary)
@@ -405,14 +425,8 @@ struct ProjectColumn: View {
         app.isProjectSectionOpen(section, tab: tab)
     }
 
-    private var visibleConversations: [TitleIndex] {
-        if showingAllChats { return conversations }
-        return Array(conversations.prefix(ProjectColumnMetrics.chatPreviewLimit))
-    }
-
-    private var visibleRuns: [TitleIndex] {
-        if showingAllRuns { return projectRuns }
-        return Array(projectRuns.prefix(ProjectColumnMetrics.chatPreviewLimit))
+    private func visible(_ rows: [TitleIndex], all: Bool) -> [TitleIndex] {
+        all ? rows : Array(rows.prefix(ProjectColumnMetrics.chatPreviewLimit))
     }
 
     private func revealTracks(reset: Bool) {
@@ -525,7 +539,12 @@ struct ProjectColumn: View {
     }
 
     @ViewBuilder
-    private func decisionGroups(_ groups: [DecisionListLayout.TitleGroup], dimmed: Bool, history: Bool) -> some View {
+    private func decisionGroups(
+        _ groups: [DecisionListLayout.TitleGroup],
+        markedIDs: Set<UUID>,
+        dimmed: Bool,
+        history: Bool
+    ) -> some View {
         ForEach(groups) { group in
             let expanded = showsDecisionGroup(group, history: history)
             DecisionDisclosureHeader(
@@ -536,7 +555,7 @@ struct ProjectColumn: View {
             )
             if expanded {
                 ForEach(group.decisions) { decision in
-                    decisionRow(decision, dimmed: dimmed)
+                    decisionRow(decision, isMarked: markedIDs.contains(decision.id), dimmed: dimmed)
                 }
             }
         }
@@ -549,25 +568,25 @@ struct ProjectColumn: View {
     private func showsDecisionGroup(_ group: DecisionListLayout.TitleGroup, history: Bool) -> Bool {
         if isDecisionSearchActive { return true }
         if group.decisions.contains(where: { $0.id == app.selectedDecision }) { return true }
-        let collapsed = history ? collapsedHistoryGroups : collapsedActiveGroups
-        return !collapsed.contains(group.id)
+        let expanded = history ? expandedHistoryGroups : expandedActiveGroups
+        return expanded.contains(group.id)
     }
 
     private func toggleDecisionGroup(_ group: DecisionListLayout.TitleGroup, history: Bool) {
         if history {
-            if collapsedHistoryGroups.contains(group.id) {
-                collapsedHistoryGroups.remove(group.id)
+            if expandedHistoryGroups.contains(group.id) {
+                expandedHistoryGroups.remove(group.id)
             } else {
-                collapsedHistoryGroups.insert(group.id)
+                expandedHistoryGroups.insert(group.id)
             }
-        } else if collapsedActiveGroups.contains(group.id) {
-            collapsedActiveGroups.remove(group.id)
+        } else if expandedActiveGroups.contains(group.id) {
+            expandedActiveGroups.remove(group.id)
         } else {
-            collapsedActiveGroups.insert(group.id)
+            expandedActiveGroups.insert(group.id)
         }
     }
 
-    private func decisionRow(_ decision: DecisionListLayout.TitleDecision, dimmed: Bool) -> some View {
+    private func decisionRow(_ decision: DecisionListLayout.TitleDecision, isMarked: Bool, dimmed: Bool) -> some View {
         Button {
             if let row = index.first(where: { $0.id == decision.id }) {
                 app.open(row)
@@ -577,7 +596,7 @@ struct ProjectColumn: View {
                 title: decision.title,
                 systemImage: decision.status == .active ? "checkmark.seal" : "xmark.seal",
                 isSelected: tab == .decisions && app.selectedDecision == decision.id,
-                isMarkedForDeletion: markedIDs.contains(decision.id)
+                isMarkedForDeletion: isMarked
             )
             .opacity(dimmed ? 0.55 : 1)
         }
@@ -598,7 +617,7 @@ struct ProjectColumn: View {
                 Label("Open in New Tab", systemImage: "plus.square.on.square")
             }
             Divider()
-            if markedIDs.contains(decision.id) {
+            if isMarked {
                 Button {
                     keepMark(decision.id)
                 } label: {

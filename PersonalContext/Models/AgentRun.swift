@@ -160,6 +160,7 @@ final class AgentRun {
 
     var project: Project?
     var task: AgendaItem?
+    var spaceIDString: String = ""
     var originChat: Conversation?
     var retryOf: AgentRun?
 

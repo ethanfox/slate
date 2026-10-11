@@ -71,15 +71,18 @@ enum TitleIndexStore {
             for row in (try? context.fetch(FetchDescriptor<TitleIndex>())) ?? [] {
                 context.delete(row)
             }
-            for project in fetch(Project.self, in: context) { upsert(project, in: context) }
-            for thread in fetch(ProjectThread.self, in: context) { upsert(thread, in: context) }
-            for note in fetch(Note.self, in: context) { upsert(note, in: context) }
-            for decision in fetch(Decision.self, in: context) { upsert(decision, in: context) }
-            for conversation in fetch(Conversation.self, in: context) { upsert(conversation, in: context) }
-            for task in fetch(AgendaItem.self, in: context) where task.kind == .task { upsert(task, in: context) }
-            for run in fetch(AgentRun.self, in: context) { upsert(run, in: context) }
+            try? context.save()
+            // Every row is new, so look rows up in memory instead of fetching per record.
+            let fresh = FreshRows()
+            for project in fetch(Project.self, in: context) { upsert(project, in: context, fresh: fresh) }
+            for thread in fetch(ProjectThread.self, in: context) { upsert(thread, in: context, fresh: fresh) }
+            for note in fetch(Note.self, in: context) { upsert(note, in: context, fresh: fresh) }
+            for decision in fetch(Decision.self, in: context) { upsert(decision, in: context, fresh: fresh) }
+            for conversation in fetch(Conversation.self, in: context) { upsert(conversation, in: context, fresh: fresh) }
+            for task in fetch(AgendaItem.self, in: context) where task.kind == .task { upsert(task, in: context, fresh: fresh) }
+            for run in fetch(AgentRun.self, in: context) { upsert(run, in: context, fresh: fresh) }
             for mark in fetch(DeletionMark.self, in: context) {
-                row(mark.targetID, in: context)?.isMarked = true
+                fresh.rows[mark.targetID]?.isMarked = true
             }
             try? context.save()
         }
@@ -87,42 +90,42 @@ enum TitleIndexStore {
 
     static func row(_ id: UUID, in context: ModelContext) -> TitleIndex? {
         let match = id
-        return fetch(TitleIndex.self, predicate: #Predicate { $0.id == match }, in: context).first
+        return fetch(TitleIndex.self, predicate: #Predicate { $0.id == match }, limit: 1, in: context).first
     }
 
     static func project(_ id: UUID, in context: ModelContext) -> Project? {
         let match = id
-        return fetch(Project.self, predicate: #Predicate { $0.id == match }, in: context).first
+        return fetch(Project.self, predicate: #Predicate { $0.id == match }, limit: 1, in: context).first
     }
 
     static func thread(_ id: UUID, in context: ModelContext) -> ProjectThread? {
         let match = id
-        return fetch(ProjectThread.self, predicate: #Predicate { $0.id == match }, in: context).first
+        return fetch(ProjectThread.self, predicate: #Predicate { $0.id == match }, limit: 1, in: context).first
     }
 
     static func note(_ id: UUID, in context: ModelContext) -> Note? {
         let match = id
-        return fetch(Note.self, predicate: #Predicate { $0.id == match }, in: context).first
+        return fetch(Note.self, predicate: #Predicate { $0.id == match }, limit: 1, in: context).first
     }
 
     static func decision(_ id: UUID, in context: ModelContext) -> Decision? {
         let match = id
-        return fetch(Decision.self, predicate: #Predicate { $0.id == match }, in: context).first
+        return fetch(Decision.self, predicate: #Predicate { $0.id == match }, limit: 1, in: context).first
     }
 
     static func conversation(_ id: UUID, in context: ModelContext) -> Conversation? {
         let match = id
-        return fetch(Conversation.self, predicate: #Predicate { $0.id == match }, in: context).first
+        return fetch(Conversation.self, predicate: #Predicate { $0.id == match }, limit: 1, in: context).first
     }
 
     static func task(_ id: UUID, in context: ModelContext) -> AgendaItem? {
         let match = id
-        return fetch(AgendaItem.self, predicate: #Predicate { $0.id == match }, in: context).first
+        return fetch(AgendaItem.self, predicate: #Predicate { $0.id == match }, limit: 1, in: context).first
     }
 
     static func run(_ id: UUID, in context: ModelContext) -> AgentRun? {
         let match = id
-        return fetch(AgentRun.self, predicate: #Predicate { $0.id == match }, in: context).first
+        return fetch(AgentRun.self, predicate: #Predicate { $0.id == match }, limit: 1, in: context).first
     }
 
     static func titles(
@@ -187,6 +190,16 @@ extension ModelContext {
 }
 
 private extension TitleIndexStore {
+    /// Rows inserted by a rebuild, keyed by record id.
+    final class FreshRows {
+        var rows: [UUID: TitleIndex] = [:]
+    }
+
+    static func existing(_ id: UUID, in context: ModelContext, fresh: FreshRows?) -> TitleIndex? {
+        if let fresh { return fresh.rows[id] }
+        return row(id, in: context)
+    }
+
     static func upsert(_ model: any PersistentModel, in context: ModelContext) {
         switch model {
         case let project as Project: upsert(project, in: context)
@@ -200,8 +213,8 @@ private extension TitleIndexStore {
         }
     }
 
-    static func upsert(_ project: Project, in context: ModelContext) {
-        let previous = row(project.id, in: context)
+    static func upsert(_ project: Project, in context: ModelContext, fresh: FreshRows? = nil) {
+        let previous = existing(project.id, in: context, fresh: fresh)
         let name = project.displayName
         write(
             id: project.id,
@@ -215,14 +228,15 @@ private extension TitleIndexStore {
             statusRaw: project.status.rawValue,
             symbol: project.symbol,
             isPinned: project.isPinned,
-            in: context
+            in: context,
+            fresh: fresh
         )
-        if previous?.title != project.name {
+        if fresh == nil, previous?.title != project.name {
             renameOwner(projectID: project.id, name: name, in: context)
         }
     }
 
-    static func upsert(_ thread: ProjectThread, in context: ModelContext) {
+    static func upsert(_ thread: ProjectThread, in context: ModelContext, fresh: FreshRows? = nil) {
         write(
             id: thread.id,
             kind: .track,
@@ -235,12 +249,13 @@ private extension TitleIndexStore {
             statusRaw: thread.status.rawValue,
             detailRaw: thread.kind.rawValue,
             symbol: thread.status == .completed ? "checkmark.circle" : TitleIndexKind.track.symbol,
-            in: context
+            in: context,
+            fresh: fresh
         )
-        bumpProject(thread.project?.id, at: thread.updatedAt, in: context)
+        bumpProject(thread.project?.id, at: thread.updatedAt, in: context, fresh: fresh)
     }
 
-    static func upsert(_ note: Note, in context: ModelContext) {
+    static func upsert(_ note: Note, in context: ModelContext, fresh: FreshRows? = nil) {
         write(
             id: note.id,
             kind: .note,
@@ -251,12 +266,13 @@ private extension TitleIndexStore {
             updatedAt: note.updatedAt,
             createdAt: note.createdAt,
             symbol: TitleIndexKind.note.symbol,
-            in: context
+            in: context,
+            fresh: fresh
         )
-        bumpProject(note.project?.id, at: note.updatedAt, in: context)
+        bumpProject(note.project?.id, at: note.updatedAt, in: context, fresh: fresh)
     }
 
-    static func upsert(_ decision: Decision, in context: ModelContext) {
+    static func upsert(_ decision: Decision, in context: ModelContext, fresh: FreshRows? = nil) {
         write(
             id: decision.id,
             kind: .decision,
@@ -268,12 +284,13 @@ private extension TitleIndexStore {
             createdAt: decision.createdAt,
             statusRaw: decision.status.rawValue,
             symbol: decision.status == .active ? "checkmark.seal" : "xmark.seal",
-            in: context
+            in: context,
+            fresh: fresh
         )
-        bumpProject(decision.project?.id, at: decision.createdAt, in: context)
+        bumpProject(decision.project?.id, at: decision.createdAt, in: context, fresh: fresh)
     }
 
-    static func upsert(_ conversation: Conversation, in context: ModelContext) {
+    static func upsert(_ conversation: Conversation, in context: ModelContext, fresh: FreshRows? = nil) {
         write(
             id: conversation.id,
             kind: .chat,
@@ -285,12 +302,13 @@ private extension TitleIndexStore {
             createdAt: conversation.createdAt,
             symbol: TitleIndexKind.chat.symbol,
             isArchived: conversation.isArchived,
-            in: context
+            in: context,
+            fresh: fresh
         )
-        bumpProject(conversation.project?.id, at: conversation.updatedAt, in: context)
+        bumpProject(conversation.project?.id, at: conversation.updatedAt, in: context, fresh: fresh)
     }
 
-    static func upsert(_ task: AgendaItem, in context: ModelContext) {
+    static func upsert(_ task: AgendaItem, in context: ModelContext, fresh: FreshRows? = nil) {
         write(
             id: task.id,
             kind: .task,
@@ -302,12 +320,13 @@ private extension TitleIndexStore {
             statusRaw: task.workflowStatus.rawValue,
             symbol: TitleIndexKind.task.symbol,
             isArchived: task.isCompleted,
-            in: context
+            in: context,
+            fresh: fresh
         )
-        bumpProject(task.project?.id, at: task.updatedAt, in: context)
+        bumpProject(task.project?.id, at: task.updatedAt, in: context, fresh: fresh)
     }
 
-    static func upsert(_ run: AgentRun, in context: ModelContext) {
+    static func upsert(_ run: AgentRun, in context: ModelContext, fresh: FreshRows? = nil) {
         write(
             id: run.id,
             kind: .run,
@@ -319,9 +338,10 @@ private extension TitleIndexStore {
             statusRaw: run.status.rawValue,
             symbol: TitleIndexKind.run.symbol,
             isBusy: run.status.isActive,
-            in: context
+            in: context,
+            fresh: fresh
         )
-        bumpProject(run.project?.id, at: run.updatedAt, in: context)
+        bumpProject(run.project?.id, at: run.updatedAt, in: context, fresh: fresh)
     }
 
     static func write(
@@ -339,9 +359,10 @@ private extension TitleIndexStore {
         isArchived: Bool = false,
         isPinned: Bool = false,
         isBusy: Bool = false,
-        in context: ModelContext
+        in context: ModelContext,
+        fresh: FreshRows?
     ) {
-        if let existing = row(id, in: context) {
+        if let existing = existing(id, in: context, fresh: fresh) {
             existing.kind = kind
             existing.title = title
             existing.owner = owner
@@ -357,28 +378,28 @@ private extension TitleIndexStore {
             existing.isBusy = isBusy
             return
         }
-        context.insert(
-            TitleIndex(
-                id: id,
-                kind: kind,
-                title: title,
-                owner: owner,
-                projectID: projectID,
-                parentID: parentID,
-                updatedAt: updatedAt,
-                createdAt: createdAt,
-                statusRaw: statusRaw,
-                detailRaw: detailRaw,
-                symbol: symbol,
-                isArchived: isArchived,
-                isPinned: isPinned,
-                isBusy: isBusy
-            )
+        let row = TitleIndex(
+            id: id,
+            kind: kind,
+            title: title,
+            owner: owner,
+            projectID: projectID,
+            parentID: parentID,
+            updatedAt: updatedAt,
+            createdAt: createdAt,
+            statusRaw: statusRaw,
+            detailRaw: detailRaw,
+            symbol: symbol,
+            isArchived: isArchived,
+            isPinned: isPinned,
+            isBusy: isBusy
         )
+        context.insert(row)
+        fresh?.rows[id] = row
     }
 
-    static func bumpProject(_ id: UUID?, at date: Date, in context: ModelContext) {
-        guard let id, let project = row(id, in: context), date > project.updatedAt else { return }
+    static func bumpProject(_ id: UUID?, at date: Date, in context: ModelContext, fresh: FreshRows?) {
+        guard let id, let project = existing(id, in: context, fresh: fresh), date > project.updatedAt else { return }
         project.updatedAt = date
     }
 
@@ -417,10 +438,12 @@ private extension TitleIndexStore {
     static func fetch<T: PersistentModel>(
         _ type: T.Type,
         predicate: Predicate<T>? = nil,
+        limit: Int? = nil,
         in context: ModelContext
     ) -> [T] {
         var descriptor = FetchDescriptor<T>()
         descriptor.predicate = predicate
+        if let limit { descriptor.fetchLimit = limit }
         return (try? context.fetch(descriptor)) ?? []
     }
 }

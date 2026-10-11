@@ -104,6 +104,12 @@ private struct HostWindowAccessor: NSViewRepresentable {
     }
 }
 
+/// The chrome asks for the open project and track many times per body pass. Remember the last answer.
+private final class OpenRecordCache {
+    var project: Project?
+    var thread: ProjectThread?
+}
+
 struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -113,6 +119,7 @@ struct RootView: View {
     @State private var chatProgress: CGFloat = 0
     @State private var chatMounted = false
     @State private var chatSettled = false
+    @State private var openRecords = OpenRecordCache()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -445,7 +452,12 @@ struct RootView: View {
 
     private var openProject: Project? {
         guard case .project(let id) = app.destination else { return nil }
-        return TitleIndexStore.project(id, in: context)
+        if let cached = openRecords.project, cached.modelContext === context, !cached.isDeleted, cached.id == id {
+            return cached
+        }
+        let project = TitleIndexStore.project(id, in: context)
+        openRecords.project = project
+        return project
     }
 
     private var showingTrackChat: Bool {
@@ -539,7 +551,12 @@ struct RootView: View {
     private var focusedThread: ProjectThread? {
         guard let project = openProject, app.tab(for: project.id) == .threads,
               let id = app.selectedThread else { return nil }
-        return TitleIndexStore.thread(id, in: context)
+        if let cached = openRecords.thread, cached.modelContext === context, !cached.isDeleted, cached.id == id {
+            return cached
+        }
+        let thread = TitleIndexStore.thread(id, in: context)
+        openRecords.thread = thread
+        return thread
     }
 
     /// Widens the window to the right only when it is narrower than `width`. It never shrinks or moves the window

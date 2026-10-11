@@ -211,7 +211,9 @@ final class AppModel {
 
     func openProjectSection(_ section: ProjectColumnSection) {
         collapsedProjectSections.remove(section.rawValue)
-        expandedProjectSections.insert(section.rawValue)
+        if section != .decisions {
+            expandedProjectSections.insert(section.rawValue)
+        }
     }
 
     func toggleInspector() {
@@ -292,11 +294,15 @@ final class AppModel {
         sidebarCollapsed = UserDefaults.standard.bool(forKey: Keys.sidebarCollapsed)
         projectColumnCollapsed = UserDefaults.standard.bool(forKey: Keys.projectColumnCollapsed)
         if UserDefaults.standard.object(forKey: Keys.expandedProjectSections) == nil {
-            collapsedProjectSections = []
+            collapsedProjectSections = [ProjectColumnSection.decisions.rawValue]
             expandedProjectSections = []
         } else {
-            collapsedProjectSections = Set(UserDefaults.standard.stringArray(forKey: Keys.collapsedProjectSections) ?? [])
-            expandedProjectSections = Set(UserDefaults.standard.stringArray(forKey: Keys.expandedProjectSections) ?? [])
+            var collapsed = Set(UserDefaults.standard.stringArray(forKey: Keys.collapsedProjectSections) ?? [])
+            var expanded = Set(UserDefaults.standard.stringArray(forKey: Keys.expandedProjectSections) ?? [])
+            collapsed.insert(ProjectColumnSection.decisions.rawValue)
+            expanded.remove(ProjectColumnSection.decisions.rawValue)
+            collapsedProjectSections = collapsed
+            expandedProjectSections = expanded
         }
         settingsSection = SettingsSection(rawValue: UserDefaults.standard.string(forKey: Keys.settingsSection) ?? "") ?? .model
         if UserDefaults.standard.object(forKey: Keys.openChatLinksInNewTab) == nil {

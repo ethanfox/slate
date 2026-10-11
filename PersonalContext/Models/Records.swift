@@ -219,6 +219,7 @@ final class ProjectThread {
     var updatedAt: Date
     var project: Project?
     var parent: ProjectThread?
+    var spaceIDString: String = ""
 
     @Relationship(deleteRule: .cascade, inverse: \ProjectThread.parent)
     var children: [ProjectThread] = []
@@ -292,6 +293,7 @@ final class Note {
     var updatedAt: Date
     var project: Project?
     var thread: ProjectThread?
+    var spaceIDString: String = ""
 
     @Relationship(inverse: \Tag.notes)
     var tags: [Tag] = []
@@ -327,6 +329,7 @@ final class Decision {
     var createdAt: Date
     var project: Project?
     var thread: ProjectThread?
+    var spaceIDString: String = ""
 
     @Relationship(inverse: \Tag.decisions)
     var tags: [Tag] = []
@@ -480,6 +483,7 @@ final class Conversation {
     var updatedAt: Date
     var project: Project?
     var thread: ProjectThread?
+    var spaceIDString: String = ""
 
     @Relationship(deleteRule: .cascade, inverse: \ChatMessage.conversation)
     var messages: [ChatMessage] = []
@@ -819,6 +823,7 @@ final class AgendaItem {
     var isNext: Bool = false
     var blockedReason: String = ""
     var project: Project?
+    var spaceIDString: String = ""
 
     @Relationship(inverse: \Tag.agendaItems)
     var tags: [Tag] = []
