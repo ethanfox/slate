@@ -56,6 +56,37 @@ enum Store {
         PersonalFact.self
     ])
 
+    /// Bump whenever a model or a stored property is added. A build that opens a store written by a
+    /// newer schema drops the tables and columns it does not know, so older builds must refuse.
+    static let schemaVersion = 2
+
+    /// Sits beside the store and holds the highest schema version that has opened it.
+    static func schemaMarkerURL(for store: URL) -> URL {
+        store.appendingPathExtension("schema")
+    }
+
+    static func recordedSchemaVersion(for store: URL) -> Int {
+        guard let raw = try? String(contentsOf: schemaMarkerURL(for: store), encoding: .utf8) else { return 0 }
+        return Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+    }
+
+    /// Throws when a newer build has already opened this store.
+    static func refuseIfOutdated(at store: URL, running version: Int = schemaVersion) throws {
+        let recorded = recordedSchemaVersion(for: store)
+        guard recorded <= version else {
+            throw StoreMigrationError(
+                "This copy of Membrae is older than its data (schema \(version), data \(recorded)). "
+                    + "It will not open the store, because doing so would delete newer records. "
+                    + "Quit it and start the current build."
+            )
+        }
+    }
+
+    private static func recordSchemaVersion(at store: URL, running version: Int) {
+        guard recordedSchemaVersion(for: store) < version else { return }
+        try? String(version).write(to: schemaMarkerURL(for: store), atomically: true, encoding: .utf8)
+    }
+
     /// Same identifier the app and membrae-mcp declare in their entitlements.
     static let applicationGroupIdentifier = "NUF99UVUKB.com.ethanfox.PersonalContext"
 
@@ -134,12 +165,22 @@ enum Store {
         try open(configuration: configuration, mode: mode)
     }
 
-    static func open(url: URL, mode: StoreOpenMode = .prepare) throws -> ModelContainer {
-        try open(configuration: ModelConfiguration(schema: schema, url: url), mode: mode)
+    static func open(
+        url: URL,
+        mode: StoreOpenMode = .prepare,
+        schemaVersion: Int = Store.schemaVersion
+    ) throws -> ModelContainer {
+        try open(configuration: ModelConfiguration(schema: schema, url: url), mode: mode, schemaVersion: schemaVersion)
     }
 
-    private static func open(configuration: ModelConfiguration, mode: StoreOpenMode) throws -> ModelContainer {
+    private static func open(
+        configuration: ModelConfiguration,
+        mode: StoreOpenMode,
+        schemaVersion: Int = Store.schemaVersion
+    ) throws -> ModelContainer {
         if !configuration.isStoredInMemoryOnly {
+            // Before the container exists: creating it is what migrates the file.
+            try refuseIfOutdated(at: configuration.url, running: schemaVersion)
             try migrateAgentRunColumns(at: configuration.url)
             try migrateCodeReferenceOwnership(at: configuration.url)
             try migrateTagColumns(at: configuration.url)
@@ -147,6 +188,9 @@ enum Store {
         }
         let start = ContinuousClock.now
         let container = try ModelContainer(for: schema, configurations: configuration)
+        if !configuration.isStoredInMemoryOnly {
+            recordSchemaVersion(at: configuration.url, running: schemaVersion)
+        }
         let context = ModelContext(container)
         context.autosaveEnabled = false
         guard mode == .prepare else {
@@ -430,6 +474,15 @@ enum MCPStoreSession {
     private static var url: URL?
 
     static func container(at url: URL? = Store.applicationGroupStoreURL) throws -> ModelContainer {
+        // A helper can outlive several app builds. Check on every call, not only on open.
+        if let url {
+            do {
+                try Store.refuseIfOutdated(at: url)
+            } catch {
+                held = nil
+                throw error
+            }
+        }
         let current = StoreFileStamp(url: url)
         if let held, self.url == url, stamp == current {
             return held

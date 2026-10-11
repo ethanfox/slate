@@ -85,6 +85,55 @@ final class StoreSyncTests: XCTestCase {
         XCTAssertTrue(notes.contains { $0.content == "From chat" })
     }
 
+    func testOlderBuildRefusesAStoreOpenedByANewerOne() throws {
+        let url = temporaryStoreURL()
+        defer { removeStore(at: url) }
+        do {
+            let current = try Store.open(url: url)
+            try SpaceStore.create(named: "Kitchen", in: current.mainContext)
+        }
+        XCTAssertEqual(Store.recordedSchemaVersion(for: url), Store.schemaVersion)
+
+        XCTAssertThrowsError(try Store.open(url: url, schemaVersion: Store.schemaVersion - 1)) { error in
+            XCTAssertTrue(error.localizedDescription.contains("older than its data"), error.localizedDescription)
+        }
+
+        XCTAssertEqual(Store.recordedSchemaVersion(for: url), Store.schemaVersion)
+        let reopened = try Store.open(url: url, mode: .reopen)
+        XCTAssertEqual(SpaceStore.all(in: reopened.mainContext).map(\.name), ["Kitchen"])
+    }
+
+    func testOpeningNeverLowersTheRecordedVersion() throws {
+        let url = temporaryStoreURL()
+        defer { removeStore(at: url) }
+        _ = try Store.open(url: url, schemaVersion: 1)
+        XCTAssertEqual(Store.recordedSchemaVersion(for: url), 1)
+        _ = try Store.open(url: url)
+        XCTAssertEqual(Store.recordedSchemaVersion(for: url), Store.schemaVersion)
+    }
+
+    func testHeldHelperSessionStopsOnceANewerBuildHasOpenedTheStore() throws {
+        MCPStoreSession.reset()
+        let url = temporaryStoreURL()
+        defer {
+            MCPStoreSession.reset()
+            removeStore(at: url)
+        }
+        let seed = try Store.open(url: url)
+        try SpaceStore.create(named: "Kitchen", in: seed.mainContext)
+        _ = try MCPStoreSession.container(at: url)
+
+        try String(Store.schemaVersion + 1).write(to: Store.schemaMarkerURL(for: url), atomically: true, encoding: .utf8)
+
+        XCTAssertThrowsError(try MCPStoreSession.container(at: url))
+        XCTAssertThrowsError(try MCPStoreSession.container(at: url))
+    }
+
+    private func removeStore(at url: URL) {
+        try? FileManager.default.removeItem(at: url)
+        try? FileManager.default.removeItem(at: Store.schemaMarkerURL(for: url))
+    }
+
     private func temporaryStoreURL() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).store")
     }
