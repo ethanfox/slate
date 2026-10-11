@@ -118,6 +118,45 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertFalse(preview.contains(HarborEvalFixture.vendorTail))
     }
 
+    func testListChatsOmitsArchivedAndGetChatReturnsTranscript() throws {
+        let seed = HarborEvalFixture.seed(in: context)
+        let chat = Conversation(title: "Auth review", providerID: "cursor", project: seed.project)
+        chat.thread = seed.auth
+        let user = ChatMessage(role: .user, content: "What did we decide about sessions?")
+        let assistant = ChatMessage(role: .assistant, content: "Keep the local session.")
+        chat.messages = [user, assistant]
+        let archived = Conversation(title: "Old scratch", providerID: "cursor", project: seed.project)
+        archived.isArchived = true
+        archived.messages = [ChatMessage(role: .user, content: "hidden")]
+        context.insert(chat)
+        context.insert(archived)
+        try context.save()
+
+        let listed = try array(Tools.call(
+            "list_chats",
+            arguments: ["project_id": seed.project.id.uuidString],
+            container: container
+        ))
+        XCTAssertEqual(listed.compactMap { $0["title"] as? String }, ["Auth review"])
+        XCTAssertNil(listed.first?["messages"])
+        XCTAssertEqual(listed.first?["preview"] as? String, "Keep the local session.")
+
+        let onAuth = try array(Tools.call(
+            "list_chats",
+            arguments: ["project_id": seed.project.id.uuidString, "track_id": seed.auth.id.uuidString],
+            container: container
+        ))
+        XCTAssertEqual(onAuth.count, 1)
+
+        let body = try object(Tools.call("get_chat", arguments: ["chat_id": chat.id.uuidString], container: container))
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages.map { $0["role"] as? String }, ["user", "assistant"])
+        XCTAssertEqual(messages.map { $0["content"] as? String }, [
+            "What did we decide about sessions?",
+            "Keep the local session."
+        ])
+    }
+
     func testGetNoteReturnsFullReferenceContent() throws {
         let seed = HarborEvalFixture.seed(in: context)
         try context.save()

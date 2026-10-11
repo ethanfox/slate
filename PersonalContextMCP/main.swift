@@ -14,7 +14,7 @@ Use the task tools to list, create, update, and complete Membrae tasks. complete
 do not set status to done on a repeating task. \
 \(ContextBuilder.knowledgeRules) \
 get_project is lean. Use get_track for a track body and its linked work, list_tasks with track_id for tasks, \
-and get_note for reference material. \
+get_note for reference material, and list_chats then get_chat to read a past conversation. \
 Tags are sparse cross-cutting labels. Use list_tags, create_tag, assign_tag, and remove_tag on notes, tracks, decisions, conversations, and tasks. Do not tag projects. \
 Agents cannot delete. To propose removing a note, track, decision, or chat, call mark_for_deletion \
 with a reason. Optionally link a replacement. The user Keeps or Deletes.

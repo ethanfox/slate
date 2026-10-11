@@ -630,6 +630,27 @@ enum Tools {
         },
 
         Tool(
+            name: "list_chats",
+            description: "List a project's chats, most recently updated first, with a preview of the last message. Hidden (archived) chats are omitted.",
+            properties: ["project_id": projectID, "track_id": text("Only chats filed under this track.")],
+            required: ["project_id"], readOnly: true
+        ) { args, context in
+            let project = try Lookup.project(try args.uuid("project_id"), in: context)
+            let trackID = try args.optionalUUID("track_id") ?? nil
+            return project.conversations
+                .filter { !$0.isArchived }
+                .filter { trackID == nil || $0.thread?.id == trackID }
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .map { JSONShape.conversation($0, full: false) }
+        },
+        Tool(
+            name: "get_chat",
+            description: "Get one chat and its message transcript.",
+            properties: ["chat_id": text("Chat id.")], required: ["chat_id"], readOnly: true
+        ) { args, context in
+            JSONShape.conversation(try Lookup.conversation(try args.uuid("chat_id"), in: context), full: true)
+        },
+        Tool(
             name: "list_notes",
             description: "List a project's notes, most recently changed first, with a preview of each.",
             properties: ["project_id": projectID, "track_id": text("Only notes filed under this track.")],
@@ -1211,6 +1232,7 @@ enum JSONShape {
                 "decisions": project.decisions.count,
                 "tracks": project.threads.count,
                 "notes": project.notes.count,
+                "chats": project.conversations.filter { !$0.isArchived }.count,
                 "tasks": project.agendaItems.filter { $0.kind == .task }.count
             ]
         ]
@@ -1323,6 +1345,35 @@ enum JSONShape {
             }
         }
         attachMark(&shape, id: thread.id, project: thread.project)
+        return shape
+    }
+
+    static func conversation(_ conversation: Conversation, full: Bool) -> [String: Any] {
+        let messages = conversation.orderedMessages
+        let lastText = messages.last.map { chatText($0.content) } ?? ""
+        var shape: [String: Any] = [
+            "id": conversation.id.uuidString,
+            "project_id": conversation.project?.id.uuidString ?? "",
+            "title": conversation.title.isEmpty ? "Chat" : conversation.title,
+            "track_id": conversation.thread?.id.uuidString ?? "",
+            "updated_at": iso.string(from: conversation.updatedAt),
+            "message_count": messages.count,
+            "is_archived": conversation.isArchived,
+            "tags": tags(conversation.tags)
+        ]
+        if full {
+            shape["messages"] = messages.map { message in
+                [
+                    "id": message.id.uuidString,
+                    "role": message.role.rawValue,
+                    "content": chatText(message.content),
+                    "created_at": iso.string(from: message.createdAt)
+                ]
+            }
+        } else {
+            shape["preview"] = clip(lastText, 240)
+        }
+        attachMark(&shape, id: conversation.id, project: conversation.project)
         return shape
     }
 
@@ -1445,6 +1496,11 @@ enum JSONShape {
             "related_keys": entry.relatedKeys,
             "source_revision": entry.sourceRevision
         ]
+    }
+
+    private static func chatText(_ raw: String) -> String {
+        guard let start = raw.range(of: "\n\n<!--membrae:", options: .backwards) else { return raw }
+        return String(raw[..<start.lowerBound])
     }
 
     private static func attachMark(_ shape: inout [String: Any], id: UUID, project: Project?) {
