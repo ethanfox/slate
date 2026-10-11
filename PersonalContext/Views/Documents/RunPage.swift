@@ -77,6 +77,8 @@ struct RunPage: View {
         var parts = [run.status.label]
         if run.status.isActive, let label = app.runCoordinator.waitLabel(for: run.id) {
             parts.append(label)
+        } else if run.status.isActive, let headline = app.browser.headline(for: run.id) {
+            parts.append(headline)
         } else {
             parts.append(timeLabel)
         }
@@ -132,9 +134,9 @@ struct RunPage: View {
                         .font(CraftFont.caption)
                         .foregroundStyle(.tertiary)
                         .frame(width: 56, alignment: .leading)
-                    Text(event.kind.rawValue.capitalized)
+                    Text(event.kind == .browser ? (event.detail.isEmpty ? "Browser" : event.detail) : event.kind.rawValue.capitalized)
                         .font(CraftFont.body)
-                    if !event.detail.isEmpty {
+                    if event.kind != .browser, !event.detail.isEmpty {
                         Text(event.detail)
                             .font(CraftFont.body)
                             .foregroundStyle(.secondary)

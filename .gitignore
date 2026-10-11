@@ -6,4 +6,5 @@ xcuserdata/
 *.xcscmblueprint
 .swiftpm/
 node_modules/
+PersonalContextBrowser/.cache/
 slate/

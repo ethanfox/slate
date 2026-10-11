@@ -13,7 +13,10 @@ final class MembraeToolGateway: AgentToolGateway {
     private let projectID: UUID?
     private let includeExternalMCP: Bool
     private let includeConfigTools: Bool
+    private let includeBrowser: Bool
+    private let runID: UUID?
     private let mcpRuntime: MCPRuntime?
+    private let browserRuntime: BrowserRuntime?
 
     init(
         roots: [ProjectCodeRoot] = [],
@@ -27,7 +30,10 @@ final class MembraeToolGateway: AgentToolGateway {
         projectID: UUID? = nil,
         includeExternalMCP: Bool = false,
         includeConfigTools: Bool = false,
-        mcpRuntime: MCPRuntime? = nil
+        includeBrowser: Bool = false,
+        runID: UUID? = nil,
+        mcpRuntime: MCPRuntime? = nil,
+        browserRuntime: BrowserRuntime? = nil
     ) {
         self.roots = roots
         self.includeMembraeTools = includeMembraeTools
@@ -40,7 +46,10 @@ final class MembraeToolGateway: AgentToolGateway {
         self.projectID = projectID
         self.includeExternalMCP = includeExternalMCP
         self.includeConfigTools = includeConfigTools
+        self.includeBrowser = includeBrowser
+        self.runID = runID
         self.mcpRuntime = mcpRuntime ?? ((includeExternalMCP || includeConfigTools) ? .shared : nil)
+        self.browserRuntime = browserRuntime ?? (includeBrowser ? .shared : nil)
     }
 
     func definitions() async throws -> [[String: Any]] {
@@ -65,6 +74,9 @@ final class MembraeToolGateway: AgentToolGateway {
         }
         if includeExternalMCP, let mcpRuntime {
             tools += await mcpRuntime.providerDefinitions(projectID: projectID)
+        }
+        if includeBrowser {
+            tools += BrowserTools.definitions
         }
         return tools.map { tool in
             var tool = tool
@@ -112,6 +124,16 @@ final class MembraeToolGateway: AgentToolGateway {
             }
             return try await mcpRuntime.execute(name: name, arguments: arguments, projectID: projectID)
         default:
+            if BrowserTools.isBrowser(name) {
+                guard includeBrowser, let browserRuntime else {
+                    throw ProjectWorkspaceError("The browser is not available in this session.")
+                }
+                return try await browserRuntime.execute(
+                    name: name,
+                    arguments: arguments,
+                    context: BrowserCallContext(runID: runID, projectID: projectID)
+                )
+            }
             if MCPToolName.isExternal(name) {
                 guard includeExternalMCP, let mcpRuntime else {
                     throw ProjectWorkspaceError("External MCP tools are not available in this session.")

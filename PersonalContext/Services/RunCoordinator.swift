@@ -59,6 +59,7 @@ final class RunCoordinator {
         jobs[id]?.task.cancel()
         jobs[id]?.process?.stop()
         try? RunStore.cancel(run, in: context)
+        BrowserRuntime.shared.cancel(runID: id)
         clear(id)
     }
 
@@ -117,7 +118,9 @@ final class RunCoordinator {
                 consult: nil,
                 mcp: includeMembrae ? .shared : nil,
                 indexingRunID: run.purpose == .indexRepository ? run.id : nil,
-                storeURL: context.container.configurations.first?.url
+                storeURL: context.container.configurations.first?.url,
+                includeBrowser: policy.allowBrowser,
+                runID: run.id
             )
         )
         let prompt = RunPrompt.body(brief: run.brief, project: run.project, run: run)
@@ -195,7 +198,8 @@ final class RunCoordinator {
                 : [],
             readProvenancePath: run.purpose == .indexRepository
                 ? CodeReadProvenance.fileURL(runID: run.id, storeURL: store).path
-                : ""
+                : "",
+            externalTools: policy.allowBrowser ? BrowserTools.providerTools() : []
         )
         let process = RunCursorProcess()
         if var job = jobs[id] {
@@ -226,6 +230,17 @@ final class RunCoordinator {
                 if event.name == "resolve_project_code_roots" {
                     do {
                         process.replyToHostTool(id: toolID, text: try ProjectCodeWorkspace.encodedRoots(roots))
+                    } catch {
+                        process.replyToHostTool(id: toolID, error: error.localizedDescription)
+                    }
+                } else if let name = event.name, BrowserTools.isBrowser(name) {
+                    do {
+                        let output = try await BrowserRuntime.shared.execute(
+                            name: name,
+                            arguments: Self.hostArguments(event),
+                            context: BrowserCallContext(runID: id, projectID: resolvedRun(id)?.project?.id)
+                        )
+                        process.replyToHostTool(id: toolID, text: output)
                     } catch {
                         process.replyToHostTool(id: toolID, error: error.localizedDescription)
                     }
@@ -418,6 +433,7 @@ final class RunCoordinator {
         jobs[id]?.process?.stop()
         jobs[id] = nil
         running.removeAll { $0.id == id }
+        BrowserRuntime.shared.cancel(runID: id)
     }
 
     private static func hostArguments(_ event: RunnerEvent) -> [String: Any] {

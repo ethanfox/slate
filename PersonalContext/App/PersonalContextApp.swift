@@ -22,6 +22,7 @@ struct MembraeApp: App {
                     if phase == .active { app.importRelay.handleForeground() }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                    app.browser.shutdown()
                     app.mcp.shutdown()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.didWakeNotification)) { _ in

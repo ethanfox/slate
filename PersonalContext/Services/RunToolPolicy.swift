@@ -12,6 +12,7 @@ struct RunToolPolicy: Equatable, Sendable {
     var requireProject: Bool
     var attachesRunSource: Bool
     var allowExternalMCP: Bool
+    var allowBrowser: Bool
 
     var allowsMembraeWrites: Bool { allowMembraeKnowledgeWrite && projectID != nil }
 
@@ -44,7 +45,8 @@ struct RunToolPolicy: Equatable, Sendable {
         denied: Set<String> = RunToolPolicy.denied,
         requireProject: Bool = true,
         attachesRunSource: Bool = true,
-        allowExternalMCP: Bool = false
+        allowExternalMCP: Bool = false,
+        allowBrowser: Bool = true
     ) {
         self.runID = runID
         self.projectID = projectID
@@ -57,6 +59,7 @@ struct RunToolPolicy: Equatable, Sendable {
         self.requireProject = requireProject
         self.attachesRunSource = attachesRunSource
         self.allowExternalMCP = allowExternalMCP
+        self.allowBrowser = allowBrowser
     }
 
     static func chat(projectID: UUID?) -> RunToolPolicy {
@@ -70,7 +73,8 @@ struct RunToolPolicy: Equatable, Sendable {
             denied: [],
             requireProject: false,
             attachesRunSource: false,
-            allowExternalMCP: true
+            allowExternalMCP: true,
+            allowBrowser: true
         )
     }
 
@@ -85,12 +89,14 @@ struct RunToolPolicy: Equatable, Sendable {
             scopedAttachmentID: attachmentID,
             denied: RunToolPolicy.denied.union(projectWrites),
             requireProject: false,
-            attachesRunSource: false
+            attachesRunSource: false,
+            allowBrowser: false
         )
     }
 
     func allows(_ name: String) -> Bool {
         if name == Self.finishRun { return true }
+        if BrowserPermissions.isBrowserTool(name) { return allowBrowser }
         if name == MCPToolName.importServers { return allowExternalMCP }
         if MCPToolName.isExternal(name) { return allowExternalMCP }
         if denied.contains(name) { return false }

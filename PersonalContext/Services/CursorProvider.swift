@@ -209,7 +209,7 @@ final class CursorConversationBridge {
             codeSnapshots: includeProjectTools && runtime == .local
                 ? ProjectCodeWorkspace.remoteSnapshots(for: project, storeURL: store)
                 : [],
-            externalTools: includeMembraeTools ? await externalMCPTools() : [],
+            externalTools: includeMembraeTools ? await externalMCPTools() + BrowserTools.providerTools() : [],
             includeMCPImport: includeMembraeTools
         )
         return (request, metadata)
@@ -568,6 +568,12 @@ struct CursorChatProvider: ChatProvider {
                                 let output: String
                                 if toolName == "resolve_project_code_roots" {
                                     output = try await bridge.encodedCurrentCodeRoots()
+                                } else if BrowserTools.isBrowser(toolName) {
+                                    output = try await BrowserRuntime.shared.execute(
+                                        name: toolName,
+                                        arguments: jsonObject(brief),
+                                        context: BrowserCallContext(projectID: bridge.project?.id)
+                                    )
                                 } else if toolName == MCPToolName.importServers || MCPToolName.isExternal(toolName) {
                                     output = try await MCPRuntime.shared.execute(
                                         name: toolName,

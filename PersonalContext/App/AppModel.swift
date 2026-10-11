@@ -241,6 +241,7 @@ final class AppModel {
     let eventKit = EventKitService()
     let sources = SourceConnections()
     let mcp = MCPRuntime.shared
+    let browser = BrowserRuntime.shared
 
     var hasAPIKey: Bool { apiKey?.isEmpty == false }
 
@@ -333,6 +334,14 @@ final class AppModel {
         restoreWindowTabs()
         runCoordinator.attach(self)
         runCoordinator.recover(in: container.mainContext)
+        browser.onActivity = { [weak self] runID, event in
+            guard let self, let runID else { return }
+            let context = self.container.mainContext
+            guard let run = RunStore.run(runID, in: context) else { return }
+            run.append(.browser, detail: event.summary)
+            try? context.save()
+        }
+        browser.warm()
         importRelay.attach(self)
         objectFind.installShortcuts { [weak self] in
             guard let self else { return false }

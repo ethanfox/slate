@@ -17,6 +17,20 @@
 		A11C0DE100000010 /* MCPRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE10000000F /* MCPRuntime.swift */; };
 		A11C0DE100000012 /* SettingsMCPPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000011 /* SettingsMCPPage.swift */; };
 		A11C0DE100000014 /* MCPConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000013 /* MCPConnectionTests.swift */; };
+		B20A01000000000000000002 /* BrowserSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000001 /* BrowserSupport.swift */; };
+		B20A01000000000000000004 /* BrowserPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000003 /* BrowserPermissions.swift */; };
+		B20A01000000000000000006 /* BrowserChallenge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000005 /* BrowserChallenge.swift */; };
+		B20A01000000000000000008 /* BrowserActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000007 /* BrowserActivity.swift */; };
+		B20A0100000000000000000A /* BrowserSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000009 /* BrowserSessionStore.swift */; };
+		B20A0100000000000000000C /* BrowserService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A0100000000000000000B /* BrowserService.swift */; };
+		B20A0100000000000000000E /* BrowserRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A0100000000000000000D /* BrowserRuntime.swift */; };
+		B20A01000000000000000010 /* BrowserTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A0100000000000000000F /* BrowserTools.swift */; };
+		B20A01000000000000000012 /* SettingsBrowserPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000011 /* SettingsBrowserPage.swift */; };
+		B20A01000000000000000014 /* BrowserVerification.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000013 /* BrowserVerification.swift */; };
+		B20A01000000000000000016 /* BrowserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000015 /* BrowserTests.swift */; };
+		B20B01000000000000000002 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20B01000000000000000001 /* main.swift */; };
+		B20B01000000000000000003 /* BrowserSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000001 /* BrowserSupport.swift */; };
+		B20B01000000000000000006 /* PersonalContextBrowser in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = B20B01000000000000000005 /* PersonalContextBrowser */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		05BA026B4AF137407DFFBB70 /* ColorHex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A843C76D621958EDA8D94D61 /* ColorHex.swift */; };
 		05FD064003B7CEADF8D13FE2 /* SourceChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DBE0B7BED768EB831D55245 /* SourceChip.swift */; };
 		06A4B5A5812EFA0E120BAFC9 /* DocumentSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591D54A725FC8665EAB3A680 /* DocumentSection.swift */; };
@@ -245,6 +259,13 @@
 			remoteGlobalIDString = F5986EA1BE0334BB6C6D8FB5;
 			remoteInfo = PersonalContextMCP;
 		};
+		B20B0100000000000000000C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11B693922469774ABBEC915F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B20B01000000000000000007;
+			remoteInfo = PersonalContextBrowser;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -255,6 +276,7 @@
 			dstSubfolderSpec = 6;
 			files = (
 				A2AE14BEB7353A0D4CC630BE /* PersonalContextMCP in Embed Dependencies */,
+				B20B01000000000000000006 /* PersonalContextBrowser in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -420,6 +442,20 @@
 		A11C0DE10000000F /* MCPRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPRuntime.swift; sourceTree = "<group>"; };
 		A11C0DE100000011 /* SettingsMCPPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsMCPPage.swift; sourceTree = "<group>"; };
 		A11C0DE100000013 /* MCPConnectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPConnectionTests.swift; sourceTree = "<group>"; };
+		B20A01000000000000000001 /* BrowserSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserSupport.swift; sourceTree = "<group>"; };
+		B20A01000000000000000003 /* BrowserPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserPermissions.swift; sourceTree = "<group>"; };
+		B20A01000000000000000005 /* BrowserChallenge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserChallenge.swift; sourceTree = "<group>"; };
+		B20A01000000000000000007 /* BrowserActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserActivity.swift; sourceTree = "<group>"; };
+		B20A01000000000000000009 /* BrowserSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserSessionStore.swift; sourceTree = "<group>"; };
+		B20A0100000000000000000B /* BrowserService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserService.swift; sourceTree = "<group>"; };
+		B20A0100000000000000000D /* BrowserRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserRuntime.swift; sourceTree = "<group>"; };
+		B20A0100000000000000000F /* BrowserTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserTools.swift; sourceTree = "<group>"; };
+		B20A01000000000000000011 /* SettingsBrowserPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsBrowserPage.swift; sourceTree = "<group>"; };
+		B20A01000000000000000013 /* BrowserVerification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserVerification.swift; sourceTree = "<group>"; };
+		B20A01000000000000000015 /* BrowserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserTests.swift; sourceTree = "<group>"; };
+		B20B01000000000000000001 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		B20B01000000000000000004 /* PersonalContextBrowser.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PersonalContextBrowser.entitlements; sourceTree = "<group>"; };
+		B20B01000000000000000005 /* PersonalContextBrowser */ = {isa = PBXFileReference; includeInIndex = 0; path = PersonalContextBrowser; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectColumn.swift; sourceTree = "<group>"; };
 		B530330434B899D87B7F9D1D /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 		B53F847FAC96205C323B63B7 /* SettingsCalendarPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCalendarPage.swift; sourceTree = "<group>"; };
@@ -494,6 +530,7 @@
 			children = (
 				070BC08705DED0C66CC96127 /* PersonalContext */,
 				69075DA49C79BC30A80F7B3A /* PersonalContextMCP */,
+				B20B0100000000000000000E /* PersonalContextBrowser */,
 				FB78A550D46064977F06D755 /* PersonalContextTests */,
 				D0B2034B690A3635E429B817 /* Frameworks */,
 				A6F0F78B1FF320F0D90320EB /* Products */,
@@ -637,6 +674,14 @@
 				A11C0DE10000000B /* MCPClientManager.swift */,
 				A11C0DE10000000D /* MCPToolRegistry.swift */,
 				A11C0DE10000000F /* MCPRuntime.swift */,
+				B20A01000000000000000001 /* BrowserSupport.swift */,
+				B20A01000000000000000003 /* BrowserPermissions.swift */,
+				B20A01000000000000000005 /* BrowserChallenge.swift */,
+				B20A01000000000000000007 /* BrowserActivity.swift */,
+				B20A01000000000000000009 /* BrowserSessionStore.swift */,
+				B20A0100000000000000000B /* BrowserService.swift */,
+				B20A0100000000000000000D /* BrowserRuntime.swift */,
+				B20A0100000000000000000F /* BrowserTools.swift */,
 				B1AFC28C1F00D3700732A654 /* MembraeToolGateway.swift */,
 				251C929D14566FDE88E32BD5 /* SourceConnections.swift */,
 			);
@@ -663,6 +708,15 @@
 				75926FA04CD11DF7C22B424B /* Tools.swift */,
 			);
 			path = PersonalContextMCP;
+			sourceTree = "<group>";
+		};
+		B20B0100000000000000000E /* PersonalContextBrowser */ = {
+			isa = PBXGroup;
+			children = (
+				B20B01000000000000000001 /* main.swift */,
+				B20B01000000000000000004 /* PersonalContextBrowser.entitlements */,
+			);
+			path = PersonalContextBrowser;
 			sourceTree = "<group>";
 		};
 		98AB5C15DCF2C8C508858130 /* Documents */ = {
@@ -710,6 +764,7 @@
 				F721FDC648EAE06103D02D53 /* SidebarSectionHeader.swift */,
 				3E67767C42C9589E3B832171 /* SidebarView.swift */,
 				E57195853AAFC087CC563F2F /* MembraeModal.swift */,
+				B20A01000000000000000013 /* BrowserVerification.swift */,
 				ECC1D1E59D9D3C62BF5F531A /* WindowTabStrip.swift */,
 			);
 			path = Chrome;
@@ -720,6 +775,7 @@
 			children = (
 				7CB763C78357F21BD7C53F4E /* PersonalContext.app */,
 				07F37A051B9234E5ABC850C5 /* PersonalContextMCP */,
+				B20B01000000000000000005 /* PersonalContextBrowser */,
 				9DCF857159F2CA0D9169DC1D /* PersonalContextTests.xctest */,
 			);
 			name = Products;
@@ -769,6 +825,7 @@
 				D2F383ABB4798F3AF6233DD5 /* SettingsOrbPage.swift */,
 				89C125A02405C5547C442505 /* SettingsSourcesPage.swift */,
 				A11C0DE100000011 /* SettingsMCPPage.swift */,
+				B20A01000000000000000011 /* SettingsBrowserPage.swift */,
 				07154E6405D2E7F829D439B4 /* SettingsTagsPage.swift */,
 				981A8176BD67C17EDF603DF6 /* SettingsView.swift */,
 			);
@@ -818,6 +875,7 @@
 				DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */,
 				8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */,
 				A11C0DE100000013 /* MCPConnectionTests.swift */,
+				B20A01000000000000000015 /* BrowserTests.swift */,
 				F11E5704A0000034 /* ImportToolsTests.swift */,
 				8F3A1C2E4B5D60718293A004 /* HarborEvalFixture.swift */,
 				8F3A1C2E4B5D60718293A007 /* TrackFirstEval.swift */,
@@ -876,6 +934,7 @@
 			);
 			dependencies = (
 				EA3CE144B0E0CCC53A004BC4 /* PBXTargetDependency */,
+				B20B0100000000000000000D /* PBXTargetDependency */,
 			);
 			name = PersonalContext;
 			packageProductDependencies = (
@@ -903,6 +962,23 @@
 			productReference = 07F37A051B9234E5ABC850C5 /* PersonalContextMCP */;
 			productType = "com.apple.product-type.tool";
 		};
+		B20B01000000000000000007 /* PersonalContextBrowser */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B20B0100000000000000000B /* Build configuration list for PBXNativeTarget "PersonalContextBrowser" */;
+			buildPhases = (
+				B20B01000000000000000008 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PersonalContextBrowser;
+			packageProductDependencies = (
+			);
+			productName = PersonalContextBrowser;
+			productReference = B20B01000000000000000005 /* PersonalContextBrowser */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -921,6 +997,10 @@
 						ProvisioningStyle = Automatic;
 					};
 					F5986EA1BE0334BB6C6D8FB5 = {
+						DevelopmentTeam = NUF99UVUKB;
+						ProvisioningStyle = Automatic;
+					};
+					B20B01000000000000000007 = {
 						DevelopmentTeam = NUF99UVUKB;
 						ProvisioningStyle = Automatic;
 					};
@@ -946,6 +1026,7 @@
 			targets = (
 				CBA356DD8E61CD0A567465DB /* PersonalContext */,
 				F5986EA1BE0334BB6C6D8FB5 /* PersonalContextMCP */,
+				B20B01000000000000000007 /* PersonalContextBrowser */,
 				57C86C944223EE44977E858A /* PersonalContextTests */,
 			);
 		};
@@ -977,6 +1058,8 @@
 				"$(SRCROOT)/PersonalContextRunner/package.json",
 				"$(SRCROOT)/PersonalContextRunner/bun.lock",
 				"$(SRCROOT)/PersonalContextRunner/runner.entitlements",
+				"$(SRCROOT)/PersonalContextBrowser/package.json",
+				"$(SRCROOT)/PersonalContextBrowser/bundle.sh",
 			);
 			name = "Build agent runner";
 			outputFileListPaths = (
@@ -985,10 +1068,12 @@
 				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/membrae-node",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/runner/runner.mjs",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/runner/source-read.mjs",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/browser/node_modules/@playwright/mcp/cli.js",
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/Membrae Browser.app",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "sh \"$SRCROOT/PersonalContextRunner/build.sh\"";
+			shellScript = "sh \"$SRCROOT/PersonalContextRunner/build.sh\"\nsh \"$SRCROOT/PersonalContextBrowser/bundle.sh\"";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -1017,6 +1102,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B20B01000000000000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B20B01000000000000000002 /* main.swift in Sources */,
+				B20B01000000000000000003 /* BrowserSupport.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6FAACF56CA99E3DE759232AF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1027,6 +1121,7 @@
 				CA068E7D29AD93EE8C1E9CD7 /* ProviderNeutralTests.swift in Sources */,
 				E07C8D9F3A4B5C6D7E8F901A /* TaskStoreTests.swift in Sources */,
 				8F3A1C2E4B5D60718293A002 /* MCPToolsTests.swift in Sources */,
+				B20A01000000000000000016 /* BrowserTests.swift in Sources */,
 				A11C0DE100000014 /* MCPConnectionTests.swift in Sources */,
 				F11E5704B0000034 /* ImportToolsTests.swift in Sources */,
 				8F3A1C2E4B5D60718293A003 /* Tools.swift in Sources */,
@@ -1209,7 +1304,17 @@
 				A11C0DE10000000C /* MCPClientManager.swift in Sources */,
 				A11C0DE10000000E /* MCPToolRegistry.swift in Sources */,
 				A11C0DE100000010 /* MCPRuntime.swift in Sources */,
+				B20A01000000000000000002 /* BrowserSupport.swift in Sources */,
+				B20A01000000000000000004 /* BrowserPermissions.swift in Sources */,
+				B20A01000000000000000006 /* BrowserChallenge.swift in Sources */,
+				B20A01000000000000000008 /* BrowserActivity.swift in Sources */,
+				B20A0100000000000000000A /* BrowserSessionStore.swift in Sources */,
+				B20A0100000000000000000C /* BrowserService.swift in Sources */,
+				B20A0100000000000000000E /* BrowserRuntime.swift in Sources */,
+				B20A01000000000000000010 /* BrowserTools.swift in Sources */,
 				A11C0DE100000012 /* SettingsMCPPage.swift in Sources */,
+				B20A01000000000000000012 /* SettingsBrowserPage.swift in Sources */,
+				B20A01000000000000000014 /* BrowserVerification.swift in Sources */,
 				B8870ECA941ADC69B2339111 /* MembraeToolGateway.swift in Sources */,
 				05FD064003B7CEADF8D13FE2 /* SourceChip.swift in Sources */,
 				1ACA211AEB62C15EB47941E1 /* SourceConnections.swift in Sources */,
@@ -1239,6 +1344,11 @@
 			isa = PBXTargetDependency;
 			target = F5986EA1BE0334BB6C6D8FB5 /* PersonalContextMCP */;
 			targetProxy = DE1828F0047067EDB0188030 /* PBXContainerItemProxy */;
+		};
+		B20B0100000000000000000D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B20B01000000000000000007 /* PersonalContextBrowser */;
+			targetProxy = B20B0100000000000000000C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1498,6 +1608,44 @@
 			};
 			name = Debug;
 		};
+		B20B01000000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PersonalContextBrowser/PersonalContextBrowser.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContext.browser;
+				PRODUCT_NAME = "membrae-browser";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		B20B0100000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PersonalContextBrowser/PersonalContextBrowser.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.ethanfox.PersonalContext.browser;
+				PRODUCT_NAME = "membrae-browser";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1515,6 +1663,15 @@
 			buildConfigurations = (
 				FF3971D93BF7E1C66D0884CF /* Debug */,
 				A098C887F88DE02895AB7C7E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B20B0100000000000000000B /* Build configuration list for PBXNativeTarget "PersonalContextBrowser" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B20B01000000000000000009 /* Debug */,
+				B20B0100000000000000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

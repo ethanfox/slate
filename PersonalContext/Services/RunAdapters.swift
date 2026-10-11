@@ -169,8 +169,9 @@ enum RunChatGPT {
 enum RunWaitLabel {
     static func forTool(_ name: String) -> String {
         switch name {
-        case "webSearch": return "Searching the web"
+        case "webSearch", "browser_search": return "Searching the web"
         case "webFetch": return "Fetching a page"
+        case let name where name.hasPrefix("browser_"): return "Browsing"
         case "create_note", "update_note": return "Writing a note"
         case "upsert_code_reference_entry", "set_code_reference_meta": return "Writing the code reference"
         case "list_code_references", "get_code_reference_entry": return "Reading the code reference"
@@ -200,9 +201,9 @@ enum RunWaitLabel {
 enum RunPrompt {
     static func closeInstruction(hasProject: Bool) -> String {
         if hasProject {
-            return "Do the job with the tools you have. Call finish_run with a short summary when you are done. Do not complete the assigned task."
+            return "Do the job with the tools you have. Call finish_run with a short summary when you are done. Do not complete the assigned task. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
         }
-        return "Do the job. Call finish_run with a short summary when you are done. You have no project to write into."
+        return "Do the job. Call finish_run with a short summary when you are done. You have no project to write into. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
     }
 
     static func body(brief: String, project: Project?, run: AgentRun? = nil) -> String {

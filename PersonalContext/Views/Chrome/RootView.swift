@@ -243,6 +243,32 @@ struct RootView: View {
                 Text(request.arguments.isEmpty ? "This action can change data on \(request.connectionName)." : request.arguments)
             }
         }
+        .confirmationDialog(
+            app.browser.actions.request.map(\.kind.confirmationTitle) ?? "Allow this browser action?",
+            isPresented: Binding(
+                get: { app.browser.actions.request != nil },
+                set: { if !$0 { app.browser.actions.cancel() } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Allow") { app.browser.actions.respond(true) }
+            Button("Don’t Allow", role: .cancel) { app.browser.actions.respond(false) }
+        } message: {
+            if let request = app.browser.actions.request {
+                Text(request.detail.isEmpty ? "This can change \(request.host)." : request.detail)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if let challenge = app.browser.challenge {
+                BrowserVerificationBanner(
+                    challenge: challenge,
+                    onOpen: { Task { try? await app.browser.openVerification() } },
+                    onSkip: { app.browser.skipChallenge() },
+                    onDone: { app.browser.finishVerification() }
+                )
+                .padding(18)
+            }
+        }
         .overlay(alignment: .bottom) {
             ZStack {
                 if let toast = app.toast {

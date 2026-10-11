@@ -569,6 +569,7 @@ struct ChatToolActivity: Identifiable, Equatable, Codable, Sendable {
 
     var symbol: String {
         if isCursorSource { return "chevron.left.forwardslash.chevron.right" }
+        if name.hasPrefix("browser_") { return "globe" }
         switch name {
         case "webSearch": return "globe"
         case "webFetch": return "safari"
@@ -596,6 +597,18 @@ struct ChatToolActivity: Identifiable, Equatable, Codable, Sendable {
             case .running: return "Adding MCP connections"
             case .succeeded: return "Added MCP connections"
             case .failed: return "Couldn’t add MCP connections"
+            }
+        }
+        if tool.hasPrefix("browser_") {
+            switch tool {
+            case "browser_search":
+                return status == .running ? "Searching the web" : status == .failed ? "Couldn’t search the web" : "Searched the web"
+            case "browser_navigate", "browser_open":
+                return status == .running ? "Opening a page" : status == .failed ? "Couldn’t open the page" : "Opened a page"
+            case "browser_snapshot", "browser_read":
+                return status == .running ? "Reading the page" : status == .failed ? "Couldn’t read the page" : "Read the page"
+            default:
+                return status == .running ? "Browsing" : status == .failed ? "Browsing failed" : "Browsed"
             }
         }
         switch tool {

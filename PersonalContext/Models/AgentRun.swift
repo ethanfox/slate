@@ -46,6 +46,7 @@ enum RunEventKind: String, Codable, Hashable {
     case failed
     case cancelled
     case quit
+    case browser
 }
 
 struct RunEvent: Codable, Identifiable, Hashable {

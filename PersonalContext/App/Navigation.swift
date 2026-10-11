@@ -174,6 +174,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     case compatible
     case sources
     case mcp
+    case browser
     case calendar
     case tags
     case appearance
@@ -191,6 +192,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .compatible: "Compatible endpoint"
         case .sources: "Sources"
         case .mcp: "MCP"
+        case .browser: "Browser"
         case .calendar: "Calendar"
         case .tags: "Tags"
         case .appearance: "Appearance"
@@ -208,6 +210,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .compatible: "link.circle"
         case .sources: "link"
         case .mcp: "cable.connector"
+        case .browser: "globe"
         case .calendar: "calendar"
         case .tags: "tag"
         case .appearance: "circle.lefthalf.filled"
