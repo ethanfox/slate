@@ -13,7 +13,6 @@ struct ChatInput: View {
     var placeholder = "Message"
     var lineLimit: ClosedRange<Int> = 1...6
     var isGenerating = false
-    var changes: [String] = []
     var errorMessage: String?
     var onSend: (ChatSubmission) -> Bool
     var composerOwnerID = UUID()
@@ -84,14 +83,6 @@ struct ChatInput: View {
                     .font(CraftFont.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, 10)
-            }
-
-            if !changes.isEmpty {
-                Label(changes.joined(separator: " · "), systemImage: "checkmark.circle")
-                    .font(CraftFont.caption)
-                    .foregroundStyle(.secondary)
                     .padding(.horizontal, 18)
                     .padding(.bottom, 10)
             }

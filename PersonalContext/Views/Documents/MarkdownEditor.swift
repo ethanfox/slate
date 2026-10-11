@@ -161,11 +161,12 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
         let storage = NSTextStorage()
         let layout = NSLayoutManager()
         storage.addLayoutManager(layout)
-        let container = NSTextContainer(size: NSSize(width: 480, height: CGFloat.greatestFiniteMagnitude))
+        let container = MarkdownTextContainer(size: NSSize(width: 480, height: CGFloat.greatestFiniteMagnitude))
         container.widthTracksTextView = true
         container.lineFragmentPadding = 0
         layout.addTextContainer(container)
         self.init(frame: .zero, textContainer: container)
+        container.markdownView = self
         layout.delegate = self
     }
 
@@ -195,10 +196,17 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
         let current = textContainer.containerSize
         textContainer.containerSize = NSSize(width: max(width, 1), height: .greatestFiniteMagnitude)
         layoutManager.ensureLayout(for: textContainer)
-        let used = layoutManager.usedRect(for: textContainer).height
+        let used = layoutManager.usedRect(for: textContainer)
+        let glyphs = layoutManager.glyphRange(for: textContainer)
+        var bottom = used.maxY
+        if glyphs.length > 0 {
+            let bounds = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+            let last = layoutManager.lineFragmentRect(forGlyphAt: NSMaxRange(glyphs) - 1, effectiveRange: nil)
+            bottom = max(bottom, bounds.maxY, last.maxY)
+        }
         textContainer.containerSize = current
         let line = layoutManager.defaultLineHeight(for: baseFont) + MarkdownStyler.lineSpacing
-        return ceil(max(used, line))
+        return ceil(max(bottom + MarkdownStyler.lineSpacing, line))
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -354,6 +362,11 @@ final class MarkdownTextView: NSTextView, NSLayoutManagerDelegate {
         lineFragmentUsedRect.pointee.size.height = height
         baselineOffset.pointee = baseFont.ascender
         return true
+    }
+
+    func isTableCharacter(_ index: Int) -> Bool {
+        guard let storage = textStorage, index >= 0, index < storage.length else { return false }
+        return storage.attribute(.markdownTable, at: index, effectiveRange: nil) != nil
     }
 
     override func cancelOperation(_ sender: Any?) {
@@ -668,37 +681,145 @@ extension NSAttributedString.Key {
     static let markdownCollapsed = NSAttributedString.Key("PCMarkdownCollapsed")
 }
 
+final class MarkdownTextContainer: NSTextContainer {
+    var proseWidth: CGFloat = DocumentMeasure.proseWidth
+    weak var markdownView: MarkdownTextView?
+
+    override func lineFragmentRect(
+        forProposedRect proposedRect: NSRect,
+        at characterIndex: Int,
+        writingDirection: NSWritingDirection,
+        remaining remainingRect: UnsafeMutablePointer<NSRect>?
+    ) -> NSRect {
+        var rect = super.lineFragmentRect(
+            forProposedRect: proposedRect,
+            at: characterIndex,
+            writingDirection: writingDirection,
+            remaining: remainingRect
+        )
+        if markdownView?.isTableCharacter(characterIndex) == true {
+            return rect
+        }
+        guard rect.width > proseWidth else { return rect }
+        rect.size.width = proseWidth
+        remainingRect?.pointee = .zero
+        return rect
+    }
+}
+
+struct MarkdownTableLayout: Equatable {
+    var columns: Int
+    var columnWidth: CGFloat
+    var textWidth: CGFloat
+    var rowHeights: [CGFloat]
+    var height: CGFloat
+}
+
 final class MarkdownTableFace {
-    let attributed: NSAttributedString
-    private var measuredWidth: CGFloat = 0
-    private var measuredHeight: CGFloat = 0
+    static let cellPadding: CGFloat = 8
+
+    let source: String
+    let fontSize: CGFloat
+    private let cells: [[NSAttributedString]]
+    private var cachedWidth: CGFloat = 0
+    private var cachedLayout = MarkdownTableLayout(
+        columns: 0,
+        columnWidth: 0,
+        textWidth: 0,
+        rowHeights: [],
+        height: 0
+    )
 
     init(source: String, fontSize: CGFloat) {
-        attributed = ChatMarkdown.attributed(source, fontSize: fontSize)
+        self.source = source
+        self.fontSize = fontSize
+        let parsed = ChatMarkdown.tableContent(in: source)
+        let rows = parsed?.rows ?? []
+        let alignments = parsed?.alignments ?? []
+        let columns = rows.map(\.count).max() ?? 0
+        cells = rows.enumerated().map { row, values in
+            (0..<columns).map { column in
+                ChatMarkdown.tableCellAttributed(
+                    column < values.count ? values[column] : "",
+                    fontSize: fontSize - 1,
+                    header: row == 0,
+                    alignment: column < alignments.count ? alignments[column] : .left
+                )
+            }
+        }
+    }
+
+    func layout(forWidth width: CGFloat) -> MarkdownTableLayout {
+        let width = max(width, 1)
+        if abs(width - cachedWidth) < 0.5 { return cachedLayout }
+        let columns = cells.first?.count ?? 0
+        guard columns > 0 else {
+            cachedWidth = width
+            cachedLayout = MarkdownTableLayout(columns: 0, columnWidth: 0, textWidth: 0, rowHeights: [], height: 0)
+            return cachedLayout
+        }
+        let columnWidth = width / CGFloat(columns)
+        let textWidth = max(columnWidth - Self.cellPadding * 2, 1)
+        let rowHeights = cells.map { row in
+            ceil(row.map { Self.measure($0, width: textWidth) }.max() ?? 0) + Self.cellPadding * 2
+        }
+        cachedWidth = width
+        cachedLayout = MarkdownTableLayout(
+            columns: columns,
+            columnWidth: columnWidth,
+            textWidth: textWidth,
+            rowHeights: rowHeights,
+            height: max(rowHeights.reduce(0, +), 22)
+        )
+        return cachedLayout
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        let width = max(width, 1)
-        if abs(width - measuredWidth) < 0.5 { return measuredHeight }
-        measuredWidth = width
-        measuredHeight = Self.measure(attributed, width: width)
-        return measuredHeight
+        layout(forWidth: width).height
     }
 
     func draw(in rect: NSRect) {
         guard rect.width > 1, rect.height > 1 else { return }
-        let storage = NSTextStorage(attributedString: attributed)
-        let layout = NSLayoutManager()
-        storage.addLayoutManager(layout)
-        let container = NSTextContainer(size: NSSize(width: rect.width, height: max(rect.height, 1)))
-        container.lineFragmentPadding = 0
-        container.widthTracksTextView = false
-        layout.addTextContainer(container)
-        layout.ensureLayout(for: container)
-        let glyphs = layout.glyphRange(for: container)
-        ChatMarkdown.drawInlineCodeBackgrounds(layoutManager: layout, textContainer: container, origin: rect.origin)
-        layout.drawBackground(forGlyphRange: glyphs, at: rect.origin)
-        layout.drawGlyphs(forGlyphRange: glyphs, at: rect.origin)
+        let layout = layout(forWidth: rect.width)
+        guard layout.columns > 0 else { return }
+        var y = rect.minY
+        for (row, height) in layout.rowHeights.enumerated() {
+            if row == 0 {
+                ChatMarkdown.blockFill.setFill()
+                NSRect(x: rect.minX, y: y, width: rect.width, height: height).fill()
+            }
+            for column in 0..<layout.columns {
+                let textRect = NSRect(
+                    x: rect.minX + CGFloat(column) * layout.columnWidth + Self.cellPadding,
+                    y: y + Self.cellPadding,
+                    width: layout.textWidth,
+                    height: max(height - Self.cellPadding * 2, 1)
+                )
+                Self.draw(cells[row][column], in: textRect)
+            }
+            y += height
+        }
+        NSColor.separatorColor.setStroke()
+        let outer = NSBezierPath(rect: rect.insetBy(dx: 0.25, dy: 0.25))
+        outer.lineWidth = 0.5
+        outer.stroke()
+        for column in 1..<layout.columns {
+            let x = rect.minX + CGFloat(column) * layout.columnWidth
+            let line = NSBezierPath()
+            line.move(to: NSPoint(x: x, y: rect.minY))
+            line.line(to: NSPoint(x: x, y: rect.maxY))
+            line.lineWidth = 0.5
+            line.stroke()
+        }
+        var edge = rect.minY
+        for (index, height) in layout.rowHeights.enumerated() where index < layout.rowHeights.count - 1 {
+            edge += height
+            let line = NSBezierPath()
+            line.move(to: NSPoint(x: rect.minX, y: edge))
+            line.line(to: NSPoint(x: rect.maxX, y: edge))
+            line.lineWidth = 0.5
+            line.stroke()
+        }
     }
 
     private static func measure(_ attributed: NSAttributedString, width: CGFloat) -> CGFloat {
@@ -710,7 +831,22 @@ final class MarkdownTableFace {
         container.widthTracksTextView = false
         layout.addTextContainer(container)
         layout.ensureLayout(for: container)
-        return ceil(max(layout.usedRect(for: container).height, 22))
+        return max(layout.usedRect(for: container).height, 18)
+    }
+
+    private static func draw(_ attributed: NSAttributedString, in rect: NSRect) {
+        let storage = NSTextStorage(attributedString: attributed)
+        let layout = NSLayoutManager()
+        storage.addLayoutManager(layout)
+        let container = NSTextContainer(size: rect.size)
+        container.lineFragmentPadding = 0
+        container.widthTracksTextView = false
+        layout.addTextContainer(container)
+        layout.ensureLayout(for: container)
+        let glyphs = layout.glyphRange(for: container)
+        ChatMarkdown.drawInlineCodeBackgrounds(layoutManager: layout, textContainer: container, origin: rect.origin)
+        layout.drawBackground(forGlyphRange: glyphs, at: rect.origin)
+        layout.drawGlyphs(forGlyphRange: glyphs, at: rect.origin)
     }
 }
 enum MarkdownStyler {

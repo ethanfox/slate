@@ -1,5 +1,11 @@
 import SwiftUI
 
+enum DocumentMeasure {
+    static let columnWidth: CGFloat = 744
+    static let horizontalPadding: CGFloat = 32
+    static let proseWidth: CGFloat = columnWidth - horizontalPadding * 2
+}
+
 struct DocumentPage<Content: View>: View {
     @Environment(\.objectFind) private var find
     @ViewBuilder var content: () -> Content
@@ -11,9 +17,8 @@ struct DocumentPage<Content: View>: View {
                     VStack(alignment: .leading, spacing: 0) {
                         content()
                     }
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, DocumentMeasure.horizontalPadding)
                     .padding(.vertical, 28)
-                    .frame(maxWidth: 744, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .onChange(of: find?.revealToken) {

@@ -113,7 +113,6 @@ private struct ConversationSessionView: View {
                 providerID: .constant(runtime.providerID),
                 allowsProviderChange: false,
                 isGenerating: session.isGenerating,
-                changes: runtime.changes,
                 errorMessage: session.error?.localizedDescription,
                 onSend: send,
                 composerOwnerID: runtime.conversationID,

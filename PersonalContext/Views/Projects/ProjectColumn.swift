@@ -23,6 +23,10 @@ struct ProjectColumn: View {
     @State private var pendingThreadDelete: ProjectThread?
     @State private var pendingNoteDelete: Note?
     @State private var pendingDecisionDelete: Decision?
+    @State private var decisionQuery = ""
+    @State private var historyExpanded = false
+    @State private var collapsedActiveGroups: Set<String> = []
+    @State private var collapsedHistoryGroups: Set<String> = []
 
     init(project: Project, compact: Bool) {
         self.project = project
@@ -44,11 +48,18 @@ struct ProjectColumn: View {
         project.notes.sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    private var decisions: [Decision] {
-        project.decisions.sorted { lhs, rhs in
-            if lhs.status != rhs.status { return lhs.status == .active }
-            return lhs.createdAt > rhs.createdAt
-        }
+    private var decisionLayout: DecisionListLayout.Snapshot {
+        DecisionListLayout.snapshot(
+            decisions: project.decisions,
+            roots: project.rootThreads,
+            query: decisionQuery
+        )
+    }
+
+    private var showsDecisionHistory: Bool {
+        if historyExpanded || decisionLayout.revealsHistory { return true }
+        guard let id = app.selectedDecision else { return false }
+        return project.decisions.contains { $0.id == id && $0.status == .superseded }
     }
 
     private var markedIDs: Set<UUID> {
@@ -116,6 +127,10 @@ struct ProjectColumn: View {
         .onChange(of: project.id, initial: true) { _, _ in
             showingAllChats = false
             showingAllRuns = false
+            decisionQuery = ""
+            historyExpanded = false
+            collapsedActiveGroups = []
+            collapsedHistoryGroups = []
             revealTracks(reset: true)
         }
         .onChange(of: app.selectedThread) { _, id in
@@ -287,44 +302,24 @@ struct ProjectColumn: View {
 
                     header(.decisions, add: createDecision)
                     if isSectionOpen(.decisions) {
-                        ForEach(decisions) { decision in
-                            Button {
-                                app.open(decision)
-                            } label: {
-                                SidebarRow(
-                                    title: decision.title.isEmpty ? "Untitled" : decision.title,
-                                    systemImage: decision.status == .active ? "checkmark.seal" : "xmark.seal",
-                                    isSelected: tab == .decisions && app.selectedDecision == decision.id,
-                                    isMarkedForDeletion: markedIDs.contains(decision.id)
-                                )
-                                .opacity(decision.status == .active ? 1 : 0.55)
+                        decisionFilter
+                        decisionGroups(decisionLayout.active, dimmed: false, history: false)
+                        if decisionLayout.historyCount > 0 {
+                            DecisionDisclosureHeader(
+                                title: "History",
+                                count: decisionLayout.historyCount,
+                                isExpanded: showsDecisionHistory,
+                                onToggle: { historyExpanded.toggle() }
+                            )
+                            if showsDecisionHistory {
+                                decisionGroups(decisionLayout.history, dimmed: true, history: true)
                             }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button {
-                                    app.present(.editDecision(decision))
-                                } label: {
-                                    Label("Edit…", systemImage: "pencil")
-                                }
-                                Button {
-                                    app.open(decision, newTab: true)
-                                } label: {
-                                    Label("Open in New Tab", systemImage: "plus.square.on.square")
-                                }
-                                Divider()
-                                if markedIDs.contains(decision.id) {
-                                    Button {
-                                        keepMark(decision.id)
-                                    } label: {
-                                        Label("Keep", systemImage: "arrow.uturn.backward")
-                                    }
-                                }
-                                Button(role: .destructive) {
-                                    pendingDecisionDelete = decision
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
+                        } else if decisionLayout.active.isEmpty, !decisionQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("No matching decisions")
+                                .font(CraftFont.caption)
+                                .foregroundStyle(.tertiary)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 6)
                         }
                     }
                 }
@@ -469,6 +464,117 @@ struct ProjectColumn: View {
         keepMark(thread.id)
     }
 
+    private var decisionFilter: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(CraftFont.caption)
+                .foregroundStyle(.tertiary)
+            TextField("Filter", text: $decisionQuery)
+                .textFieldStyle(.plain)
+                .font(CraftFont.sidebar)
+            if !decisionQuery.isEmpty {
+                Button {
+                    decisionQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear filter")
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 28)
+        .background(CraftColor.wash, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.horizontal, 8)
+        .padding(.bottom, 4)
+        .accessibilityLabel("Filter decisions")
+    }
+
+    @ViewBuilder
+    private func decisionGroups(_ groups: [DecisionListLayout.Group], dimmed: Bool, history: Bool) -> some View {
+        ForEach(groups) { group in
+            let expanded = showsDecisionGroup(group, history: history)
+            DecisionDisclosureHeader(
+                title: group.title,
+                count: group.decisions.count,
+                isExpanded: expanded,
+                onToggle: { toggleDecisionGroup(group, history: history) }
+            )
+            if expanded {
+                ForEach(group.decisions) { decision in
+                    decisionRow(decision, dimmed: dimmed)
+                }
+            }
+        }
+    }
+
+    private var isDecisionSearchActive: Bool {
+        !decisionQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func showsDecisionGroup(_ group: DecisionListLayout.Group, history: Bool) -> Bool {
+        if isDecisionSearchActive { return true }
+        if group.decisions.contains(where: { $0.id == app.selectedDecision }) { return true }
+        let collapsed = history ? collapsedHistoryGroups : collapsedActiveGroups
+        return !collapsed.contains(group.id)
+    }
+
+    private func toggleDecisionGroup(_ group: DecisionListLayout.Group, history: Bool) {
+        if history {
+            if collapsedHistoryGroups.contains(group.id) {
+                collapsedHistoryGroups.remove(group.id)
+            } else {
+                collapsedHistoryGroups.insert(group.id)
+            }
+        } else if collapsedActiveGroups.contains(group.id) {
+            collapsedActiveGroups.remove(group.id)
+        } else {
+            collapsedActiveGroups.insert(group.id)
+        }
+    }
+
+    private func decisionRow(_ decision: Decision, dimmed: Bool) -> some View {
+        Button {
+            app.open(decision)
+        } label: {
+            SidebarRow(
+                title: decision.title.isEmpty ? "Untitled" : decision.title,
+                systemImage: decision.status == .active ? "checkmark.seal" : "xmark.seal",
+                isSelected: tab == .decisions && app.selectedDecision == decision.id,
+                isMarkedForDeletion: markedIDs.contains(decision.id)
+            )
+            .opacity(dimmed ? 0.55 : 1)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                app.present(.editDecision(decision))
+            } label: {
+                Label("Edit…", systemImage: "pencil")
+            }
+            Button {
+                app.open(decision, newTab: true)
+            } label: {
+                Label("Open in New Tab", systemImage: "plus.square.on.square")
+            }
+            Divider()
+            if markedIDs.contains(decision.id) {
+                Button {
+                    keepMark(decision.id)
+                } label: {
+                    Label("Keep", systemImage: "arrow.uturn.backward")
+                }
+            }
+            Button(role: .destructive) {
+                pendingDecisionDelete = decision
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
     private func createDecision() {
         app.openProjectSection(.decisions)
         let decision = Decision(title: "", decision: "", project: project)
@@ -476,6 +582,39 @@ struct ProjectColumn: View {
         project.touch()
         try? context.save()
         app.open(decision)
+    }
+}
+
+private struct DecisionDisclosureHeader: View {
+    var title: String
+    var count: Int
+    var isExpanded: Bool
+    var onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 4) {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 28, height: 28)
+                Text(title)
+                    .font(CraftFont.section)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text("\(count)")
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+                Spacer(minLength: 0)
+            }
+            .padding(.trailing, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+        .accessibilityHint("Shows \(count) decisions")
     }
 }
 

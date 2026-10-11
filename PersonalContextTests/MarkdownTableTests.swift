@@ -261,6 +261,41 @@ final class MarkdownTableTests: XCTestCase {
         XCTAssertNotNil(rendered.attribute(.link, at: 0, effectiveRange: nil))
     }
 
+    func testProseLineFragmentCapsAtMeasure() {
+        let container = MarkdownTextContainer(size: NSSize(width: 1200, height: 10_000))
+        container.lineFragmentPadding = 0
+        let rect = container.lineFragmentRect(
+            forProposedRect: NSRect(x: 0, y: 0, width: 1200, height: 18),
+            at: 0,
+            writingDirection: .leftToRight,
+            remaining: nil
+        )
+        XCTAssertEqual(rect.width, DocumentMeasure.proseWidth, accuracy: 0.01)
+    }
+
+    func testTableFaceFillsEqualColumns() {
+        let face = MarkdownTableFace(
+            source: "| A | B |\n| --- | --- |\n| Hello world this wraps | x |",
+            fontSize: 15
+        )
+        let layout = face.layout(forWidth: 800)
+        XCTAssertEqual(layout.columns, 2)
+        XCTAssertEqual(layout.columnWidth, 400, accuracy: 0.01)
+        XCTAssertEqual(layout.textWidth, 384, accuracy: 0.01)
+        XCTAssertGreaterThan(layout.height, 22)
+    }
+
+    func testTableFaceTextUsesWiderColumns() {
+        let face = MarkdownTableFace(
+            source: "| Feature | Benefit |\n| --- | --- |\n| Project knowledge base | Stop rebuilding context every time work resumes or moves between tools. |",
+            fontSize: 15
+        )
+        let narrow = face.layout(forWidth: 400)
+        let wide = face.layout(forWidth: 900)
+        XCTAssertGreaterThan(wide.textWidth, narrow.textWidth)
+        XCTAssertLessThan(wide.height, narrow.height)
+    }
+
     func testFenceAndTableNeedMoreThanOneLineOfHeight() {
         let line = measure(ChatMarkdown.attributed("Hello"))
         let fence = measure(ChatMarkdown.attributed("```\nline one\nline two\nline three\n```"))

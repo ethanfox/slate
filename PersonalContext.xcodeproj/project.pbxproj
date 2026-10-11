@@ -235,6 +235,8 @@
 		F046BF352BB1E7D19B30BFC8 /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8E5D3661B12BD18C62A9BCC /* CalendarView.swift */; };
 		F1ABE449C39ECC8D4E25C090 /* ProjectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C15F7AD6019E54818996ACF5 /* ProjectView.swift */; };
 		F7923FE98A551FFBCE7186A4 /* ProjectColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */; };
+		D15C010000000002 /* DecisionListLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15C010000000001 /* DecisionListLayout.swift */; };
+		D15C010000000004 /* DecisionListLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15C010000000003 /* DecisionListLayoutTests.swift */; };
 		FA3EB0AB86C91248D9A40273 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5543E221A797F7A128F4D5B2 /* main.swift */; };
 		FCF956190420683B665BF2B1 /* SettingsOrbPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2F383ABB4798F3AF6233DD5 /* SettingsOrbPage.swift */; };
 		F11E5704B0000030 /* ImportKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000030 /* ImportKeyStore.swift */; };
@@ -459,6 +461,8 @@
 		B20B01000000000000000004 /* PersonalContextBrowser.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PersonalContextBrowser.entitlements; sourceTree = "<group>"; };
 		B20B01000000000000000005 /* PersonalContextBrowser */ = {isa = PBXFileReference; includeInIndex = 0; path = PersonalContextBrowser; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectColumn.swift; sourceTree = "<group>"; };
+		D15C010000000001 /* DecisionListLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionListLayout.swift; sourceTree = "<group>"; };
+		D15C010000000003 /* DecisionListLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionListLayoutTests.swift; sourceTree = "<group>"; };
 		B530330434B899D87B7F9D1D /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 		B53F847FAC96205C323B63B7 /* SettingsCalendarPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCalendarPage.swift; sourceTree = "<group>"; };
 		B5FFBDB290AFF05316BF8B75 /* ModalDatePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalDatePicker.swift; sourceTree = "<group>"; };
@@ -847,6 +851,7 @@
 				690265881D471474DCC2ECDF /* OverviewPage.swift */,
 				5E95839E9F07CBA87BC01981 /* OverviewWidgets.swift */,
 				B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */,
+				D15C010000000001 /* DecisionListLayout.swift */,
 				77F4B6484C6BED0CADABAF2B /* ProjectLine.swift */,
 				8DC37F181EBBBF8E1E7F7E4D /* ProjectsView.swift */,
 				BD4F5A6C708192A3B4C5D6E7 /* ProjectTasksBoard.swift */,
@@ -871,6 +876,7 @@
 			isa = PBXGroup;
 			children = (
 				E35A7CBF816324E5AF92807D /* ObjectFindTests.swift */,
+				D15C010000000003 /* DecisionListLayoutTests.swift */,
 				A7B1C2D3E4F5061728394A01 /* WindowTabTests.swift */,
 				3C8E1A2B4D5F60718293B4C5 /* MarkdownTableTests.swift */,
 				588C1D051000807F84657854 /* ProviderNeutralTests.swift */,
@@ -1119,6 +1125,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F46B8DC0927435F6B0A3918E /* ObjectFindTests.swift in Sources */,
+				D15C010000000004 /* DecisionListLayoutTests.swift in Sources */,
 				A7B1C2D3E4F5061728394A02 /* WindowTabTests.swift in Sources */,
 				4D9F2B3C5E60718293A4C5D6 /* MarkdownTableTests.swift in Sources */,
 				CA068E7D29AD93EE8C1E9CD7 /* ProviderNeutralTests.swift in Sources */,
@@ -1235,6 +1242,7 @@
 				F11E5704B0000020 /* GitHistory.swift in Sources */,
 				3CBFBB43F65CC52F93EA805A /* ProjectCodeWorkspace.swift in Sources */,
 				F7923FE98A551FFBCE7186A4 /* ProjectColumn.swift in Sources */,
+				D15C010000000002 /* DecisionListLayout.swift in Sources */,
 				52EE7F1BE3AD5886F5CF29D2 /* ProjectHost.swift in Sources */,
 				2184775826B65D7AB594775A /* ProjectLine.swift in Sources */,
 				F1ABE449C39ECC8D4E25C090 /* ProjectView.swift in Sources */,

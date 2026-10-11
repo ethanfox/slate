@@ -160,8 +160,6 @@ final class ChatRuntime {
         return ""
     }
 
-    var changes: [String] { session.changes }
-
     func applyModel() {
         session.model = modelID
         store.applyModel(modelID)

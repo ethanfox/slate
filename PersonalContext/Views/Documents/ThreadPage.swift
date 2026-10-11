@@ -40,6 +40,7 @@ struct ThreadPage: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1...4)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: DocumentMeasure.proseWidth, alignment: .leading)
                 .padding(.top, 4)
                 .findHighlight(.summary)
 

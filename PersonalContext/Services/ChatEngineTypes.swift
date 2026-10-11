@@ -144,7 +144,6 @@ enum ChatEntry: Identifiable {
         var sources: [ChatSource] = []
         var thinking: String = ""
         var waitState: ChatWaitState = .starting
-        var changes: [String] = []
         var startedAt: Date? = nil
         var finishedAt: Date? = nil
 
@@ -315,7 +314,6 @@ struct ChatTurnState: Equatable, Sendable {
     var sources: [ChatSource] = []
     var thinking = ""
     var waitState: ChatWaitState = .starting
-    var changes: [String] = []
     var startedAt: Date?
     var finishedAt: Date?
     var startNewText = false
@@ -348,7 +346,6 @@ struct ChatTurnState: Equatable, Sendable {
         items = []
         sources = []
         thinking = ""
-        changes = []
         self.userID = userID
         waitState = .starting
         startedAt = .now
@@ -427,7 +424,6 @@ struct ChatTurnState: Equatable, Sendable {
                 sources: incoming
             ))
         ))
-        recordChange(name: name, status: next)
         refreshWaitState()
     }
 
@@ -463,7 +459,6 @@ struct ChatTurnState: Equatable, Sendable {
         sources = assistant.sources
         thinking = assistant.thinking
         waitState = assistant.waitState
-        changes = assistant.changes
         startedAt = assistant.startedAt
         finishedAt = assistant.finishedAt
     }
@@ -476,7 +471,6 @@ struct ChatTurnState: Equatable, Sendable {
         next.sources = sources
         next.thinking = thinking
         next.waitState = waitState
-        next.changes = changes
         next.startedAt = startedAt
         next.finishedAt = finishedAt
         return next
@@ -487,7 +481,6 @@ struct ChatTurnState: Equatable, Sendable {
             guard case .tool(var tool) = items[index].kind, tool.status == .running else { continue }
             tool.status = status
             items[index].kind = .tool(tool)
-            recordChange(name: tool.name, status: status)
         }
     }
 
@@ -516,7 +509,6 @@ struct ChatTurnState: Equatable, Sendable {
         if !detail.isEmpty { tool.detail = detail }
         if !sources.isEmpty { tool.sources = sources }
         items[index].kind = .tool(tool)
-        recordChange(name: tool.name, status: status)
     }
 
     private mutating func refreshWaitState() {
@@ -527,12 +519,6 @@ struct ChatTurnState: Equatable, Sendable {
         }
     }
 
-    private mutating func recordChange(name: String, status: ChatToolActivity.Status) {
-        guard status != .running else { return }
-        guard name.hasPrefix("create_") || name.hasPrefix("update_") else { return }
-        let label = ChatToolActivity.title(for: name, status: status)
-        if !changes.contains(label) { changes.append(label) }
-    }
 }
 
 struct ChatToolActivity: Identifiable, Equatable, Codable, Sendable {

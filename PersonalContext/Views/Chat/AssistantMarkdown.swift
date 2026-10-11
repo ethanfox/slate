@@ -714,6 +714,36 @@ enum ChatMarkdown {
         return inFence ? fenceStart : lineStart
     }
 
+    static func tableContent(in source: String) -> (rows: [[String]], alignments: [NSTextAlignment])? {
+        for segment in segments(in: source) {
+            if case .table(let rows, let alignments) = segment {
+                return (rows, alignments)
+            }
+        }
+        return nil
+    }
+
+    static func tableCellAttributed(
+        _ text: String,
+        fontSize: CGFloat,
+        header: Bool,
+        alignment: NSTextAlignment = .left
+    ) -> NSAttributedString {
+        let result = NSMutableAttributedString(
+            attributedString: renderInline(
+                text.isEmpty ? " " : text,
+                fontSize: fontSize,
+                header: header ? 6 : nil,
+                list: false
+            )
+        )
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = alignment
+        paragraph.lineSpacing = 3
+        result.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: result.length))
+        return result
+    }
+
     static func attributed(_ source: String, fontSize: CGFloat = 15) -> NSMutableAttributedString {
         let result = NSMutableAttributedString()
         let lines = source.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)

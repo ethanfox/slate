@@ -8,7 +8,6 @@ final class ChatEngine {
     private(set) var entries: [ChatEntry] = []
     private(set) var isGenerating = false
     private(set) var error: Error?
-    private(set) var changes: [String] = []
     private(set) var pendingMetadata = ChatTurnMetadata()
     var provider: any ChatProvider
     var model: String
@@ -66,7 +65,6 @@ final class ChatEngine {
         stream.cancel()
         generationID += 1
         turn.failRunningTools()
-        changes = turn.changes
         finishTurn(cancelled: true, streamError: nil)
     }
 
@@ -78,7 +76,6 @@ final class ChatEngine {
         activeAssistantID = nil
         rawText = ""
         turn = ChatTurnState()
-        changes = []
         pendingMetadata = ChatTurnMetadata()
         removedMessageIDs = []
         self.entries = entries
@@ -135,7 +132,6 @@ final class ChatEngine {
         rawText = ""
         pendingMetadata = ChatTurnMetadata()
         turn.begin(userID: userID)
-        changes = []
         ensureAssistant()
         DraftTrace.streamStart(object: traceObjectID, runtime: traceRuntime, model: model)
         noteChange()
@@ -190,7 +186,6 @@ final class ChatEngine {
             publishTurn(streaming: true)
         case .tool(let name, let status, let id, let detail, let sources):
             turn.applyTool(name: name, status: status, id: id, detail: detail, sources: sources)
-            changes = turn.changes
             ensureAssistant()
             publishTurn(streaming: true)
         case .sources(let sources):
@@ -204,11 +199,9 @@ final class ChatEngine {
             noteChange()
         case .completeRunningTools:
             turn.completeRunningTools()
-            changes = turn.changes
             publishTurn(streaming: true)
         case .failRunningTools:
             turn.failRunningTools()
-            changes = turn.changes
             publishTurn(streaming: true)
         case .done:
             break
@@ -223,7 +216,6 @@ final class ChatEngine {
             turn.completeRunningTools()
         }
         turn.finish()
-        changes = turn.changes
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         if let assistantID = activeAssistantID {
             if text.isEmpty, turn.tools.isEmpty, turn.thinking.isEmpty {
