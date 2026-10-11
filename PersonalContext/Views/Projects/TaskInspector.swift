@@ -49,6 +49,9 @@ private struct TaskDocument: View {
                 VStack(alignment: .leading, spacing: 0) {
                     DocumentTitle(text: $item.title)
 
+                    TagBar(tags: item.tags) { AssociationService.apply(tags: $0, to: item) }
+                        .padding(.top, 8)
+
                     HStack(alignment: .center, spacing: 6) {
                         statusPill
                         nextPill
@@ -64,7 +67,6 @@ private struct TaskDocument: View {
                         projectPill
                         tracksPill
                         notesPill
-                        TagField(tags: item.tags) { AssociationService.apply(tags: $0, to: item) }
                     }
                     .padding(.top, 6)
 

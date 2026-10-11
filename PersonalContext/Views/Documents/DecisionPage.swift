@@ -16,6 +16,8 @@ struct DecisionPage: View {
         ) {
         DocumentPage {
             DocumentTitle(text: $decision.title)
+            TagBar(tags: decision.tags) { decision.tags = $0; project.touch() }
+                .padding(.top, 8)
             HStack(spacing: 6) {
                 PropertyPill(title: decision.status.label, systemImage: decision.status == .active ? "checkmark.seal" : "xmark.seal", field: .status) {
                     ForEach(DecisionStatus.allCases) { status in
@@ -50,7 +52,6 @@ struct DecisionPage: View {
                         Button(thread.title.isEmpty ? "Untitled" : thread.title) { decision.thread = thread; project.touch() }
                     }
                 }
-                TagField(tags: decision.tags) { decision.tags = $0; project.touch() }
                 Spacer()
                 Text(decision.createdAt.formatted(date: .abbreviated, time: .omitted))
                     .font(CraftFont.caption)

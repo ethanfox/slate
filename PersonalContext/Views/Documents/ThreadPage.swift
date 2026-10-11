@@ -44,6 +44,9 @@ struct ThreadPage: View {
                 .padding(.top, 4)
                 .findHighlight(.summary)
 
+            TagBar(tags: thread.tags) { thread.tags = $0; touch() }
+                .padding(.top, 8)
+
             HStack(spacing: 6) {
                 PropertyPill(title: thread.kind.label, systemImage: thread.kind.symbol, field: .kind) {
                     ForEach(ThreadKind.allCases) { kind in
@@ -66,7 +69,6 @@ struct ThreadPage: View {
                         Button(candidate.title.isEmpty ? "Untitled" : candidate.title) { thread.parent = candidate; touch() }
                     }
                 }
-                TagField(tags: thread.tags) { thread.tags = $0; touch() }
                 linked
             }
             .frame(maxWidth: .infinity, alignment: .leading)

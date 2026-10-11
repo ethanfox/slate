@@ -112,3 +112,18 @@ struct TagField: View {
         }
     }
 }
+
+struct TagBar: View {
+    var tags: [Tag]
+    var size: TagChipSize = .regular
+    var onChange: ([Tag]) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            TagField(tags: tags, size: size, onChange: onChange)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: size == .compact ? 20 : 28)
+    }
+}

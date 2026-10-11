@@ -139,6 +139,31 @@ final class TagStoreTests: XCTestCase {
         XCTAssertEqual(Set(both.tags.map(\.id)), [survivorID])
     }
 
+    func testChipFitShowsAllWhenWidthAllows() {
+        let names = ["Dock", "Marina"]
+        let needed = TagChipMetrics.width(for: "Dock", size: .compact)
+            + TagChipMetrics.spacing
+            + TagChipMetrics.width(for: "Marina", size: .compact)
+        XCTAssertEqual(
+            TagChipMetrics.fit(names, in: needed, size: .compact),
+            TagChipMetrics.Plan(visibleCount: 2, overflows: false)
+        )
+    }
+
+    func testChipFitKeepsWhatFitsAndMarksOverflow() {
+        let first = TagChipMetrics.width(for: "Dock", size: .compact)
+        let available = first + TagChipMetrics.spacing + TagChipMetrics.overflowWidth
+        let plan = TagChipMetrics.fit(["Dock", "Architecture"], in: available, size: .compact)
+        XCTAssertEqual(plan.visibleCount, 1)
+        XCTAssertTrue(plan.overflows)
+    }
+
+    func testChipFitFallsBackToIconWhenNothingFits() {
+        let plan = TagChipMetrics.fit(["Architecture", "Maintenance"], in: 24, size: .compact)
+        XCTAssertEqual(plan.visibleCount, 0)
+        XCTAssertTrue(plan.overflows)
+    }
+
     private func tag(_ name: String, created: TimeInterval) -> Tag {
         let tag = Tag(name: name)
         tag.createdAt = Date(timeIntervalSince1970: created)

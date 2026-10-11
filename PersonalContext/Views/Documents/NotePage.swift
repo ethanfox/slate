@@ -16,6 +16,8 @@ struct NotePage: View {
         ) {
         DocumentPage {
             DocumentTitle(text: $note.title)
+            TagBar(tags: note.tags) { note.tags = $0; touch() }
+                .padding(.top, 8)
             HStack(spacing: 6) {
                 PropertyPill(
                     title: note.thread.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No track",
@@ -28,7 +30,6 @@ struct NotePage: View {
                         Button(thread.title.isEmpty ? "Untitled" : thread.title) { note.thread = thread; touch() }
                     }
                 }
-                TagField(tags: note.tags) { note.tags = $0; touch() }
                 if !note.source.isEmpty {
                     Text(note.source)
                         .font(CraftFont.caption)

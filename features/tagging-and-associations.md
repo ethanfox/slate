@@ -59,6 +59,8 @@ A tag is: name, color from the shared palette, optional symbol, stable id. Names
 
 Use one reusable tag chip everywhere tags appear. Color belongs to the tag, not the assignment.
 
+Tags sit above the metadata header on notes, tracks, decisions, conversations, and tasks. That bar is full width and scrolls horizontally so chips keep their natural width. Project task cards show the chips that fit; if they cannot all fit, a tag icon remains and hovering it shows every tag.
+
 Users and agents create tags and assign or remove them on notes, tracks, decisions, conversations, and tasks. Settings owns the vocabulary. Agent tools: list_tags, create_tag, update_tag, assign_tag, remove_tag. Same TagStore operations as the app.
 
 - Many tags per object.

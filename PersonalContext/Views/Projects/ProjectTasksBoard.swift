@@ -228,6 +228,7 @@ private struct TaskBoardCard: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
+            CardTagStrip(tags: item.tags)
             if let due = item.due {
                 Text(TaskDue.label(due))
                     .font(CraftFont.caption)
@@ -364,6 +365,7 @@ private struct TaskListRow: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
+                    CardTagStrip(tags: item.tags)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())

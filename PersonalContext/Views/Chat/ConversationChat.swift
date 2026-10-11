@@ -72,30 +72,35 @@ struct ChatTitleBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text(displayTitle)
-                .font(CraftFont.title)
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .layoutPriority(1)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Text(displayTitle)
+                    .font(CraftFont.title)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
+                Spacer(minLength: 8)
+                if let onStartRun {
+                    Button("Start Run…", action: onStartRun)
+                        .buttonStyle(.plain)
+                        .font(CraftFont.body)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 32)
+            .frame(height: 52)
+
             if let conversation {
-                TagField(tags: conversation.tags, size: .compact) {
+                TagBar(tags: conversation.tags, size: .compact) {
                     conversation.tags = $0
                     conversation.updatedAt = .now
                     conversation.project?.touch()
                 }
-            }
-            Spacer(minLength: 8)
-            if let onStartRun {
-                Button("Start Run…", action: onStartRun)
-                    .buttonStyle(.plain)
-                    .font(CraftFont.body)
-                    .foregroundStyle(.secondary)
+                .padding(.horizontal, 32)
+                .padding(.bottom, 10)
             }
         }
-        .padding(.horizontal, 32)
-        .frame(height: 52)
         .background(CraftColor.canvas)
         .overlay(alignment: .bottom) {
             Hairline()
