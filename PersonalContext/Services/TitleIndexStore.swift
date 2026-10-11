@@ -200,15 +200,17 @@ private extension TitleIndexStore {
         return row(id, in: context)
     }
 
+    /// Each case names `fresh:` so the call picks the typed overload. Without it Swift prefers this
+    /// function, which needs no default argument, and it calls itself until the stack runs out.
     static func upsert(_ model: any PersistentModel, in context: ModelContext) {
         switch model {
-        case let project as Project: upsert(project, in: context)
-        case let thread as ProjectThread: upsert(thread, in: context)
-        case let note as Note: upsert(note, in: context)
-        case let decision as Decision: upsert(decision, in: context)
-        case let conversation as Conversation: upsert(conversation, in: context)
-        case let task as AgendaItem where task.kind == .task: upsert(task, in: context)
-        case let run as AgentRun: upsert(run, in: context)
+        case let project as Project: upsert(project, in: context, fresh: nil)
+        case let thread as ProjectThread: upsert(thread, in: context, fresh: nil)
+        case let note as Note: upsert(note, in: context, fresh: nil)
+        case let decision as Decision: upsert(decision, in: context, fresh: nil)
+        case let conversation as Conversation: upsert(conversation, in: context, fresh: nil)
+        case let task as AgendaItem where task.kind == .task: upsert(task, in: context, fresh: nil)
+        case let run as AgentRun: upsert(run, in: context, fresh: nil)
         default: break
         }
     }
