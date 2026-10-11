@@ -5,6 +5,8 @@ import SwiftUI
 enum AppModal: Identifiable {
     case newProject
     case newSpace
+    case newRecord(SpaceType)
+    case editRecord(SpaceRecord)
     case newEvent
     case editEvent(CalendarEvent)
     case newTask(Project?)
@@ -30,6 +32,8 @@ enum AppModal: Identifiable {
         switch self {
         case .newProject: "new-project"
         case .newSpace: "new-space"
+        case .newRecord(let type): "new-record-\(type.id.uuidString)"
+        case .editRecord(let record): "edit-record-\(record.id.uuidString)"
         case .newEvent: "new-event"
         case .editEvent(let event): "edit-event-\(event.id)"
         case .newTask(let project): project.map { "new-task-\($0.id.uuidString)" } ?? "new-task"
@@ -56,7 +60,7 @@ enum AppModal: Identifiable {
 
     var panelWidth: CGFloat {
         switch self {
-        case .newEvent, .editEvent, .newTask, .newTaskFromNote, .editReminder, .editTask: 520
+        case .newEvent, .editEvent, .newTask, .newTaskFromNote, .editReminder, .editTask, .newRecord, .editRecord: 520
         case .inspectCodeReference: 560
         default: 440
         }

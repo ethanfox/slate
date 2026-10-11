@@ -55,12 +55,14 @@ final class FileStoreTests: XCTestCase {
     @MainActor
     private struct Env {
         var root: URL
+        /// Held so the context outlives init. A context whose container is gone crashes on save.
+        var container: ModelContainer
         var context: ModelContext
         var store: FileStore
 
         init() throws {
             let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
-            let container = try ModelContainer(for: Store.schema, configurations: configuration)
+            container = try ModelContainer(for: Store.schema, configurations: configuration)
             root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
             context = container.mainContext
             store = FileStore(root: root, context: context)

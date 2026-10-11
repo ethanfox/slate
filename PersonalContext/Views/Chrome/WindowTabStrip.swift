@@ -306,6 +306,14 @@ struct WindowTabStrip: View {
         case .space(let id):
             let space = SpaceStore.space(id, in: context)
             return TabLabel(title: space?.displayName ?? "Space", symbol: space?.symbol ?? "square.grid.2x2")
+        case .spaceRecord(let spaceID, let recordID):
+            let space = SpaceStore.space(spaceID, in: context)
+            return TabLabel(
+                title: SpaceStore.record(recordID, in: context)?.displayTitle ?? "Untitled",
+                symbol: "doc.text",
+                projectName: space?.displayName ?? "Space",
+                projectSymbol: space?.symbol ?? "square.grid.2x2"
+            )
         case .quickAsk(let id):
             if let title = conversationTitle(id), !title.isEmpty {
                 return TabLabel(title: title, symbol: "bubble.left")

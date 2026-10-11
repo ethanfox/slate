@@ -112,6 +112,9 @@ final class AppModel {
     var showAgentIDs: Bool {
         didSet { defaults.set(showAgentIDs, forKey: Keys.showAgentIDs) }
     }
+    /// The type showing in each open Space. Not persisted.
+    var spaceTypeSelection: [UUID: UUID] = [:]
+
     var projectsLayout: ProjectsLayout {
         didSet { defaults.set(projectsLayout.rawValue, forKey: Keys.projectsLayout) }
     }

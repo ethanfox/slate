@@ -17,6 +17,10 @@ enum AssetOwnerKind: String, Sendable {
     case composer
     case chatDraft
     case chatMessage
+    /// Images picked in a record form that has not been saved yet.
+    case spaceForm
+    /// Images a Space record's image fields point at.
+    case spaceRecord
 }
 
 @Model

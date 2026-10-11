@@ -153,7 +153,7 @@ struct SidebarView: View {
     /// About you and Spaces are opened from You, so they keep its row lit.
     private var isOnYou: Bool {
         switch app.destination {
-        case .home, .aboutYou, .space: true
+        case .home, .aboutYou, .space, .spaceRecord: true
         default: false
         }
     }

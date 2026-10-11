@@ -525,3 +525,176 @@ extension Decision: SpaceOwnable {}
 extension Conversation: SpaceOwnable {}
 extension AgendaItem: SpaceOwnable {}
 extension AgentRun: SpaceOwnable {}
+
+extension SpaceSchema {
+    /// Text for lists and the plain detail view.
+    /// Asset ids held by image fields, including image columns inside groups.
+    func imageAssetIDs(in values: [String: SpaceValue]) -> [UUID] {
+        Self.imageAssetIDs(in: values, fields: fields)
+    }
+
+    private static func imageAssetIDs(in values: [String: SpaceValue], fields: [SpaceField]) -> [UUID] {
+        var ids: [UUID] = []
+        for field in fields {
+            switch (field.kind, values[field.id]) {
+            case (.image, .text(let raw)):
+                if let id = UUID(uuidString: raw) { ids.append(id) }
+            case (.group, .rows(let rows)):
+                for row in rows {
+                    ids += imageAssetIDs(in: row, fields: field.fields)
+                }
+            default:
+                break
+            }
+        }
+        return ids
+    }
+
+    func display(_ value: SpaceValue, for field: SpaceField) -> String {
+        switch value {
+        case .text(let text):
+            if field.kind == .choice {
+                return field.options.first { $0.id == text }?.name ?? text
+            }
+            // An image value is an asset id, which is not worth reading.
+            return field.kind == .image ? "" : text
+        case .number(let number):
+            return number.formatted(.number.precision(.fractionLength(0...2)))
+        case .boolean(let flag):
+            return flag ? "Yes" : "No"
+        case .date(let date):
+            return date.formatted(date: .abbreviated, time: .omitted)
+        case .quantity(let quantity):
+            let amount = quantity.amount.formatted(.number.precision(.fractionLength(0...2)))
+            return quantity.unit.isEmpty ? amount : "\(amount) \(quantity.unit)"
+        case .rows(let rows):
+            return rows.count == 1 ? "1 row" : "\(rows.count) rows"
+        }
+    }
+}
+
+/// A starting set of types for a new Space. Plain data built from the same field kinds an agent uses.
+struct SpaceTemplate: Identifiable, Hashable {
+    struct TypeDraft: Hashable {
+        var key: String
+        var name: String
+        var role: SpaceTypeRole
+        var fields: [SpaceField]
+        var collection: [SpaceComponent] = []
+        var detail: [SpaceComponent] = []
+    }
+
+    var id: String
+    var name: String
+    var types: [TypeDraft]
+
+    static let empty = SpaceTemplate(id: "empty", name: "Empty", types: [])
+
+    static let recipes = SpaceTemplate(id: "recipes", name: "Recipes", types: [
+        TypeDraft(key: "recipe", name: "Recipes", role: .object, fields: [
+            SpaceField(id: "photo", name: "Photo", kind: .image),
+            SpaceField(id: "course", name: "Course", kind: .choice, options: [
+                SpaceOption(id: "main", name: "Main"),
+                SpaceOption(id: "side", name: "Side"),
+                SpaceOption(id: "bread", name: "Bread"),
+                SpaceOption(id: "dessert", name: "Dessert")
+            ]),
+            SpaceField(id: "servings", name: "Servings", kind: .number),
+            SpaceField(id: "time", name: "Time", kind: .text),
+            SpaceField(id: "source", name: "Source", kind: .text),
+            SpaceField(id: "ingredients", name: "Ingredients", kind: .group, fields: [
+                SpaceField(id: "amount", name: "Amount", kind: .quantity),
+                SpaceField(id: "item", name: "Item", kind: .text)
+            ]),
+            SpaceField(id: "method", name: "Method", kind: .group, fields: [
+                SpaceField(id: "step", name: "Step", kind: .text)
+            ], isOrdered: true),
+            SpaceField(id: "notes", name: "Notes", kind: .richText)
+        ], collection: [
+            SpaceComponent("search", ["filters": .list(["course"])]),
+            SpaceComponent("cards", ["image": .text("photo"), "subtitle": .list(["time", "course"])])
+        ], detail: [
+            SpaceComponent("header", [
+                "image": .text("photo"),
+                "fields": .list(["time", "course", "source"]),
+                "action": .text("cooked"),
+                "actionLabel": .text("Log cooked")
+            ]),
+            SpaceComponent("columns", ["leading": .number(300)], children: [
+                SpaceComponent("section", ["title": .text("Ingredients")], children: [
+                    SpaceComponent("stepper", ["field": .text("servings"), "label": .text("Serves")]),
+                    SpaceComponent("checklist", ["rows": .text("ingredients"), "scaleBy": .text("servings")])
+                ]),
+                SpaceComponent("section", ["title": .text("Method")], children: [
+                    SpaceComponent("steps", ["rows": .text("method")])
+                ])
+            ]),
+            SpaceComponent("fields", ["fields": .list(["notes"])]),
+            SpaceComponent("section", ["title": .text("History")], children: [
+                SpaceComponent("columns", ["leading": .number(300)], children: [
+                    SpaceComponent("columns", children: [
+                        SpaceComponent("metric", ["value": .text("count:cooked"), "label": .text("times cooked")]),
+                        SpaceComponent("metric", ["value": .text("latest:cooked"), "label": .text("last cooked")])
+                    ]),
+                    SpaceComponent("timeline", ["events": .text("cooked")])
+                ])
+            ])
+        ]),
+        TypeDraft(key: "cooked", name: "Cooked", role: .event, fields: [
+            SpaceField(id: "servings", name: "Servings", kind: .number),
+            SpaceField(id: "note", name: "Note", kind: .text)
+        ])
+    ])
+
+    static let habits = SpaceTemplate(id: "habits", name: "Habits", types: [
+        TypeDraft(key: "habit", name: "Habits", role: .object, fields: [
+            SpaceField(id: "target", name: "Target", kind: .text),
+            SpaceField(id: "started", name: "Started", kind: .date),
+            SpaceField(id: "active", name: "Active", kind: .boolean),
+            SpaceField(id: "notes", name: "Notes", kind: .richText)
+        ], collection: [
+            SpaceComponent("columns", children: [
+                SpaceComponent("metric", ["value": .text("today:check-in"), "label": .text("done today")]),
+                SpaceComponent("metric", ["value": .text("week:check-in"), "label": .text("check-ins this week")]),
+                SpaceComponent("metric", ["value": .text("records"), "label": .text("habits")])
+            ]),
+            SpaceComponent("section", ["title": .text("Today")], children: [
+                SpaceComponent("rows", [
+                    "subtitle": .list(["target"]),
+                    "action": .text("check-in"),
+                    "week": .text("check-in"),
+                    "trail": .text("streak:check-in")
+                ])
+            ])
+        ], detail: [
+            SpaceComponent("header", [
+                "fields": .list(["target", "started"]),
+                "action": .text("check-in"),
+                "actionLabel": .text("Check in")
+            ]),
+            SpaceComponent("columns", ["leading": .number(364)], children: [
+                SpaceComponent("calendar", ["events": .text("check-in")]),
+                SpaceComponent("section", ["title": .text("Progress")], children: [
+                    SpaceComponent("columns", children: [
+                        SpaceComponent("metric", ["value": .text("streak:check-in"), "label": .text("current streak")]),
+                        SpaceComponent("metric", ["value": .text("best:check-in"), "label": .text("best streak")])
+                    ]),
+                    SpaceComponent("columns", children: [
+                        SpaceComponent("metric", ["value": .text("week:check-in"), "label": .text("this week")]),
+                        SpaceComponent("metric", ["value": .text("count:check-in"), "label": .text("check-ins in all")])
+                    ])
+                ])
+            ]),
+            SpaceComponent("fields", ["fields": .list(["notes"])]),
+            SpaceComponent("section", ["title": .text("History")], children: [
+                SpaceComponent("timeline", ["events": .text("check-in")])
+            ])
+        ]),
+        TypeDraft(key: "check-in", name: "Check-in", role: .event, fields: [
+            SpaceField(id: "minutes", name: "Minutes", kind: .number),
+            SpaceField(id: "note", name: "Note", kind: .text)
+        ])
+    ])
+
+    static let all = [empty, recipes, habits]
+}

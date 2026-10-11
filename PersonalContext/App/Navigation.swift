@@ -22,6 +22,7 @@ enum Destination: Hashable, Codable {
     case run(UUID)
     case aboutYou
     case space(UUID)
+    case spaceRecord(space: UUID, record: UUID)
 }
 enum ProjectTab: String, CaseIterable, Identifiable, Hashable, Codable {
     case overview

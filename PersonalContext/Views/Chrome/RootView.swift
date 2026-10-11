@@ -339,6 +339,10 @@ struct RootView: View {
             .buttonStyle(.plain)
             .glassEffect(.regular, in: Capsule())
             .help("New Space")
+        } else if case .space(let id) = app.destination {
+            SpaceToolbar(spaceID: id)
+        } else if case .spaceRecord(_, let recordID) = app.destination {
+            SpaceRecordToolbar(recordID: recordID)
         } else if case .aboutYou = app.destination {
             Button {
                 app.navigate(to: .home, newTab: false)
@@ -628,6 +632,12 @@ struct RootView: View {
             NewProjectSheet()
         case .newSpace:
             NewSpaceSheet()
+        case .newRecord(let type):
+            SpaceRecordForm(type: type)
+        case .editRecord(let record):
+            if let typeID = record.typeID, let type = SpaceStore.type(typeID, in: record.modelContext ?? app.container.mainContext) {
+                SpaceRecordForm(type: type, record: record)
+            }
         case .newEvent:
             NewEventSheet()
         case .editEvent(let event):
@@ -705,6 +715,8 @@ struct RootView: View {
             AboutYouView()
         case .space(let id):
             SpaceView(id: id)
+        case .spaceRecord(let spaceID, let recordID):
+            SpaceRecordView(spaceID: spaceID, recordID: recordID)
         case .projects:
             ProjectsView()
         case .tasks:

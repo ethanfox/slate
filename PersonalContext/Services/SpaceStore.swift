@@ -7,6 +7,7 @@ enum SpaceStoreError: LocalizedError, Equatable {
     case notAnObjectType
     case notAnEventType
     case recordOutsideSpace
+    case invalidScreen([String])
 
     var errorDescription: String? {
         switch self {
@@ -15,6 +16,7 @@ enum SpaceStoreError: LocalizedError, Equatable {
         case .notAnObjectType: "Records can only be made from an object type."
         case .notAnEventType: "Events can only be logged with an event type."
         case .recordOutsideSpace: "An event can only be about records in its own Space."
+        case .invalidScreen(let problems): problems.joined(separator: " ")
         }
     }
 }
@@ -51,6 +53,8 @@ enum SpaceStore {
     static func delete(_ space: Space, in context: ModelContext) throws {
         let key = SpaceJSON.key(space.id)
         events(in: space, context: context).forEach(context.delete)
+        fetch(#Predicate<SpaceScreen> { $0.spaceIDString == key }, in: context).forEach(context.delete)
+        releaseImages(of: records(in: space, context: context), in: context)
         records(in: space, context: context).forEach(context.delete)
         types(in: space, context: context).forEach(context.delete)
         fetch(#Predicate<ProjectThread> { $0.spaceIDString == key }, in: context).forEach(context.delete)
@@ -142,6 +146,85 @@ enum SpaceStore {
         return type
     }
 
+    /// Types first, then screens, because a screen can name any event type in the Space.
+    static func apply(_ template: SpaceTemplate, to space: Space, in context: ModelContext) throws {
+        var made: [(SpaceTemplate.TypeDraft, SpaceType)] = []
+        for draft in template.types {
+            let type = try defineType(
+                in: space,
+                key: draft.key,
+                name: draft.name,
+                role: draft.role,
+                schema: SpaceSchema(fields: draft.fields),
+                context: context
+            )
+            made.append((draft, type))
+        }
+        for (draft, type) in made {
+            if !draft.collection.isEmpty {
+                try setScreen(SpaceScreenDefinition(draft.collection), for: type, kind: .collection, in: context)
+            }
+            if !draft.detail.isEmpty {
+                try setScreen(SpaceScreenDefinition(draft.detail), for: type, kind: .detail, in: context)
+            }
+        }
+    }
+
+    // MARK: Screens
+
+    static func screen(for type: SpaceType, kind: SpaceScreenKind, in context: ModelContext) -> SpaceScreen? {
+        let key = SpaceJSON.key(type.id)
+        let raw = kind.rawValue
+        let descriptor = FetchDescriptor<SpaceScreen>(predicate: #Predicate { $0.typeIDString == key && $0.kindRaw == raw })
+        return try? context.fetch(descriptor).first
+    }
+
+    static func eventKeys(in spaceIDString: String, context: ModelContext) -> Set<String> {
+        let role = SpaceTypeRole.event.rawValue
+        let descriptor = FetchDescriptor<SpaceType>(predicate: #Predicate { $0.spaceIDString == spaceIDString && $0.roleRaw == role })
+        return Set(((try? context.fetch(descriptor)) ?? []).map(\.key))
+    }
+
+    /// Stores a screen only if every component and binding checks out. `byAgent` also records it as
+    /// the version Reset returns to.
+    @discardableResult
+    static func setScreen(
+        _ definition: SpaceScreenDefinition,
+        for type: SpaceType,
+        kind: SpaceScreenKind,
+        byAgent: Bool = false,
+        in context: ModelContext
+    ) throws -> SpaceScreen {
+        let problems = SpaceScreenCatalog.problems(
+            in: definition,
+            kind: kind,
+            schema: type.schema,
+            eventKeys: eventKeys(in: type.spaceIDString, context: context)
+        )
+        guard problems.isEmpty else { throw SpaceStoreError.invalidScreen(problems) }
+        let screen = screen(for: type, kind: kind, in: context) ?? {
+            let created = SpaceScreen(type: type, kind: kind, definition: definition)
+            context.insert(created)
+            return created
+        }()
+        screen.definition = definition
+        if byAgent { screen.agentJSON = screen.definitionJSON }
+        screen.updatedAt = .now
+        try context.save()
+        return screen
+    }
+
+    /// Back to the last version an agent wrote. With none, the screen is removed and the plain view shows.
+    static func resetScreen(_ screen: SpaceScreen, in context: ModelContext) throws {
+        if screen.agentJSON.isEmpty {
+            context.delete(screen)
+        } else {
+            screen.definitionJSON = screen.agentJSON
+            screen.updatedAt = .now
+        }
+        try context.save()
+    }
+
     /// Replace a type's schema without losing stored values. See `SpaceSchema.replacing`.
     static func reviseSchema(of type: SpaceType, to schema: SpaceSchema, in context: ModelContext) throws {
         let merged = try schema.replacing(type.schema)
@@ -170,6 +253,8 @@ enum SpaceStore {
         let key = SpaceJSON.key(type.id)
         let ownedEvents = FetchDescriptor<SpaceEvent>(predicate: #Predicate { $0.typeIDString == key })
         ((try? context.fetch(ownedEvents)) ?? []).forEach(context.delete)
+        fetch(#Predicate<SpaceScreen> { $0.typeIDString == key }, in: context).forEach(context.delete)
+        releaseImages(of: records(of: type, in: context), in: context)
         for record in records(of: type, in: context) {
             unlink(record, in: context)
             context.delete(record)
@@ -211,6 +296,7 @@ enum SpaceStore {
         let record = SpaceRecord(type: type, title: title, values: values)
         context.insert(record)
         try context.save()
+        syncImages(of: record, schema: type.schema, in: context)
         return record
     }
 
@@ -230,10 +316,54 @@ enum SpaceStore {
         }
         record.updatedAt = .now
         try context.save()
+        if let typeID = record.typeID, let type = type(typeID, in: context) {
+            syncImages(of: record, schema: type.schema, in: context)
+        }
+    }
+
+    /// What a form saves: `values` replaces every visible field, so a cleared field loses its value.
+    /// Values of removed fields are kept, because removal hides them without erasing.
+    static func replaceValues(
+        of record: SpaceRecord,
+        title: String,
+        values: [String: SpaceValue],
+        in context: ModelContext
+    ) throws {
+        var kept: [String: SpaceValue] = [:]
+        let schema = record.typeID.flatMap { type($0, in: context) }?.schema
+        if let schema {
+            try schema.validate(values)
+            kept = record.values.filter { schema.field($0.key)?.isRemoved == true }
+        }
+        record.title = title
+        record.values = kept.merging(values) { _, new in new }
+        record.updatedAt = .now
+        try context.save()
+        if let schema {
+            syncImages(of: record, schema: schema, in: context)
+        }
+    }
+
+    /// The file store keeps an image for as long as some record points at it. This makes the
+    /// record's claims match the asset ids its image fields hold right now.
+    private static func syncImages(of record: SpaceRecord, schema: SpaceSchema, in context: ModelContext) {
+        try? FileStore.default(context: context).replace(
+            assetIDs: schema.imageAssetIDs(in: record.values),
+            ownerKind: .spaceRecord,
+            ownerID: record.id
+        )
+    }
+
+    private static func releaseImages(of records: [SpaceRecord], in context: ModelContext) {
+        let store = FileStore.default(context: context)
+        for record in records {
+            try? store.release(ownerKind: .spaceRecord, ownerID: record.id)
+        }
     }
 
     /// Events that mention the record are kept, minus that link.
     static func delete(_ record: SpaceRecord, in context: ModelContext) throws {
+        releaseImages(of: [record], in: context)
         unlink(record, in: context)
         context.delete(record)
         try context.save()
