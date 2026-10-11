@@ -112,7 +112,7 @@ final class MCPConnectionTests: XCTestCase {
             MCPDiscoveredTool(name: "get_guide", description: "Read a guide", inputSchema: [:], readOnlyHint: true, destructiveHint: false)
         ])
         let runtime = MCPRuntime(store: store, factory: FakeFactory(session: session))
-        runtime.useAuthorizer { _, _, _ in true }
+        runtime.useAuthorizer { _, _, _, _ in true }
 
         let listed = await runtime.definitions(projectID: projectID)
         XCTAssertEqual(listed.map(\.originalName), ["get_guide"])
@@ -162,7 +162,7 @@ final class MCPConnectionTests: XCTestCase {
             paper.command: paperSession,
             docs.command: docsSession
         ]))
-        runtime.useAuthorizer { _, _, _ in true }
+        runtime.useAuthorizer { _, _, _, _ in true }
 
         let listed = await runtime.definitions(projectID: projectID)
         XCTAssertEqual(listed.count, 2)
@@ -185,7 +185,7 @@ final class MCPConnectionTests: XCTestCase {
     }
 
     func testReadOnlySkipsConfirmationAndMutatingAsks() async throws {
-        let record = try store.save(MCPConnectionRecord(name: "paper", transport: .stdio, command: "/bin/paper"))
+        let record = try store.save(MCPConnectionRecord(name: "docs", transport: .stdio, command: "/bin/docs", autoApprove: false))
         let projectID = UUID()
         store.setAllowed(record.id, in: projectID, allowed: true)
         let session = FakeMCPSession(tools: [
@@ -195,7 +195,7 @@ final class MCPConnectionTests: XCTestCase {
         ], result: try JSONSerialization.data(withJSONObject: ["content": [["type": "text", "text": "ok"]]]))
         let runtime = MCPRuntime(store: store, factory: FakeFactory(session: session))
         var asked: [String] = []
-        runtime.useAuthorizer { _, tool, _ in
+        runtime.useAuthorizer { _, _, tool, _ in
             asked.append(tool)
             return tool != "mystery"
         }
@@ -219,6 +219,41 @@ final class MCPConnectionTests: XCTestCase {
             XCTFail("unclassified decline should fail")
         } catch {}
         XCTAssertEqual(asked, ["write_html", "mystery"])
+    }
+
+    func testPaperDefaultsToAlwaysAllowAndCanBeTurnedOff() async throws {
+        let paper = try store.save(MCPConnectionRecord(name: "paper", transport: .stdio, command: "/bin/paper"))
+        XCTAssertTrue(paper.skipsConfirmation)
+        let projectID = UUID()
+        store.setAllowed(paper.id, in: projectID, allowed: true)
+        let session = FakeMCPSession(tools: [
+            MCPDiscoveredTool(name: "write_html", description: "", inputSchema: [:], readOnlyHint: false, destructiveHint: false)
+        ], result: try JSONSerialization.data(withJSONObject: ["content": [["type": "text", "text": "ok"]]]))
+        let runtime = MCPRuntime(store: store, factory: FakeFactory(session: session))
+        var asked = 0
+        runtime.useAuthorizer { _, _, _, _ in
+            asked += 1
+            return true
+        }
+
+        _ = try await runtime.execute(
+            name: MCPToolName.namespaced(connectionID: paper.id, original: "write_html"),
+            arguments: [:],
+            projectID: projectID
+        )
+        XCTAssertEqual(asked, 0)
+
+        try runtime.setAutoApprove(paper.id, enabled: false)
+        _ = try await runtime.execute(
+            name: MCPToolName.namespaced(connectionID: paper.id, original: "write_html"),
+            arguments: [:],
+            projectID: projectID
+        )
+        XCTAssertEqual(asked, 1)
+
+        let reloaded = MCPConnectionStore(url: storeURL)
+        XCTAssertEqual(reloaded.connection(id: paper.id)?.autoApprove, false)
+        XCTAssertFalse(reloaded.connection(id: paper.id)?.skipsConfirmation ?? true)
     }
 
     func testSchemaValidationAndResultFormats() throws {
@@ -323,7 +358,7 @@ final class MCPConnectionTests: XCTestCase {
             )
         ])
         let runtime = MCPRuntime(store: store, factory: FakeFactory(session: session))
-        runtime.useAuthorizer { _, _, _ in true }
+        runtime.useAuthorizer { _, _, _, _ in true }
         session.result = try JSONSerialization.data(withJSONObject: [
             "content": [["type": "text", "text": "pages"]]
         ])

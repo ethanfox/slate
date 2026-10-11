@@ -27,6 +27,7 @@ struct MCPConnectionRecord: Identifiable, Codable, Equatable, Sendable {
     var headerKeys: [String]
     var executableBookmark: Data?
     var workingDirectoryBookmark: Data?
+    var autoApprove: Bool?
     var createdAt: Date
     var updatedAt: Date
 
@@ -43,6 +44,7 @@ struct MCPConnectionRecord: Identifiable, Codable, Equatable, Sendable {
         headerKeys: [String] = [],
         executableBookmark: Data? = nil,
         workingDirectoryBookmark: Data? = nil,
+        autoApprove: Bool? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -58,8 +60,19 @@ struct MCPConnectionRecord: Identifiable, Codable, Equatable, Sendable {
         self.headerKeys = headerKeys
         self.executableBookmark = executableBookmark
         self.workingDirectoryBookmark = workingDirectoryBookmark
+        self.autoApprove = autoApprove
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    var skipsConfirmation: Bool {
+        autoApprove ?? Self.defaultsToAlwaysAllow(name: name, command: command)
+    }
+
+    static func defaultsToAlwaysAllow(name: String, command: String) -> Bool {
+        if name.caseInsensitiveCompare("paper") == .orderedSame { return true }
+        let executable = URL(fileURLWithPath: command).lastPathComponent
+        return executable.caseInsensitiveCompare("paper") == .orderedSame
     }
 
     var transportLabel: String { transport.label }

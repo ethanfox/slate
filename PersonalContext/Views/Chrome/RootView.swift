@@ -236,6 +236,7 @@ struct RootView: View {
             ),
             titleVisibility: .visible
         ) {
+            Button("Always Allow") { app.mcp.alwaysAllowCurrentRequest() }
             Button("Allow") { app.mcp.actions.respond(true) }
             Button("Don’t Allow", role: .cancel) { app.mcp.actions.respond(false) }
         } message: {

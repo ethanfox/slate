@@ -63,6 +63,7 @@ enum MCPJSONImport {
                 var incoming = server.record
                 incoming.id = current.id
                 incoming.enabled = current.enabled
+                incoming.autoApprove = current.autoApprove
                 incoming.createdAt = current.createdAt
                 incoming.executableBookmark = current.executableBookmark
                 incoming.workingDirectoryBookmark = current.workingDirectoryBookmark

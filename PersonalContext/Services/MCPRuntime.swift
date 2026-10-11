@@ -6,6 +6,7 @@ import Observation
 final class MCPActionGate {
     struct Request: Identifiable {
         var id = UUID()
+        var connectionID: UUID
         var connectionName: String
         var toolName: String
         var arguments: String
@@ -14,7 +15,7 @@ final class MCPActionGate {
     private(set) var request: Request?
     private var continuation: CheckedContinuation<Bool, Never>?
 
-    func confirm(connectionName: String, toolName: String, arguments: [String: Any]) async -> Bool {
+    func confirm(connectionID: UUID, connectionName: String, toolName: String, arguments: [String: Any]) async -> Bool {
         if let continuation {
             continuation.resume(returning: false)
             self.continuation = nil
@@ -22,7 +23,12 @@ final class MCPActionGate {
         let summary = argumentSummary(arguments)
         return await withCheckedContinuation { continuation in
             self.continuation = continuation
-            request = Request(connectionName: connectionName, toolName: toolName, arguments: summary)
+            request = Request(
+                connectionID: connectionID,
+                connectionName: connectionName,
+                toolName: toolName,
+                arguments: summary
+            )
         }
     }
 
@@ -52,7 +58,7 @@ final class MCPRuntime {
     let store: MCPConnectionStore
     let clients: MCPClientManager
     let actions: MCPActionGate
-    private var authorizer: ((String, String, [String: Any]) async -> Bool)?
+    private var authorizer: ((UUID, String, String, [String: Any]) async -> Bool)?
 
     init(
         store: MCPConnectionStore? = nil,
@@ -62,14 +68,31 @@ final class MCPRuntime {
         self.store = store
         self.clients = MCPClientManager(store: store, factory: factory)
         self.actions = MCPActionGate()
-        self.authorizer = { [weak actions] connection, tool, arguments in
+        self.authorizer = { [weak actions] connectionID, connection, tool, arguments in
             guard let actions else { return false }
-            return await actions.confirm(connectionName: connection, toolName: tool, arguments: arguments)
+            return await actions.confirm(
+                connectionID: connectionID,
+                connectionName: connection,
+                toolName: tool,
+                arguments: arguments
+            )
         }
     }
 
-    func useAuthorizer(_ authorizer: @escaping (String, String, [String: Any]) async -> Bool) {
+    func useAuthorizer(_ authorizer: @escaping (UUID, String, String, [String: Any]) async -> Bool) {
         self.authorizer = authorizer
+    }
+
+    func setAutoApprove(_ id: UUID, enabled: Bool) throws {
+        guard var record = store.connection(id: id) else { return }
+        record.autoApprove = enabled
+        _ = try store.save(record)
+    }
+
+    func alwaysAllowCurrentRequest() {
+        guard let request = actions.request else { return }
+        try? setAutoApprove(request.connectionID, enabled: true)
+        actions.respond(true)
     }
 
     func shutdown() {
@@ -112,16 +135,12 @@ final class MCPRuntime {
         let discovered = clients.tools(for: parsed.connectionID).first {
             MCPToolName.matches($0.name, encoded: parsed.original)
         }
+        let needsConfirmation = !record.skipsConfirmation && (discovered?.classification.requiresConfirmation ?? true)
         if let discovered {
             try MCPSchema.validate(arguments: compact, schema: discovered.schemaObject)
-            if discovered.classification.requiresConfirmation {
-                let allowed = await (authorizer?(record.name, parsed.original, compact) ?? false)
-                guard allowed else {
-                    throw MCPConnectionError("The user declined \(parsed.original) on \(record.name).")
-                }
-            }
-        } else {
-            let allowed = await (authorizer?(record.name, parsed.original, compact) ?? false)
+        }
+        if needsConfirmation {
+            let allowed = await (authorizer?(record.id, record.name, parsed.original, compact) ?? false)
             guard allowed else {
                 throw MCPConnectionError("The user declined \(parsed.original) on \(record.name).")
             }

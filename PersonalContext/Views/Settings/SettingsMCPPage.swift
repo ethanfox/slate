@@ -125,6 +125,22 @@ struct SettingsMCPPage: View {
             }
             Hairline().padding(.horizontal, 16)
             SettingsRow {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Always allow tools")
+                    Text("Chat can run this server’s tools without asking each time.")
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 16)
+                Toggle("Always allow tools", isOn: Binding(
+                    get: { record.skipsConfirmation },
+                    set: { try? mcp.setAutoApprove(record.id, enabled: $0) }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+            }
+            Hairline().padding(.horizontal, 16)
+            SettingsRow {
                 Spacer(minLength: 0)
                 Button(record.enabled ? (status.toolCount > 0 ? "Retry" : "Connect") : "Disabled") {
                     Task { await mcp.clients.connect(record.id) }
@@ -202,6 +218,7 @@ struct MCPConnectionDraft: Identifiable {
     var url: String
     var headers: [MCPKeyValue]
     var enabled: Bool
+    var autoApprove: Bool?
     var createdAt: Date
     var isNew: Bool
     var executableBookmark: Data?
@@ -219,6 +236,7 @@ struct MCPConnectionDraft: Identifiable {
             url: "",
             headers: [],
             enabled: true,
+            autoApprove: nil,
             createdAt: .now,
             isNew: true,
             executableBookmark: nil,
@@ -241,6 +259,7 @@ struct MCPConnectionDraft: Identifiable {
             MCPKeyValue(key: $0, value: KeychainStore.read(account: MCPSecrets.headerAccount(connectionID: record.id, key: $0)) ?? "")
         }
         enabled = record.enabled
+        autoApprove = record.autoApprove
         createdAt = record.createdAt
         isNew = false
         executableBookmark = record.executableBookmark
@@ -258,6 +277,7 @@ struct MCPConnectionDraft: Identifiable {
         url: String,
         headers: [MCPKeyValue],
         enabled: Bool,
+        autoApprove: Bool?,
         createdAt: Date,
         isNew: Bool,
         executableBookmark: Data?,
@@ -273,6 +293,7 @@ struct MCPConnectionDraft: Identifiable {
         self.url = url
         self.headers = headers
         self.enabled = enabled
+        self.autoApprove = autoApprove
         self.createdAt = createdAt
         self.isNew = isNew
         self.executableBookmark = executableBookmark
@@ -293,6 +314,7 @@ struct MCPConnectionDraft: Identifiable {
             headerKeys: headers.map(\.key).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty },
             executableBookmark: executableBookmark,
             workingDirectoryBookmark: workingDirectoryBookmark,
+            autoApprove: autoApprove,
             createdAt: createdAt
         )
     }
