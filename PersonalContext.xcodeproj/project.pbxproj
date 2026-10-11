@@ -120,6 +120,12 @@
 		5970F19FA847557162751BF3 /* ChatInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5991E95904B11AEBA3B96BDE /* ChatInput.swift */; };
 		5B69D4033AA633125A4A2FAB /* ObjectLinkCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E415EBBA67C5F2F8A3F3A20 /* ObjectLinkCard.swift */; };
 		B02D4F8C5E3091B27C6F5D4A /* ObjectFind.swift in Sources */ = {isa = PBXBuildFile; fileRef = A91C3E7B4D2F80A16B5E4C39 /* ObjectFind.swift */; };
+		C0F1050100000011 /* ComposerSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F1050100000001 /* ComposerSearch.swift */; };
+		C0F1050100000012 /* ComposerSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F1050100000002 /* ComposerSession.swift */; };
+		C0F1050100000013 /* UniversalComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F1050100000003 /* UniversalComposer.swift */; };
+		C0F1050100000014 /* ComposerResults.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F1050100000004 /* ComposerResults.swift */; };
+		C0F1050100000015 /* ComposerChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F1050100000005 /* ComposerChatView.swift */; };
+		C0F1050100000016 /* ComposerSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F1050100000006 /* ComposerSearchTests.swift */; };
 		D24F6BAE705213D49E817F6C /* ObjectFindBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13E5A9D6F4102C38D706E5B /* ObjectFindBar.swift */; };
 		F46B8DC0927435F6B0A3918E /* ObjectFindTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E35A7CBF816324E5AF92807D /* ObjectFindTests.swift */; };
 		A7B1C2D3E4F5061728394A02 /* WindowTabTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B1C2D3E4F5061728394A01 /* WindowTabTests.swift */; };
@@ -429,6 +435,12 @@
 		A7F5DDBFDDE9BF6067DE5CCC /* DocumentPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPage.swift; sourceTree = "<group>"; };
 		A843C76D621958EDA8D94D61 /* ColorHex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorHex.swift; sourceTree = "<group>"; };
 		A91C3E7B4D2F80A16B5E4C39 /* ObjectFind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectFind.swift; sourceTree = "<group>"; };
+		C0F1050100000001 /* ComposerSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerSearch.swift; sourceTree = "<group>"; };
+		C0F1050100000002 /* ComposerSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerSession.swift; sourceTree = "<group>"; };
+		C0F1050100000003 /* UniversalComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UniversalComposer.swift; sourceTree = "<group>"; };
+		C0F1050100000004 /* ComposerResults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerResults.swift; sourceTree = "<group>"; };
+		C0F1050100000005 /* ComposerChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerChatView.swift; sourceTree = "<group>"; };
+		C0F1050100000006 /* ComposerSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerSearchTests.swift; sourceTree = "<group>"; };
 		AB3545DC169370BDB82CFAEB /* NotePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotePage.swift; sourceTree = "<group>"; };
 		C13E5A9D6F4102C38D706E5B /* ObjectFindBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectFindBar.swift; sourceTree = "<group>"; };
 		E35A7CBF816324E5AF92807D /* ObjectFindTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectFindTests.swift; sourceTree = "<group>"; };
@@ -587,6 +599,16 @@
 			path = Design;
 			sourceTree = "<group>";
 		};
+		C0F1050100000020 /* Composer */ = {
+			isa = PBXGroup;
+			children = (
+				C0F1050100000003 /* UniversalComposer.swift */,
+				C0F1050100000004 /* ComposerResults.swift */,
+				C0F1050100000005 /* ComposerChatView.swift */,
+			);
+			path = Composer;
+			sourceTree = "<group>";
+		};
 		4586B9EE10B4EC4A9F6BE2A6 /* Chat */ = {
 			isa = PBXGroup;
 			children = (
@@ -660,6 +682,8 @@
 				B81A0C1D2E3F405162738A0D /* RunAdapters.swift */,
 				DF040EA1BCECFFBD441F0F91 /* ChatGPTProvider.swift */,
 				E8B24C96AAB593E09C71D659 /* ChatGPTSignIn.swift */,
+				C0F1050100000001 /* ComposerSearch.swift */,
+				C0F1050100000002 /* ComposerSession.swift */,
 				55C705E6D771B0D57F792CD5 /* ContextBuilder.swift */,
 				EC770F3F4A6E9C65A13777F6 /* CursorClient.swift */,
 				8C2027BAADC2942F395A23C9 /* CursorProvider.swift */,
@@ -795,6 +819,7 @@
 		B0CFEA48A675560AE1D9829E /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				C0F1050100000020 /* Composer */,
 				4586B9EE10B4EC4A9F6BE2A6 /* Chat */,
 				A5D6A7757F01EBD09446260A /* Chrome */,
 				98AB5C15DCF2C8C508858130 /* Documents */,
@@ -881,6 +906,7 @@
 			isa = PBXGroup;
 			children = (
 				E35A7CBF816324E5AF92807D /* ObjectFindTests.swift */,
+				C0F1050100000006 /* ComposerSearchTests.swift */,
 				D15C010000000003 /* DecisionListLayoutTests.swift */,
 				D15C020000000001 /* TagStoreTests.swift */,
 				A7B1C2D3E4F5061728394A01 /* WindowTabTests.swift */,
@@ -1131,6 +1157,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F46B8DC0927435F6B0A3918E /* ObjectFindTests.swift in Sources */,
+				C0F1050100000016 /* ComposerSearchTests.swift in Sources */,
 				D15C010000000004 /* DecisionListLayoutTests.swift in Sources */,
 				D15C020000000002 /* TagStoreTests.swift in Sources */,
 				A7B1C2D3E4F5061728394A02 /* WindowTabTests.swift in Sources */,
@@ -1236,6 +1263,11 @@
 				AD8746C5C6F6267B6E861E22 /* NotePage.swift in Sources */,
 				C24BE4C7FD47F1EF214C9B48 /* NotesWidget.swift in Sources */,
 				B02D4F8C5E3091B27C6F5D4A /* ObjectFind.swift in Sources */,
+				C0F1050100000011 /* ComposerSearch.swift in Sources */,
+				C0F1050100000012 /* ComposerSession.swift in Sources */,
+				C0F1050100000013 /* UniversalComposer.swift in Sources */,
+				C0F1050100000014 /* ComposerResults.swift in Sources */,
+				C0F1050100000015 /* ComposerChatView.swift in Sources */,
 				D24F6BAE705213D49E817F6C /* ObjectFindBar.swift in Sources */,
 				5B69D4033AA633125A4A2FAB /* ObjectLinkCard.swift in Sources */,
 				463C9AC124371E05CBFFECCC /* OrbPalette.swift in Sources */,

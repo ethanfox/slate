@@ -127,6 +127,7 @@ final class AppModel {
     var selectedOverviewPlate: UUID?
     var selectedTaskID: UUID?
     let objectFind = ObjectFindSession()
+    let composer = ComposerSession()
 
     var isObjectPage: Bool {
         if selectedNote != nil || selectedDecision != nil || selectedThread != nil || selectedRun != nil {
@@ -348,6 +349,7 @@ final class AppModel {
             guard let self else { return false }
             return self.isObjectPage || self.objectFind.isOpen
         }
+        composer.attach(self)
     }
 
     func refreshUsage(force: Bool = false) {

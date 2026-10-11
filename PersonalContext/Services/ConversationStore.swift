@@ -111,6 +111,16 @@ final class ConversationStore {
         try? conversation.modelContext?.save()
     }
 
+    func applyProvider(_ providerID: String) -> Conversation? {
+        guard let conversation else { return nil }
+        conversation.providerID = providerID
+        conversation.externalSessionID = ""
+        conversation.updatedAt = .now
+        conversation.project?.touch()
+        try? conversation.modelContext?.save()
+        return conversation
+    }
+
     func replaceDraft(assetIDs: [UUID], conversationID: UUID) throws {
         guard let context = conversation?.modelContext else {
             throw AttachmentError.missingAsset("attachment")

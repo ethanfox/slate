@@ -349,6 +349,26 @@ extension AppModel {
         }
     }
 
+    func open(_ task: AgendaItem, newTab: Bool = TabActivation.commandClick) {
+        if let project = task.project {
+            reveal(
+                WindowTab(
+                    id: UUID(),
+                    destination: .project(project.id),
+                    projectTab: .tasks,
+                    selectedThread: nil,
+                    selectedNote: nil,
+                    selectedDecision: nil,
+                    selectedConversation: nil
+                ),
+                newTab: newTab
+            )
+            selectTask(task.id)
+        } else {
+            navigate(to: .tasks, newTab: newTab)
+        }
+    }
+
     func showNewChat(in project: Project, newTab: Bool = TabActivation.commandClick) {
         reveal(
             WindowTab(

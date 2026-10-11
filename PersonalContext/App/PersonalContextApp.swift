@@ -88,6 +88,10 @@ struct MembraeApp: App {
                 .keyboardShortcut("9")
             }
             CommandGroup(after: .textEditing) {
+                Button("Composer") {
+                    app.composer.toggle()
+                }
+                .keyboardShortcut("k")
                 Button(app.objectFind.isOpen ? "Hide Find" : "Find…") {
                     app.objectFind.toggle()
                 }

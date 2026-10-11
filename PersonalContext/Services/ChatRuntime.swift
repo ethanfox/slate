@@ -71,7 +71,7 @@ final class ChatDebugLog {
 @Observable
 final class ChatRuntime {
     let conversationID: UUID
-    let providerID: String
+    var providerID: String
     let session: ChatEngine
     let debugLog: ChatDebugLog
     var modelID: String
@@ -163,6 +163,17 @@ final class ChatRuntime {
     func applyModel() {
         session.model = modelID
         store.applyModel(modelID)
+    }
+
+    func applyProvider() {
+        if session.provider.id == providerID { return }
+        if session.isGenerating { session.cancel() }
+        guard let conversation = store.applyProvider(providerID) else { return }
+        session.provider = ChatProviderFactory.make(
+            conversation: conversation,
+            project: conversation.project,
+            debugLog: debugLog
+        )
     }
 
     func schedulePersist() {

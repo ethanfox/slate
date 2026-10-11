@@ -278,6 +278,30 @@ final class ChatEngineTests: XCTestCase {
         XCTAssertEqual(runtimeB.draft, "")
     }
 
+    func testRuntimeSwitchesProviderAndClearsExternalSession() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        conversation.externalSessionID = "chatgpt-session"
+        container.mainContext.insert(conversation)
+        try container.mainContext.save()
+
+        let runtime = ChatRuntime(
+            conversation: conversation,
+            project: nil,
+            provider: ScriptedChatProvider(chunks: ["unused"])
+        )
+        runtime.providerID = TalkProvider.cursor.rawValue
+        runtime.applyProvider()
+
+        XCTAssertEqual(conversation.providerID, TalkProvider.cursor.rawValue)
+        XCTAssertEqual(conversation.externalSessionID, "")
+        XCTAssertEqual(runtime.session.provider.id, TalkProvider.cursor.rawValue)
+
+        runtime.applyProvider()
+        XCTAssertEqual(runtime.session.provider.id, TalkProvider.cursor.rawValue)
+    }
+
     func testPersistDoesNotDeleteStoreMessagesAbsentFromSession() throws {
         let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Store.schema, configurations: configuration)

@@ -124,8 +124,7 @@ private struct ConversationSessionView: View {
             ChatInput(
                 text: $runtime.draft,
                 modelID: Bindable(runtime).modelID,
-                providerID: .constant(runtime.providerID),
-                allowsProviderChange: false,
+                providerID: Bindable(runtime).providerID,
                 isGenerating: session.isGenerating,
                 errorMessage: session.error?.localizedDescription,
                 onSend: send,
@@ -153,6 +152,7 @@ private struct ConversationSessionView: View {
         }
         .onChange(of: app.pendingSend) { _, _ in runtime.consumePending(from: app) }
         .onChange(of: runtime.modelID) { _, _ in runtime.applyModel() }
+        .onChange(of: runtime.providerID) { _, _ in runtime.applyProvider() }
         .onChange(of: session.isGenerating) { _, generating in
             runtime.debugLog.snapshot(session, label: "generating=\(generating) entries=\(session.entries.count)")
         }

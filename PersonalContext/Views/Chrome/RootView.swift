@@ -187,6 +187,14 @@ struct RootView: View {
         }
         .environment(\.objectFind, app.objectFind)
         .onExitCommand {
+            if app.composer.isOpen {
+                if app.composer.popup != .none {
+                    app.composer.closePopup()
+                } else {
+                    app.composer.close()
+                }
+                return
+            }
             guard app.objectFind.isOpen else { return }
             app.objectFind.close()
         }
@@ -227,6 +235,9 @@ struct RootView: View {
             MembraeModalPresenter(modal: app.modal(in: .main), onDismiss: app.dismissModal) { modal in
                 modalContent(modal)
             }
+        }
+        .overlay {
+            UniversalComposerOverlay()
         }
         .confirmationDialog(
             app.mcp.actions.request.map { "Allow \($0.toolName) on \($0.connectionName)?" } ?? "Allow this MCP action?",
