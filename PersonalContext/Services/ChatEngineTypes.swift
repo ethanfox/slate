@@ -542,6 +542,23 @@ struct ChatToolActivity: Identifiable, Equatable, Codable, Sendable {
 
     var title: String { Self.title(for: name, status: status) }
 
+    var displayTitle: String {
+        if let url = pageURL { return Self.compactPageURL(url) }
+        return title
+    }
+
+    var pageURL: URL? {
+        guard namesAWebPage else { return nil }
+        if let raw = sources.first(where: { $0.kind == .url })?.url, let url = Self.httpURL(from: raw) {
+            return url
+        }
+        return Self.httpURL(from: detail)
+    }
+
+    var showsDetail: Bool {
+        !detail.isEmpty && pageURL == nil
+    }
+
     func destination(from extras: [ChatSource] = []) -> ChatSource? {
         if sources.count == 1 { return sources[0] }
         if let first = sources.first, opensRecord { return first }
@@ -655,7 +672,21 @@ struct ChatToolActivity: Identifiable, Equatable, Codable, Sendable {
         return nil
     }
 
+    private var namesAWebPage: Bool {
+        if name == "webFetch" || name == "WebFetch" { return true }
+        return name.hasPrefix("browser_") && name != "browser_search" && name != "browser_sessions"
+    }
+
     private var inferredDestination: ChatSource? {
+        if let url = pageURL {
+            return ChatSource(
+                id: url.absoluteString,
+                title: Self.compactPageURL(url),
+                url: url.absoluteString,
+                kind: .url,
+                pin: false
+            )
+        }
         guard status == .succeeded, opensRecord, let kind = inferredKind, !detail.isEmpty else { return nil }
         return ChatSource(id: detail, title: detail, url: nil, kind: kind, pin: false)
     }
@@ -711,12 +742,15 @@ struct ChatToolActivity: Identifiable, Equatable, Codable, Sendable {
             return fields["root"] ?? ""
         case "consult_code":
             return clip(fields["brief"] ?? fields["question"] ?? "", 80)
-        case "webSearch":
+        case "webSearch", "browser_search":
             return clip(fields["query"] ?? fields["search"] ?? fields["q"] ?? "", 80)
-        case "webFetch", "WebFetch":
-            return fields["url"] ?? fields["href"] ?? ""
+        case "webFetch", "WebFetch", "browser_navigate", "browser_open":
+            return pageURLString(arguments: arguments, result: result) ?? ""
         default:
             break
+        }
+        if name.hasPrefix("browser_"), let url = pageURLString(arguments: arguments, result: result) {
+            return url
         }
         if let title = fields["title"] ?? fields["name"], !title.isEmpty {
             return clip(title, 80)
@@ -727,6 +761,45 @@ struct ChatToolActivity: Identifiable, Equatable, Codable, Sendable {
         let titles = titles(from: result).prefix(3)
         if !titles.isEmpty { return titles.joined(separator: " · ") }
         return ""
+    }
+
+    static func compactPageURL(_ url: URL) -> String {
+        let host = (url.host() ?? "").replacingOccurrences(of: "www.", with: "")
+        guard !host.isEmpty else { return clip(url.absoluteString, 80) }
+        var path = url.path
+        if path == "/" { path = "" }
+        while path.hasSuffix("/") { path.removeLast() }
+        return clip(host + path, 80)
+    }
+
+    private static func pageURLString(arguments: [String: Any], result: String?) -> String? {
+        if let url = BrowserPermissions.firstURL(in: arguments) { return url }
+        return firstHTTPURL(in: result)
+    }
+
+    private static func httpURL(from text: String) -> URL? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              url.host() != nil
+        else { return nil }
+        return url
+    }
+
+    private static func firstHTTPURL(in result: String?) -> String? {
+        guard let result else { return nil }
+        for line in result.split(whereSeparator: \.isNewline).prefix(24) {
+            let text = String(line).trimmingCharacters(in: .whitespaces)
+            guard let range = text.range(of: "https://") ?? text.range(of: "http://") else { continue }
+            var raw = String(text[range.lowerBound...])
+            if let end = raw.firstIndex(where: { $0.isWhitespace || $0 == ")" || $0 == "]" }) {
+                raw = String(raw[..<end])
+            }
+            raw = raw.trimmingCharacters(in: CharacterSet(charactersIn: ".,;\""))
+            if httpURL(from: raw) != nil { return raw }
+        }
+        return nil
     }
 
     private static func fileDetail(_ fields: [String: String]) -> String {

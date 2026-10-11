@@ -366,6 +366,39 @@ final class MCPConnectionTests: XCTestCase {
         XCTAssertEqual(assistant.tools.first?.title, "Paper · get guide")
     }
 
+    func testHTTPCodecReadsJSONAndSSE() throws {
+        let json = try MCPHTTPCodec.result(
+            fromBody: Data(#"{"jsonrpc":"2.0","result":{"ok":true}}"#.utf8),
+            contentType: "application/json"
+        )
+        let jsonObject = try XCTUnwrap(JSONSerialization.jsonObject(with: json) as? [String: Any])
+        XCTAssertEqual(jsonObject["ok"] as? Bool, true)
+
+        let sse = """
+        event: message
+        data: {"jsonrpc":"2.0","result":{"page":"ready"}}
+
+        """
+        let streamed = try MCPHTTPCodec.result(fromBody: Data(sse.utf8), contentType: "text/plain")
+        let streamedObject = try XCTUnwrap(JSONSerialization.jsonObject(with: streamed) as? [String: Any])
+        XCTAssertEqual(streamedObject["page"] as? String, "ready")
+        XCTAssertTrue(MCPHTTPCodec.looksLikeSSE(Data(sse.utf8)))
+    }
+
+    func testHTTPCodecRejectsEmptyAndInvalidBodies() {
+        XCTAssertThrowsError(try MCPHTTPCodec.result(fromBody: Data(), contentType: "application/json"))
+        XCTAssertThrowsError(try MCPHTTPCodec.result(fromBody: Data("not-json".utf8), contentType: "application/json"))
+        XCTAssertEqual(MCPHTTPCodec.httpError(status: 404, body: "Session not found"), "Session not found")
+    }
+
+    func testTransportLossRecognizesDeadPlaywrightSession() {
+        XCTAssertTrue(MCPTransportLoss.isLost(MCPConnectionError("Session not found")))
+        XCTAssertTrue(MCPTransportLoss.isLost(MCPConnectionError("The data couldn’t be read because it isn’t in the correct format.")))
+        XCTAssertTrue(MCPTransportLoss.isLost(MCPConnectionError("The MCP server returned invalid JSON.")))
+        XCTAssertFalse(MCPTransportLoss.isLost(MCPConnectionError("query is required.")))
+        XCTAssertFalse(MCPTransportLoss.isLost(CancellationError()))
+    }
+
     func testSSERejectedAndMissingFields() {
         XCTAssertThrowsError(try MCPJSONImport.parse("""
         {"mcpServers":{"old":{"type":"sse","url":"https://example.com"}}}

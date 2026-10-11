@@ -209,6 +209,8 @@ private func isMembraeWrite(_ name: String) -> Bool {
         || name.hasPrefix("delete_")
         || name == "complete_task"
         || name == "mark_for_deletion"
+        || name == "assign_tag"
+        || name == "remove_tag"
 }
 
 private func isMembraeTool(_ name: String) -> Bool {
@@ -219,4 +221,6 @@ private func isMembraeTool(_ name: String) -> Bool {
         || name.hasPrefix("delete_")
         || name == "complete_task"
         || name == "mark_for_deletion"
+        || name == "assign_tag"
+        || name == "remove_tag"
 }

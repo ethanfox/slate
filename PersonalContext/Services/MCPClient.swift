@@ -235,12 +235,115 @@ actor MCPStdioSession: MCPSessioning {
     }
 }
 
+enum MCPTransportLoss {
+    static func isLost(_ error: Error) -> Bool {
+        if error is CancellationError { return false }
+        let text = error.localizedDescription.lowercased()
+        return text.contains("session not found")
+            || text.contains("correct format")
+            || text.contains("invalid json")
+            || text.contains("empty stream")
+            || text.contains("empty response")
+            || text.contains("disconnect")
+            || text.contains("not start")
+            || text.contains("couldn’t start")
+            || text.contains("couldn't start")
+            || text.contains("helper")
+            || text.contains("connection")
+            || text.contains("mcp server")
+    }
+}
+
+enum MCPHTTPCodec {
+    static func result(fromBody data: Data, contentType: String) throws -> Data {
+        if data.isEmpty {
+            throw MCPConnectionError("The MCP server sent an empty response.")
+        }
+        if contentType.contains("text/event-stream") || looksLikeSSE(data) {
+            return try result(fromSSE: data)
+        }
+        return try result(fromJSON: data)
+    }
+
+    static func looksLikeSSE(_ data: Data) -> Bool {
+        let prefix = String(decoding: data.prefix(48), as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return prefix.hasPrefix("event:") || prefix.hasPrefix("data:") || prefix.hasPrefix("id:")
+    }
+
+    static func result(fromJSON data: Data) throws -> Data {
+        let object: [String: Any]
+        do {
+            guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw MCPConnectionError("The MCP server returned invalid JSON.")
+            }
+            object = parsed
+        } catch let error as MCPConnectionError {
+            throw error
+        } catch {
+            throw MCPConnectionError("The MCP server returned invalid JSON.")
+        }
+        if let error = object["error"] as? [String: Any] {
+            throw MCPConnectionError(error["message"] as? String ?? "The MCP server returned an error.")
+        }
+        let result = object["result"] ?? [:]
+        return try JSONSerialization.data(withJSONObject: result)
+    }
+
+    static func result(fromSSE data: Data) throws -> Data {
+        let payloads = ssePayloads(in: String(decoding: data, as: UTF8.self))
+        for payload in payloads.reversed() {
+            if let encoded = payload.data(using: .utf8),
+               (try? JSONSerialization.jsonObject(with: encoded)) is [String: Any] {
+                return try result(fromJSON: encoded)
+            }
+        }
+        throw MCPConnectionError("The MCP server sent an empty stream.")
+    }
+
+    static func ssePayloads(in text: String) -> [String] {
+        var payloads: [String] = []
+        var current: [String] = []
+        for line in text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                let payload = current.joined(separator: "\n")
+                if !payload.isEmpty { payloads.append(payload) }
+                current = []
+                continue
+            }
+            if trimmed.hasPrefix("data:") {
+                current.append(trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces))
+            }
+        }
+        let trailing = current.joined(separator: "\n")
+        if !trailing.isEmpty { payloads.append(trailing) }
+        return payloads
+    }
+
+    static func httpError(status: Int, body: String) -> String {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if status == 404, trimmed.lowercased().contains("session not found") {
+            return "Session not found"
+        }
+        if status == 401 || status == 403 {
+            return "Authentication failed (\(status)). Check the connection headers."
+        }
+        if !trimmed.isEmpty {
+            return ChatTrace.clip(trimmed, 240)
+        }
+        return "The MCP server returned \(status)."
+    }
+}
+
 actor MCPHTTPSession: MCPSessioning {
     private var url: URL
     private var headers: [String: String]
     private var sessionID: String?
     private var nextID = 1
     private let session: URLSession
+    private let streamSession: URLSession
+    private var listenTask: Task<Void, Never>?
     private var closed = false
 
     static func open(_ connection: MCPResolvedConnection) async throws -> MCPHTTPSession {
@@ -259,6 +362,10 @@ actor MCPHTTPSession: MCPSessioning {
         configuration.timeoutIntervalForRequest = 60
         configuration.timeoutIntervalForResource = 120
         self.session = URLSession(configuration: configuration)
+        let stream = URLSessionConfiguration.ephemeral
+        stream.timeoutIntervalForRequest = 3600
+        stream.timeoutIntervalForResource = 86_400
+        self.streamSession = URLSession(configuration: stream)
     }
 
     func listTools() async throws -> [MCPDiscoveredTool] {
@@ -271,11 +378,15 @@ actor MCPHTTPSession: MCPSessioning {
 
     func close() async {
         closed = true
+        listenTask?.cancel()
+        listenTask = nil
         session.invalidateAndCancel()
+        streamSession.invalidateAndCancel()
     }
 
     private func initialize() async throws {
         try await MCPProtocol.initialize(send: request, notify: notify, clientName: "membrae-app")
+        startListening()
     }
 
     private func request(_ method: String, params: [String: Any]) async throws -> Data {
@@ -310,65 +421,113 @@ actor MCPHTTPSession: MCPSessioning {
         request.httpMethod = "POST"
         request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applySession(&request)
+        request.httpBody = try JSONSerialization.data(withJSONObject: message)
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse {
+            rememberSession(http)
+            if !(200...299).contains(http.statusCode) {
+                throw MCPConnectionError(MCPHTTPCodec.httpError(status: http.statusCode, body: String(decoding: data, as: UTF8.self)))
+            }
+            if data.isEmpty {
+                if message["method"] == nil {
+                    return Data("{}".utf8)
+                }
+                throw MCPConnectionError("The MCP server sent an empty response.")
+            }
+            return try MCPHTTPCodec.result(
+                fromBody: data,
+                contentType: http.value(forHTTPHeaderField: "Content-Type") ?? ""
+            )
+        }
+        return try MCPHTTPCodec.result(fromBody: data, contentType: "")
+    }
+
+    private func applySession(_ request: inout URLRequest) {
         if let sessionID, !sessionID.isEmpty {
             request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
         }
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
         }
-        request.httpBody = try JSONSerialization.data(withJSONObject: message)
-        let (data, response) = try await session.data(for: request)
+    }
+
+    private func rememberSession(_ http: HTTPURLResponse) {
+        if let incoming = http.value(forHTTPHeaderField: "Mcp-Session-Id"), !incoming.isEmpty {
+            sessionID = incoming
+        }
+    }
+
+    private func startListening() {
+        guard sessionID != nil else { return }
+        listenTask?.cancel()
+        listenTask = Task { [weak self] in
+            await self?.listenForServerMessages()
+        }
+    }
+
+    private func listenForServerMessages() async {
+        while !closed && !Task.isCancelled {
+            do {
+                let retry = try await openEventStream()
+                if !retry { return }
+            } catch is CancellationError {
+                return
+            } catch {
+                if closed || Task.isCancelled { return }
+                ChatTrace.event("mcp-http listen \(ChatTrace.clip(error.localizedDescription, 160))")
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    private func openEventStream() async throws -> Bool {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        applySession(&request)
+        let (bytes, response) = try await streamSession.bytes(for: request)
         if let http = response as? HTTPURLResponse {
-            if let incoming = http.value(forHTTPHeaderField: "Mcp-Session-Id"), !incoming.isEmpty {
-                sessionID = incoming
+            rememberSession(http)
+            if (400...499).contains(http.statusCode), http.statusCode != 408 {
+                ChatTrace.event("mcp-http listen unsupported \(http.statusCode)")
+                return false
             }
             if !(200...299).contains(http.statusCode) {
-                let text = String(decoding: data, as: UTF8.self)
-                throw MCPConnectionError(Self.httpError(status: http.statusCode, body: text))
-            }
-            let contentType = http.value(forHTTPHeaderField: "Content-Type") ?? ""
-            if contentType.contains("text/event-stream") {
-                return try Self.result(fromSSE: data)
+                throw MCPConnectionError(MCPHTTPCodec.httpError(status: http.statusCode, body: "GET \(http.statusCode)"))
             }
         }
-        return try Self.result(fromJSON: data)
-    }
-
-    private static func result(fromJSON data: Data) throws -> Data {
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw MCPConnectionError("The MCP server returned invalid JSON.")
-        }
-        if let error = object["error"] as? [String: Any] {
-            throw MCPConnectionError(error["message"] as? String ?? "The MCP server returned an error.")
-        }
-        let result = object["result"] ?? [:]
-        return try JSONSerialization.data(withJSONObject: result)
-    }
-
-    private static func result(fromSSE data: Data) throws -> Data {
-        let text = String(decoding: data, as: UTF8.self)
-        var payload = ""
-        for line in text.split(whereSeparator: \.isNewline) {
+        var current: [String] = []
+        for try await line in bytes.lines {
+            if Task.isCancelled || closed { return false }
             let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                await handleServerEvent(current.joined(separator: "\n"))
+                current = []
+                continue
+            }
             if trimmed.hasPrefix("data:") {
-                let value = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
-                if !value.isEmpty { payload = value }
+                current.append(trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces))
             }
         }
-        guard let encoded = payload.data(using: .utf8) else {
-            throw MCPConnectionError("The MCP server sent an empty stream.")
+        if !current.isEmpty {
+            await handleServerEvent(current.joined(separator: "\n"))
         }
-        return try result(fromJSON: encoded)
+        return true
     }
 
-    private static func httpError(status: Int, body: String) -> String {
-        if status == 401 || status == 403 {
-            return "Authentication failed (\(status)). Check the connection headers."
+    private func handleServerEvent(_ payload: String) async {
+        guard let data = payload.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return }
+        let method = object["method"] as? String ?? ""
+        if method == "ping" || method.hasSuffix("/ping"), let id = object["id"] {
+            _ = try? await post([
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": [:] as [String: Any]
+            ])
         }
-        if !body.isEmpty {
-            return ChatTrace.clip(body, 240)
-        }
-        return "The MCP server returned \(status)."
     }
 }
 

@@ -8,19 +8,38 @@ enum TagStore {
     }
 
     static func existing(named raw: String, in context: ModelContext) -> Tag? {
-        let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = collisionKey(raw)
         guard !key.isEmpty else { return nil }
-        return all(in: context).first { $0.name.caseInsensitiveCompare(key) == .orderedSame }
+        return all(in: context).first { collisionKey($0.name) == key }
     }
 
-    static func create(named raw: String, in context: ModelContext) -> Tag? {
+    static func create(named raw: String, color: TagSwatch? = nil, in context: ModelContext) -> Tag? {
         let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
         if let existing = existing(named: name, in: context) { return existing }
-        let tag = Tag(name: name)
+        let tag = Tag(name: name, color: color ?? TagSwatch.nextUnused(among: all(in: context)))
         context.insert(tag)
-        try? context.save()
+        persist(context)
         return tag
+    }
+
+    static func setColor(_ tag: Tag, to swatch: TagSwatch, in context: ModelContext) {
+        tag.swatch = swatch
+        persist(context)
+    }
+
+    static func assign(_ tag: Tag, to kind: TaggableKind, id: UUID, in context: ModelContext) throws {
+        try mutate(kind, id: id, in: context) { tags in
+            if !tags.contains(where: { $0.id == tag.id }) {
+                tags.append(tag)
+            }
+        }
+    }
+
+    static func remove(_ tag: Tag, from kind: TaggableKind, id: UUID, in context: ModelContext) throws {
+        try mutate(kind, id: id, in: context) { tags in
+            tags.removeAll { $0.id == tag.id }
+        }
     }
 
     static func rename(_ tag: Tag, to raw: String, in context: ModelContext) -> Bool {
@@ -32,10 +51,137 @@ enum TagStore {
         return true
     }
 
+    static func merge(_ source: Tag, into survivor: Tag, in context: ModelContext) {
+        guard source.id != survivor.id else { return }
+        reassign(Array(source.threads), onto: survivor, tags: \.tags)
+        reassign(Array(source.notes), onto: survivor, tags: \.tags)
+        reassign(Array(source.decisions), onto: survivor, tags: \.tags)
+        reassign(Array(source.conversations), onto: survivor, tags: \.tags)
+        reassign(Array(source.agendaItems), onto: survivor, tags: \.tags)
+        context.delete(source)
+        try? context.save()
+    }
+
+    @discardableResult
+    static func mergeDuplicates(in context: ModelContext) -> Int {
+        let groups = Dictionary(grouping: all(in: context), by: { collisionKey($0.name) })
+        var merged = 0
+        for (key, tags) in groups where !key.isEmpty && tags.count > 1 {
+            let ordered = tags.sorted(by: preferSurvivor)
+            let survivor = ordered[0]
+            for source in ordered.dropFirst() {
+                reassign(Array(source.threads), onto: survivor, tags: \.tags)
+                reassign(Array(source.notes), onto: survivor, tags: \.tags)
+                reassign(Array(source.decisions), onto: survivor, tags: \.tags)
+                reassign(Array(source.conversations), onto: survivor, tags: \.tags)
+                reassign(Array(source.agendaItems), onto: survivor, tags: \.tags)
+                context.delete(source)
+                merged += 1
+            }
+        }
+        if merged > 0 {
+            try? context.save()
+        }
+        return merged
+    }
+
     static func delete(_ tag: Tag, in context: ModelContext) {
         context.delete(tag)
         try? context.save()
     }
+
+    private static func collisionKey(_ raw: String) -> String {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func preferSurvivor(_ a: Tag, _ b: Tag) -> Bool {
+        if a.createdAt != b.createdAt { return a.createdAt < b.createdAt }
+        return a.id.uuidString < b.id.uuidString
+    }
+
+    private static func mutate(
+        _ kind: TaggableKind,
+        id: UUID,
+        in context: ModelContext,
+        _ change: (inout [Tag]) -> Void
+    ) throws {
+        switch kind {
+        case .note:
+            guard let note = try context.fetch(FetchDescriptor<Note>(predicate: #Predicate { $0.id == id })).first else {
+                throw TagStoreError.missing("No note with id \(id.uuidString).")
+            }
+            var tags = note.tags
+            change(&tags)
+            note.tags = tags
+            note.updatedAt = .now
+            note.project?.touch()
+        case .track:
+            guard let thread = try context.fetch(FetchDescriptor<ProjectThread>(predicate: #Predicate { $0.id == id })).first else {
+                throw TagStoreError.missing("No track with id \(id.uuidString).")
+            }
+            var tags = thread.tags
+            change(&tags)
+            thread.tags = tags
+            thread.updatedAt = .now
+            thread.project?.touch()
+        case .decision:
+            guard let decision = try context.fetch(FetchDescriptor<Decision>(predicate: #Predicate { $0.id == id })).first else {
+                throw TagStoreError.missing("No decision with id \(id.uuidString).")
+            }
+            var tags = decision.tags
+            change(&tags)
+            decision.tags = tags
+            decision.project?.touch()
+        case .conversation:
+            guard let conversation = try context.fetch(FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == id })).first else {
+                throw TagStoreError.missing("No chat with id \(id.uuidString).")
+            }
+            var tags = conversation.tags
+            change(&tags)
+            conversation.tags = tags
+            conversation.updatedAt = .now
+            conversation.project?.touch()
+        case .task:
+            guard let item = try context.fetch(FetchDescriptor<AgendaItem>(predicate: #Predicate { $0.id == id })).first else {
+                throw TagStoreError.missing("No task with id \(id.uuidString).")
+            }
+            guard item.kind == .task else {
+                throw TagStoreError.missing("That id is not a Membrae task.")
+            }
+            var tags = item.tags
+            change(&tags)
+            AssociationService.apply(tags: tags, to: item)
+        }
+        persist(context)
+    }
+
+    static func persist(_ context: ModelContext) {
+        do {
+            try context.save()
+        } catch {
+            try? context.save()
+        }
+    }
+
+    private static func reassign<Object>(
+        _ objects: [Object],
+        onto survivor: Tag,
+        tags: ReferenceWritableKeyPath<Object, [Tag]>
+    ) {
+        for object in objects {
+            var next = object[keyPath: tags]
+            if !next.contains(where: { $0.id == survivor.id }) {
+                next.append(survivor)
+                object[keyPath: tags] = next
+            }
+        }
+    }
+}
+
+struct TagStoreError: LocalizedError {
+    var message: String
+    static func missing(_ message: String) -> TagStoreError { TagStoreError(message: message) }
+    var errorDescription: String? { message }
 }
 
 enum AgendaStore {

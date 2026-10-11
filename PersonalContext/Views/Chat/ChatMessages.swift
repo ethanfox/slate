@@ -1,3 +1,4 @@
+import AppKit
 import SwiftData
 import SwiftUI
 
@@ -176,6 +177,7 @@ private struct WorkAccordion: View {
     private var extraToolCount: Int { max(tools.count - 1, 0) }
     private var pillTitle: String? {
         guard let currentTool else { return nil }
+        if currentTool.pageURL != nil { return currentTool.displayTitle }
         if isGenerating {
             return ChatToolActivity.title(for: currentTool.name, status: .running)
         }
@@ -239,8 +241,8 @@ private struct WorkAccordion: View {
 
     private func currentToolPill(_ tool: ChatToolActivity) -> some View {
         HStack(spacing: 6) {
-            ChatToolMark(symbol: tool.symbol)
-            Text(pillTitle ?? tool.title)
+            ChatToolMark(symbol: tool.symbol, pageURL: tool.pageURL)
+            Text(pillTitle ?? tool.displayTitle)
                 .font(CraftFont.body)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -303,7 +305,7 @@ private struct WorkAccordion: View {
     }
 
     private func pillLabel(for tool: ChatToolActivity) -> String {
-        let title = pillTitle ?? tool.title
+        let title = pillTitle ?? tool.displayTitle
         if extraToolCount == 0 { return title }
         return "\(title), \(extraToolCount) more"
     }
@@ -369,20 +371,33 @@ private struct ChatToolRow: View {
         tool.destination(from: sources)
     }
 
+    private var titleLinked: Bool {
+        destination != nil && !tool.showsDetail
+    }
+
+    private var rowLabel: String {
+        if let url = tool.pageURL {
+            return "\(tool.title), \(ChatToolActivity.compactPageURL(url))"
+        }
+        return tool.showsDetail ? "\(tool.title). \(tool.detail)" : tool.title
+    }
+
     private var row: some View {
         HStack(alignment: .top, spacing: 8) {
-            ChatToolMark(symbol: tool.symbol)
+            ChatToolMark(symbol: tool.symbol, pageURL: tool.pageURL)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(tool.title)
+                    Text(tool.displayTitle)
                         .font(CraftFont.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(titleLinked && hovering ? .primary : .secondary)
+                        .underline(titleLinked && hovering)
+                        .lineLimit(1)
                     if tool.status == .running {
                         ProgressView()
                             .controlSize(.small)
                     }
                 }
-                if !tool.detail.isEmpty {
+                if tool.showsDetail {
                     Text(tool.detail)
                         .font(CraftFont.caption)
                         .foregroundStyle(destination == nil ? .tertiary : hovering ? .primary : .secondary)
@@ -393,26 +408,41 @@ private struct ChatToolRow: View {
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(tool.detail.isEmpty ? tool.title : "\(tool.title). \(tool.detail)")
+        .accessibilityLabel(rowLabel)
     }
 }
 
 private struct ChatToolMark: View {
     var symbol: String
+    var pageURL: URL? = nil
+    @State private var favicon: NSImage?
 
     var body: some View {
-        if symbol == "chevron.left.forwardslash.chevron.right" {
-            Text("C")
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
-                .frame(width: 16, height: 16)
-                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("Cursor")
-        } else {
-            Image(systemName: symbol)
-                .font(CraftFont.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 16, height: 16)
+        Group {
+            if let favicon {
+                Image(nsImage: favicon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 16, height: 16)
+                    .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+            } else if symbol == "chevron.left.forwardslash.chevron.right" {
+                Text("C")
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .frame(width: 16, height: 16)
+                    .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Cursor")
+            } else {
+                Image(systemName: symbol)
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16, height: 16)
+            }
+        }
+        .task(id: pageURL) {
+            favicon = nil
+            guard let pageURL else { return }
+            favicon = await FaviconStore.shared.image(for: pageURL)
         }
     }
 }

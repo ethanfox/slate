@@ -11,7 +11,7 @@ struct AgendaMarks: View {
                     Label(project.displayName, systemImage: project.symbol.isEmpty ? "square.stack" : project.symbol)
                 }
                 ForEach(item.tags.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }) { tag in
-                    Label(tag.displayName, systemImage: tag.symbol.isEmpty ? "tag" : tag.symbol)
+                    TagChip(tag: tag, size: .compact)
                 }
                 ForEach(item.liveTracks, id: \.id) { thread in
                     Label(thread.title.isEmpty ? "Untitled" : thread.title, systemImage: thread.kind.symbol)

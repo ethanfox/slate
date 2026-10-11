@@ -698,6 +698,98 @@ enum Tools {
         },
 
         Tool(
+            name: "list_tags",
+            description: "List the global tag vocabulary. Tags are sparse cross-cutting labels, not projects, status, or relationships. Projects do not receive tags.",
+            properties: [:],
+            required: [],
+            readOnly: true
+        ) { _, context in
+            TagStore.all(in: context).map(JSONShape.tag)
+        },
+        Tool(
+            name: "create_tag",
+            description: "Create a global tag with a name and color. Names are unique case-insensitively; a colliding name returns the existing tag. Color is one of: slate, terracotta, ochre, moss, sea, indigo, plum. Creating a tag does not assign it.",
+            properties: [
+                "name": text("Tag name."),
+                "color": text("Palette color: slate, terracotta, ochre, moss, sea, indigo, plum.")
+            ],
+            required: ["name"],
+            readOnly: false
+        ) { args, context in
+            let name = try args.required("name")
+            let color = try TagTools.color(args.string("color"))
+            guard let tag = TagStore.create(named: name, color: color, in: context) else {
+                throw ToolError("name is required.")
+            }
+            return JSONShape.tag(tag)
+        },
+        Tool(
+            name: "update_tag",
+            description: "Change a tag’s name or color. Renaming onto an existing name merges into that tag and keeps every assignment.",
+            properties: [
+                "tag_id": text("Tag id."),
+                "name": text("New name."),
+                "color": text("Palette color: slate, terracotta, ochre, moss, sea, indigo, plum.")
+            ],
+            required: ["tag_id"],
+            readOnly: false
+        ) { args, context in
+            let tag = try Lookup.tag(try args.uuid("tag_id"), in: context)
+            if let name = args.string("name") {
+                if let other = TagStore.existing(named: name, in: context), other.id != tag.id {
+                    TagStore.merge(tag, into: other, in: context)
+                    if let colorRaw = args.string("color") {
+                        other.swatch = try TagTools.requireColor(colorRaw)
+                    }
+                    return JSONShape.tag(other)
+                }
+                guard TagStore.rename(tag, to: name, in: context) else {
+                    throw ToolError("name is required.")
+                }
+            }
+            if let colorRaw = args.string("color") {
+                tag.swatch = try TagTools.requireColor(colorRaw)
+            }
+            return JSONShape.tag(tag)
+        },
+        Tool(
+            name: "assign_tag",
+            description: "Assign a tag to a note, track, decision, conversation, or task. Does not assign a project. Projects cannot be tagged.",
+            properties: [
+                "tag_id": text("Tag id from list_tags."),
+                "record_type": options(TaggableKind.self, "Kind of record to tag."),
+                "record_id": text("Id of the record.")
+            ],
+            required: ["tag_id", "record_type", "record_id"],
+            readOnly: false
+        ) { args, context in
+            let tag = try Lookup.tag(try args.uuid("tag_id"), in: context)
+            guard let kind = try args.choice("record_type", as: TaggableKind.self) else {
+                throw ToolError("record_type is required.")
+            }
+            try TagStore.assign(tag, to: kind, id: try args.uuid("record_id"), in: context)
+            return JSONShape.tag(tag)
+        },
+        Tool(
+            name: "remove_tag",
+            description: "Remove a tag from a note, track, decision, conversation, or task.",
+            properties: [
+                "tag_id": text("Tag id."),
+                "record_type": options(TaggableKind.self, "Kind of record."),
+                "record_id": text("Id of the record.")
+            ],
+            required: ["tag_id", "record_type", "record_id"],
+            readOnly: false
+        ) { args, context in
+            let tag = try Lookup.tag(try args.uuid("tag_id"), in: context)
+            guard let kind = try args.choice("record_type", as: TaggableKind.self) else {
+                throw ToolError("record_type is required.")
+            }
+            try TagStore.remove(tag, from: kind, id: try args.uuid("record_id"), in: context)
+            return JSONShape.tag(tag)
+        },
+
+        Tool(
             name: "mark_for_deletion",
             description: "Propose deleting a note, track, decision, or chat. Agents cannot delete. The user sees the mark and can Keep or Delete. Reason is required. Optionally link a replacement in the same project. Calling again updates the reason and replacement.",
             properties: [
@@ -935,6 +1027,21 @@ enum TaskMutations {
     }
 }
 
+enum TagTools {
+    static func color(_ raw: String?) throws -> TagSwatch? {
+        guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return try requireColor(raw)
+    }
+
+    static func requireColor(_ raw: String) throws -> TagSwatch {
+        guard let parsed = TagSwatch.parse(raw) else {
+            let allowed = TagSwatch.allCases.map(\.rawValue).joined(separator: ", ")
+            throw ToolError("color must be one of: \(allowed).")
+        }
+        return parsed
+    }
+}
+
 enum Lookup {
     static func project(_ id: UUID, in context: ModelContext) throws -> Project {
         guard let found = try context.fetch(FetchDescriptor<Project>(predicate: #Predicate { $0.id == id })).first else {
@@ -996,6 +1103,13 @@ enum Lookup {
     static func conversation(_ id: UUID, in context: ModelContext) throws -> Conversation {
         guard let found = try context.fetch(FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == id })).first else {
             throw ToolError("No chat with id \(id.uuidString).")
+        }
+        return found
+    }
+
+    static func tag(_ id: UUID, in context: ModelContext) throws -> Tag {
+        guard let found = try context.fetch(FetchDescriptor<Tag>(predicate: #Predicate { $0.id == id })).first else {
+            throw ToolError("No tag with id \(id.uuidString).")
         }
         return found
     }
@@ -1062,6 +1176,27 @@ enum Lookup {
 enum JSONShape {
     private static let iso = ISO8601DateFormatter()
 
+    static func tag(_ tag: Tag) -> [String: Any] {
+        [
+            "id": tag.id.uuidString,
+            "name": tag.displayName,
+            "color": tag.swatch.rawValue,
+            "counts": [
+                "tracks": tag.threads.count,
+                "notes": tag.notes.count,
+                "decisions": tag.decisions.count,
+                "conversations": tag.conversations.count,
+                "tasks": tag.agendaItems.filter { $0.kind == .task }.count
+            ]
+        ]
+    }
+
+    static func tags(_ tags: [Tag]) -> [[String: Any]] {
+        tags
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            .map { ["id": $0.id.uuidString, "name": $0.displayName, "color": $0.swatch.rawValue] }
+    }
+
     static func project(_ project: Project) -> [String: Any] {
         var shape: [String: Any] = [
             "id": project.id.uuidString,
@@ -1124,7 +1259,8 @@ enum JSONShape {
                     "title": $0.displayTitle,
                     "project_name": $0.project?.name ?? ""
                 ]
-            }
+            },
+            "tags": tags(item.tags)
         ]
         if full {
             shape["blocked_by_ids"] = item.blockerLinks.compactMap { $0.blockingTask?.id.uuidString }
@@ -1155,7 +1291,8 @@ enum JSONShape {
             "status": decision.status.rawValue,
             "superseded_by_id": decision.supersededByID?.uuidString ?? "",
             "track_id": decision.thread?.id.uuidString ?? "",
-            "created_at": iso.string(from: decision.createdAt)
+            "created_at": iso.string(from: decision.createdAt),
+            "tags": tags(decision.tags)
         ]
         attachMark(&shape, id: decision.id, project: decision.project)
         return shape
@@ -1170,7 +1307,8 @@ enum JSONShape {
             "status": thread.status.rawValue,
             "summary": thread.summary,
             "parent_id": thread.parent?.id.uuidString ?? "",
-            "updated_at": iso.string(from: thread.updatedAt)
+            "updated_at": iso.string(from: thread.updatedAt),
+            "tags": tags(thread.tags)
         ]
         if full {
             shape["body"] = thread.body
@@ -1195,7 +1333,8 @@ enum JSONShape {
             "title": note.displayTitle,
             "source": note.source,
             "track_id": note.thread?.id.uuidString ?? "",
-            "updated_at": iso.string(from: note.updatedAt)
+            "updated_at": iso.string(from: note.updatedAt),
+            "tags": tags(note.tags)
         ]
         if full {
             shape["content"] = note.content

@@ -459,6 +459,7 @@ extension RunToolPolicy {
         "list_decisions", "get_decision", "create_decision", "update_decision",
         "list_tracks", "get_track", "create_track", "update_track",
         "list_notes", "get_note", "create_note", "update_note",
+        "list_tags", "create_tag", "update_tag", "assign_tag", "remove_tag",
         "list_runs", "get_run",
         "list_code_references", "get_code_reference_entry"
     ]

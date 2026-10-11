@@ -8,9 +8,11 @@ struct SettingsTagsPage: View {
     @Query(sort: \Note.updatedAt, order: .reverse) private var notes: [Note]
     @Query(sort: \ProjectThread.updatedAt, order: .reverse) private var tracks: [ProjectThread]
     @State private var newName = ""
+    @State private var newColor: TagSwatch = .slate
     @State private var renameID: UUID?
     @State private var renameText = ""
     @State private var pendingDelete: Tag?
+    @State private var pendingMerge: PendingMerge?
 
     var body: some View {
         SettingsPage {
@@ -30,6 +32,7 @@ struct SettingsTagsPage: View {
                 SettingsRow {
                     TextField("New tag", text: $newName)
                         .textFieldStyle(.plain)
+                    TagColorWell(selection: newColor) { newColor = $0 }
                     Button("Add") { add() }
                         .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -49,6 +52,22 @@ struct SettingsTagsPage: View {
             Button("Save") { saveRename() }
             Button("Cancel", role: .cancel) { renameID = nil }
         }
+        .alert("Merge these tags?", isPresented: Binding(get: { pendingMerge != nil }, set: { if !$0 { pendingMerge = nil } })) {
+            Button("Merge") {
+                if let pending = pendingMerge {
+                    TagStore.merge(pending.source, into: pending.survivor, in: context)
+                }
+                pendingMerge = nil
+            }
+            Button("Cancel", role: .cancel) { pendingMerge = nil }
+        } message: {
+            if let pending = pendingMerge {
+                Text("“\(pending.survivor.displayName)” already exists. Everything on this tag will use that one.")
+            }
+        }
+        .onAppear {
+            newColor = TagSwatch.nextUnused(among: tags)
+        }
         .alert("Delete this tag?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })) {
             Button("Delete", role: .destructive) {
                 if let tag = pendingDelete { TagStore.delete(tag, in: context) }
@@ -66,10 +85,8 @@ struct SettingsTagsPage: View {
 
     private func tagRow(_ tag: Tag) -> some View {
         SettingsRow {
-            Image(systemName: tag.symbol)
-                .foregroundStyle(.secondary)
-                .frame(width: 22)
-            Text(tag.displayName)
+            TagChip(tag: tag)
+            TagColorWell(selection: tag.swatch) { TagStore.setColor(tag, to: $0, in: context) }
             Spacer(minLength: 16)
             Button("Rename") {
                 renameID = tag.id
@@ -126,15 +143,23 @@ struct SettingsTagsPage: View {
     }
 
     private func add() {
-        _ = TagStore.create(named: newName, in: context)
+        _ = TagStore.create(named: newName, color: newColor, in: context)
         newName = ""
+        newColor = TagSwatch.nextUnused(among: TagStore.all(in: context))
     }
 
     private func saveRename() {
         guard let id = renameID, let tag = tags.first(where: { $0.id == id }) else { return }
-        if !TagStore.rename(tag, to: renameText, in: context) {
-            app.flash("A tag with that name already exists.")
+        if let other = TagStore.existing(named: renameText, in: context), other.id != tag.id {
+            pendingMerge = PendingMerge(source: tag, survivor: other)
+        } else {
+            _ = TagStore.rename(tag, to: renameText, in: context)
         }
         renameID = nil
     }
+}
+
+private struct PendingMerge {
+    var source: Tag
+    var survivor: Tag
 }

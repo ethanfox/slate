@@ -263,6 +263,76 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(notes.first?["id"] as? String, seed.oauthNote.id.uuidString)
     }
 
+    func testTagToolsCreateAssignAndRemove() throws {
+        let seed = HarborEvalFixture.seed(in: context)
+        try context.save()
+
+        let created = try object(Tools.call(
+            "create_tag",
+            arguments: ["name": "Dock", "color": "terracotta"],
+            container: container
+        ))
+        XCTAssertEqual(created["name"] as? String, "Dock")
+        XCTAssertEqual(created["color"] as? String, "terracotta")
+        let tagID = try XCTUnwrap(created["id"] as? String)
+
+        let listed = try array(Tools.call("list_tags", arguments: [:], container: container))
+        XCTAssertEqual(listed.count, 1)
+        XCTAssertEqual(listed.first?["id"] as? String, tagID)
+
+        _ = try object(Tools.call(
+            "assign_tag",
+            arguments: [
+                "tag_id": tagID,
+                "record_type": "note",
+                "record_id": seed.oauthNote.id.uuidString
+            ],
+            container: container
+        ))
+        let note = try object(Tools.call("get_note", arguments: ["note_id": seed.oauthNote.id.uuidString], container: container))
+        let tags = try XCTUnwrap(note["tags"] as? [[String: Any]])
+        XCTAssertEqual(tags.first?["name"] as? String, "Dock")
+
+        _ = try object(Tools.call(
+            "remove_tag",
+            arguments: [
+                "tag_id": tagID,
+                "record_type": "note",
+                "record_id": seed.oauthNote.id.uuidString
+            ],
+            container: container
+        ))
+        let cleared = try object(Tools.call("get_note", arguments: ["note_id": seed.oauthNote.id.uuidString], container: container))
+        XCTAssertEqual((cleared["tags"] as? [[String: Any]])?.count, 0)
+    }
+
+    func testCreateTagRejectsUnknownColor() throws {
+        let result = Tools.call(
+            "create_tag",
+            arguments: ["name": "Dock", "color": "neon"],
+            container: container
+        )
+        XCTAssertEqual(result["isError"] as? Bool, true)
+    }
+
+    func testUpdateTagMergesCollidingNames() throws {
+        let seed = HarborEvalFixture.seed(in: context)
+        let dock = try XCTUnwrap(TagStore.create(named: "Dock", color: .terracotta, in: context))
+        let marina = try XCTUnwrap(TagStore.create(named: "Marina", color: .sea, in: context))
+        seed.oauthNote.tags = [marina]
+        try context.save()
+
+        let body = try object(Tools.call(
+            "update_tag",
+            arguments: ["tag_id": marina.id.uuidString, "name": "dock"],
+            container: container
+        ))
+        XCTAssertEqual(body["id"] as? String, dock.id.uuidString)
+        let note = try object(Tools.call("get_note", arguments: ["note_id": seed.oauthNote.id.uuidString], container: container))
+        let tags = try XCTUnwrap(note["tags"] as? [[String: Any]])
+        XCTAssertEqual(tags.first?["id"] as? String, dock.id.uuidString)
+    }
+
     private func object(_ result: [String: Any]) throws -> [String: Any] {
         XCTAssertNil(result["isError"], result["content"].debugDescription)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text(in: result).utf8)) as? [String: Any])

@@ -560,7 +560,7 @@ struct CursorChatProvider: ChatProvider {
                             let toolID = event.id ?? UUID().uuidString
                             let toolName = event.name ?? "consult_code"
                             let brief = event.text ?? event.detail ?? ""
-                            emitTool(name: toolName, status: "running", id: toolID, detail: clip(brief, 80))
+                            emitTool(name: toolName, status: "running", id: toolID, detail: hostToolDetail(name: toolName, brief: brief))
                             await MainActor.run {
                                 bridge.debugLog.add("event host_tool \(toolName) \(ChatTrace.clip(brief, 80))")
                             }
@@ -595,7 +595,7 @@ struct CursorChatProvider: ChatProvider {
                                         ))
                                     }
                                 }
-                                emitTool(name: toolName, status: "completed", id: toolID, detail: clip(brief, 80))
+                                emitTool(name: toolName, status: "completed", id: toolID, detail: hostToolDetail(name: toolName, brief: brief, result: output))
                                 await MainActor.run { bridge.replyToHostTool(id: toolID, text: output) }
                             } catch {
                                 emitTool(
@@ -715,4 +715,13 @@ private func jsonObject(_ text: String) -> [String: Any] {
         return [:]
     }
     return object
+}
+
+private func hostToolDetail(name: String, brief: String, result: String? = nil) -> String {
+    var arguments = jsonObject(brief)
+    if arguments.isEmpty, URL(string: brief)?.scheme?.hasPrefix("http") == true {
+        arguments = ["url": brief]
+    }
+    let detail = ChatToolActivity.detail(for: name, arguments: arguments, result: result)
+    return detail.isEmpty ? clip(brief, 80) : detail
 }

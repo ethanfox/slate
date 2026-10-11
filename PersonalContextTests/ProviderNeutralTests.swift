@@ -730,6 +730,46 @@ final class ProviderNeutralTests: XCTestCase {
         )
     }
 
+    func testToolActivityNamesABrowserPage() {
+        XCTAssertEqual(ChatToolActivity.title(for: "browser_navigate", status: .running), "Opening a page")
+        XCTAssertEqual(
+            ChatToolActivity.detail(for: "browser_navigate", arguments: ["url": "https://docs.example.com/guide"]),
+            "https://docs.example.com/guide"
+        )
+        XCTAssertEqual(
+            ChatToolActivity.detail(
+                for: "browser_snapshot",
+                result: "Page URL: https://wiki.example.com/Home\nPage Title: Home"
+            ),
+            "https://wiki.example.com/Home"
+        )
+        let tool = ChatToolActivity(
+            id: "1",
+            name: "browser_navigate",
+            status: .succeeded,
+            detail: "https://www.docs.example.com/guide/"
+        )
+        XCTAssertEqual(tool.displayTitle, "docs.example.com/guide")
+        XCTAssertEqual(tool.pageURL?.host(), "www.docs.example.com")
+        XCTAssertEqual(tool.destination()?.kind, .url)
+    }
+
+    func testToolActivityNamesAWebSearchQuery() {
+        XCTAssertEqual(
+            ChatToolActivity.detail(for: "browser_search", arguments: ["query": "swift concurrency"]),
+            "swift concurrency"
+        )
+        let tool = ChatToolActivity(
+            id: "1",
+            name: "browser_search",
+            status: .succeeded,
+            detail: "swift concurrency"
+        )
+        XCTAssertNil(tool.pageURL)
+        XCTAssertEqual(tool.displayTitle, "Searched the web")
+        XCTAssertTrue(tool.showsDetail)
+    }
+
     func testToolActivityNamesALiveList() {
         XCTAssertEqual(ChatToolActivity.title(for: "list_tracks", status: .running), "Listing Tracks")
         XCTAssertEqual(ChatToolActivity.title(for: "list_tracks", status: .succeeded), "Listed Tracks")

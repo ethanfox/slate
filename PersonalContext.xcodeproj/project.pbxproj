@@ -132,6 +132,7 @@
 		628E38B59A9414F249425F2B /* EventKitAccessLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E58979D71F21F89355E97C7 /* EventKitAccessLine.swift */; };
 		64B08D66F58530B1E3F9FCDE /* WindowTabStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECC1D1E59D9D3C62BF5F531A /* WindowTabStrip.swift */; };
 		65722F53847A018B2E5A216B /* TagField.swift in Sources */ = {isa = PBXBuildFile; fileRef = E177D53D62F208568F2DF9CE /* TagField.swift */; };
+		B81C4F8D2E3A405162738B15 /* TagChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A81C4F8D2E3A405162738B14 /* TagChip.swift */; };
 		67A5B40080FF84F855A04995 /* DocumentPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7F5DDBFDDE9BF6067DE5CCC /* DocumentPage.swift */; };
 		67B0FD2834F5CD0EBE6277A4 /* WindowTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 509E6F9E705BA7F4A6F2184F /* WindowTab.swift */; };
 		6B79A71495D0CCAC66F0A0A4 /* ChatMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65DEA7985A36C0955B7C5DA /* ChatMessages.swift */; };
@@ -237,6 +238,7 @@
 		F7923FE98A551FFBCE7186A4 /* ProjectColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */; };
 		D15C010000000002 /* DecisionListLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15C010000000001 /* DecisionListLayout.swift */; };
 		D15C010000000004 /* DecisionListLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15C010000000003 /* DecisionListLayoutTests.swift */; };
+		D15C020000000002 /* TagStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15C020000000001 /* TagStoreTests.swift */; };
 		FA3EB0AB86C91248D9A40273 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5543E221A797F7A128F4D5B2 /* main.swift */; };
 		FCF956190420683B665BF2B1 /* SettingsOrbPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2F383ABB4798F3AF6233DD5 /* SettingsOrbPage.swift */; };
 		F11E5704B0000030 /* ImportKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000030 /* ImportKeyStore.swift */; };
@@ -463,6 +465,7 @@
 		B1DB0C0E1E914CB79B02C5BF /* ProjectColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectColumn.swift; sourceTree = "<group>"; };
 		D15C010000000001 /* DecisionListLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionListLayout.swift; sourceTree = "<group>"; };
 		D15C010000000003 /* DecisionListLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionListLayoutTests.swift; sourceTree = "<group>"; };
+		D15C020000000001 /* TagStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagStoreTests.swift; sourceTree = "<group>"; };
 		B530330434B899D87B7F9D1D /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 		B53F847FAC96205C323B63B7 /* SettingsCalendarPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCalendarPage.swift; sourceTree = "<group>"; };
 		B5FFBDB290AFF05316BF8B75 /* ModalDatePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalDatePicker.swift; sourceTree = "<group>"; };
@@ -487,6 +490,7 @@
 		DF040EA1BCECFFBD441F0F91 /* ChatGPTProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatGPTProvider.swift; sourceTree = "<group>"; };
 		DF0BEA4CDC6DFF8DC0FE081A /* MarkdownEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownEditor.swift; sourceTree = "<group>"; };
 		E0C540C9CE3A784CC7E9EBD1 /* Records.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Records.swift; sourceTree = "<group>"; };
+		A81C4F8D2E3A405162738B14 /* TagChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagChip.swift; sourceTree = "<group>"; };
 		E177D53D62F208568F2DF9CE /* TagField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagField.swift; sourceTree = "<group>"; };
 		E3D0C1F706C485B4A9186664 /* ThreadKindStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadKindStyle.swift; sourceTree = "<group>"; };
 		E40B615A4396A1424EA51062 /* FocusWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusWidget.swift; sourceTree = "<group>"; };
@@ -743,6 +747,7 @@
 				A91C3E7B4D2F80A16B5E4C39 /* ObjectFind.swift */,
 				C13E5A9D6F4102C38D706E5B /* ObjectFindBar.swift */,
 				85B462CAB65E38C9331F5F12 /* PropertyPill.swift */,
+				A81C4F8D2E3A405162738B14 /* TagChip.swift */,
 				E177D53D62F208568F2DF9CE /* TagField.swift */,
 				1129E66453242DE81FC7B81C /* ThreadBranch.swift */,
 				E3D0C1F706C485B4A9186664 /* ThreadKindStyle.swift */,
@@ -877,6 +882,7 @@
 			children = (
 				E35A7CBF816324E5AF92807D /* ObjectFindTests.swift */,
 				D15C010000000003 /* DecisionListLayoutTests.swift */,
+				D15C020000000001 /* TagStoreTests.swift */,
 				A7B1C2D3E4F5061728394A01 /* WindowTabTests.swift */,
 				3C8E1A2B4D5F60718293B4C5 /* MarkdownTableTests.swift */,
 				588C1D051000807F84657854 /* ProviderNeutralTests.swift */,
@@ -1126,6 +1132,7 @@
 			files = (
 				F46B8DC0927435F6B0A3918E /* ObjectFindTests.swift in Sources */,
 				D15C010000000004 /* DecisionListLayoutTests.swift in Sources */,
+				D15C020000000002 /* TagStoreTests.swift in Sources */,
 				A7B1C2D3E4F5061728394A02 /* WindowTabTests.swift in Sources */,
 				4D9F2B3C5E60718293A4C5D6 /* MarkdownTableTests.swift in Sources */,
 				CA068E7D29AD93EE8C1E9CD7 /* ProviderNeutralTests.swift in Sources */,
@@ -1332,6 +1339,7 @@
 				83B3538C787ACDDD267EF567 /* Store.swift in Sources */,
 				A11C0DE100000020 /* Tools.swift in Sources */,
 				5CEECB088156040C95489B64 /* SymbolPicker.swift in Sources */,
+				B81C4F8D2E3A405162738B15 /* TagChip.swift in Sources */,
 				65722F53847A018B2E5A216B /* TagField.swift in Sources */,
 				A0C059E2D2C3DD3EBD2AF605 /* TasksView.swift in Sources */,
 				4E2DA01EB53D623F3121BF60 /* TextFormat.swift in Sources */,

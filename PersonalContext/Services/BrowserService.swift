@@ -66,7 +66,7 @@ actor BrowserProcess {
             BrowserSupport.log("call \(name) cancelled ms=\(Self.ms(since: started))")
             throw CancellationError()
         } catch {
-            guard Self.isTransportError(error) else {
+            guard MCPTransportLoss.isLost(error) else {
                 BrowserSupport.log("call \(name) fail ms=\(Self.ms(since: started)) \(error.localizedDescription)")
                 throw error
             }
@@ -227,16 +227,6 @@ actor BrowserProcess {
         Int(Date().timeIntervalSince(start) * 1000)
     }
 
-    private static func isTransportError(_ error: Error) -> Bool {
-        let text = error.localizedDescription.lowercased()
-        return text.contains("disconnect")
-            || text.contains("not start")
-            || text.contains("couldn’t start")
-            || text.contains("couldn\'t start")
-            || text.contains("helper")
-            || text.contains("connection")
-            || text.contains("mcp server")
-    }
 }
 
 @MainActor

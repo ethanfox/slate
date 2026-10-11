@@ -20,7 +20,7 @@ struct ConversationChat: View {
     var body: some View {
         VStack(spacing: 0) {
             if project != nil, !compact {
-                ChatTitleBar(title: conversation.title, onStartRun: startRun)
+                ChatTitleBar(title: conversation.title, conversation: conversation, onStartRun: startRun)
             }
             if !compact, let mark = deletionMark {
                 DeletionBanner(mark: mark, onKeep: keepMark, onDelete: { confirmDelete = true })
@@ -64,6 +64,7 @@ struct ConversationChat: View {
 
 struct ChatTitleBar: View {
     var title: String
+    var conversation: Conversation? = nil
     var onStartRun: (() -> Void)? = nil
 
     private var displayTitle: String {
@@ -77,7 +78,15 @@ struct ChatTitleBar: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+            if let conversation {
+                TagField(tags: conversation.tags, size: .compact) {
+                    conversation.tags = $0
+                    conversation.updatedAt = .now
+                    conversation.project?.touch()
+                }
+            }
+            Spacer(minLength: 8)
             if let onStartRun {
                 Button("Start Run…", action: onStartRun)
                     .buttonStyle(.plain)

@@ -55,13 +55,17 @@ One Membrae Note can sit on many reminders, events, or tasks.
 
 Created and managed in Settings. Global, not per project. Same tag on a note in Project A and a track in Project B is the same tag.
 
-A tag is: name, optional color or symbol, stable id. Names are unique, case-insensitive.
+A tag is: name, color from the shared palette, optional symbol, stable id. Names are unique, case-insensitive.
+
+Use one reusable tag chip everywhere tags appear. Color belongs to the tag, not the assignment.
+
+Users and agents create tags and assign or remove them on notes, tracks, decisions, conversations, and tasks. Settings owns the vocabulary. Agent tools: list_tags, create_tag, update_tag, assign_tag, remove_tag. Same TagStore operations as the app.
 
 - Many tags per object.
 - Tags do not inherit down a track tree. Tagging a parent does not tag its children.
 - Tags do not assign a project.
 - Deleting a tag removes it from every object.
-- Rename keeps the id. Merge is a later Settings action if two names collide.
+- Rename keeps the id. If the new name collides, merge into the existing tag and keep every assignment. Store open also merges leftover duplicate names.
 - Create-on-tag is allowed. Creating a tag from an object adds it to the same Settings vocabulary.
 
 Taggable: tracks, notes, decisions, conversations, reminders, events, tasks.

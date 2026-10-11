@@ -102,6 +102,7 @@ enum BrowserSupport {
         [
             "PLAYWRIGHT_BROWSERS_PATH": browserPayloadPath,
             "PLAYWRIGHT_SKIP_BROWSER_GC": "1",
+            "PLAYWRIGHT_MCP_PING_TIMEOUT_MS": "0",
             "TMPDIR": temporary.path
         ]
     }

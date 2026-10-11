@@ -136,6 +136,7 @@ enum Store {
         if !configuration.isStoredInMemoryOnly {
             try migrateAgentRunColumns(at: configuration.url)
             try migrateCodeReferenceOwnership(at: configuration.url)
+            try migrateTagColumns(at: configuration.url)
         }
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = ModelContext(container)
@@ -144,6 +145,7 @@ enum Store {
         legacyBackfillIndexingMetadata(in: context)
         try backfillCodeReferenceOwnership(in: context)
         migrateProductNames(in: context)
+        TagStore.mergeDuplicates(in: context)
         try? FileStore.default(context: context).cleanup()
         return container
     }
@@ -156,6 +158,22 @@ enum Store {
     /// Existing stores created before indexing may lack these columns. Safe to
     /// call on every open: ADD COLUMN runs only when the name is missing, and a
     /// duplicate-column error is ignored.
+    static func migrateTagColumns(at url: URL) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        var peek: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &peek, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let peek else {
+            return
+        }
+        let columns = tableColumns(peek, table: "ZTAG")
+        sqlite3_close(peek)
+        guard !columns.isEmpty, !columns.contains("ZCOLORRAW") else { return }
+
+        var db: OpaquePointer?
+        guard sqlite3_open(url.path, &db) == SQLITE_OK, let db else { return }
+        defer { sqlite3_close(db) }
+        try execIgnoringDuplicateColumn(db, "ALTER TABLE ZTAG ADD COLUMN ZCOLORRAW VARCHAR DEFAULT ''")
+    }
+
     static func migrateAgentRunColumns(at url: URL) throws {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         var db: OpaquePointer?

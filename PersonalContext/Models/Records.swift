@@ -680,11 +680,101 @@ enum TaskDue {
     }
 }
 
+enum TagSwatch: String, CaseIterable, Identifiable, Hashable {
+    case slate
+    case terracotta
+    case ochre
+    case moss
+    case sea
+    case indigo
+    case plum
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .slate: "Slate"
+        case .terracotta: "Terracotta"
+        case .ochre: "Ochre"
+        case .moss: "Moss"
+        case .sea: "Sea"
+        case .indigo: "Indigo"
+        case .plum: "Plum"
+        }
+    }
+
+    var hex: String {
+        switch self {
+        case .slate: "6B6B6B"
+        case .terracotta: "C45C26"
+        case .ochre: "C4922A"
+        case .moss: "5A7A3A"
+        case .sea: "2F6F7A"
+        case .indigo: "3D4F8A"
+        case .plum: "7A3F6A"
+        }
+    }
+
+    var inkLightHex: String {
+        switch self {
+        case .slate: "3D3D3D"
+        case .terracotta: "8A3A12"
+        case .ochre: "7A5A10"
+        case .moss: "3A5224"
+        case .sea: "1A4A52"
+        case .indigo: "2A3660"
+        case .plum: "522044"
+        }
+    }
+
+    var inkDarkHex: String {
+        switch self {
+        case .slate: "C8C8C8"
+        case .terracotta: "F0B090"
+        case .ochre: "F0D080"
+        case .moss: "B5D090"
+        case .sea: "8FCDD4"
+        case .indigo: "A8B4E0"
+        case .plum: "E0A8D0"
+        }
+    }
+
+    static func parse(_ raw: String?) -> TagSwatch? {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        if trimmed.isEmpty { return nil }
+        if let named = TagSwatch(rawValue: trimmed) { return named }
+        let hex = trimmed.filter(\.isHexDigit)
+        return allCases.first { $0.hex.lowercased() == hex }
+    }
+
+    static func resolved(_ raw: String?, fallbackID: UUID? = nil) -> TagSwatch {
+        if let parsed = parse(raw) { return parsed }
+        guard let fallbackID else { return .slate }
+        let colors = Array(allCases)
+        let index = abs(fallbackID.uuidString.hashValue) % colors.count
+        return colors[index]
+    }
+
+    static func nextUnused(among tags: [Tag]) -> TagSwatch {
+        let used = Set(tags.map(\.swatch))
+        return allCases.first { !used.contains($0) } ?? .slate
+    }
+}
+
+enum TaggableKind: String, CaseIterable {
+    case note
+    case track
+    case decision
+    case conversation
+    case task
+}
+
 @Model
 final class Tag {
     var id: UUID
     var name: String
     var symbol: String
+    var colorRaw: String?
     var createdAt: Date
 
     var threads: [ProjectThread] = []
@@ -698,10 +788,16 @@ final class Tag {
         return trimmed.isEmpty ? "Untitled" : trimmed
     }
 
-    init(name: String, symbol: String = "tag") {
+    var swatch: TagSwatch {
+        get { TagSwatch.resolved(colorRaw, fallbackID: id) }
+        set { colorRaw = newValue.rawValue }
+    }
+
+    init(name: String, symbol: String = "tag", color: TagSwatch = .slate) {
         self.id = UUID()
         self.name = name
         self.symbol = symbol
+        self.colorRaw = color.rawValue
         self.createdAt = .now
     }
 }
