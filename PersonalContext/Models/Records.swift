@@ -627,10 +627,56 @@ enum TaskDue {
         calendar.startOfDay(for: date) <= calendar.startOfDay(for: now)
     }
 
+    static func isOverdue(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> Bool {
+        calendar.startOfDay(for: date) < calendar.startOfDay(for: now)
+    }
+
+    static func isDueToday(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> Bool {
+        calendar.isDate(date, inSameDayAs: now)
+    }
+
+    static func isUpcoming(_ date: Date, now: Date = .now, calendar: Calendar = .current, days: Int = 7) -> Bool {
+        let start = calendar.startOfDay(for: now)
+        guard let end = calendar.date(byAdding: .day, value: days, to: start) else { return false }
+        let day = calendar.startOfDay(for: date)
+        return day > start && day <= end
+    }
+
+    static func hasClockTime(_ date: Date, calendar: Calendar = .current) -> Bool {
+        let parts = calendar.dateComponents([.hour, .minute, .second], from: date)
+        return (parts.hour ?? 0) != 0 || (parts.minute ?? 0) != 0 || (parts.second ?? 0) != 0
+    }
+
     static func label(_ date: Date, calendar: Calendar = .current) -> String {
         if calendar.isDateInToday(date) { return "Due today" }
         if calendar.isDateInTomorrow(date) { return "Due tomorrow" }
         return "Due \(date.formatted(date: .abbreviated, time: .omitted))"
+    }
+
+    static func compact(
+        _ date: Date,
+        hideIfToday: Bool = false,
+        hasTime: Bool = false,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> String {
+        if isDueToday(date, now: now, calendar: calendar) {
+            if hasTime || hasClockTime(date, calendar: calendar) {
+                return date.formatted(date: .omitted, time: .shortened)
+            }
+            return hideIfToday ? "" : "Today"
+        }
+        if calendar.isDateInYesterday(date) { return "Yesterday" }
+        if calendar.isDateInTomorrow(date) { return "Tomorrow" }
+        if calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear) {
+            return date.formatted(.dateTime.weekday(.abbreviated))
+        }
+        return date.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    static func dayHeading(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
+        if calendar.isDateInTomorrow(date) { return "Tomorrow" }
+        return date.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
     }
 }
 

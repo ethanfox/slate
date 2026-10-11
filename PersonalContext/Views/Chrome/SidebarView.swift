@@ -141,10 +141,7 @@ struct SidebarView: View {
             guard let due = task.due else { return false }
             return TaskDue.isOutstanding(due)
         }.count
-        let reminders = app.eventKit.reminders.filter { reminder in
-            guard !reminder.isCompleted, let due = reminder.due else { return false }
-            return TaskDue.isOutstanding(due)
-        }.count
+        let reminders = app.eventKit.reminders.filter { ReminderItem.isAttention($0) }.count
         return tasks + reminders
     }
 }

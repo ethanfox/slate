@@ -59,7 +59,10 @@ struct SidebarRow: View {
             if badge > 0 {
                 Text("\(badge)")
                     .font(CraftFont.caption)
-                    .foregroundStyle(.tertiary)
+                    .fontWeight(.medium)
+                    .foregroundStyle(CraftColor.elevated)
+                    .frame(width: 18, height: 18)
+                    .background(Color.primary, in: Circle())
                     .accessibilityLabel("\(badge) due")
             }
             if showsPin {

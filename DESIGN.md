@@ -72,7 +72,7 @@ Rows (`SidebarRow`):
 - Selection / hover: continuous rounded rect, radius 8, `CraftColor.selection` or `CraftColor.hover`.
 - Icon: primary when selected, secondary when the window is active, tertiary when it is not. No tile behind the icon.
 - Pin: `pin.fill`, 9pt, tertiary, trailing edge. Not a badge.
-- **Tasks due count (locked exception):** the Tasks row may show a trailing count in that same slot, `CraftFont.caption`, tertiary, when there are incomplete reminders or Membrae tasks due today or earlier. Accessibility value: “3 due”. Do not badge any other row.
+- **Tasks due badge (locked exception):** the Tasks row may show a trailing numbered circle (18pt, primary fill, elevated caption) when there are incomplete Membrae tasks due today or earlier, or incomplete reminders that are due today, overdue, or flagged. Accessibility value: “3 due”. Do not badge any other row.
 - **Chats working spinner (locked exception):** when any conversation is generating, the Chats icon is a `ProgressView` in the same 18×18 slot. Idle icon stays `bubble.left.and.bubble.right`. This is not a badge. Reduce Motion uses a static `ellipsis` instead of the spinner. Accessibility value: “Working”.
 - **Runs working spinner (locked exception):** same as Chats, for any Run that is `queued` or `running`. Idle icon stays `play.circle`.
 - Plain buttons. Section labels are 13 semibold, secondary, 20 above / 4 below / 8 inset, no hit testing.

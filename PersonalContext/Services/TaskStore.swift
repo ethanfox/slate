@@ -294,3 +294,100 @@ enum TaskStore {
         try? context.save()
     }
 }
+
+enum TasksFilter: String, CaseIterable, Identifiable, Sendable {
+    case today
+    case upcoming
+    case inbox
+    case all
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .today: "Today"
+        case .upcoming: "Upcoming"
+        case .inbox: "Inbox"
+        case .all: "All"
+        }
+    }
+}
+
+struct TasksSection: Identifiable, Equatable {
+    var id: String
+    var title: String
+    var items: [AgendaItem]
+
+    static func == (lhs: TasksSection, rhs: TasksSection) -> Bool {
+        lhs.id == rhs.id && lhs.title == rhs.title && lhs.items.map(\.id) == rhs.items.map(\.id)
+    }
+}
+
+enum TasksLayout {
+    static func sections(
+        from tasks: [AgendaItem],
+        filter: TasksFilter,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [TasksSection] {
+        let open = tasks.filter { !$0.isCompleted }
+        switch filter {
+        case .today:
+            let overdue = open.filter { task in
+                guard let due = task.due else { return false }
+                return TaskDue.isOverdue(due, now: now, calendar: calendar)
+            }.sorted(by: TaskStore.boardSort)
+            let today = open.filter { task in
+                guard let due = task.due else { return false }
+                return TaskDue.isDueToday(due, now: now, calendar: calendar)
+            }.sorted(by: TaskStore.boardSort)
+            var result: [TasksSection] = []
+            if !overdue.isEmpty {
+                result.append(TasksSection(id: "overdue", title: "Overdue", items: overdue))
+            }
+            if !today.isEmpty {
+                result.append(TasksSection(id: "today", title: "Today", items: today))
+            }
+            return result
+
+        case .upcoming:
+            let upcoming = open.filter { task in
+                guard let due = task.due else { return false }
+                return TaskDue.isUpcoming(due, now: now, calendar: calendar)
+            }
+            let grouped = Dictionary(grouping: upcoming) { task -> Date in
+                calendar.startOfDay(for: task.due ?? now)
+            }
+            return grouped.keys.sorted().map { day in
+                TasksSection(
+                    id: "day-\(day.timeIntervalSinceReferenceDate)",
+                    title: TaskDue.dayHeading(day, now: now, calendar: calendar),
+                    items: (grouped[day] ?? []).sorted(by: TaskStore.boardSort)
+                )
+            }
+
+        case .inbox:
+            let inbox = open.filter { $0.project == nil }.sorted(by: TaskStore.boardSort)
+            return inbox.isEmpty ? [] : [TasksSection(id: "inbox", title: "Inbox", items: inbox)]
+
+        case .all:
+            let inbox = open.filter { $0.project == nil }.sorted(by: TaskStore.boardSort)
+            var result: [TasksSection] = []
+            if !inbox.isEmpty {
+                result.append(TasksSection(id: "inbox", title: "Inbox", items: inbox))
+            }
+            let assigned = Dictionary(grouping: open.filter { $0.project != nil }) { $0.project!.id }
+            let projects = assigned.values.compactMap { items -> TasksSection? in
+                guard let project = items.first?.project else { return nil }
+                let name = project.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                return TasksSection(
+                    id: "project-\(project.id.uuidString)",
+                    title: name.isEmpty ? "Untitled" : name,
+                    items: items.sorted(by: TaskStore.boardSort)
+                )
+            }
+            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            return result + projects
+        }
+    }
+}

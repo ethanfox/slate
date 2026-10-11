@@ -135,6 +135,76 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertFalse(withChildren.contains { $0.id == other.id })
     }
 
+    func testTodaySplitsOverdueAndDueToday() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 10, hour: 12))!
+        let harbor = Project(name: "Harbor", symbol: "folder", summary: "")
+        let overdue = task("Late", in: harbor)
+        overdue.due = calendar.date(from: DateComponents(year: 2026, month: 10, day: 9))
+        let today = task("Now", in: harbor)
+        today.due = now
+        let later = task("Later", in: harbor)
+        later.due = calendar.date(from: DateComponents(year: 2026, month: 10, day: 12))
+        let inbox = AgendaItem(kind: .task, eventKitID: "", title: "Loose")
+        context.insert(inbox)
+        let sections = TasksLayout.sections(from: [overdue, today, later, inbox], filter: .today, now: now, calendar: calendar)
+        XCTAssertEqual(sections.map(\.id), ["overdue", "today"])
+        XCTAssertEqual(sections[0].items.map(\.title), ["Late"])
+        XCTAssertEqual(sections[1].items.map(\.title), ["Now"])
+    }
+
+    func testInboxIsUnassignedOpenTasks() {
+        let harbor = Project(name: "Harbor", symbol: "folder", summary: "")
+        let assigned = task("Assigned", in: harbor)
+        let loose = AgendaItem(kind: .task, eventKitID: "", title: "Loose")
+        let done = AgendaItem(kind: .task, eventKitID: "", title: "Done")
+        done.isCompleted = true
+        context.insert(loose)
+        context.insert(done)
+        let sections = TasksLayout.sections(from: [assigned, loose, done], filter: .inbox)
+        XCTAssertEqual(sections.map(\.id), ["inbox"])
+        XCTAssertEqual(sections[0].items.map(\.title), ["Loose"])
+    }
+
+    func testUpcomingGroupsByDay() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 10, hour: 12))!
+        let harbor = Project(name: "Harbor", symbol: "folder", summary: "")
+        let tomorrow = task("Tomorrow", in: harbor)
+        tomorrow.due = calendar.date(from: DateComponents(year: 2026, month: 10, day: 11))
+        let wednesday = task("Wednesday", in: harbor)
+        wednesday.due = calendar.date(from: DateComponents(year: 2026, month: 10, day: 14))
+        let far = task("Far", in: harbor)
+        far.due = calendar.date(from: DateComponents(year: 2026, month: 11, day: 1))
+        let sections = TasksLayout.sections(from: [tomorrow, wednesday, far], filter: .upcoming, now: now, calendar: calendar)
+        XCTAssertEqual(sections.count, 2)
+        XCTAssertEqual(sections[0].title, "Tomorrow")
+        XCTAssertEqual(sections[0].items.map(\.title), ["Tomorrow"])
+        XCTAssertEqual(sections[1].items.map(\.title), ["Wednesday"])
+    }
+
+    func testAttentionReminderIncludesFlaggedAndDue() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 10, hour: 12))!
+        let due = ReminderItem(id: "1", title: "Pay", listID: "h", listName: "House", due: calendar.date(from: DateComponents(year: 2026, month: 10, day: 9)), isCompleted: false)
+        let flagged = ReminderItem(id: "2", title: "Call", listID: "p", listName: "Personal", due: nil, isCompleted: false, isFlagged: true)
+        let later = ReminderItem(id: "3", title: "Dinner", listID: "p", listName: "Personal", due: calendar.date(from: DateComponents(year: 2026, month: 10, day: 14)), isCompleted: false)
+        XCTAssertTrue(ReminderItem.isAttention(due, now: now, calendar: calendar))
+        XCTAssertTrue(ReminderItem.isAttention(flagged, now: now, calendar: calendar))
+        XCTAssertFalse(ReminderItem.isAttention(later, now: now, calendar: calendar))
+    }
+
+    func testCompactDueLabels() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 10, hour: 15))!
+        let yesterday = calendar.date(from: DateComponents(year: 2026, month: 10, day: 9, hour: 9))!
+        let todayTime = calendar.date(from: DateComponents(year: 2026, month: 10, day: 10, hour: 16, minute: 30))!
+        XCTAssertEqual(TaskDue.compact(yesterday, now: now, calendar: calendar), "Yesterday")
+        let todayAllDay = calendar.startOfDay(for: now)
+        XCTAssertEqual(TaskDue.compact(todayTime, hideIfToday: true, hasTime: true, now: now, calendar: calendar), todayTime.formatted(date: .omitted, time: .shortened))
+        XCTAssertEqual(TaskDue.compact(todayAllDay, hideIfToday: true, now: now, calendar: calendar), "")
+    }
+
     private func task(_ title: String, in project: Project) -> AgendaItem {
         let item = AgendaItem(kind: .task, eventKitID: "", title: title)
         context.insert(project)

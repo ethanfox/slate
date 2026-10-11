@@ -109,6 +109,9 @@ struct ReminderItem: Identifiable, Hashable, Sendable {
     var allowsEditing: Bool
     var tint: CalendarTint
     var repeatRule: TaskRepeat
+    var isFlagged: Bool
+    var completedAt: Date?
+    var dueHasTime: Bool
 
     init(_ reminder: EKReminder) {
         id = reminder.calendarItemIdentifier
@@ -117,8 +120,10 @@ struct ReminderItem: Identifiable, Hashable, Sendable {
         listName = reminder.calendar.title
         if let components = reminder.dueDateComponents {
             due = Calendar.current.date(from: components)
+            dueHasTime = components.hour != nil
         } else {
             due = nil
+            dueHasTime = false
         }
         notes = reminder.notes ?? ""
         url = reminder.url
@@ -126,7 +131,75 @@ struct ReminderItem: Identifiable, Hashable, Sendable {
         allowsEditing = reminder.calendar.allowsContentModifications
         tint = CalendarTint(reminder.calendar.cgColor)
         repeatRule = TaskRepeat.from(rules: reminder.recurrenceRules)
+        isFlagged = Self.flagged(on: reminder)
+        completedAt = reminder.completionDate
     }
+
+    init(
+        id: String,
+        title: String,
+        listID: String,
+        listName: String,
+        due: Date?,
+        isCompleted: Bool,
+        isFlagged: Bool = false,
+        completedAt: Date? = nil,
+        dueHasTime: Bool = false,
+        tint: CalendarTint = .neutral
+    ) {
+        self.id = id
+        self.title = title
+        self.listID = listID
+        self.listName = listName
+        self.due = due
+        self.notes = ""
+        self.url = nil
+        self.isCompleted = isCompleted
+        self.allowsEditing = true
+        self.tint = tint
+        self.repeatRule = .none
+        self.isFlagged = isFlagged
+        self.completedAt = completedAt
+        self.dueHasTime = dueHasTime
+    }
+
+    private static func flagged(on reminder: EKReminder) -> Bool {
+        let selector = NSSelectorFromString("isFlagged")
+        guard reminder.responds(to: selector) else { return false }
+        return (reminder.perform(selector)?.takeUnretainedValue() as? Bool) ?? false
+    }
+
+    static func isAttention(_ item: ReminderItem, now: Date = .now, calendar: Calendar = .current) -> Bool {
+        guard !item.isCompleted else { return false }
+        if item.isFlagged { return true }
+        guard let due = item.due else { return false }
+        return TaskDue.isOutstanding(due, now: now, calendar: calendar)
+    }
+
+    static func isCompletedToday(_ item: ReminderItem, now: Date = .now, calendar: Calendar = .current) -> Bool {
+        guard item.isCompleted else { return false }
+        if let completed = item.completedAt {
+            return calendar.isDate(completed, inSameDayAs: now)
+        }
+        guard let due = item.due else { return false }
+        return calendar.isDate(due, inSameDayAs: now)
+    }
+
+    static func groups(from items: [ReminderItem]) -> [ReminderGroup] {
+        let grouped = Dictionary(grouping: items, by: \.listID)
+        return grouped.keys.compactMap { id -> ReminderGroup? in
+            guard let items = grouped[id], let name = items.first?.listName else { return nil }
+            return ReminderGroup(id: id, title: name, tint: items.first?.tint ?? .neutral, items: items)
+        }
+        .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+}
+
+struct ReminderGroup: Identifiable {
+    var id: String
+    var title: String
+    var tint: CalendarTint
+    var items: [ReminderItem]
 }
 
 extension TaskRepeat {
