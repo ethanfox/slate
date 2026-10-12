@@ -23,6 +23,7 @@ struct RunToolPolicy: Equatable, Sendable {
     static let denied: Set<String> = [
         "complete_task",
         "mark_for_deletion",
+        "delete_record",
         "create_project",
         "update_project",
         "delete_completion",

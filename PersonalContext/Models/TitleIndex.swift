@@ -208,6 +208,7 @@ final class AgentAction {
         switch verb {
         case .added: return ["task", "note", "decision", "track", "record", "source"].contains(kindRaw)
         case .changed, .completed, .logged: return !beforeJSON.isEmpty
+        case .removed: return !beforeJSON.isEmpty
         default: return false
         }
     }
@@ -240,7 +241,7 @@ final class AgentAction {
         case .flagged: return "Flagged \(name) for deletion"
         case .tagged: return "Tagged \(name)\(detail.isEmpty ? "" : " with \(detail)")"
         case .untagged: return "Removed tag\(detail.isEmpty ? "" : " \(detail)") from \(name)"
-        case .removed: return "Removed a \(noun)"
+        case .removed: return title.isEmpty ? "Removed a \(noun)" : "Deleted \(name)"
         }
     }
 }

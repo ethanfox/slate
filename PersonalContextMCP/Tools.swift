@@ -134,6 +134,7 @@ enum Tools {
         var properties: [String: [String: Any]]
         var required: [String]
         var readOnly: Bool
+        var destructive = false
         var handler: Handler
     }
 
@@ -148,7 +149,7 @@ enum Tools {
                     "required": tool.required,
                     "additionalProperties": false
                 ],
-                "annotations": ["readOnlyHint": tool.readOnly, "destructiveHint": false]
+                "annotations": ["readOnlyHint": tool.readOnly, "destructiveHint": tool.destructive]
             ]
         }
     }
@@ -168,6 +169,10 @@ enum Tools {
         context.autosaveEnabled = false
         do {
             let args = Args(raw: migrate(arguments))
+            if tool.name == "delete_record", !origin.conversationID.isEmpty,
+               args.string("target_id")?.lowercased() == origin.conversationID.lowercased() {
+                throw ToolError("You cannot delete the chat you are in.")
+            }
             let before = logs && !tool.readOnly ? snapshot(tool.name, args: args, in: context) : [:]
             let value = try tool.handler(args, context)
             if !tool.readOnly {
@@ -200,7 +205,7 @@ enum Tools {
         "create_source": (.added, "source"), "update_source": (.changed, "source"),
         "create_tag": (.added, "tag"), "update_tag": (.changed, "tag"),
         "assign_tag": (.tagged, ""), "remove_tag": (.untagged, ""),
-        "mark_for_deletion": (.flagged, ""),
+        "mark_for_deletion": (.flagged, ""), "delete_record": (.removed, ""),
         "upsert_code_reference_entry": (.changed, "code"), "set_code_reference_meta": (.changed, "code"),
         "create_space": (.added, "space"), "update_space": (.changed, "space"),
         "set_space_type": (.changed, "space"), "set_space_screen": (.changed, "space"),
@@ -255,6 +260,8 @@ enum Tools {
         case "mark_for_deletion":
             detail = args.string("reason") ?? ""
             pointAtIndexed(args.string("target_id") ?? "", kind: args.string("target_type") ?? "")
+        case "delete_record":
+            kind = args.string("target_type") ?? ""
         case "delete_completion":
             target = ""
         case "create_space", "update_space":
@@ -303,6 +310,11 @@ enum Tools {
 
     /// The fields a write is about to change, as they are now, in the shape the same tool takes back.
     private static func snapshot(_ tool: String, args: Args, in context: ModelContext) -> [String: Any] {
+        if tool == "delete_record" {
+            guard let kind = try? args.choice("target_type", as: DeletableKind.self),
+                  let id = try? args.uuid("target_id") else { return [:] }
+            return (try? DeletedRecord.snapshot(kind, id, in: context)) ?? [:]
+        }
         if tool == "update_space_record" {
             guard let id = args.string("record_id"),
                   let record = UUID(uuidString: id).flatMap({ SpaceStore.record($0, in: context) }),
@@ -341,8 +353,8 @@ enum Tools {
         return before
     }
 
-    /// Takes back one logged write: what an agent added is deleted, what it edited gets its old values.
-    /// Only the app calls this. Agents cannot delete.
+    /// Takes back one logged write: what an agent added is deleted, what it edited gets its old values,
+    /// and what it deleted comes back. Only the app calls this.
     static func undo(_ actionID: UUID, container: ModelContainer) throws {
         let context = ModelContext(container)
         context.autosaveEnabled = false
@@ -390,6 +402,8 @@ enum Tools {
                 throw ToolError("That entry is already gone.")
             }
             try SpaceStore.delete(event, in: context)
+        case .removed:
+            try DeletedRecord.restore(before, in: context)
         default:
             let target = action.targetIDString
             let made = action.createdAt
@@ -1137,7 +1151,7 @@ enum Tools {
 
         Tool(
             name: "mark_for_deletion",
-            description: "Propose deleting a note, track, decision, or chat. Agents cannot delete. The user sees the mark and can Keep or Delete. Reason is required. Optionally link a replacement in the same project. Calling again updates the reason and replacement.",
+            description: "Propose deleting a note, track, decision, or chat when the user should decide. To delete outright, use delete_record. The user sees the mark and can Keep or Delete. Reason is required. Optionally link a replacement in the same project. Calling again updates the reason and replacement.",
             properties: [
                 "target_type": options(DeletionTargetKind.self, "Kind of record to mark."),
                 "target_id": text("Id of the record to mark."),
@@ -1172,6 +1186,22 @@ enum Tools {
             )
             target.project.touch()
             return JSONShape.deletionMark(mark)
+        },
+        Tool(
+            name: "delete_record",
+            description: "Delete a task, note, track, decision, or chat. The delete shows in the user's Lately feed, where they can take it back. Delete what is obsolete, duplicated, or what the user asked to remove. A track with tracks under it cannot be deleted until those are moved or deleted; notes, decisions, and tasks filed under a deleted track stay in the project.",
+            properties: [
+                "target_type": options(DeletableKind.self, "Kind of record to delete."),
+                "target_id": text("Id of the record to delete.")
+            ],
+            required: ["target_type", "target_id"],
+            readOnly: false,
+            destructive: true
+        ) { args, context in
+            guard let kind = try args.choice("target_type", as: DeletableKind.self) else {
+                throw ToolError("target_type is required.")
+            }
+            return try DeletedRecord.delete(kind, try args.uuid("target_id"), in: context)
         },
         Tool(
             name: "list_runs",
@@ -1653,6 +1683,330 @@ enum TagTools {
             throw ToolError("color must be one of: \(allowed).")
         }
         return parsed
+    }
+}
+
+/// The kinds of record delete_record removes.
+enum DeletableKind: String, CaseIterable {
+    case task, note, track, decision, chat
+}
+
+/// Deleting a record for an agent, and keeping enough of it in the action log to bring it back.
+enum DeletedRecord {
+    private static func stamp(_ date: Date?) -> Any {
+        date.map { $0.timeIntervalSinceReferenceDate as Any } ?? NSNull()
+    }
+
+    private static func date(_ value: Any?) -> Date? {
+        (value as? Double).map(Date.init(timeIntervalSinceReferenceDate:))
+    }
+
+    private static func key(_ id: UUID?) -> Any {
+        id.map { $0.uuidString as Any } ?? NSNull()
+    }
+
+    private static func uuid(_ value: Any?) -> UUID? {
+        (value as? String).flatMap(UUID.init(uuidString:))
+    }
+
+    private static func uuids(_ value: Any?) -> [UUID] {
+        (value as? [String] ?? []).compactMap(UUID.init(uuidString:))
+    }
+
+    /// Everything needed to put the record back as it was, including what it was linked to.
+    static func snapshot(_ kind: DeletableKind, _ id: UUID, in context: ModelContext) throws -> [String: Any] {
+        var saved: [String: Any] = ["type": kind.rawValue, "id": id.uuidString]
+        switch kind {
+        case .task:
+            let item = try Lookup.task(id, in: context)
+            saved["title"] = item.title
+            saved["event_kit"] = item.eventKitID
+            saved["due"] = stamp(item.due)
+            saved["completed"] = item.isCompleted
+            saved["notes"] = item.notes
+            saved["repeat"] = item.repeatRaw
+            saved["project_inherited"] = item.projectIsInherited
+            saved["created"] = stamp(item.createdAt)
+            saved["updated"] = stamp(item.updatedAt)
+            saved["status"] = item.workflowStatusRaw
+            saved["blocked_reason"] = item.blockedReason
+            saved["project"] = key(item.project?.id)
+            saved["space"] = item.spaceIDString
+            saved["tags"] = item.tags.map(\.id.uuidString)
+            saved["track_links"] = item.trackLinks.map { link in
+                ["track": link.threadID.uuidString, "inherited": link.isInherited, "from_note": key(link.inheritedFromNoteID)] as [String: Any]
+            }
+            saved["note_links"] = item.noteLinks.map(\.noteID.uuidString)
+            saved["blockers"] = item.blockerLinks.compactMap { $0.blockingTask?.id.uuidString }
+            saved["blocking"] = item.blockingLinks.compactMap { $0.blockedTask?.id.uuidString }
+            saved["completions"] = item.completions.map(\.id.uuidString)
+        case .note:
+            let note = try Lookup.note(id, in: context)
+            saved["title"] = note.title
+            saved["content"] = note.content
+            saved["source"] = note.source
+            saved["created"] = stamp(note.createdAt)
+            saved["updated"] = stamp(note.updatedAt)
+            saved["project"] = key(note.project?.id)
+            saved["track"] = key(note.thread?.id)
+            saved["space"] = note.spaceIDString
+            saved["tags"] = note.tags.map(\.id.uuidString)
+        case .decision:
+            let decision = try Lookup.decision(id, in: context)
+            saved["title"] = decision.title
+            saved["decision"] = decision.decision
+            saved["rationale"] = decision.rationale
+            saved["status"] = decision.statusRaw
+            saved["superseded_by"] = key(decision.supersededByID)
+            saved["created"] = stamp(decision.createdAt)
+            saved["project"] = key(decision.project?.id)
+            saved["track"] = key(decision.thread?.id)
+            saved["space"] = decision.spaceIDString
+            saved["tags"] = decision.tags.map(\.id.uuidString)
+        case .track:
+            let track = try Lookup.thread(id, in: context)
+            saved["title"] = track.title
+            saved["kind"] = track.kindRaw
+            saved["summary"] = track.summary
+            saved["body"] = track.body
+            saved["status"] = track.statusRaw
+            saved["created"] = stamp(track.createdAt)
+            saved["updated"] = stamp(track.updatedAt)
+            saved["project"] = key(track.project?.id)
+            saved["parent"] = key(track.parent?.id)
+            saved["space"] = track.spaceIDString
+            saved["tags"] = track.tags.map(\.id.uuidString)
+            saved["notes"] = track.notes.map(\.id.uuidString)
+            saved["decisions"] = track.decisions.map(\.id.uuidString)
+            saved["chats"] = track.conversations.map(\.id.uuidString)
+        case .chat:
+            let chat = try Lookup.conversation(id, in: context)
+            let files = FileStore.default(context: context)
+            func assets(_ owner: AssetOwnerKind, _ ownerID: UUID) -> [String] {
+                files.references(ownerKind: owner, ownerID: ownerID).compactMap { $0.assetID?.uuidString }
+            }
+            saved["title"] = chat.title
+            saved["provider"] = chat.providerID
+            saved["session"] = chat.externalSessionID
+            saved["model"] = chat.modelID
+            saved["context"] = chat.contextSnapshot
+            saved["archived"] = chat.isArchived
+            saved["created"] = stamp(chat.createdAt)
+            saved["updated"] = stamp(chat.updatedAt)
+            saved["project"] = key(chat.project?.id)
+            saved["track"] = key(chat.thread?.id)
+            saved["space"] = chat.spaceIDString
+            saved["tags"] = chat.tags.map(\.id.uuidString)
+            saved["draft_files"] = assets(.chatDraft, chat.id)
+            saved["messages"] = chat.orderedMessages.map { message in
+                [
+                    "id": message.id.uuidString,
+                    "role": message.roleRaw,
+                    "content": message.content,
+                    "run": message.externalRunID,
+                    "created": stamp(message.createdAt),
+                    "files": assets(.chatMessage, message.id)
+                ] as [String: Any]
+            }
+        }
+        return saved
+    }
+
+    /// Removes the record the way the app does, and says what was removed.
+    static func delete(_ kind: DeletableKind, _ id: UUID, in context: ModelContext) throws -> [String: Any] {
+        var title = ""
+        var project: Project?
+        switch kind {
+        case .task:
+            let item = try Lookup.task(id, in: context)
+            guard RunStore.canDelete(item, in: context) else {
+                throw ToolError("A Run is working on this task. Stop the Run first.")
+            }
+            title = item.displayTitle
+            project = item.project
+            TaskStore.delete(item, in: context)
+        case .note:
+            let note = try Lookup.note(id, in: context)
+            title = note.displayTitle
+            project = note.project
+            DeletionMarks.remove(targetingIDs: [id], in: context)
+            context.delete(note)
+        case .decision:
+            let decision = try Lookup.decision(id, in: context)
+            title = decision.title
+            project = decision.project
+            DeletionMarks.remove(targetingIDs: [id], in: context)
+            context.delete(decision)
+        case .track:
+            let track = try Lookup.thread(id, in: context)
+            guard track.children.isEmpty else {
+                throw ToolError("This track has tracks under it. Delete or move those first.")
+            }
+            title = track.title
+            project = track.project
+            DeletionMarks.remove(targetingIDs: [id], in: context)
+            context.delete(track)
+        case .chat:
+            let chat = try Lookup.conversation(id, in: context)
+            title = chat.title
+            project = chat.project
+            DeletionMarks.remove(targetingIDs: [id], in: context)
+            try? FileStore.default(context: context).releaseConversation(chat)
+            context.delete(chat)
+        }
+        project?.touch()
+        return [
+            "deleted": true,
+            "type": kind.rawValue,
+            "id": id.uuidString,
+            "title": title,
+            "project_id": project?.id.uuidString ?? ""
+        ]
+    }
+
+    /// Puts a deleted record back under its old id, with the links that still have something to point at.
+    static func restore(_ saved: [String: Any], in context: ModelContext) throws {
+        guard let kind = (saved["type"] as? String).flatMap(DeletableKind.init(rawValue:)), let id = uuid(saved["id"]) else {
+            throw ToolError("This cannot be taken back.")
+        }
+        func text(_ key: String) -> String { saved[key] as? String ?? "" }
+        func gone() -> ToolError { ToolError("Its project is gone, so it cannot be brought back.") }
+        func back() -> ToolError { ToolError("That \(kind.rawValue) is already back.") }
+
+        var project: Project?
+        if let projectID = uuid(saved["project"]) {
+            guard let found = try? Lookup.project(projectID, in: context) else { throw gone() }
+            project = found
+        }
+        let track = uuid(saved["track"]).flatMap { try? Lookup.thread($0, in: context) }
+        let tags = uuids(saved["tags"]).compactMap { try? Lookup.tag($0, in: context) }
+
+        switch kind {
+        case .task:
+            guard (try? Lookup.task(id, in: context)) == nil else { throw back() }
+            let item = AgendaItem(kind: .task, eventKitID: text("event_kit"), title: text("title"))
+            item.id = id
+            item.due = date(saved["due"])
+            item.isCompleted = saved["completed"] as? Bool ?? false
+            item.notes = text("notes")
+            item.repeatRaw = saved["repeat"] as? String ?? TaskRepeat.none.rawValue
+            item.projectIsInherited = saved["project_inherited"] as? Bool ?? false
+            item.createdAt = date(saved["created"]) ?? .now
+            item.updatedAt = date(saved["updated"]) ?? .now
+            item.workflowStatusRaw = saved["status"] as? String ?? TaskWorkflowStatus.ready.rawValue
+            item.blockedReason = text("blocked_reason")
+            item.spaceIDString = text("space")
+            context.insert(item)
+            item.project = project
+            item.tags = tags
+            for link in saved["track_links"] as? [[String: Any]] ?? [] {
+                guard let thread = uuid(link["track"]).flatMap({ try? Lookup.thread($0, in: context) }) else { continue }
+                let restored = AgendaTrackLink(thread: thread, inherited: link["inherited"] as? Bool ?? false, fromNoteID: uuid(link["from_note"]))
+                context.insert(restored)
+                restored.item = item
+            }
+            for noteID in uuids(saved["note_links"]) {
+                guard let note = try? Lookup.note(noteID, in: context) else { continue }
+                let restored = AgendaNoteLink(note: note)
+                context.insert(restored)
+                restored.item = item
+            }
+            for blockerID in uuids(saved["blockers"]) {
+                guard let blocker = try? Lookup.task(blockerID, in: context) else { continue }
+                context.insert(TaskDependency(blocked: item, blocking: blocker))
+            }
+            for blockedID in uuids(saved["blocking"]) {
+                guard let blocked = try? Lookup.task(blockedID, in: context) else { continue }
+                context.insert(TaskDependency(blocked: blocked, blocking: item))
+                TaskStore.reconcileBlockers(for: blocked, in: context, save: false)
+            }
+            for completionID in uuids(saved["completions"]) {
+                (try? Lookup.completion(completionID, in: context))?.parentTask = item
+            }
+        case .note:
+            guard (try? Lookup.note(id, in: context)) == nil else { throw back() }
+            guard let project else { throw gone() }
+            let note = Note(content: text("content"), project: project, title: text("title"), source: text("source"), thread: track)
+            note.id = id
+            note.createdAt = date(saved["created"]) ?? .now
+            note.updatedAt = date(saved["updated"]) ?? .now
+            note.spaceIDString = text("space")
+            context.insert(note)
+            note.tags = tags
+            let links = (try? context.fetch(FetchDescriptor<AgendaNoteLink>(predicate: #Predicate { $0.noteID == id }))) ?? []
+            for link in links where link.note == nil {
+                link.note = note
+            }
+        case .decision:
+            guard (try? Lookup.decision(id, in: context)) == nil else { throw back() }
+            guard let project else { throw gone() }
+            let decision = Decision(title: text("title"), decision: text("decision"), project: project, rationale: text("rationale"), thread: track)
+            decision.id = id
+            decision.statusRaw = saved["status"] as? String ?? DecisionStatus.active.rawValue
+            decision.supersededByID = uuid(saved["superseded_by"])
+            decision.createdAt = date(saved["created"]) ?? .now
+            decision.spaceIDString = text("space")
+            context.insert(decision)
+            decision.tags = tags
+        case .track:
+            guard (try? Lookup.thread(id, in: context)) == nil else { throw back() }
+            guard let project else { throw gone() }
+            let parent = uuid(saved["parent"]).flatMap { try? Lookup.thread($0, in: context) }
+            let restored = ProjectThread(title: text("title"), kind: .topic, project: project, parent: parent)
+            restored.id = id
+            restored.kindRaw = saved["kind"] as? String ?? restored.kindRaw
+            restored.summary = text("summary")
+            restored.body = text("body")
+            restored.statusRaw = saved["status"] as? String ?? restored.statusRaw
+            restored.createdAt = date(saved["created"]) ?? .now
+            restored.updatedAt = date(saved["updated"]) ?? .now
+            restored.spaceIDString = text("space")
+            context.insert(restored)
+            restored.tags = tags
+            // What was filed under the track lost its link when the track went. Give it back where nothing replaced it.
+            for noteID in uuids(saved["notes"]) {
+                if let note = try? Lookup.note(noteID, in: context), note.thread == nil { note.thread = restored }
+            }
+            for decisionID in uuids(saved["decisions"]) {
+                if let decision = try? Lookup.decision(decisionID, in: context), decision.thread == nil { decision.thread = restored }
+            }
+            for chatID in uuids(saved["chats"]) {
+                if let chat = try? Lookup.conversation(chatID, in: context), chat.thread == nil { chat.thread = restored }
+            }
+            let links = (try? context.fetch(FetchDescriptor<AgendaTrackLink>(predicate: #Predicate { $0.threadID == id }))) ?? []
+            for link in links where link.thread == nil {
+                link.thread = restored
+            }
+        case .chat:
+            guard (try? Lookup.conversation(id, in: context)) == nil else { throw back() }
+            let chat = Conversation(title: text("title"), providerID: text("provider"), modelID: text("model"), project: project)
+            chat.id = id
+            chat.externalSessionID = text("session")
+            chat.contextSnapshot = text("context")
+            chat.isArchived = saved["archived"] as? Bool ?? false
+            chat.createdAt = date(saved["created"]) ?? .now
+            chat.updatedAt = date(saved["updated"]) ?? .now
+            chat.spaceIDString = text("space")
+            context.insert(chat)
+            chat.thread = track
+            chat.tags = tags
+            var files: [(kind: AssetOwnerKind, owner: UUID, assets: [UUID])] = [(.chatDraft, id, uuids(saved["draft_files"]))]
+            for entry in saved["messages"] as? [[String: Any]] ?? [] {
+                let message = ChatMessage(id: uuid(entry["id"]) ?? UUID(), role: .user, content: entry["content"] as? String ?? "")
+                message.roleRaw = entry["role"] as? String ?? message.roleRaw
+                message.externalRunID = entry["run"] as? String ?? ""
+                message.createdAt = date(entry["created"]) ?? .now
+                context.insert(message)
+                message.conversation = chat
+                files.append((.chatMessage, message.id, uuids(entry["files"])))
+            }
+            // Attached files come back while the store still holds them; it clears unused files after a while.
+            let store = FileStore.default(context: context)
+            for entry in files where !entry.assets.isEmpty {
+                try? store.retain(assetIDs: entry.assets, ownerKind: entry.kind, ownerID: entry.owner)
+            }
+        }
+        project?.touch()
     }
 }
 

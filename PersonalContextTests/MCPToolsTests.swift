@@ -444,6 +444,84 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertNil(SourceFetcher.link(in: "example"))
     }
 
+    func testAnAgentDeleteIsLoggedAndCanBeTakenBack() throws {
+        let seed = HarborEvalFixture.seed(in: context)
+        let child = ProjectThread(title: "Passkeys", kind: .topic, project: seed.project, parent: seed.auth)
+        context.insert(child)
+        let chat = Conversation(title: "Scratch", providerID: "cursor", project: seed.project)
+        context.insert(chat)
+        let message = ChatMessage(role: .user, content: "hello")
+        context.insert(message)
+        message.conversation = chat
+        try context.save()
+
+        func log() throws -> [AgentAction] {
+            try ModelContext(container).fetch(FetchDescriptor<AgentAction>(sortBy: [SortDescriptor(\.createdAt)]))
+        }
+        func read(_ tool: String, _ key: String, _ id: String) -> [String: Any] {
+            Tools.call(tool, arguments: [key: id], container: container)
+        }
+        func delete(_ type: String, _ id: String, origin: ActionOrigin = ActionOrigin()) -> [String: Any] {
+            Tools.call("delete_record", arguments: ["target_type": type, "target_id": id], container: container, announce: false, origin: origin)
+        }
+        func ids(_ value: Any?) -> Set<String> {
+            Set((value as? [[String: Any]] ?? []).compactMap { $0["id"] as? String })
+        }
+
+        let noteID = seed.oauthNote.id.uuidString
+        let note = try object(read("get_note", "note_id", noteID))
+        _ = try object(delete("note", noteID))
+        XCTAssertEqual(read("get_note", "note_id", noteID)["isError"] as? Bool, true)
+        let removed = try XCTUnwrap(try log().last)
+        XCTAssertEqual(removed.sentence, "Deleted note “\(note["title"] as? String ?? "")”")
+        XCTAssertEqual(removed.projectIDString.lowercased(), seed.project.id.uuidString.lowercased())
+        XCTAssertTrue(removed.canUndo)
+        try Tools.undo(removed.id, container: container)
+        let noteBack = try object(read("get_note", "note_id", noteID))
+        for key in ["title", "content", "source", "track_id"] {
+            XCTAssertEqual(noteBack[key] as? String, note[key] as? String, key)
+        }
+        XCTAssertThrowsError(try Tools.undo(removed.id, container: container), "a delete is taken back once")
+        XCTAssertEqual(try log().count, 1, "taking a delete back is not itself logged")
+
+        let taskID = seed.shipSignIn.id.uuidString
+        let task = try object(read("get_task", "task_id", taskID))
+        _ = try object(delete("task", taskID))
+        XCTAssertEqual(read("get_task", "task_id", taskID)["isError"] as? Bool, true)
+        try Tools.undo(try XCTUnwrap(try log().last).id, container: container)
+        let taskBack = try object(read("get_task", "task_id", taskID))
+        XCTAssertEqual(taskBack["title"] as? String, task["title"] as? String)
+        XCTAssertEqual(taskBack["status"] as? String, task["status"] as? String)
+        XCTAssertEqual(ids(taskBack["tracks"]), ids(task["tracks"]))
+
+        let decisionID = seed.decision.id.uuidString
+        let decision = try object(read("get_decision", "decision_id", decisionID))
+        _ = try object(delete("decision", decisionID))
+        try Tools.undo(try XCTUnwrap(try log().last).id, container: container)
+        let decisionBack = try object(read("get_decision", "decision_id", decisionID))
+        for key in ["title", "decision", "rationale", "status", "created_at"] {
+            XCTAssertEqual(decisionBack[key] as? String, decision[key] as? String, key)
+        }
+
+        XCTAssertEqual(delete("track", seed.auth.id.uuidString)["isError"] as? Bool, true, "a track with tracks under it stays")
+        let childID = child.id.uuidString
+        _ = try object(delete("track", childID))
+        try Tools.undo(try XCTUnwrap(try log().last).id, container: container)
+        let childBack = try object(read("get_track", "track_id", childID))
+        XCTAssertEqual(childBack["title"] as? String, "Passkeys")
+        XCTAssertEqual((childBack["parent_id"] as? String)?.lowercased(), seed.auth.id.uuidString.lowercased())
+
+        let chatID = chat.id.uuidString
+        let own = delete("chat", chatID, origin: ActionOrigin(client: "membrae", conversationID: chatID))
+        XCTAssertEqual(own["isError"] as? Bool, true, "an agent cannot delete the chat it is in")
+        _ = try object(delete("chat", chatID))
+        XCTAssertEqual(read("get_chat", "chat_id", chatID)["isError"] as? Bool, true)
+        try Tools.undo(try XCTUnwrap(try log().last).id, container: container)
+        let chatBack = try object(read("get_chat", "chat_id", chatID))
+        XCTAssertEqual(chatBack["title"] as? String, "Scratch")
+        XCTAssertEqual(chatBack["message_count"] as? Int, 1)
+    }
+
     private func text(in result: [String: Any]) throws -> String {
         let content = try XCTUnwrap(result["content"] as? [[String: Any]])
         return try XCTUnwrap(content.first?["text"] as? String)

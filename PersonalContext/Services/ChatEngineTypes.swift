@@ -633,6 +633,7 @@ struct ChatToolActivity: Identifiable, Equatable, Codable, Sendable {
         if name.hasPrefix("list_") || name.hasPrefix("get_") { return "doc.text.magnifyingglass" }
         if name.hasPrefix("create_") { return "plus" }
         if name.hasPrefix("update_") { return "pencil" }
+        if name == "delete_record" { return "trash" }
         return "wrench.and.screwdriver"
     }
 
@@ -682,6 +683,8 @@ struct ChatToolActivity: Identifiable, Equatable, Codable, Sendable {
             return status == .running ? "Reading git history" : status == .failed ? "Couldn’t read git history" : "Read git history"
         case "consult_code":
             return status == .running ? "Asking the Worker" : status == .failed ? "The Worker failed" : "Asked the Worker"
+        case "delete_record":
+            return status == .running ? "Deleting" : status == .failed ? "Couldn’t delete" : "Deleted"
         default:
             break
         }
