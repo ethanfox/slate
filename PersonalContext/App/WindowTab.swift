@@ -77,6 +77,20 @@ struct WindowTab: Identifiable, Hashable, Codable {
         }
     }
 
+    /// The record this tab shows, when it is one that can be pinned.
+    var pinTarget: (kind: PinKind, id: UUID)? {
+        switch viewKey {
+        case .thread(let id): (.track, id)
+        case .note(let id): (.note, id)
+        case .decision(let id): (.decision, id)
+        case .conversation(let id): (.chat, id)
+        case .run(let id): (.run, id)
+        case .space(let id): (.space, id)
+        case .spaceRecord(let id): (.record, id)
+        default: nil
+        }
+    }
+
     var generatingID: UUID? {
         switch destination {
         case .quickAsk(let id): id

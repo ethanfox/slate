@@ -246,6 +246,66 @@ final class AgentAction {
     }
 }
 
+/// What a pin can point at. A project keeps its own pinned flag.
+enum PinKind: String, CaseIterable {
+    case track, note, decision, chat, task, run, space, record
+
+    init?(_ kind: TitleIndexKind) {
+        guard kind != .project else { return nil }
+        self.init(rawValue: kind.rawValue)
+    }
+}
+
+/// Something the user pinned so it stays within reach in the sidebar.
+@Model
+final class Pin {
+    @Attribute(.unique) var id: UUID
+    var kindRaw: String = ""
+    var targetIDString: String = ""
+    var createdAt: Date = Date.now
+
+    init(kind: PinKind, targetID: UUID) {
+        id = UUID()
+        kindRaw = kind.rawValue
+        targetIDString = targetID.uuidString.lowercased()
+    }
+
+    var kind: PinKind? { PinKind(rawValue: kindRaw) }
+    var targetID: UUID? { UUID(uuidString: targetIDString) }
+}
+
+enum PinStore {
+    /// Every pin, oldest first.
+    static func all(in context: ModelContext) -> [Pin] {
+        (try? context.fetch(FetchDescriptor<Pin>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
+    }
+
+    static func toggle(_ kind: PinKind, _ id: UUID, in context: ModelContext) {
+        let key = id.uuidString.lowercased()
+        let existing = (try? context.fetch(FetchDescriptor<Pin>(predicate: #Predicate { $0.targetIDString == key }))) ?? []
+        if existing.isEmpty {
+            context.insert(Pin(kind: kind, targetID: id))
+        } else {
+            existing.forEach(context.delete)
+        }
+    }
+
+    /// Moves in the pins an older build kept in preferences, which held ids with no kind.
+    static func adopt(_ ids: [String], in context: ModelContext) {
+        let known = Set(all(in: context).map(\.targetIDString))
+        var made = Date.now.addingTimeInterval(-Double(ids.count))
+        for key in ids where !known.contains(key) {
+            guard let id = UUID(uuidString: key),
+                  let row = try? context.fetch(FetchDescriptor<TitleIndex>(predicate: #Predicate { $0.id == id })).first,
+                  let kind = PinKind(row.kind) else { continue }
+            let pin = Pin(kind: kind, targetID: id)
+            pin.createdAt = made
+            made = made.addingTimeInterval(1)
+            context.insert(pin)
+        }
+    }
+}
+
 enum AgentActionStore {
     static let limit = 2000
 

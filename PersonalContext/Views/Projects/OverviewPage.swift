@@ -525,7 +525,7 @@ struct IndexRow: View {
                 Label("Open in New Tab", systemImage: "plus.square.on.square")
             }
             Button {
-                app.togglePin(row.id)
+                app.togglePin(row)
             } label: {
                 Label(app.isPinned(row.id) ? "Unpin" : "Pin", systemImage: app.isPinned(row.id) ? "pin.slash" : "pin")
             }

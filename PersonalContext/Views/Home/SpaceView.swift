@@ -147,6 +147,11 @@ struct SpaceView: View {
                             Label("Edit…", systemImage: "pencil")
                         }
                         Button {
+                            app.togglePin(.record, record.id)
+                        } label: {
+                            Label(app.isPinned(record.id) ? "Unpin" : "Pin", systemImage: app.isPinned(record.id) ? "pin.slash" : "pin")
+                        }
+                        Button {
                             try? SpaceStore.duplicate(record, in: context)
                         } label: {
                             Label("Duplicate", systemImage: "plus.square.on.square")

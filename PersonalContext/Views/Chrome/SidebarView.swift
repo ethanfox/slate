@@ -7,7 +7,53 @@ struct SidebarView: View {
     @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "project" }, sort: \TitleIndex.title)
     private var projects: [TitleIndex]
     @Query(sort: \Space.createdAt) private var spaces: [Space]
+    @Query(sort: \Pin.createdAt) private var pins: [Pin]
     @State private var pendingDelete: TitleIndex?
+
+    private struct PinnedItem: Identifiable {
+        var id: UUID
+        var kind: PinKind
+        var title: String
+        var symbol: String
+        var open: (Bool) -> Void
+        var shows: TabViewKey?
+    }
+
+    /// The pins that still point at something, oldest first, each with how to show and open it.
+    private var pinned: [PinnedItem] {
+        pins.compactMap { pin in
+            guard let kind = pin.kind, let id = pin.targetID else { return nil }
+            switch kind {
+            case .space:
+                guard let space = spaces.first(where: { $0.id == id }) else { return nil }
+                return PinnedItem(id: id, kind: kind, title: space.displayName, symbol: space.symbol, open: { newTab in
+                    app.navigate(to: .space(id), newTab: newTab)
+                }, shows: .space(id))
+            case .record:
+                guard let record = SpaceStore.record(id, in: context), let space = record.spaceID else { return nil }
+                return PinnedItem(id: id, kind: kind, title: record.displayTitle, symbol: "doc.text", open: { newTab in
+                    app.navigate(to: .spaceRecord(space: space, record: id), newTab: newTab)
+                }, shows: .spaceRecord(id))
+            default:
+                guard let row = try? context.fetch(FetchDescriptor<TitleIndex>(predicate: #Predicate { $0.id == id })).first else { return nil }
+                let shows: TabViewKey? = switch kind {
+                case .track: .thread(id)
+                case .note: .note(id)
+                case .decision: .decision(id)
+                case .chat: .conversation(id)
+                case .run: .run(id)
+                default: nil
+                }
+                return PinnedItem(id: id, kind: kind, title: row.displayTitle, symbol: row.kind.symbol, open: { newTab in
+                    app.open(row, newTab: newTab)
+                }, shows: shows)
+            }
+        }
+    }
+
+    private var showing: TabViewKey? {
+        app.windowTabs.first { $0.id == app.selectedTabID }?.viewKey
+    }
 
     private var orderedProjects: [TitleIndex] {
         projects.sorted { lhs, rhs in
@@ -28,6 +74,30 @@ struct SidebarView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     row("You", "person", destination: .home, selected: isOnYou)
 
+                    if !pinned.isEmpty {
+                        section("Pinned")
+                        ForEach(pinned) { item in
+                            Button {
+                                item.open(false)
+                            } label: {
+                                SidebarRow(title: item.title, systemImage: item.symbol, isSelected: item.shows != nil && item.shows == showing)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    item.open(true)
+                                } label: {
+                                    Label("Open in New Tab", systemImage: "plus.square.on.square")
+                                }
+                                Button {
+                                    app.togglePin(item.kind, item.id)
+                                } label: {
+                                    Label("Unpin", systemImage: "pin.slash")
+                                }
+                            }
+                        }
+                    }
+
                     if !spaces.isEmpty {
                         section("Spaces")
                         ForEach(spaces) { space in
@@ -47,6 +117,11 @@ struct SidebarView: View {
                                     app.navigate(to: .space(space.id), newTab: true)
                                 } label: {
                                     Label("Open in New Tab", systemImage: "plus.square.on.square")
+                                }
+                                Button {
+                                    app.togglePin(.space, space.id)
+                                } label: {
+                                    Label(app.isPinned(space.id) ? "Unpin" : "Pin", systemImage: app.isPinned(space.id) ? "pin.slash" : "pin")
                                 }
                             }
                         }

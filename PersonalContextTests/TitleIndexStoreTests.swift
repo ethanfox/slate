@@ -24,6 +24,33 @@ final class TitleIndexStoreTests: XCTestCase {
         XCTAssertEqual(rows.first?.projectID, project.id)
     }
 
+    func testPinsLiveInTheStoreAndOldOnesMoveIn() throws {
+        let project = Project(name: "Harbor", symbol: "folder", summary: "")
+        context.insert(project)
+        let note = Note(content: "body", project: project, title: "Launch note")
+        context.insert(note)
+        let thread = ProjectThread(title: "Auth", kind: .feature, project: project)
+        context.insert(thread)
+        try context.persist()
+
+        let space = UUID()
+        PinStore.toggle(.space, space, in: context)
+        PinStore.toggle(.note, note.id, in: context)
+        try context.persist()
+        XCTAssertEqual(PinStore.all(in: context).compactMap(\.kind), [.space, .note])
+
+        PinStore.toggle(.space, space, in: context)
+        try context.persist()
+        XCTAssertEqual(PinStore.all(in: context).compactMap(\.targetID), [note.id])
+
+        let old = [note.id, thread.id, project.id, UUID()].map { $0.uuidString.lowercased() }
+        PinStore.adopt(old, in: context)
+        try context.persist()
+        let pins = PinStore.all(in: context)
+        XCTAssertEqual(Set(pins.compactMap(\.targetID)), [note.id, thread.id], "a pin already there is kept once; a project or a missing record is left out")
+        XCTAssertEqual(pins.first { $0.targetID == thread.id }?.kind, .track)
+    }
+
     func testRenameUpdatesTheTitleRow() throws {
         let project = Project(name: "Harbor", symbol: "folder", summary: "")
         context.insert(project)

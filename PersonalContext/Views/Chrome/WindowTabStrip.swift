@@ -62,6 +62,34 @@ struct WindowTabStrip: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
+        .contextMenu {
+            if let tab = app.windowTabs.first {
+                pinButton(tab)
+            }
+        }
+    }
+
+    /// Whatever a tab shows can be pinned from the tab itself.
+    @ViewBuilder
+    private func pinButton(_ tab: WindowTab) -> some View {
+        if let target = tab.pinTarget {
+            let pinned = app.isPinned(target.id)
+            Button {
+                app.togglePin(target.kind, target.id)
+            } label: {
+                Label(pinned ? "Unpin" : "Pin", systemImage: pinned ? "pin.slash" : "pin")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func tabMenu(_ tab: WindowTab) -> some View {
+        pinButton(tab)
+        Button {
+            app.closeTab(tab.id)
+        } label: {
+            Label("Close Tab", systemImage: "xmark")
+        }
     }
 
     private var displayedTabs: [WindowTab] {
@@ -83,6 +111,7 @@ struct WindowTabStrip: View {
         HStack(spacing: 8) {
             ForEach(displayedTabs) { tab in
                 tabChip(tab, drag: interactive)
+                    .contextMenu { tabMenu(tab) }
                     .id(tab.id)
                     .opacity(interactive && draggingID == tab.id ? 0.35 : 1)
                     .onGeometryChange(for: CGRect.self) { geo in

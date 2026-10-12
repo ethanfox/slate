@@ -118,22 +118,34 @@ final class AppModel {
     var spaceTypeSelection: [UUID: UUID] = [:]
     /// Spaces currently showing their archived records. Not persisted.
     var spacesShowingArchived: Set<UUID> = []
-    /// Records the user pinned, oldest first. Kept in defaults until pinning has a home in the store.
-    var pinnedIDs: [String] = UserDefaults.standard.stringArray(forKey: "pinnedIDs") ?? [] {
-        didSet { UserDefaults.standard.set(pinnedIDs, forKey: "pinnedIDs") }
-    }
+    /// Ids of everything pinned, kept beside the store's pins so a row can ask without a fetch.
+    private(set) var pinnedIDs: Set<String> = []
 
     func isPinned(_ id: UUID) -> Bool {
         pinnedIDs.contains(id.uuidString.lowercased())
     }
 
-    func togglePin(_ id: UUID) {
-        let key = id.uuidString.lowercased()
-        if let index = pinnedIDs.firstIndex(of: key) {
-            pinnedIDs.remove(at: index)
-        } else {
-            pinnedIDs.append(key)
+    func togglePin(_ kind: PinKind, _ id: UUID) {
+        let context = container.mainContext
+        PinStore.toggle(kind, id, in: context)
+        try? context.persist()
+        loadPins()
+    }
+
+    func togglePin(_ row: TitleIndex) {
+        guard let kind = PinKind(row.kind) else { return }
+        togglePin(kind, row.id)
+    }
+
+    /// Reads the pins, first moving in any that an older build kept in preferences.
+    func loadPins() {
+        let context = container.mainContext
+        if let old = defaults.stringArray(forKey: "pinnedIDs") {
+            PinStore.adopt(old, in: context)
+            try? context.persist()
+            defaults.removeObject(forKey: "pinnedIDs")
         }
+        pinnedIDs = Set(PinStore.all(in: context).map(\.targetIDString))
     }
 
     var projectsLayout: ProjectsLayout {
@@ -385,6 +397,7 @@ final class AppModel {
         refreshChatGPTModels()
         refreshUsage()
         restoreWindowTabs()
+        loadPins()
         runCoordinator.attach(self)
         runCoordinator.recover(in: container.mainContext)
         browser.onActivity = { [weak self] runID, event in

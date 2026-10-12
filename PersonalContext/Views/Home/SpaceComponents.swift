@@ -1588,12 +1588,20 @@ private struct SpacePlanner: View {
 struct SpaceRecordMenu: View {
     var record: SpaceRecord
     var context: SpaceScreenContext
+    @Environment(AppModel.self) private var app: AppModel?
 
     var body: some View {
         Button {
             context.present(.editRecord(record))
         } label: {
             Label("Edit…", systemImage: "pencil")
+        }
+        if let app {
+            Button {
+                app.togglePin(.record, record.id)
+            } label: {
+                Label(app.isPinned(record.id) ? "Unpin" : "Pin", systemImage: app.isPinned(record.id) ? "pin.slash" : "pin")
+            }
         }
         Button {
             try? SpaceStore.duplicate(record, in: context.context)

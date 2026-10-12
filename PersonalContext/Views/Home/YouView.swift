@@ -310,6 +310,11 @@ struct YouView: View {
         } label: {
             Label("Edit…", systemImage: "pencil")
         }
+        Button {
+            app.togglePin(.space, space.id)
+        } label: {
+            Label(app.isPinned(space.id) ? "Unpin" : "Pin", systemImage: app.isPinned(space.id) ? "pin.slash" : "pin")
+        }
         Menu("Color") {
             ForEach(SpaceGradient.allCases) { gradient in
                 Button {
