@@ -19,6 +19,7 @@ type Request = {
   model?: string;
   cwd: string;
   mcpCommand: string;
+  conversationId?: string;
   codeRoots: { title: string; locator?: string; path: string }[];
   includeMembraeTools: boolean;
   includeProjectTools: boolean;
@@ -305,7 +306,7 @@ function toolEvent(name: string, status: string, args?: unknown, result?: unknow
 type McpTool = { name: string; description?: string; inputSchema?: SDKCustomTool["inputSchema"]; annotations?: SDKCustomTool["annotations"] };
 
 /** Runs the Membrae MCP as a child and exposes its tools in-process, since MCP server calls need an approval a headless run can't give. */
-async function membraeTools(command: string, allowed?: string[]): Promise<Record<string, SDKCustomTool>> {
+async function membraeTools(command: string, allowed?: string[], conversationId = ""): Promise<Record<string, SDKCustomTool>> {
   const child = spawn(command, [], { stdio: ["pipe", "pipe", "inherit"] });
   const pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
   let nextId = 1;
@@ -346,7 +347,7 @@ async function membraeTools(command: string, allowed?: string[]): Promise<Record
             }
             emit(toolEvent(tool.name, "running", args));
             try {
-              const result = (await call("tools/call", { name: tool.name, arguments: args })) as SDKCustomToolResult;
+              const result = (await call("tools/call", { name: tool.name, arguments: args, _meta: { conversation_id: conversationId } })) as SDKCustomToolResult;
               emit(toolEvent(tool.name, "completed", args, result));
               return result;
             } catch (error) {
@@ -938,7 +939,7 @@ async function createSession(request: Request): Promise<Session> {
     });
   } else {
     const customTools = {
-      ...(request.includeMembraeTools ? await membraeTools(request.mcpCommand, request.allowedTools) : {}),
+      ...(request.includeMembraeTools ? await membraeTools(request.mcpCommand, request.allowedTools, request.conversationId) : {}),
       ...(request.includeProjectTools ? projectCodeTools(session) : {}),
       ...(request.includeWorkerTool ? workerTool() : {}),
       ...(request.includeFinishRun ? finishRunTool() : {}),

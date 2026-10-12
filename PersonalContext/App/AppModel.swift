@@ -114,6 +114,25 @@ final class AppModel {
     }
     /// The type showing in each open Space. Not persisted.
     var spaceTypeSelection: [UUID: UUID] = [:]
+    /// Spaces currently showing their archived records. Not persisted.
+    var spacesShowingArchived: Set<UUID> = []
+    /// Records the user pinned, oldest first. Kept in defaults until pinning has a home in the store.
+    var pinnedIDs: [String] = UserDefaults.standard.stringArray(forKey: "pinnedIDs") ?? [] {
+        didSet { UserDefaults.standard.set(pinnedIDs, forKey: "pinnedIDs") }
+    }
+
+    func isPinned(_ id: UUID) -> Bool {
+        pinnedIDs.contains(id.uuidString.lowercased())
+    }
+
+    func togglePin(_ id: UUID) {
+        let key = id.uuidString.lowercased()
+        if let index = pinnedIDs.firstIndex(of: key) {
+            pinnedIDs.remove(at: index)
+        } else {
+            pinnedIDs.append(key)
+        }
+    }
 
     var projectsLayout: ProjectsLayout {
         didSet { defaults.set(projectsLayout.rawValue, forKey: Keys.projectsLayout) }
@@ -496,7 +515,7 @@ final class AppModel {
     }
 
     func tab(for project: UUID) -> ProjectTab {
-        tabs[project] ?? .chat
+        tabs[project] ?? .overview
     }
 
     func makeConversation(in project: Project?, context: ModelContext, newTab: Bool = false) -> Conversation {

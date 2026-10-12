@@ -15,6 +15,7 @@ struct SpaceRecordView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .captureBar()
     }
 }
 
@@ -23,6 +24,7 @@ struct SpaceRecordContent: View {
     var spaceID: UUID
     var recordID: UUID
 
+    @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @Query private var records: [SpaceRecord]
     @Query private var types: [SpaceType]
@@ -70,7 +72,8 @@ struct SpaceRecordContent: View {
             accent: space.gradient.accent,
             state: screenState,
             context: context,
-            open: { _ in }
+            open: { app.navigate(to: .spaceRecord(space: spaceID, record: $0.id)) },
+            present: { app.present($0) }
         )
     }
 
@@ -177,6 +180,82 @@ struct SpaceRecordToolbar: View {
     }
 }
 
+/// Logs an event with its values, or changes one already logged: when it happened and what it recorded.
+struct SpaceEventForm: View {
+    var type: SpaceType
+    var record: SpaceRecord?
+    var event: SpaceEvent?
+
+    @Environment(\.modelContext) private var context
+    @Environment(\.modalDismiss) private var modalDismiss
+    @State private var date = Date.now
+    @State private var values: [String: SpaceValue] = [:]
+    @State private var error = ""
+    @State private var loaded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(event == nil ? "Log \(type.name.lowercased())" : "Edit \(type.name.lowercased())")
+                .font(CraftFont.title)
+
+            ModalScroll {
+                VStack(alignment: .leading, spacing: 16) {
+                    ModalControlRow("When") {
+                        DatePicker("", selection: $date, displayedComponents: [.date, .hourAndMinute])
+                            .labelsHidden()
+                    }
+                    ForEach(type.schema.liveFields.filter { $0.kind != .calc && $0.kind != .image }) { field in
+                        SpaceFieldEditor(
+                            field: field,
+                            spaceKey: type.spaceIDString,
+                            value: Binding(get: { values[field.id] }, set: { values[field.id] = $0 }),
+                            importImage: { _ in nil }
+                        )
+                    }
+                }
+            }
+
+            if !error.isEmpty {
+                Text(error)
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.red)
+            }
+
+            ModalFooter(actionTitle: event == nil ? "Log" : "Save", actionEnabled: true, action: save) {
+                if event != nil {
+                    ModalFooterButton(title: "Delete", role: .destructive) {
+                        if let event { try? SpaceStore.delete(event, in: context) }
+                        modalDismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            guard !loaded else { return }
+            loaded = true
+            if let event {
+                date = event.occurredAt
+                let schema = type.schema
+                values = event.values.filter { schema.field($0.key)?.isRemoved == false }
+            }
+        }
+    }
+
+    private func save() {
+        let cleaned = SpaceRecordForm.cleaned(values)
+        do {
+            if let event {
+                try SpaceStore.update(event, at: date, values: cleaned, in: context)
+            } else if let record {
+                try SpaceStore.logEvent(of: type, at: date, values: cleaned, about: [record], in: context)
+            }
+            modalDismiss()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
 /// The schema-generated form for creating and editing a record by hand.
 struct SpaceRecordForm: View {
     var type: SpaceType
@@ -208,7 +287,13 @@ struct SpaceRecordForm: View {
                         }
                     }
                     ForEach(type.schema.liveFields.filter { $0.kind != .calc }) { field in
-                        SpaceFieldEditor(field: field, spaceKey: type.spaceIDString, value: binding(field.id), importImage: importImage)
+                        SpaceFieldEditor(
+                            field: field,
+                            spaceKey: type.spaceIDString,
+                            value: binding(field.id),
+                            importImage: importImage,
+                            importFile: importFile
+                        )
                     }
                     let worked = type.schema.liveFields.filter { $0.kind == .calc }
                     if !worked.isEmpty {
@@ -236,6 +321,11 @@ struct SpaceRecordForm: View {
             loaded = true
             title = record?.title ?? ""
             let schema = type.schema
+            if record == nil { values = schema.defaults() }
+            guard record != nil else {
+                focusName = true
+                return
+            }
             values = (record?.values ?? [:]).filter {
                 guard let field = schema.field($0.key) else { return false }
                 return !field.isRemoved && field.kind != .calc
@@ -258,6 +348,18 @@ struct SpaceRecordForm: View {
                 error = "\(url.lastPathComponent) is not an image."
                 return nil
             }
+            error = ""
+            return SpaceJSON.key(asset.id)
+        } catch {
+            self.error = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Copies any picked file into the file store and returns its asset id.
+    private func importFile(_ url: URL) -> String? {
+        do {
+            let asset = try FileStore.default(context: context).importFile(url: url, ownerKind: .spaceForm, ownerID: formID, orderIndex: 0)
             error = ""
             return SpaceJSON.key(asset.id)
         } catch {
@@ -326,12 +428,115 @@ private struct SpaceFieldEditor: View {
     var spaceKey: String
     @Binding var value: SpaceValue?
     var importImage: (URL) -> String?
+    var importFile: (URL) -> String? = { _ in nil }
     @State private var choosingImage = false
+    @State private var choosingFile = false
 
     var body: some View {
         switch field.kind {
-        case .text:
+        case .text, .url:
             ModalField(field.name) { SpaceCell(field: field, value: $value) }
+        case .money, .duration:
+            ModalField(field.name, boxed: false) {
+                SpaceCell(field: field, value: $value)
+                    .boxed()
+                    .fixedSize()
+            }
+        case .rating:
+            ModalControlRow(field.name) {
+                SpaceStars(stars: { if case .number(let stars) = value { stars } else { 0 } }(), accent: .primary) { picked in
+                    value = picked == 0 ? nil : .number(picked)
+                }
+            }
+        case .time:
+            ModalControlRow(field.name) {
+                if case .number(let minutes) = value {
+                    HStack(spacing: 8) {
+                        DatePicker("", selection: Binding(
+                            get: { SpaceClock.date(minutes) },
+                            set: { value = .number(SpaceClock.minutes($0)) }
+                        ), displayedComponents: .hourAndMinute)
+                        .labelsHidden()
+                        Button("Clear") { value = nil }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Button("Add time") { value = .number(9 * 60) }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        case .dateRange:
+            ModalControlRow(field.name) {
+                if case .text(let raw) = value, let range = SpaceDateRange(raw) {
+                    HStack(spacing: 6) {
+                        DatePicker("", selection: Binding(
+                            get: { range.start },
+                            set: { value = .text(SpaceDateRange(start: $0, end: max($0, range.end)).raw) }
+                        ), displayedComponents: .date)
+                        .labelsHidden()
+                        Text("to")
+                            .foregroundStyle(.tertiary)
+                        DatePicker("", selection: Binding(
+                            get: { range.end },
+                            set: { value = .text(SpaceDateRange(start: min($0, range.start), end: $0).raw) }
+                        ), displayedComponents: .date)
+                        .labelsHidden()
+                        Button("Clear") { value = nil }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Button("Add dates") {
+                        let today = Calendar.current.startOfDay(for: .now)
+                        value = .text(SpaceDateRange(start: today, end: today).raw)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
+            }
+        case .tags:
+            ModalField(field.name, boxed: false) {
+                let chosen: [String] = { if case .text(let raw) = value { SpaceTags.ids(raw) } else { [] } }()
+                FlowTags(options: field.options, chosen: chosen) { id in
+                    var next = chosen
+                    if let index = next.firstIndex(of: id) { next.remove(at: index) } else { next.append(id) }
+                    // Kept in the order the options are listed, so the same picks always store the same text.
+                    let ordered = field.options.map(\.id).filter(next.contains)
+                    value = ordered.isEmpty ? nil : .text(SpaceTags.raw(ordered))
+                }
+            }
+        case .file:
+            ModalField(field.name, boxed: false) {
+                HStack(spacing: 12) {
+                    if case .text(let assetID) = value {
+                        SpaceFileButton(assetID: assetID, accent: .primary)
+                        Button("Replace") { choosingFile = true }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                        Button("Remove") { value = nil }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Button("Choose a file") { choosingFile = true }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+                .dropDestination(for: URL.self) { urls, _ in
+                    guard let url = urls.first, let id = importFile(url) else { return false }
+                    value = .text(id)
+                    return true
+                }
+                .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.item]) { result in
+                    if case .success(let url) = result, let id = importFile(url) {
+                        value = .text(id)
+                    }
+                }
+            }
         case .richText:
             ModalField(field.name) {
                 TextField("", text: text, axis: .vertical)
@@ -392,6 +597,8 @@ private struct SpaceFieldEditor: View {
             }
         case .calc:
             EmptyView()
+        case .schedule:
+            ModalField(field.name, boxed: false) { SpaceScheduleEditor(value: $value) }
         case .image:
             ModalField(field.name, boxed: false) { imageEditor }
         case .group:
@@ -533,10 +740,30 @@ private struct SpaceCell: View {
             )
         case .link:
             SpaceLinkPicker(field: field, spaceKey: spaceKey, value: $value)
-        case .number:
+        case .number, .rating, .time:
             TextField(field.name, value: number, format: .number)
                 .textFieldStyle(.plain)
                 .frame(width: 72)
+        case .money:
+            HStack(spacing: 6) {
+                TextField(field.name, value: number, format: .number)
+                    .textFieldStyle(.plain)
+                    .frame(width: 84)
+                Text(field.unit.isEmpty ? (Locale.current.currency?.identifier ?? "USD") : field.unit.uppercased())
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        case .duration:
+            HStack(spacing: 4) {
+                TextField("0", value: hours, format: .number)
+                    .textFieldStyle(.plain)
+                    .frame(width: 32)
+                Text("h").foregroundStyle(.tertiary)
+                TextField("0", value: minutes, format: .number)
+                    .textFieldStyle(.plain)
+                    .frame(width: 32)
+                Text("m").foregroundStyle(.tertiary)
+            }
         case .quantity:
             HStack(spacing: 6) {
                 TextField("Amount", value: amount, format: .number)
@@ -566,6 +793,24 @@ private struct SpaceCell: View {
         Binding(
             get: { if case .number(let number) = value { number } else { nil } },
             set: { value = $0.map(SpaceValue.number) }
+        )
+    }
+
+    private var totalMinutes: Int {
+        if case .number(let number) = value { Int(number.rounded()) } else { 0 }
+    }
+
+    private var hours: Binding<Int?> {
+        Binding(
+            get: { value == nil ? nil : totalMinutes / 60 },
+            set: { value = .number(Double(max($0 ?? 0, 0) * 60 + totalMinutes % 60)) }
+        )
+    }
+
+    private var minutes: Binding<Int?> {
+        Binding(
+            get: { value == nil ? nil : totalMinutes % 60 },
+            set: { value = .number(Double(totalMinutes / 60 * 60 + min(max($0 ?? 0, 0), 59))) }
         )
     }
 
@@ -661,5 +906,90 @@ private struct SpaceLinkPicker: View {
             value: $value
         )
         .disabled(options.isEmpty)
+    }
+}
+
+
+/// Every day, some number of times a week, or chosen weekdays.
+private struct SpaceScheduleEditor: View {
+    @Binding var value: SpaceValue?
+
+    private var schedule: SpaceSchedule? {
+        if case .text(let raw) = value { SpaceSchedule(raw) } else { nil }
+    }
+
+    private func set(_ rule: SpaceSchedule.Rule?) {
+        value = rule.map { .text(SpaceSchedule($0).raw) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                option("Every day", isOn: schedule?.rule == .daily) { set(.daily) }
+                option("Times a week", isOn: isPerWeek) { set(.perWeek(3)) }
+                option("Set days", isOn: isWeekdays) { set(.weekdays([2, 4, 6])) }
+            }
+            if case .perWeek(let times) = schedule?.rule {
+                Stepper(times == 1 ? "Once a week" : "\(times) times a week", value: Binding(
+                    get: { times },
+                    set: { set(.perWeek(min(max($0, 1), 6))) }
+                ), in: 1...6)
+                .font(CraftFont.body)
+                .fixedSize()
+            }
+            if case .weekdays(let days) = schedule?.rule {
+                HStack(spacing: 4) {
+                    ForEach(1...7, id: \.self) { day in
+                        let isOn = days.contains(day)
+                        Button {
+                            var next = days
+                            if isOn { next.remove(day) } else { next.insert(day) }
+                            if !next.isEmpty { set(.weekdays(next)) }
+                        } label: {
+                            ChoiceCapsule(title: SpaceSchedule.dayNames[day - 1].capitalized, isSelected: isOn)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var isPerWeek: Bool {
+        if case .perWeek = schedule?.rule { true } else { false }
+    }
+
+    private var isWeekdays: Bool {
+        if case .weekdays = schedule?.rule { true } else { false }
+    }
+
+    private func option(_ title: String, isOn: Bool, choose: @escaping () -> Void) -> some View {
+        Button {
+            if isOn { set(nil) } else { choose() }
+        } label: {
+            ChoiceCapsule(title: title, isSelected: isOn)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+
+/// Options as capsules that wrap onto more lines. Any number can be on.
+private struct FlowTags: View {
+    var options: [SpaceOption]
+    var chosen: [String]
+    var toggle: (String) -> Void
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 6, alignment: .leading)], alignment: .leading, spacing: 6) {
+            ForEach(options) { option in
+                Button {
+                    toggle(option.id)
+                } label: {
+                    ChoiceCapsule(title: option.name, isSelected: chosen.contains(option.id))
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 }

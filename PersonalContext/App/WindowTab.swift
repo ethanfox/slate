@@ -232,7 +232,8 @@ extension AppModel {
         switch row.kind {
         case .project:
             if let project = NavTrace.measure("fetch.project") { TitleIndexStore.project(row.id, in: context) } {
-                open(project, newTab: newTab)
+                // A project opens on its overview, the one page that stands for it.
+                open(project, tab: .overview, newTab: newTab)
             }
         case .track:
             if let thread = NavTrace.measure("fetch.track") { TitleIndexStore.thread(row.id, in: context) } {
@@ -645,7 +646,7 @@ extension AppModel {
 
     private func currentWindowTab() -> WindowTab {
         let projectTab: ProjectTab = {
-            if case .project(let id) = chromeDestination { return tabs[id] ?? .chat }
+            if case .project(let id) = chromeDestination { return tabs[id] ?? .overview }
             return .chat
         }()
         return WindowTab(

@@ -195,10 +195,10 @@ struct YouView: View {
                         .padding(.horizontal, gutter)
                     shelf
                     HStack(alignment: .top, spacing: 48) {
+                        latelyFeed
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         comingUp
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        recentProjects
-                            .frame(width: 280, alignment: .leading)
                     }
                     .padding(.horizontal, gutter)
                 }
@@ -207,6 +207,7 @@ struct YouView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .captureBar()
         .task { await app.eventKit.prepareEvents() }
         .alert(
             "Delete \(pendingDelete?.displayName ?? "this Space")?",
@@ -235,6 +236,8 @@ struct YouView: View {
                 Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
                     .font(CraftFont.body)
                     .foregroundStyle(.secondary)
+                shortcuts
+                    .padding(.top, 12)
             }
             Spacer(minLength: 16)
             Button {
@@ -393,6 +396,47 @@ struct YouView: View {
         case .record(let spaceID, _):
             app.navigate(to: .space(spaceID))
         }
+    }
+
+    private var latelyFeed: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Lately")
+                .font(CraftFont.section)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 2)
+            ActionFeed(empty: "What Membrae files for you will show up here.")
+        }
+    }
+
+    /// The places that no longer have a sidebar row of their own.
+    private var shortcuts: some View {
+        HStack(spacing: 6) {
+            shortcut("Tasks", "checklist", .tasks)
+            shortcut("Calendar", "calendar", .calendar)
+            shortcut("Chats", "bubble.left.and.bubble.right", .chats)
+            shortcut("Runs", "play.circle", .runs)
+            shortcut("All projects", "square.stack", .projects)
+        }
+    }
+
+    private func shortcut(_ title: String, _ symbol: String, _ destination: Destination) -> some View {
+        Button {
+            app.navigate(to: destination)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Text(title)
+                    .font(CraftFont.body)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(CraftColor.elevated, in: Capsule())
+            .overlay(Capsule().strokeBorder(CraftColor.hairline))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private var recentProjects: some View {

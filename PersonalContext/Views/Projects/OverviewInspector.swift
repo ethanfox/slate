@@ -187,78 +187,11 @@ private struct OverviewInspectorSettings: View {
             }
 
             inspectorField("MCP") {
-                VStack(alignment: .leading, spacing: 8) {
-                    if app.talkProvider == .compatible {
-                        Text("The compatible endpoint cannot run MCP tools.")
-                            .font(CraftFont.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if app.mcp.store.enabledConnections.isEmpty {
-                        Text("Connect a server in Settings → MCP, then enable it here.")
-                            .font(CraftFont.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } else {
-                        ForEach(app.mcp.store.enabledConnections) { record in
-                            Toggle(record.name, isOn: Binding(
-                                get: { app.mcp.store.allows(record.id, in: project.id) },
-                                set: { app.mcp.store.setAllowed(record.id, in: project.id, allowed: $0) }
-                            ))
-                            .toggleStyle(.switch)
-                        }
-                    }
-                }
+                ProjectMCPToggles(project: project)
             }
 
             inspectorField("Worker") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Picker("Worker", selection: workerMode) {
-                        Text("Use chat model").tag(false)
-                        Text("Custom worker").tag(true)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-
-                    if !project.workerProviderID.isEmpty {
-                        Picker("Provider", selection: $project.workerProviderID) {
-                            if let current = TalkProvider(rawValue: project.workerProviderID),
-                               !app.availableTalkProviders.contains(current) {
-                                Text("\(current.title) — disconnected").tag(current.rawValue)
-                            }
-                            ForEach(app.availableTalkProviders) { provider in
-                                Text(provider.title).tag(provider.rawValue)
-                            }
-                        }
-                        .pickerStyle(.menu)
-
-                        Picker("Model", selection: $project.workerModelID) {
-                            if project.workerProviderID == TalkProvider.cursor.rawValue {
-                                Text("Account default").tag("")
-                            }
-                            ForEach(app.models(for: project.workerProviderID), id: \.id) { model in
-                                Text(model.name).tag(model.id)
-                            }
-                        }
-                        .pickerStyle(.menu)
-
-                        Picker("Run on", selection: $project.workerPath) {
-                            ForEach(WorkerRegistry.paths(for: project.workerProviderID)) { path in
-                                Text(path.title).tag(path.rawValue)
-                            }
-                        }
-                        .pickerStyle(.menu)
-
-                        if project.workerPath == WorkerPath.cloud.rawValue,
-                           project.workerProviderID == TalkProvider.cursor.rawValue,
-                           !project.codeAttachments.contains(where: { $0.kind == .github }) {
-                            Text("Cursor Cloud requires an attached GitHub repository.")
-                                .font(CraftFont.caption)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
+                ProjectWorkerFields(project: project)
             }
         }
         .onChange(of: project.name) { _, _ in project.touch() }
@@ -269,6 +202,102 @@ private struct OverviewInspectorSettings: View {
         }
         .onChange(of: project.isPinned) { _, _ in project.touch() }
         .onChange(of: project.overviewWidthRaw) { _, _ in project.touch() }
+    }
+
+    private func inspectorField<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(CraftFont.caption)
+                .foregroundStyle(.secondary)
+            content()
+        }
+    }
+}
+
+/// Which connected MCP servers this project's chats may use.
+struct ProjectMCPToggles: View {
+    var project: Project
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if app.talkProvider == .compatible {
+                Text("The compatible endpoint cannot run MCP tools.")
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if app.mcp.store.enabledConnections.isEmpty {
+                Text("Connect a server in Settings → MCP, then enable it here.")
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ForEach(app.mcp.store.enabledConnections) { record in
+                    Toggle(record.name, isOn: Binding(
+                        get: { app.mcp.store.allows(record.id, in: project.id) },
+                        set: { app.mcp.store.setAllowed(record.id, in: project.id, allowed: $0) }
+                    ))
+                    .toggleStyle(.switch)
+                }
+            }
+        }
+    }
+}
+
+/// The model that does code work for this project.
+struct ProjectWorkerFields: View {
+    @Bindable var project: Project
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Worker", selection: workerMode) {
+                Text("Use chat model").tag(false)
+                Text("Custom worker").tag(true)
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+
+            if !project.workerProviderID.isEmpty {
+                Picker("Provider", selection: $project.workerProviderID) {
+                    if let current = TalkProvider(rawValue: project.workerProviderID),
+                       !app.availableTalkProviders.contains(current) {
+                        Text("\(current.title) — disconnected").tag(current.rawValue)
+                    }
+                    ForEach(app.availableTalkProviders) { provider in
+                        Text(provider.title).tag(provider.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Picker("Model", selection: $project.workerModelID) {
+                    if project.workerProviderID == TalkProvider.cursor.rawValue {
+                        Text("Account default").tag("")
+                    }
+                    ForEach(app.models(for: project.workerProviderID), id: \.id) { model in
+                        Text(model.name).tag(model.id)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Picker("Run on", selection: $project.workerPath) {
+                    ForEach(WorkerRegistry.paths(for: project.workerProviderID)) { path in
+                        Text(path.title).tag(path.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                if project.workerPath == WorkerPath.cloud.rawValue,
+                   project.workerProviderID == TalkProvider.cursor.rawValue,
+                   !project.codeAttachments.contains(where: { $0.kind == .github }) {
+                    Text("Cursor Cloud requires an attached GitHub repository.")
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
         .onChange(of: project.workerProviderID) { _, _ in
             normalizeWorker()
             project.touch()
@@ -308,15 +337,6 @@ private struct OverviewInspectorSettings: View {
         if project.workerProviderID == TalkProvider.chatgpt.rawValue,
            !models.contains(where: { $0.id == project.workerModelID }) {
             project.workerModelID = models.first?.id ?? ""
-        }
-    }
-
-    private func inspectorField<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(CraftFont.caption)
-                .foregroundStyle(.secondary)
-            content()
         }
     }
 }

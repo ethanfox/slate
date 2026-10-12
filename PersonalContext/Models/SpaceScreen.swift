@@ -170,6 +170,8 @@ struct SpaceCalcRequest: Hashable {
         case max
         /// How much a logged number has moved since the period began.
         case change
+        /// Where the record stands against its schedule: 2 of 3 this week, or done today.
+        case pace
 
         var needsEvent: Bool { self != .records }
         var collectionOnly: Bool { self == .today || self == .records }
@@ -228,6 +230,61 @@ enum SpaceCalc {
             cursor = previous
         }
         return length
+    }
+
+    /// A streak in the schedule's own terms: scheduled days hit in a row, or weeks that met their count.
+    /// The current day or week does not break a streak until it is over.
+    static func streak(_ dates: [Date], schedule: SpaceSchedule, now: Date = .now, calendar: Calendar = .current) -> String {
+        let marked = days(dates, calendar: calendar)
+        let today = calendar.startOfDay(for: now)
+        switch schedule.rule {
+        case .daily:
+            return daysLabel(streak(dates, now: now, calendar: calendar))
+        case .weekdays:
+            var length = 0
+            var cursor = today
+            for _ in 0..<3660 {
+                if schedule.isDue(on: cursor, calendar: calendar) {
+                    if marked.contains(cursor) {
+                        length += 1
+                    } else if cursor != today {
+                        break
+                    }
+                }
+                guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+                cursor = previous
+            }
+            return daysLabel(length)
+        case .perWeek(let times):
+            guard var week = calendar.dateInterval(of: .weekOfYear, for: today) else { return weeksLabel(0) }
+            var length = 0
+            for index in 0..<520 {
+                let count = marked.filter { week.contains($0) }.count
+                if count >= times {
+                    length += 1
+                } else if index != 0 {
+                    break
+                }
+                guard let earlier = calendar.date(byAdding: .weekOfYear, value: -1, to: week.start),
+                      let previous = calendar.dateInterval(of: .weekOfYear, for: earlier) else { break }
+                week = previous
+            }
+            return weeksLabel(length)
+        }
+    }
+
+    static func pace(_ dates: [Date], schedule: SpaceSchedule?, now: Date = .now, calendar: Calendar = .current) -> String {
+        let marked = days(dates, calendar: calendar)
+        let today = calendar.startOfDay(for: now)
+        if case .perWeek(let times) = schedule?.rule, let week = calendar.dateInterval(of: .weekOfYear, for: today) {
+            return "\(marked.filter { week.contains($0) }.count) of \(times) this week"
+        }
+        if marked.contains(today) { return "Done today" }
+        return schedule?.isDue(on: today, calendar: calendar) == false ? "Not due today" : "Due today"
+    }
+
+    static func weeksLabel(_ count: Int) -> String {
+        count == 1 ? "1 week" : "\(count) weeks"
     }
 
     static func best(_ dates: [Date], calendar: Calendar = .current) -> Int {
@@ -335,8 +392,20 @@ struct SpaceComponentSpec: Hashable {
 }
 
 enum SpaceScreenCatalog {
-    private static let singles: [SpaceFieldKind] = [.text, .number, .boolean, .date, .choice, .quantity, .link, .calc]
+    private static let singles: [SpaceFieldKind] = [.text, .number, .boolean, .date, .choice, .quantity, .link, .calc, .schedule, .tags, .url, .money, .duration, .time, .dateRange, .rating, .file]
     private static let both: Set<SpaceScreenKind> = [.collection, .detail]
+    private static let sortNote = "A field id, title, or updated. Put - in front for largest or newest first, such as -rating."
+    private static let arrangeProps = [
+        SpacePropSpec(name: "sort", kind: .text, note: sortNote),
+        SpacePropSpec(name: "group", kind: .field([.choice, .link]), note: "A choice or link field to group the records under headings.")
+    ]
+    private static let plannerProps = [
+        SpacePropSpec(name: "date", kind: .field([.date]), required: true, note: "The date field that places a record on a day."),
+        SpacePropSpec(name: "subtitle", kind: .fields(singles), note: "Fields shown under each name."),
+        SpacePropSpec(name: "total", kind: .field(SpaceFieldKind.allCases.filter(\.isNumeric)), note: "A number field added up for each day."),
+        SpacePropSpec(name: "target", kind: .formula, note: "What each day's total is measured against, such as goals.calories."),
+        SpacePropSpec(name: "unit", kind: .text, note: "Shown after the total, such as kcal.")
+    ]
 
     static let components: [SpaceComponentSpec] = [
         SpaceComponentSpec(
@@ -360,13 +429,56 @@ enum SpaceScreenCatalog {
             props: [SpacePropSpec(name: "filters", kind: .fields([.choice]), note: "Choice fields to offer as chips.")]
         ),
         SpaceComponentSpec(
+            name: "quickAdd",
+            summary: "A line to type a name into. Return adds a record without opening the form.",
+            screens: [.collection],
+            props: [SpacePropSpec(name: "placeholder", kind: .text, note: "Hint shown in the empty line.")]
+        ),
+        SpaceComponentSpec(
             name: "cards",
             summary: "The records as a grid of cards.",
             screens: [.collection],
             props: [
                 SpacePropSpec(name: "image", kind: .field([.image]), note: "Image field shown at the top of each card."),
                 SpacePropSpec(name: "subtitle", kind: .fields(singles), note: "Fields shown under each name.")
+            ] + arrangeProps
+        ),
+        SpaceComponentSpec(
+            name: "board",
+            summary: "The records in columns by a choice field, such as the stage of a job application. Dragging a card to another column changes the field.",
+            screens: [.collection],
+            props: [
+                SpacePropSpec(name: "by", kind: .field([.choice]), required: true, note: "The choice field whose options are the columns."),
+                SpacePropSpec(name: "subtitle", kind: .fields(singles), note: "Fields shown under each name."),
+                SpacePropSpec(name: "sort", kind: .text, note: sortNote)
             ]
+        ),
+        SpaceComponentSpec(
+            name: "sheet",
+            summary: "The records as a table, one column per field. Clicking a heading sorts by it.",
+            screens: [.collection],
+            props: [
+                SpacePropSpec(name: "columns", kind: .fields(singles), required: true, note: "Fields shown as columns after the name."),
+                SpacePropSpec(name: "sort", kind: .text, note: sortNote)
+            ]
+        ),
+        SpaceComponentSpec(
+            name: "week",
+            summary: "Seven days side by side, each listing the records dated that day. For plans: meals for the week, workouts, appointments.",
+            screens: [.collection],
+            props: plannerProps
+        ),
+        SpaceComponentSpec(
+            name: "day",
+            summary: "One day at a time, listing the records dated that day, with a daily total.",
+            screens: [.collection],
+            props: plannerProps
+        ),
+        SpaceComponentSpec(
+            name: "month",
+            summary: "A month grid marking the days that have records. Picking a day lists them.",
+            screens: [.collection],
+            props: plannerProps
         ),
         SpaceComponentSpec(
             name: "rows",
@@ -377,6 +489,29 @@ enum SpaceScreenCatalog {
                 SpacePropSpec(name: "action", kind: .event, note: "Event to log or undo for today with one tap."),
                 SpacePropSpec(name: "week", kind: .event, note: "Event to show as seven day dots."),
                 SpacePropSpec(name: "trail", kind: .calc, note: "A calculation shown at the end of each row.")
+            ] + arrangeProps
+        ),
+        SpaceComponentSpec(
+            name: "table",
+            summary: "Rows of a group as a plain table with column headings. Use this for lists that are not ticked off, such as a meal's recipes or a nutrient list. Linked records can be opened from it.",
+            screens: [.detail],
+            props: [SpacePropSpec(name: "rows", kind: .field([.group]), required: true, note: "The group field.")]
+        ),
+        SpaceComponentSpec(
+            name: "usedIn",
+            summary: "Records of another type that link to this one, such as the meals a recipe is in.",
+            screens: [.detail],
+            props: [SpacePropSpec(name: "type", kind: .text, required: true, note: "Key of the type whose records link here.")]
+        ),
+        SpaceComponentSpec(
+            name: "chart",
+            summary: "Logged events over time: a line for a logged number such as weight, or bars for how much happened each day.",
+            screens: both,
+            props: [
+                SpacePropSpec(name: "events", kind: .event, required: true, note: "The event type."),
+                SpacePropSpec(name: "field", kind: .text, note: "A number field of the event, or record.field for a field of the records it is about. Left out, the chart counts events."),
+                SpacePropSpec(name: "period", kind: .text, note: "week, month, year or all. Defaults to month."),
+                SpacePropSpec(name: "style", kind: .text, note: "line or bar. Lines suit a measurement, bars a daily amount.")
             ]
         ),
         SpaceComponentSpec(
@@ -411,7 +546,8 @@ enum SpaceScreenCatalog {
             screens: [.detail],
             props: [
                 SpacePropSpec(name: "rows", kind: .field([.group]), required: true, note: "The group field."),
-                SpacePropSpec(name: "scaleBy", kind: .field([.number]), note: "Number field whose stepper scales the quantities.")
+                SpacePropSpec(name: "scaleBy", kind: .field([.number]), note: "Number field whose stepper scales the quantities."),
+                SpacePropSpec(name: "saves", kind: .text, note: "A yes/no column of the group. Ticks are then saved into it, for a to-do list. Left out, ticks reset when the page closes.")
             ]
         ),
         SpaceComponentSpec(
@@ -448,7 +584,7 @@ enum SpaceScreenCatalog {
             summary: "One calculated number with a label.",
             screens: both,
             props: [
-                SpacePropSpec(name: "value", kind: .calc, required: true, note: "count, latest, streak, best or week, then :eventKey. For logged numbers: sum, avg, min, max or change, then :eventKey.field:period. In a collection also today:eventKey and records."),
+                SpacePropSpec(name: "value", kind: .calc, required: true, note: "count, latest, streak, best, week or pace, then :eventKey. For logged numbers: sum, avg, min, max or change, then :eventKey.field:period. In a collection also today:eventKey and records."),
                 SpacePropSpec(name: "label", kind: .text, required: true, note: "Text under the number.")
             ]
         ),
@@ -472,11 +608,12 @@ enum SpaceScreenCatalog {
         in definition: SpaceScreenDefinition,
         kind: SpaceScreenKind,
         schema: SpaceSchema,
-        eventKeys: Set<String>
+        eventKeys: Set<String>,
+        events: [String: SpaceSchema] = [:]
     ) -> [String] {
         var problems: [String] = []
         for component in definition.components {
-            check(component, kind: kind, schema: schema, eventKeys: eventKeys, into: &problems)
+            check(component, kind: kind, schema: schema, eventKeys: eventKeys, events: events, into: &problems)
         }
         return problems
     }
@@ -486,6 +623,7 @@ enum SpaceScreenCatalog {
         kind: SpaceScreenKind,
         schema: SpaceSchema,
         eventKeys: Set<String>,
+        events: [String: SpaceSchema],
         into problems: inout [String]
     ) {
         guard let spec = spec(component.kind) else {
@@ -564,8 +702,37 @@ enum SpaceScreenCatalog {
                 }
             }
         }
+        if component.kind == "checklist", let saves = component.text("saves"), let rows = component.text("rows") {
+            let column = schema.field(rows)?.fields.first { $0.id == saves && !$0.isRemoved }
+            if column?.kind != .boolean {
+                problems.append("checklist.saves must name a yes/no column of \(rows).")
+            }
+        }
+        if component.kind == "chart" {
+            if let period = component.text("period"), SpaceCalcRequest.Period(rawValue: period) == nil {
+                problems.append("chart.period must be week, month, year or all.")
+            }
+            if let style = component.text("style"), style != "line", style != "bar" {
+                problems.append("chart.style must be line or bar.")
+            }
+            if let eventKey = component.text("events"), let field = component.text("field") {
+                if let request = SpaceCalcRequest("sum:\(eventKey).\(field)") {
+                    checkCalc(request, owner: "chart.field", schema: schema, eventKeys: eventKeys, events: events, into: &problems)
+                } else {
+                    problems.append("chart.field must be a field id, or record.field.")
+                }
+            }
+        }
+        for sortable in ["cards", "rows", "board", "sheet"] where component.kind == sortable {
+            if let sort = component.text("sort") {
+                let id = sort.hasPrefix("-") ? String(sort.dropFirst()) : sort
+                if id != "title", id != "updated", schema.liveFields.first(where: { $0.id == id }) == nil {
+                    problems.append("\(sortable).sort names a field that does not exist: \(id).")
+                }
+            }
+        }
         for child in component.children {
-            check(child, kind: kind, schema: schema, eventKeys: eventKeys, into: &problems)
+            check(child, kind: kind, schema: schema, eventKeys: eventKeys, events: events, into: &problems)
         }
     }
 
@@ -582,11 +749,10 @@ enum SpaceScreenCatalog {
             return
         }
         guard request.name.needsField else { return }
-        let numeric: Set<SpaceFieldKind> = [.number, .quantity, .calc]
         let holder = request.onRecord ? schema : events[request.eventKey]
         // Without the event's fields to hand there is nothing more to check.
         guard let holder else { return }
-        guard let field = holder.liveFields.first(where: { $0.id == request.field }), numeric.contains(field.kind) else {
+        guard let field = holder.liveFields.first(where: { $0.id == request.field }), field.kind.isNumeric else {
             let place = request.onRecord ? "this type" : "the event \(request.eventKey)"
             problems.append("\(owner) needs a number field, and \(place) has no number field \(request.field).")
             return

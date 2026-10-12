@@ -60,6 +60,9 @@ func openStore() throws -> ModelContainer {
     throw last!
 }
 
+/// Name the connected client gave at initialize, kept for the action log.
+var client = ""
+
 while let line = readLine(strippingNewline: true) {
     guard !line.isEmpty else { continue }
     guard let message = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any] else {
@@ -72,6 +75,7 @@ while let line = readLine(strippingNewline: true) {
 
     switch method {
     case "initialize":
+        client = (params["clientInfo"] as? [String: Any])?["name"] as? String ?? ""
         let requested = params["protocolVersion"] as? String ?? ""
         respond(id, result: [
             "protocolVersion": supportedVersions.contains(requested) ? requested : supportedVersions[0],
@@ -88,7 +92,9 @@ while let line = readLine(strippingNewline: true) {
         let arguments = params["arguments"] as? [String: Any] ?? [:]
         do {
             let container = try openStore()
-            let result = Tools.call(name, arguments: arguments, container: container)
+            let meta = params["_meta"] as? [String: Any] ?? [:]
+            let origin = ActionOrigin(client: client, conversationID: meta["conversation_id"] as? String ?? "")
+            let result = Tools.call(name, arguments: arguments, container: container, origin: origin)
             MCPStoreSession.noteLocalWrite()
             respond(id, result: result)
         } catch {

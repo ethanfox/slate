@@ -47,6 +47,14 @@ struct EditProjectModal: View {
                 ProjectCodeSection(project: project)
             }
 
+            ModalField("MCP", boxed: false) {
+                ProjectMCPToggles(project: project)
+            }
+
+            ModalField("Worker", boxed: false) {
+                ProjectWorkerFields(project: project)
+            }
+
             ModalControlRow("Status") {
                 Picker("Status", selection: $status) {
                     ForEach(ProjectStatus.allCases) { item in

@@ -24,6 +24,11 @@ struct SpaceView: View {
     }
 
     var body: some View {
+        content
+            .captureBar(placeholder: "Tell Membrae anything about \(space?.displayName ?? "this Space")")
+    }
+
+    private var content: some View {
         ScrollView {
             PageBody {
                 VStack(alignment: .leading, spacing: 20) {
@@ -74,7 +79,9 @@ struct SpaceView: View {
             type: type,
             schema: type.schema,
             eventTypes: SpaceScreens.eventTypes(beside: type, in: types),
-            records: records.filter { $0.typeIDString == key }.sorted { $0.createdAt < $1.createdAt },
+            records: records
+                .filter { $0.typeIDString == key && ($0.isArchived == app.spacesShowingArchived.contains(id)) }
+                .sorted { $0.createdAt < $1.createdAt },
             events: events.filter { $0.spaceIDString == spaceKey },
             record: nil,
             titles: SpaceSelection.titles(in: spaceKey, records: records),
@@ -82,7 +89,8 @@ struct SpaceView: View {
             accent: space.gradient.accent,
             state: screenState,
             context: context,
-            open: { app.navigate(to: .spaceRecord(space: id, record: $0.id)) }
+            open: { app.navigate(to: .spaceRecord(space: id, record: $0.id)) },
+            present: { app.present($0) }
         )
     }
 
@@ -90,7 +98,7 @@ struct SpaceView: View {
     @ViewBuilder
     private func list(_ type: SpaceType) -> some View {
         let key = SpaceJSON.key(type.id)
-        let rows = records.filter { $0.typeIDString == key }
+        let rows = records.filter { $0.typeIDString == key && ($0.isArchived == app.spacesShowingArchived.contains(id)) }
         let schema = type.schema
         let titles = SpaceSelection.titles(in: type.spaceIDString, records: records)
         HStack(alignment: .firstTextBaseline) {
@@ -137,6 +145,16 @@ struct SpaceView: View {
                             app.present(.editRecord(record))
                         } label: {
                             Label("Edit…", systemImage: "pencil")
+                        }
+                        Button {
+                            try? SpaceStore.duplicate(record, in: context)
+                        } label: {
+                            Label("Duplicate", systemImage: "plus.square.on.square")
+                        }
+                        Button {
+                            try? SpaceStore.setArchived(!record.isArchived, on: record, in: context)
+                        } label: {
+                            Label(record.isArchived ? "Unarchive" : "Archive", systemImage: "archivebox")
                         }
                         Divider()
                         Button(role: .destructive) {
@@ -215,6 +233,21 @@ struct SpaceToolbar: View {
                     }
                     .padding(2)
                     .glassEffect(.regular, in: Capsule())
+                }
+                if records.contains(where: { $0.spaceIDString == SpaceJSON.key(spaceID) && $0.isArchived }) {
+                    let showing = app.spacesShowingArchived.contains(spaceID)
+                    Button {
+                        if showing { app.spacesShowingArchived.remove(spaceID) } else { app.spacesShowingArchived.insert(spaceID) }
+                    } label: {
+                        Image(systemName: showing ? "archivebox.fill" : "archivebox")
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular, in: Capsule())
+                    .help(showing ? "Back to current records" : "Show archived records")
+                    .accessibilityLabel(showing ? "Back to current records" : "Show archived records")
                 }
                 if let selected, selected.role == .settings {
                     if let record = records.first(where: { $0.typeIDString == SpaceJSON.key(selected.id) }) {

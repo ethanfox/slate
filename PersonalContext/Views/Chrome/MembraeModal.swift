@@ -6,6 +6,8 @@ enum AppModal: Identifiable {
     case newProject
     case newSpace
     case editSpace(Space)
+    case logSpaceEvent(SpaceType, SpaceRecord)
+    case editSpaceEvent(SpaceEvent)
     case newRecord(SpaceType)
     case editRecord(SpaceRecord)
     case newEvent
@@ -34,6 +36,8 @@ enum AppModal: Identifiable {
         case .newProject: "new-project"
         case .newSpace: "new-space"
         case .editSpace(let space): "edit-space-\(space.id.uuidString)"
+        case .logSpaceEvent(let type, let record): "log-event-\(type.id.uuidString)-\(record.id.uuidString)"
+        case .editSpaceEvent(let event): "edit-space-event-\(event.id.uuidString)"
         case .newRecord(let type): "new-record-\(type.id.uuidString)"
         case .editRecord(let record): "edit-record-\(record.id.uuidString)"
         case .newEvent: "new-event"
@@ -62,7 +66,7 @@ enum AppModal: Identifiable {
 
     var panelWidth: CGFloat {
         switch self {
-        case .newEvent, .editEvent, .newTask, .newTaskFromNote, .editReminder, .editTask, .newRecord, .editRecord: 520
+        case .newEvent, .editEvent, .newTask, .newTaskFromNote, .editReminder, .editTask, .newRecord, .editRecord, .logSpaceEvent, .editSpaceEvent: 520
         case .inspectCodeReference: 560
         default: 440
         }

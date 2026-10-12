@@ -142,7 +142,7 @@ final class MembraeToolGateway: AgentToolGateway {
             }
             if let store {
                 return try Self.localResult(
-                    Tools.call(name, arguments: arguments, container: store, announce: false)
+                    Tools.call(name, arguments: arguments, container: store, announce: false, origin: ActionOrigin(client: "membrae"))
                 )
             }
             guard let mcp else {

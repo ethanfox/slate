@@ -157,7 +157,9 @@ enum Tools {
         _ name: String,
         arguments: [String: Any],
         container: ModelContainer,
-        announce: Bool = true
+        announce: Bool = true,
+        origin: ActionOrigin = ActionOrigin(),
+        logs: Bool = true
     ) -> [String: Any] {
         guard let tool = tools.first(where: { $0.name == canonical(name) }) else {
             return failure("Unknown tool: \(name)")
@@ -165,8 +167,13 @@ enum Tools {
         let context = ModelContext(container)
         context.autosaveEnabled = false
         do {
-            let value = try tool.handler(Args(raw: migrate(arguments)), context)
+            let args = Args(raw: migrate(arguments))
+            let before = logs && !tool.readOnly ? snapshot(tool.name, args: args, in: context) : [:]
+            let value = try tool.handler(args, context)
             if !tool.readOnly {
+                if logs {
+                    record(tool.name, args: args, result: value, before: before, origin: origin, in: context)
+                }
                 try context.persist()
                 if announce {
                     Store.announceChange()
@@ -179,6 +186,223 @@ enum Tools {
         } catch {
             return failure(error.localizedDescription)
         }
+    }
+
+    // MARK: - Action log
+
+    private static let logged: [String: (verb: AgentActionVerb, kind: String)] = [
+        "create_project": (.added, "project"), "update_project": (.changed, "project"),
+        "create_task": (.added, "task"), "update_task": (.changed, "task"), "complete_task": (.completed, "task"),
+        "delete_completion": (.removed, "completion"),
+        "create_decision": (.added, "decision"), "update_decision": (.changed, "decision"),
+        "create_track": (.added, "track"), "update_track": (.changed, "track"),
+        "create_note": (.added, "note"), "update_note": (.changed, "note"),
+        "create_tag": (.added, "tag"), "update_tag": (.changed, "tag"),
+        "assign_tag": (.tagged, ""), "remove_tag": (.untagged, ""),
+        "mark_for_deletion": (.flagged, ""),
+        "upsert_code_reference_entry": (.changed, "code"), "set_code_reference_meta": (.changed, "code"),
+        "create_space": (.added, "space"), "update_space": (.changed, "space"),
+        "set_space_type": (.changed, "space"), "set_space_screen": (.changed, "space"),
+        "create_space_record": (.added, "record"), "update_space_record": (.changed, "record"),
+        "update_space_event": (.changed, "record"), "log_space_event": (.logged, "record")
+    ]
+
+    /// Writes one line to the action log for a write that just succeeded.
+    private static func record(
+        _ tool: String,
+        args: Args,
+        result: Any,
+        before: [String: Any],
+        origin: ActionOrigin,
+        in context: ModelContext
+    ) {
+        guard let entry = logged[tool] else { return }
+        let shape = result as? [String: Any] ?? [:]
+        var kind = entry.kind
+        var target = shape["id"] as? String ?? ""
+        var title = (shape["title"] as? String) ?? (shape["name"] as? String) ?? ""
+        var detail = ""
+        var project = (shape["project_id"] as? String) ?? args.string("project_id") ?? ""
+        var space = args.string("space_id") ?? ""
+        var before = before
+
+        func index(_ id: String) -> TitleIndex? {
+            guard let uuid = UUID(uuidString: id) else { return nil }
+            var descriptor = FetchDescriptor<TitleIndex>(predicate: #Predicate { $0.id == uuid })
+            descriptor.fetchLimit = 1
+            return try? context.fetch(descriptor).first
+        }
+        func pointAtRecord(_ id: String) {
+            target = id
+            guard let record = UUID(uuidString: id).flatMap({ SpaceStore.record($0, in: context) }) else { return }
+            title = record.displayTitle
+            space = record.spaceIDString
+        }
+        func pointAtIndexed(_ id: String, kind raw: String) {
+            target = id
+            kind = raw == "conversation" ? "chat" : raw
+            title = index(id)?.displayTitle ?? ""
+            project = index(id)?.projectIDString ?? project
+        }
+
+        switch tool {
+        case "create_project", "update_project":
+            project = target
+        case "assign_tag", "remove_tag":
+            detail = title
+            pointAtIndexed(args.string("record_id") ?? "", kind: args.string("record_type") ?? "")
+        case "mark_for_deletion":
+            detail = args.string("reason") ?? ""
+            pointAtIndexed(args.string("target_id") ?? "", kind: args.string("target_type") ?? "")
+        case "delete_completion":
+            target = ""
+        case "create_space", "update_space":
+            space = target
+        case "set_space_type", "set_space_screen":
+            detail = (shape["name"] as? String) ?? args.string("type_key") ?? ""
+            target = space
+            title = UUID(uuidString: space).flatMap { SpaceStore.space($0, in: context) }?.displayName ?? ""
+        case "create_space_record", "update_space_record":
+            pointAtRecord(target)
+        case "log_space_event", "update_space_event":
+            detail = (try? SpaceTools.type(args, in: context))?.name ?? ""
+            if tool == "log_space_event" { before = ["event_id": target] }
+            pointAtRecord((shape["record_ids"] as? [String])?.first ?? "")
+        default:
+            break
+        }
+
+        context.insert(AgentAction(
+            tool: tool,
+            verb: entry.verb,
+            kind: kind,
+            targetID: target,
+            title: title,
+            detail: detail,
+            projectID: project,
+            spaceID: space,
+            origin: origin,
+            beforeJSON: before.isEmpty ? "" : (try? JSONSerialization.data(withJSONObject: before)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        ))
+        AgentActionStore.trim(in: context)
+    }
+
+    // MARK: - Taking a write back
+
+    /// For each tool that edits a record: the tool that reads it, and the argument that names it.
+    private static let readers: [String: (tool: String, id: String)] = [
+        "update_project": ("get_project", "project_id"),
+        "update_task": ("get_task", "task_id"),
+        "complete_task": ("get_task", "task_id"),
+        "update_decision": ("get_decision", "decision_id"),
+        "update_track": ("get_track", "track_id"),
+        "update_note": ("get_note", "note_id")
+    ]
+
+    /// The fields a write is about to change, as they are now, in the shape the same tool takes back.
+    private static func snapshot(_ tool: String, args: Args, in context: ModelContext) -> [String: Any] {
+        if tool == "update_space_record" {
+            guard let id = args.string("record_id"),
+                  let record = UUID(uuidString: id).flatMap({ SpaceStore.record($0, in: context) }),
+                  let type = record.typeID.flatMap({ SpaceStore.type($0, in: context) }) else { return [:] }
+            let shape = SpaceTools.record(record, schema: type.schema, in: context)
+            var before: [String: Any] = ["record_id": id]
+            if args.raw["title"] != nil { before["title"] = shape["title"] }
+            if args.raw["archived"] != nil { before["archived"] = shape["archived"] }
+            if let changed = args.raw["values"] as? [String: Any], let values = shape["values"] as? [String: Any] {
+                before["values"] = values.filter { changed[$0.key] != nil }
+            }
+            return before
+        }
+        guard let reader = readers[tool],
+              let id = args.string(reader.id),
+              let read = tools.first(where: { $0.name == reader.tool }),
+              let shape = (try? read.handler(Args(raw: [reader.id: id]), context)) as? [String: Any] else { return [:] }
+        if tool == "complete_task" {
+            // A repeating task writes a completion and moves its due date; that is not one field to put back.
+            let repeats = (shape["repeat"] as? String ?? "none") != "none" && !(shape["due"] as? String ?? "").isEmpty
+            return repeats ? [:] : [reader.id: id, "status": shape["status"] ?? "ready"]
+        }
+        func ids(_ key: String) -> [String] {
+            (shape[key] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
+        }
+        var before: [String: Any] = [reader.id: id]
+        for key in args.raw.keys where key != reader.id {
+            switch key {
+            case "track_ids": before[key] = ids("tracks")
+            case "note_ids": before[key] = ids("linked_notes")
+            case "blocker_ids": before[key] = ids("blockers")
+            case "append_to_body": before["body"] = shape["body"]
+            default: before[key] = shape[key]
+            }
+        }
+        return before
+    }
+
+    /// Takes back one logged write: what an agent added is deleted, what it edited gets its old values.
+    /// Only the app calls this. Agents cannot delete.
+    static func undo(_ actionID: UUID, container: ModelContainer) throws {
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        var descriptor = FetchDescriptor<AgentAction>(predicate: #Predicate { $0.id == actionID })
+        descriptor.fetchLimit = 1
+        guard let action = try context.fetch(descriptor).first, action.canUndo else {
+            throw ToolError("This cannot be taken back.")
+        }
+        let before = (try? JSONSerialization.jsonObject(with: Data(action.beforeJSON.utf8))) as? [String: Any] ?? [:]
+
+        switch action.verb {
+        case .added:
+            guard let id = action.targetID else { throw ToolError("This cannot be taken back.") }
+            switch action.kindRaw {
+            case "task":
+                TaskStore.delete(try Lookup.task(id, in: context), in: context)
+            case "note":
+                let note = try Lookup.note(id, in: context)
+                DeletionMarks.remove(targetingIDs: [id], in: context)
+                note.project?.touch()
+                context.delete(note)
+            case "decision":
+                let decision = try Lookup.decision(id, in: context)
+                DeletionMarks.remove(targetingIDs: [id], in: context)
+                decision.project?.touch()
+                context.delete(decision)
+            case "track":
+                let track = try Lookup.thread(id, in: context)
+                guard track.children.isEmpty else {
+                    throw ToolError("This track has tracks under it now. Move or delete those first.")
+                }
+                DeletionMarks.remove(targetingIDs: track.deletionTargetIDs, in: context)
+                track.project?.touch()
+                context.delete(track)
+            case "record":
+                guard let record = SpaceStore.record(id, in: context) else { throw ToolError("That record is already gone.") }
+                try SpaceStore.delete(record, in: context)
+            default:
+                throw ToolError("This cannot be taken back.")
+            }
+        case .logged:
+            guard let event = (before["event_id"] as? String).flatMap(UUID.init(uuidString:)).flatMap({ SpaceStore.event($0, in: context) }) else {
+                throw ToolError("That entry is already gone.")
+            }
+            try SpaceStore.delete(event, in: context)
+        default:
+            let target = action.targetIDString
+            let made = action.createdAt
+            let later = try context.fetchCount(FetchDescriptor<AgentAction>(
+                predicate: #Predicate { $0.targetIDString == target && $0.createdAt > made && $0.undoneAt == nil }
+            ))
+            guard later == 0 else {
+                throw ToolError("This was changed again after that. Take back the later change first.")
+            }
+            let tool = action.tool == "complete_task" ? "update_task" : action.tool
+            let result = call(tool, arguments: before, container: container, announce: false, logs: false)
+            if result["isError"] as? Bool == true {
+                throw ToolError((result["content"] as? [[String: Any]])?.first?["text"] as? String ?? "This could not be taken back.")
+            }
+        }
+        action.undoneAt = .now
+        try context.persist()
     }
 
     private static func failure(_ message: String) -> [String: Any] {
@@ -1076,7 +1300,7 @@ enum Tools {
                 "key": text("Stable lowercase key, such as recipe or check-in."),
                 "name": text("Name shown to the user, such as Recipes."),
                 "role": options(SpaceTypeRole.self, "object, event, or settings. Defaults to object."),
-                "fields": objectList("Fields: {id, name, kind, options?, fields?, ordered?, target?, formula?}. See get_space_catalog for kinds."),
+                "fields": objectList("Fields: {id, name, kind, options?, fields?, ordered?, target?, formula?, currency?, default?}. See get_space_catalog for kinds."),
                 "collection": objectList("Optional. Components for this object type's collection screen, set in the same call."),
                 "detail": objectList("Optional. Components for this object type's detail screen, set in the same call.")
             ],
@@ -1132,13 +1356,21 @@ enum Tools {
         },
         Tool(
             name: "list_space_records",
-            description: "List the records of one type in a Space, with their values.",
-            properties: ["space_id": spaceID, "type_key": typeKey], required: ["space_id", "type_key"], readOnly: true
+            description: "List the records of one type in a Space, with their values. Archived records are left out unless asked for.",
+            properties: [
+                "space_id": spaceID,
+                "type_key": typeKey,
+                "include_archived": flag("true also lists archived records.")
+            ],
+            required: ["space_id", "type_key"], readOnly: true
         ) { args, context in
             let type = try SpaceTools.type(args, in: context)
             let schema = type.schema
             if type.role == .settings { _ = try? SpaceStore.settingsRecord(of: type, in: context) }
-            return SpaceStore.records(of: type, in: context).map { SpaceTools.record($0, schema: schema, in: context) }
+            let all = args.bool("include_archived") == true
+            return SpaceStore.records(of: type, in: context)
+                .filter { all || !$0.isArchived }
+                .map { SpaceTools.record($0, schema: schema, in: context) }
         },
         Tool(
             name: "create_space_record",
@@ -1156,7 +1388,7 @@ enum Tools {
             let record = try SpaceStore.createRecord(
                 of: type,
                 title: try args.required("title"),
-                values: try SpaceTools.values(args.raw["values"], schema: schema),
+                values: schema.defaults().merging(try SpaceTools.values(args.raw["values"], schema: schema)) { _, given in given },
                 in: context
             )
             return SpaceTools.record(record, schema: schema, in: context)
@@ -1167,7 +1399,8 @@ enum Tools {
             properties: [
                 "record_id": text("Record id from list_space_records."),
                 "title": text("New name."),
-                "values": object("Field id to new value.")
+                "values": object("Field id to new value."),
+                "archived": flag("true puts the record away without deleting it; false brings it back.")
             ],
             required: ["record_id"], readOnly: false
         ) { args, context in
@@ -1183,7 +1416,53 @@ enum Tools {
                 values: try SpaceTools.values(args.raw["values"], schema: schema),
                 in: context
             )
+            if let archived = args.bool("archived") {
+                try SpaceStore.setArchived(archived, on: record, in: context)
+            }
             return SpaceTools.record(record, schema: schema, in: context)
+        },
+        Tool(
+            name: "list_space_events",
+            description: "List what has been logged in a Space for one event type, newest first. Pass record_id for one record's history.",
+            properties: [
+                "space_id": spaceID,
+                "type_key": text("Key of an event type in this Space."),
+                "record_id": text("Only events about this record.")
+            ],
+            required: ["space_id", "type_key"], readOnly: true
+        ) { args, context in
+            let type = try SpaceTools.type(args, in: context)
+            let space = try SpaceTools.space(args, in: context)
+            let typeKey = SpaceJSON.key(type.id)
+            let recordKey = try args.optionalUUID("record_id").flatMap { $0 }.map(SpaceJSON.key)
+            return SpaceStore.events(in: space, context: context)
+                .filter { $0.typeIDString == typeKey && (recordKey == nil || $0.recordIDsRaw.contains(recordKey!)) }
+                .prefix(200)
+                .map { SpaceTools.event($0, schema: type.schema) }
+        },
+        Tool(
+            name: "update_space_event",
+            description: "Change a logged event: when it happened, or its values. values replaces all of the event's values.",
+            properties: [
+                "event_id": text("Event id from list_space_events or log_space_event."),
+                "occurred_at": text("ISO-8601 time it happened."),
+                "values": object("Event field id to value.")
+            ],
+            required: ["event_id"], readOnly: false
+        ) { args, context in
+            let id = try args.uuid("event_id")
+            guard let event = SpaceStore.event(id, in: context),
+                  let typeID = event.typeID,
+                  let type = SpaceStore.type(typeID, in: context) else {
+                throw ToolError("No event with id \(id.uuidString).")
+            }
+            try SpaceStore.update(
+                event,
+                at: try args.date("occurred_at") ?? nil,
+                values: args.raw["values"] == nil ? nil : try SpaceTools.values(args.raw["values"], schema: type.schema),
+                in: context
+            )
+            return SpaceTools.event(event, schema: type.schema)
         },
         Tool(
             name: "log_space_event",
@@ -1788,8 +2067,8 @@ enum SpaceTools {
                 guard let pair = option as? [String: Any], let optionName = pair["name"] as? String else { return nil }
                 return SpaceOption(id: (pair["id"] as? String) ?? slug(optionName), name: optionName)
             }
-            if kind == .choice, options.isEmpty {
-                throw ToolError("\(name) is a choice field and needs options.")
+            if kind == .choice || kind == .tags, options.isEmpty {
+                throw ToolError("\(name) is a \(kind.rawValue) field and needs options.")
             }
             let nested = try fields((object["fields"] as? [Any] ?? []).compactMap { $0 as? [String: Any] })
             if kind == .group, nested.isEmpty {
@@ -1811,7 +2090,9 @@ enum SpaceTools {
                 fields: nested,
                 isOrdered: (object["ordered"] as? Bool) ?? (object["isOrdered"] as? Bool) ?? false,
                 target: target,
-                formula: formula
+                formula: formula,
+                unit: (object["currency"] as? String) ?? (object["unit"] as? String) ?? "",
+                initial: (object["default"] as? String) ?? (object["default"] as? NSNumber).map { "\($0)" } ?? ""
             )
         }
     }
@@ -1862,6 +2143,53 @@ enum SpaceTools {
             throw ToolError("\(field.name) is an image. Images are added by the user in the app.")
         case .calc:
             throw ToolError("\(field.name) is worked out automatically. Leave it out.")
+        case .file:
+            throw ToolError("\(field.name) is a file. Files are added by the user in the app.")
+        case .url:
+            guard let text = raw as? String, !text.isEmpty else { throw wrong("a web address") }
+            return .text(text)
+        case .tags:
+            let names = (raw as? [String]) ?? (raw as? String).map(SpaceTags.ids) ?? []
+            let ids = try names.map { name -> String in
+                guard let option = field.options.first(where: { $0.id == name })
+                    ?? field.options.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else {
+                    throw wrong("a list from: \(field.options.map(\.id).joined(separator: ", "))")
+                }
+                return option.id
+            }
+            return .text(SpaceTags.raw(field.options.map(\.id).filter(ids.contains)))
+        case .money, .rating:
+            if raw is Bool { throw wrong("a number") }
+            guard let number = (raw as? NSNumber)?.doubleValue ?? (raw as? String).flatMap(Double.init) else { throw wrong("a number") }
+            if field.kind == .rating, !(0...5).contains(number) { throw wrong("a number from 0 to 5") }
+            return .number(number)
+        case .duration:
+            guard !(raw is Bool), let number = (raw as? NSNumber)?.doubleValue ?? (raw as? String).flatMap(Double.init) else {
+                throw wrong("a number of minutes")
+            }
+            return .number(number)
+        case .time:
+            if let text = raw as? String {
+                let parts = text.split(separator: ":").compactMap { Double($0) }
+                guard parts.count == 2, (0..<24).contains(parts[0]), (0..<60).contains(parts[1]) else { throw wrong("a time such as 07:30") }
+                return .number(parts[0] * 60 + parts[1])
+            }
+            guard !(raw is Bool), let number = (raw as? NSNumber)?.doubleValue else { throw wrong("a time such as 07:30") }
+            return .number(number)
+        case .dateRange:
+            let text: String?
+            if let object = raw as? [String: Any], let start = object["start"] as? String, let end = object["end"] as? String {
+                text = "\(start.prefix(10))/\(end.prefix(10))"
+            } else {
+                text = raw as? String
+            }
+            guard let text, let range = SpaceDateRange(text) else { throw wrong("{start, end} as dates such as 2026-10-11") }
+            return .text(range.raw)
+        case .schedule:
+            guard let text = raw as? String, let schedule = SpaceSchedule(text) else {
+                throw wrong("daily, weekly:3 for three times a week, or days:mon,wed,fri")
+            }
+            return .text(schedule.raw)
         case .link:
             guard let text = raw as? String, let id = UUID(uuidString: text) else {
                 throw wrong("the id of a record in \(field.target), from list_space_records")
@@ -1945,6 +2273,8 @@ enum SpaceTools {
         if field.isOrdered { shape["ordered"] = true }
         if field.kind == .link { shape["target"] = field.target }
         if field.kind == .calc { shape["formula"] = field.formula }
+        if !field.unit.isEmpty { shape["currency"] = field.unit }
+        if !field.initial.isEmpty { shape["default"] = field.initial }
         return shape
     }
 
@@ -1985,6 +2315,7 @@ enum SpaceTools {
         return [
             "id": record.id.uuidString,
             "title": record.displayTitle,
+            "archived": record.isArchived,
             "values": plain(values.filter { live.contains($0.key) }),
             "updated_at": ISO8601DateFormatter().string(from: record.updatedAt)
         ]
@@ -2026,6 +2357,15 @@ enum SpaceTools {
                 ["kind": "quantity", "value": "{amount, unit}; add scales: false for amounts like a pinch"],
                 ["kind": "group", "value": "a list of rows keyed by the group's field ids", "needs": "fields: the columns of each row; ordered: true for numbered steps. Groups do not nest."],
                 ["kind": "calc", "value": "never set; worked out", "needs": "formula. Use calc for anything that can be worked out, so the user never types a total. In a group row: recipe.calories * servings reads the linked recipe and multiplies by that row's servings. On the record: sum(items.calories) adds a column up. goals.calories reads a settings type. " + SpaceFormula.grammar],
+                ["kind": "tags", "value": "a list of option ids", "needs": "options: a list of names"],
+                ["kind": "url", "value": "a web address"],
+                ["kind": "money", "value": "a number", "needs": "currency: a code such as USD, if not the user's own"],
+                ["kind": "duration", "value": "minutes"],
+                ["kind": "time", "value": "a time of day such as 07:30"],
+                ["kind": "dateRange", "value": "{start, end} as dates"],
+                ["kind": "rating", "value": "0 to 5"],
+                ["kind": "file", "value": "set by the user in the app"],
+                ["kind": "schedule", "value": "daily, weekly:3 (three times a week), or days:mon,wed,fri", "needs": "nothing. Give a habit or routine one schedule field; streaks, pace and done-today then follow it instead of assuming every day."],
                 ["kind": "link", "value": "the id of one record of the target type", "needs": "target: the key of an object type in the same Space, created first. Use a link whenever one thing refers to another, such as a meal made from recipes, instead of retyping its details. For several, put the link in a group with any per-row fields, such as servings."]
             ],
             "components": SpaceScreenCatalog.components.map { spec -> [String: Any] in
@@ -2039,6 +2379,7 @@ enum SpaceTools {
                     }
                 ]
             },
+            "defaults": "Any field can take default: what a new record starts with. A number, an option id, true, or today for a date.",
             "roles": [
                 "object": "a lasting thing with many records, such as recipes",
                 "event": "something logged about records, such as cooked",
@@ -2050,6 +2391,13 @@ enum SpaceTools {
                 "streak:eventKey": "days in a row with an event",
                 "best:eventKey": "longest run of days with an event",
                 "week:eventKey": "events in the last seven days",
+                "pace:eventKey": "where the record stands against its schedule: 2 of 3 this week, or done today",
+                "sum:eventKey.field:period": "a logged number added up. period is today, week, month, year or all. Use eventKey.record.field to add up a field of the records the events are about, such as sum:eaten.record.calories:today",
+                "avg:eventKey.field:period": "the average of a logged number",
+                "min:eventKey.field:period": "the smallest logged number",
+                "max:eventKey.field:period": "the largest logged number",
+                "change:eventKey.field:period": "how far a logged number has moved since the period began, such as weight this month",
+                "count:eventKey:period": "how many events in a period",
                 "today:eventKey": "collection only: records with an event today, out of all",
                 "records": "collection only: how many records"
             ],

@@ -210,6 +210,12 @@ enum SpaceStore {
         return try? context.fetch(descriptor).first
     }
 
+    static func eventSchemas(in spaceIDString: String, context: ModelContext) -> [String: SpaceSchema] {
+        let role = SpaceTypeRole.event.rawValue
+        let descriptor = FetchDescriptor<SpaceType>(predicate: #Predicate { $0.spaceIDString == spaceIDString && $0.roleRaw == role })
+        return Dictionary(((try? context.fetch(descriptor)) ?? []).map { ($0.key, $0.schema) }) { first, _ in first }
+    }
+
     static func eventKeys(in spaceIDString: String, context: ModelContext) -> Set<String> {
         let role = SpaceTypeRole.event.rawValue
         let descriptor = FetchDescriptor<SpaceType>(predicate: #Predicate { $0.spaceIDString == spaceIDString && $0.roleRaw == role })
@@ -230,7 +236,8 @@ enum SpaceStore {
             in: definition,
             kind: kind,
             schema: type.schema,
-            eventKeys: eventKeys(in: type.spaceIDString, context: context)
+            eventKeys: eventKeys(in: type.spaceIDString, context: context),
+            events: eventSchemas(in: type.spaceIDString, context: context)
         )
         guard problems.isEmpty else { throw SpaceStoreError.invalidScreen(problems) }
         let screen = screen(for: type, kind: kind, in: context) ?? {
@@ -333,6 +340,26 @@ enum SpaceStore {
         try context.save()
         syncImages(of: record, schema: type.schema, in: context)
         return record
+    }
+
+    /// A second record with the same values, named as a copy.
+    @discardableResult
+    static func duplicate(_ record: SpaceRecord, in context: ModelContext) throws -> SpaceRecord {
+        guard let typeID = record.typeID, let type = type(typeID, in: context), type.role == .object else {
+            throw SpaceStoreError.notAnObjectType
+        }
+        let copy = SpaceRecord(type: type, title: "\(record.displayTitle) copy", values: record.values)
+        context.insert(copy)
+        try context.save()
+        syncImages(of: copy, schema: type.schema, in: context)
+        return copy
+    }
+
+    /// Archiving hides a record without losing it or its history.
+    static func setArchived(_ archived: Bool, on record: SpaceRecord, in context: ModelContext) throws {
+        record.isArchived = archived
+        record.updatedAt = .now
+        try context.save()
     }
 
     /// The one record of a settings type, made the first time it is asked for.
@@ -459,7 +486,6 @@ enum SpaceStore {
         let formulas = schema.formulas
         guard formulas.contains(where: { !$0.formula.paths.isEmpty }) else { return }
         let types = fetch(#Predicate<SpaceType> { $0.spaceIDString == spaceKey }, in: context)
-        let numeric: Set<SpaceFieldKind> = [.number, .quantity, .calc]
         for entry in formulas {
             for (head, fieldID) in entry.formula.paths {
                 let link = entry.siblings.first { $0.id == head && $0.kind == .link && !$0.isRemoved }
@@ -481,7 +507,7 @@ enum SpaceStore {
                         reason: "\(head) is neither a link field here nor a settings type in this Space."
                     )
                 }
-                guard let found = targetSchema?.liveFields.first(where: { $0.id == fieldID }), numeric.contains(found.kind) else {
+                guard let found = targetSchema?.liveFields.first(where: { $0.id == fieldID }), found.kind.isNumeric else {
                     throw SpaceStoreError.badFormulaPath(
                         field: entry.field.name,
                         reason: "\(targetName) has no number field \(fieldID)."
@@ -550,6 +576,29 @@ enum SpaceStore {
         return event
     }
 
+    /// Change when a logged event happened or what it recorded. Nil leaves a part as it is.
+    static func update(
+        _ event: SpaceEvent,
+        at occurredAt: Date? = nil,
+        values: [String: SpaceValue]? = nil,
+        in context: ModelContext
+    ) throws {
+        if let values {
+            if let typeID = event.typeID, let type = type(typeID, in: context) {
+                try type.schema.validate(values)
+                try checkLinks(in: values, schema: type.schema, spaceKey: type.spaceIDString, in: context)
+            }
+            event.values = values
+        }
+        if let occurredAt { event.occurredAt = occurredAt }
+        try context.save()
+    }
+
+    static func event(_ id: UUID, in context: ModelContext) -> SpaceEvent? {
+        let descriptor = FetchDescriptor<SpaceEvent>(predicate: #Predicate { $0.id == id })
+        return try? context.fetch(descriptor).first
+    }
+
     static func delete(_ event: SpaceEvent, in context: ModelContext) throws {
         context.delete(event)
         try context.save()
@@ -568,6 +617,7 @@ final class SpaceLookup: SpaceFormulaSource {
     private let records: [String: SpaceRecord]
     private let schemas: [String: SpaceSchema]
     private let settingsTypeIDs: [String: String]
+    private let typeIDs: [String: String]
     private var decoded: [String: [String: SpaceValue]] = [:]
     private var filled: [String: [String: SpaceValue]] = [:]
     let titles: [String: String]
@@ -582,8 +632,10 @@ final class SpaceLookup: SpaceFormulaSource {
         }
         var schemas: [String: SpaceSchema] = [:]
         var settings: [String: String] = [:]
+        var typeIDs: [String: String] = [:]
         for type in types where type.spaceIDString == spaceKey {
             let key = SpaceJSON.key(type.id)
+            typeIDs[type.key] = key
             schemas[key] = type.schema
             if type.role == .settings { settings[type.key] = key }
         }
@@ -591,6 +643,20 @@ final class SpaceLookup: SpaceFormulaSource {
         self.titles = titles
         self.schemas = schemas
         self.settingsTypeIDs = settings
+        self.typeIDs = typeIDs
+    }
+
+    func record(_ recordID: String) -> SpaceRecord? {
+        records[recordID]
+    }
+
+    /// Records of one type that link to `recordID`, by name.
+    func linking(to recordID: String, typeKey: String) -> [SpaceRecord] {
+        guard let typeID = typeIDs[typeKey], let schema = schemas[typeID] else { return [] }
+        return records.values
+            .filter { $0.typeIDString == typeID && $0.valuesJSON.contains(recordID) }
+            .filter { record in schema.links(in: stored(SpaceJSON.key(record.id), record)).contains { $0.recordID == recordID } }
+            .sorted { $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending }
     }
 
     private func stored(_ key: String, _ record: SpaceRecord) -> [String: SpaceValue] {

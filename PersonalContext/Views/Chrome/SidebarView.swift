@@ -6,8 +6,7 @@ struct SidebarView: View {
     @Environment(\.modelContext) private var context
     @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "project" }, sort: \TitleIndex.title)
     private var projects: [TitleIndex]
-    @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" && $0.isCompleted == false })
-    private var openTasks: [AgendaItem]
+    @Query(sort: \Space.createdAt) private var spaces: [Space]
     @State private var pendingDelete: TitleIndex?
 
     private var orderedProjects: [TitleIndex] {
@@ -29,12 +28,29 @@ struct SidebarView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     row("You", "person", destination: .home, selected: isOnYou)
 
-                    section("Workspace")
-                    row("Projects", "square.stack", destination: .projects)
-                    row("Tasks", "checklist", destination: .tasks, badge: dueCount)
-                    row("Calendar", "calendar", destination: .calendar)
-                    row("Chats", "bubble.left.and.bubble.right", destination: .chats, busy: !app.runningChats.isEmpty)
-                    row("Runs", "play.circle", destination: .runs, busy: !app.runCoordinator.running.isEmpty)
+                    if !spaces.isEmpty {
+                        section("Spaces")
+                        ForEach(spaces) { space in
+                            Button {
+                                app.navigate(to: .space(space.id))
+                            } label: {
+                                SidebarRow(title: space.displayName, systemImage: space.symbol, isSelected: isOn(space))
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    app.present(.editSpace(space))
+                                } label: {
+                                    Label("Edit…", systemImage: "pencil")
+                                }
+                                Button {
+                                    app.navigate(to: .space(space.id), newTab: true)
+                                } label: {
+                                    Label("Open in New Tab", systemImage: "plus.square.on.square")
+                                }
+                            }
+                        }
+                    }
 
                     if !orderedProjects.isEmpty {
                         section("Projects")
@@ -150,20 +166,18 @@ struct SidebarView: View {
         .accessibilityValue(busy ? "Working" : badge > 0 ? "\(badge) due" : "")
     }
 
-    /// About you and Spaces are opened from You, so they keep its row lit.
+    /// Everything without a row of its own is reached from You, so it keeps that row lit.
     private var isOnYou: Bool {
         switch app.destination {
-        case .home, .aboutYou, .space, .spaceRecord: true
+        case .home, .aboutYou, .tasks, .calendar, .chats, .runs, .projects: true
         default: false
         }
     }
 
-    private var dueCount: Int {
-        let tasks = openTasks.filter { task in
-            guard let due = task.due else { return false }
-            return TaskDue.isOutstanding(due)
-        }.count
-        let reminders = app.eventKit.reminders.filter { ReminderItem.isAttention($0) }.count
-        return tasks + reminders
+    private func isOn(_ space: Space) -> Bool {
+        switch app.destination {
+        case .space(let id), .spaceRecord(let id, _): id == space.id
+        default: false
+        }
     }
 }

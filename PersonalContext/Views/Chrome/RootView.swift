@@ -142,6 +142,24 @@ struct RootView: View {
                     .glassEffect(.regular, in: Circle())
                     .help(sidebarHidden ? "Show Sidebar" : "Hide Sidebar")
                     .accessibilityLabel(sidebarHidden ? "Show Sidebar" : "Hide Sidebar")
+                    if let project = openProject, app.tab(for: project.id) != .overview {
+                        Button {
+                            app.open(project, tab: .overview, newTab: false)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 10, weight: .semibold))
+                                Text(project.name)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 10)
+                            .frame(height: 28)
+                            .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .glassEffect(.regular, in: Capsule())
+                        .help("Back to \(project.name)")
+                    }
                     WindowTabStrip()
                     Color.clear
                         .frame(minWidth: 16)
@@ -451,16 +469,6 @@ struct RootView: View {
             .glassEffect(.regular, in: Capsule())
             .help(app.trackChatOpen ? "Hide track chat" : "Ask Membrae")
             .accessibilityLabel(app.trackChatOpen ? "Hide track chat" : "Ask Membrae")
-        } else if let project = openProject, app.tab(for: project.id) == .overview {
-            Button(action: toggleInspector) {
-                Image(systemName: "sidebar.trailing")
-                    .frame(width: 28, height: 28)
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .glassEffect(.regular, in: Circle())
-            .help(app.inspectorOpen ? "Hide Inspector" : "Show Inspector")
-            .accessibilityLabel(app.inspectorOpen ? "Hide Inspector" : "Show Inspector")
         } else if openProject != nil {
             Button {
                 if let project = openProject {
@@ -634,6 +642,12 @@ struct RootView: View {
             NewSpaceSheet()
         case .editSpace(let space):
             NewSpaceSheet(space: space)
+        case .logSpaceEvent(let type, let record):
+            SpaceEventForm(type: type, record: record)
+        case .editSpaceEvent(let event):
+            if let typeID = event.typeID, let type = SpaceStore.type(typeID, in: event.modelContext ?? app.container.mainContext) {
+                SpaceEventForm(type: type, event: event)
+            }
         case .newRecord(let type):
             SpaceRecordForm(type: type)
         case .editRecord(let record):

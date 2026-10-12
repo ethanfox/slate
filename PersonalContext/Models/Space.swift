@@ -15,8 +15,31 @@ enum SpaceFieldKind: String, Codable, CaseIterable, Identifiable, Hashable {
     case link
     /// A number worked out from other fields by a formula. Never typed, never stored.
     case calc
+    /// How often something is meant to happen: every day, some times a week, or on set weekdays.
+    case schedule
+    /// Several of the field's options at once.
+    case tags
+    /// A web address.
+    case url
+    /// An amount of money, in the field's currency.
+    case money
+    /// A length of time, held in minutes.
+    case duration
+    /// A time of day, held as minutes after midnight.
+    case time
+    /// A first and last day.
+    case dateRange
+    /// One to five stars.
+    case rating
+    /// Any file, kept in the file store like an image.
+    case file
 
     var id: String { rawValue }
+
+    /// Holds a number that formulas and totals can use.
+    var isNumeric: Bool {
+        [.number, .quantity, .calc, .money, .duration, .rating].contains(self)
+    }
 }
 
 struct SpaceOption: Codable, Hashable, Identifiable {
@@ -41,6 +64,10 @@ struct SpaceField: Codable, Hashable, Identifiable {
     var target: String
     /// Calc only. See `SpaceFormula`.
     var formula: String
+    /// Money only: a currency code such as USD. Empty uses the Mac's own.
+    var unit: String
+    /// What a new record starts with, as text: a number, an option id, true, or today for a date.
+    var initial: String
 
     init(
         id: String,
@@ -51,7 +78,9 @@ struct SpaceField: Codable, Hashable, Identifiable {
         isOrdered: Bool = false,
         isRemoved: Bool = false,
         target: String = "",
-        formula: String = ""
+        formula: String = "",
+        unit: String = "",
+        initial: String = ""
     ) {
         self.id = id
         self.name = name
@@ -62,6 +91,8 @@ struct SpaceField: Codable, Hashable, Identifiable {
         self.isRemoved = isRemoved
         self.target = target
         self.formula = formula
+        self.unit = unit
+        self.initial = initial
     }
 
     init(from decoder: Decoder) throws {
@@ -75,6 +106,8 @@ struct SpaceField: Codable, Hashable, Identifiable {
         isRemoved = try container.decodeIfPresent(Bool.self, forKey: .isRemoved) ?? false
         target = try container.decodeIfPresent(String.self, forKey: .target) ?? ""
         formula = try container.decodeIfPresent(String.self, forKey: .formula) ?? ""
+        unit = try container.decodeIfPresent(String.self, forKey: .unit) ?? ""
+        initial = try container.decodeIfPresent(String.self, forKey: .initial) ?? ""
     }
 }
 
@@ -161,6 +194,7 @@ enum SpaceSchemaError: LocalizedError, Equatable {
     case targetChanged(String)
     case badFormula(field: String, reason: String)
     case computed(String)
+    case notAColumn(field: String, kind: SpaceFieldKind)
 
     var errorDescription: String? {
         switch self {
@@ -177,6 +211,7 @@ enum SpaceSchemaError: LocalizedError, Equatable {
         case .targetChanged(let field): "\(field) already links to another type. Add a new field instead."
         case .badFormula(let field, let reason): "\(field) has a formula that does not work: \(reason)"
         case .computed(let field): "\(field) is worked out automatically and cannot be set."
+        case .notAColumn(let field, let kind): "\(field) is a \(kind.rawValue) field, which cannot be a column inside a group. Put it on the record itself."
         }
     }
 }
@@ -236,6 +271,9 @@ struct SpaceSchema: Codable, Equatable {
             if field.kind == .link, field.target.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 throw SpaceSchemaError.linkNeedsTarget(field.name)
             }
+            if insideGroup, [.tags, .dateRange, .file, .schedule, .richText].contains(field.kind) {
+                throw SpaceSchemaError.notAColumn(field: field.name, kind: field.kind)
+            }
             if field.kind == .group {
                 guard !insideGroup else { throw SpaceSchemaError.nestedGroup(field.name) }
                 try validate(field.fields, insideGroup: true)
@@ -256,6 +294,24 @@ struct SpaceSchema: Codable, Equatable {
             switch (field.kind, value) {
             case (.calc, _):
                 throw SpaceSchemaError.computed(field.name)
+            case (.schedule, .text(let raw)):
+                guard SpaceSchedule(raw) != nil else {
+                    throw SpaceSchemaError.wrongValue(field: field.name, expected: field.kind)
+                }
+            case (.tags, .text(let raw)):
+                for option in SpaceTags.ids(raw) where !field.options.contains(where: { $0.id == option }) {
+                    throw SpaceSchemaError.unknownOption(field: field.name, option: option)
+                }
+            case (.dateRange, .text(let raw)):
+                guard SpaceDateRange(raw) != nil else {
+                    throw SpaceSchemaError.wrongValue(field: field.name, expected: field.kind)
+                }
+            case (.rating, .number(let stars)):
+                guard (0...5).contains(stars) else {
+                    throw SpaceSchemaError.wrongValue(field: field.name, expected: field.kind)
+                }
+            case (.url, .text), (.file, .text), (.money, .number), (.duration, .number), (.time, .number):
+                break
             case (.text, .text), (.richText, .text), (.image, .text), (.link, .text),
                  (.number, .number), (.boolean, .boolean), (.date, .date), (.quantity, .quantity):
                 break
@@ -468,6 +524,8 @@ final class SpaceRecord {
     var typeIDString: String
     var title: String
     var valuesJSON: String
+    /// Put away without being deleted. Hidden from screens unless archived records are shown.
+    var isArchived: Bool = false
     var createdAt: Date
     var updatedAt: Date
 
@@ -596,7 +654,7 @@ extension SpaceSchema {
         var ids: [UUID] = []
         for field in fields {
             switch (field.kind, values[field.id]) {
-            case (.image, .text(let raw)):
+            case (.image, .text(let raw)), (.file, .text(let raw)):
                 if let id = UUID(uuidString: raw) { ids.append(id) }
             case (.group, .rows(let rows)):
                 for row in rows {
@@ -668,10 +726,35 @@ extension SpaceSchema {
             if field.kind == .link {
                 return titles[text] ?? "Missing record"
             }
-            // An image value is an asset id, which is not worth reading.
-            return field.kind == .image ? "" : text
+            if field.kind == .schedule {
+                return SpaceSchedule(text)?.label ?? text
+            }
+            if field.kind == .tags {
+                return SpaceTags.ids(text).map { id in field.options.first { $0.id == id }?.name ?? id }.joined(separator: ", ")
+            }
+            if field.kind == .dateRange {
+                return SpaceDateRange(text)?.label ?? text
+            }
+            if field.kind == .url {
+                return URL(string: text)?.host?.replacingOccurrences(of: "www.", with: "") ?? text
+            }
+            // An image or file value is an asset id, which is not worth reading.
+            return field.kind == .image || field.kind == .file ? "" : text
         case .number(let number):
-            return number.formatted(.number.precision(.fractionLength(0...2)))
+            switch field.kind {
+            case .money:
+                let code = field.unit.isEmpty ? (Locale.current.currency?.identifier ?? "USD") : field.unit.uppercased()
+                return number.formatted(.currency(code: code).precision(.fractionLength(0...2)))
+            case .duration:
+                return SpaceClock.duration(number)
+            case .time:
+                return SpaceClock.timeOfDay(number)
+            case .rating:
+                let stars = Int(number.rounded())
+                return String(repeating: "★", count: max(0, min(stars, 5))) + String(repeating: "☆", count: max(0, 5 - stars))
+            default:
+                return number.formatted(.number.precision(.fractionLength(0...2)))
+            }
         case .boolean(let flag):
             return flag ? "Yes" : "No"
         case .date(let date):
@@ -761,6 +844,7 @@ struct SpaceTemplate: Identifiable, Hashable {
     static let habits = SpaceTemplate(id: "habits", name: "Habits", types: [
         TypeDraft(key: "habit", name: "Habits", role: .object, fields: [
             SpaceField(id: "target", name: "Target", kind: .text),
+            SpaceField(id: "schedule", name: "How often", kind: .schedule),
             SpaceField(id: "started", name: "Started", kind: .date),
             SpaceField(id: "active", name: "Active", kind: .boolean),
             SpaceField(id: "notes", name: "Notes", kind: .richText)
@@ -918,7 +1002,6 @@ indirect enum SpaceFormula: Equatable {
         }
     }
 
-    private static let numeric: Set<SpaceFieldKind> = [.number, .quantity, .calc]
 
     /// What is wrong with the formula as far as one type can tell. Fields of linked and settings
     /// types are checked by the store, which can see them.
@@ -930,7 +1013,7 @@ indirect enum SpaceFormula: Equatable {
             guard let field = siblings.first(where: { $0.id == id }) ?? schema.liveFields.first(where: { $0.id == id }) else {
                 return "there is no field \(id)."
             }
-            return Self.numeric.contains(field.kind) ? nil : "\(field.name) is not a number."
+            return field.kind.isNumeric ? nil : "\(field.name) is not a number."
         case .path:
             return nil
         case .sum(let group, let column):
@@ -940,7 +1023,7 @@ indirect enum SpaceFormula: Equatable {
             guard let found = field.fields.first(where: { $0.id == column && !$0.isRemoved }) else {
                 return "\(field.name) has no column \(column)."
             }
-            return Self.numeric.contains(found.kind) ? nil : "\(found.name) is not a number."
+            return found.kind.isNumeric ? nil : "\(found.name) is not a number."
         case .binary(_, let left, let right):
             return left.problem(beside: siblings, schema: schema) ?? right.problem(beside: siblings, schema: schema)
         }
@@ -1098,5 +1181,169 @@ extension SpaceSchema {
             }
         }
         return found
+    }
+}
+
+
+/// How often a record is meant to be logged. Stored as text: `daily`, `weekly:3`, or `days:mon,wed,fri`.
+struct SpaceSchedule: Equatable {
+    enum Rule: Equatable {
+        case daily
+        /// Any days, this many times in a calendar week.
+        case perWeek(Int)
+        /// Calendar weekday numbers, 1 for Sunday.
+        case weekdays(Set<Int>)
+    }
+
+    static let dayNames = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
+
+    var rule: Rule
+
+    init(_ rule: Rule) {
+        self.rule = rule
+    }
+
+    init?(_ raw: String) {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if text == "daily" {
+            rule = .daily
+        } else if text.hasPrefix("weekly:"), let times = Int(text.dropFirst(7)), (1...7).contains(times) {
+            rule = times == 7 ? .daily : .perWeek(times)
+        } else if text.hasPrefix("days:") {
+            let days = text.dropFirst(5).split(separator: ",").map { String($0.prefix(3)) }
+            let numbers = days.compactMap { Self.dayNames.firstIndex(of: $0).map { $0 + 1 } }
+            guard !numbers.isEmpty, numbers.count == days.count else { return nil }
+            rule = numbers.count == 7 ? .daily : .weekdays(Set(numbers))
+        } else {
+            return nil
+        }
+    }
+
+    var raw: String {
+        switch rule {
+        case .daily: "daily"
+        case .perWeek(let times): "weekly:\(times)"
+        case .weekdays(let days): "days:" + days.sorted().map { Self.dayNames[$0 - 1] }.joined(separator: ",")
+        }
+    }
+
+    var label: String {
+        switch rule {
+        case .daily: "Every day"
+        case .perWeek(let times): times == 1 ? "Once a week" : "\(times) times a week"
+        case .weekdays(let days): days.sorted().map { Self.dayNames[$0 - 1].capitalized }.joined(separator: ", ")
+        }
+    }
+
+    /// Whether `day` is one it is meant to happen on. A times-a-week rule is open every day.
+    func isDue(on day: Date, calendar: Calendar = .current) -> Bool {
+        if case .weekdays(let days) = rule {
+            return days.contains(calendar.component(.weekday, from: day))
+        }
+        return true
+    }
+}
+
+
+/// Several option ids held as one comma-separated text value.
+enum SpaceTags {
+    static func ids(_ raw: String) -> [String] {
+        raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    static func raw(_ ids: [String]) -> String {
+        ids.joined(separator: ",")
+    }
+}
+
+/// A first and last day, held as text: `2026-10-11/2026-10-14`.
+struct SpaceDateRange: Equatable {
+    var start: Date
+    var end: Date
+
+    private static func formatter() -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }
+
+    init(start: Date, end: Date) {
+        self.start = min(start, end)
+        self.end = max(start, end)
+    }
+
+    init?(_ raw: String) {
+        let parts = raw.split(separator: "/").map(String.init)
+        let formatter = Self.formatter()
+        guard parts.count == 2, let start = formatter.date(from: parts[0]), let end = formatter.date(from: parts[1]) else { return nil }
+        self.init(start: start, end: end)
+    }
+
+    var raw: String {
+        let formatter = Self.formatter()
+        return "\(formatter.string(from: start))/\(formatter.string(from: end))"
+    }
+
+    var label: String {
+        let first = start.formatted(.dateTime.month(.abbreviated).day())
+        let last = end.formatted(.dateTime.month(.abbreviated).day().year())
+        return Calendar.current.isDate(start, inSameDayAs: end) ? last : "\(first) to \(last)"
+    }
+}
+
+enum SpaceClock {
+    /// Minutes as `1h 30m`.
+    static func duration(_ minutes: Double) -> String {
+        let total = Int(minutes.rounded())
+        let hours = total / 60
+        let rest = total % 60
+        if hours == 0 { return "\(rest)m" }
+        return rest == 0 ? "\(hours)h" : "\(hours)h \(rest)m"
+    }
+
+    /// Minutes after midnight as the Mac writes a time.
+    static func timeOfDay(_ minutes: Double) -> String {
+        date(minutes).formatted(date: .omitted, time: .shortened)
+    }
+
+    static func date(_ minutes: Double) -> Date {
+        Calendar.current.startOfDay(for: .now).addingTimeInterval(minutes * 60)
+    }
+
+    static func minutes(_ date: Date) -> Double {
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return Double((parts.hour ?? 0) * 60 + (parts.minute ?? 0))
+    }
+}
+
+extension SpaceSchema {
+    /// What a new record starts with, from each field's `initial`. Anything unreadable is skipped.
+    func defaults(now: Date = .now) -> [String: SpaceValue] {
+        var values: [String: SpaceValue] = [:]
+        for field in liveFields where !field.initial.isEmpty {
+            let raw = field.initial
+            switch field.kind {
+            case .text, .richText, .url:
+                values[field.id] = .text(raw)
+            case .number, .money, .duration, .time, .rating:
+                if let number = Double(raw) { values[field.id] = .number(number) }
+            case .boolean:
+                values[field.id] = .boolean(raw.lowercased() == "true")
+            case .date:
+                if raw.lowercased() == "today" { values[field.id] = .date(Calendar.current.startOfDay(for: now)) }
+            case .choice:
+                if field.options.contains(where: { $0.id == raw }) { values[field.id] = .text(raw) }
+            case .tags:
+                let ids = SpaceTags.ids(raw).filter { id in field.options.contains { $0.id == id } }
+                if !ids.isEmpty { values[field.id] = .text(SpaceTags.raw(ids)) }
+            case .schedule:
+                if let schedule = SpaceSchedule(raw) { values[field.id] = .text(schedule.raw) }
+            default:
+                break
+            }
+        }
+        return values
     }
 }

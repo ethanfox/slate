@@ -10,6 +10,8 @@ struct RunnerRequest: Encodable, Sendable {
     var model: String
     var cwd: String
     var mcpCommand: String
+    /// The chat this turn belongs to, so its writes can be traced back to it.
+    var conversationId = ""
     var codeRoots: [ProjectCodeRoot]
     var includeMembraeTools: Bool
     var includeProjectTools: Bool
@@ -207,6 +209,7 @@ final class CursorConversationBridge {
             model: model,
             cwd: workspace,
             mcpCommand: mcp.path,
+            conversationId: conversation.id.uuidString,
             codeRoots: codeRoots,
             includeMembraeTools: includeMembraeTools,
             includeProjectTools: includeProjectTools,
