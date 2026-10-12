@@ -901,8 +901,9 @@ struct SpaceTemplate: Identifiable, Hashable {
 
 /// The arithmetic behind a calc field or a progress bar.
 ///
-/// Terms: a number, a field id beside the formula, `link.field` (a field of the linked record),
-/// `settingsKey.field` (a field of a settings type), and `sum(group.column)`.
+/// Terms: a number, a field id beside the formula, `settingsKey.field` (a field of a settings type),
+/// and `sum(group.column)`. A formula stays inside its own record: it cannot read a linked record,
+/// so a value that comes from one is copied into the row when the row is added.
 /// Operators: + - * / and parentheses. Ids may hold hyphens, so put spaces around a minus.
 indirect enum SpaceFormula: Equatable {
     case number(Double)
@@ -911,7 +912,9 @@ indirect enum SpaceFormula: Equatable {
     case sum(String, String)
     case binary(Character, SpaceFormula, SpaceFormula)
 
-    static let grammar = "Use numbers, field ids, link.field, settingsKey.field, sum(group.column), + - * / and parentheses, with spaces around a minus."
+    static let grammar = "Use numbers, field ids, settingsKey.field, sum(group.column), + - * / and parentheses, with spaces around a minus."
+
+    static let noLinkedReads = "is a link, and a formula cannot read the record it points at. Give the row its own number field and copy the value into it when the row is added."
 
     init?(_ raw: String) {
         var parser = Parser(raw)
@@ -1006,8 +1009,8 @@ indirect enum SpaceFormula: Equatable {
     }
 
 
-    /// What is wrong with the formula as far as one type can tell. Fields of linked and settings
-    /// types are checked by the store, which can see them.
+    /// What is wrong with the formula as far as one type can tell. Fields of settings types are
+    /// checked by the store, which can see them.
     func problem(beside siblings: [SpaceField], schema: SpaceSchema) -> String? {
         switch self {
         case .number:
@@ -1017,8 +1020,10 @@ indirect enum SpaceFormula: Equatable {
                 return "there is no field \(id)."
             }
             return field.kind.isNumeric ? nil : "\(field.name) is not a number."
-        case .path:
-            return nil
+        case .path(let head, _):
+            let link = siblings.first { $0.id == head && $0.kind == .link && !$0.isRemoved }
+                ?? schema.liveFields.first { $0.id == head && $0.kind == .link }
+            return link.map { "\($0.name) \(Self.noLinkedReads)" }
         case .sum(let group, let column):
             guard let field = schema.liveFields.first(where: { $0.id == group }), field.kind == .group else {
                 return "\(group) is not a group."
@@ -1042,10 +1047,8 @@ indirect enum SpaceFormula: Equatable {
     }
 }
 
-/// Where a formula finds the records it reaches through links and settings.
+/// Where a formula finds the settings it reads.
 protocol SpaceFormulaSource {
-    /// A record by id: its type's schema and stored values.
-    func linked(_ recordID: String) -> (schema: SpaceSchema, values: [String: SpaceValue])?
     /// The one record of a settings type, by the type's key.
     func settings(_ typeKey: String) -> (schema: SpaceSchema, values: [String: SpaceValue])?
 }
@@ -1123,15 +1126,7 @@ extension SpaceSchema {
             guard let field = liveFields.first(where: { $0.id == id }) else { return nil }
             return plain(field, siblings: liveFields, row: top, top: top, source: source, depth: depth)
         case .path(let head, let fieldID):
-            let found: (schema: SpaceSchema, values: [String: SpaceValue])?
-            if siblings.contains(where: { $0.id == head && $0.kind == .link }), case .text(let id) = row[head] {
-                found = source?.linked(id)
-            } else if liveFields.contains(where: { $0.id == head && $0.kind == .link }), case .text(let id) = top[head] {
-                found = source?.linked(id)
-            } else {
-                found = source?.settings(head)
-            }
-            guard let found else { return nil }
+            guard let found = source?.settings(head) else { return nil }
             return found.schema.evaluate(
                 .field(fieldID), siblings: found.schema.liveFields, row: found.values, top: found.values, source: source, depth: depth + 1
             )

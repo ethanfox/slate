@@ -2842,7 +2842,7 @@ enum SpaceTools {
                 ["kind": "image", "value": "set by the user in the app"],
                 ["kind": "quantity", "value": "{amount, unit}; add scales: false for amounts like a pinch"],
                 ["kind": "group", "value": "a list of rows keyed by the group's field ids", "needs": "fields: the columns of each row; ordered: true for numbered steps. Groups do not nest."],
-                ["kind": "calc", "value": "never set; worked out", "needs": "formula. Use calc for anything that can be worked out, so the user never types a total. In a group row: recipe.calories * servings reads the linked recipe and multiplies by that row's servings. On the record: sum(items.calories) adds a column up. goals.calories reads a settings type. " + SpaceFormula.grammar],
+                ["kind": "calc", "value": "never set; worked out", "needs": "formula. Use calc for anything that can be worked out, so the user never types a total. In a group row: calories * servings multiplies two numbers of that row. On the record: sum(items.calories) adds a column up. goals.calories reads a settings type. A formula cannot read a linked record: when a row refers to another record, give the row its own number field beside the link and copy the value into it when you add the row." + SpaceFormula.grammar],
                 ["kind": "tags", "value": "a list of option ids", "needs": "options: a list of names"],
                 ["kind": "url", "value": "a web address"],
                 ["kind": "money", "value": "a number", "needs": "currency: a code such as USD, if not the user's own"],
@@ -2852,7 +2852,7 @@ enum SpaceTools {
                 ["kind": "rating", "value": "0 to 5"],
                 ["kind": "file", "value": "set by the user in the app"],
                 ["kind": "schedule", "value": "daily, weekly:3 (three times a week), or days:mon,wed,fri", "needs": "nothing. Give a habit or routine one schedule field; streaks, pace and done-today then follow it instead of assuming every day."],
-                ["kind": "link", "value": "the id of one record of the target type", "needs": "target: the key of an object type in the same Space, created first. Use a link whenever one thing refers to another, such as a meal made from recipes, instead of retyping its details. For several, put the link in a group with any per-row fields, such as servings."]
+                ["kind": "link", "value": "the id of one record of the target type", "needs": "target: the key of an object type in the same Space, created first. Use a link whenever one thing refers to another, such as a meal made from recipes, so it can be opened from there. For several, put the link in a group with any per-row fields, such as servings. A number the row needs from the linked record, such as its calories, is a number field of the row that you fill in from the linked record when you add the row; it is a snapshot and does not change when the linked record does."]
             ],
             "components": SpaceScreenCatalog.components.map { spec -> [String: Any] in
                 [
@@ -2878,7 +2878,7 @@ enum SpaceTools {
                 "best:eventKey": "longest run of days with an event",
                 "week:eventKey": "events in the last seven days",
                 "pace:eventKey": "where the record stands against its schedule: 2 of 3 this week, or done today",
-                "sum:eventKey.field:period": "a logged number added up. period is today, week, month, year or all. Use eventKey.record.field to add up a field of the records the events are about, such as sum:eaten.record.calories:today",
+                "sum:eventKey.field:period": "a logged number added up. period is today, week, month, year or all. The field belongs to the event: to add up something about the records the events are about, give the event a number field and copy the value into it when you log, such as sum:eaten.calories:today",
                 "avg:eventKey.field:period": "the average of a logged number",
                 "min:eventKey.field:period": "the smallest logged number",
                 "max:eventKey.field:period": "the largest logged number",

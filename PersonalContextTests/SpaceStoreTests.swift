@@ -1024,7 +1024,8 @@ final class SpaceToolsTests: XCTestCase {
                     "fields": [
                         ["id": "recipe", "name": "Recipe", "kind": "link", "target": "recipe"],
                         ["name": "Servings", "kind": "number"],
-                        ["name": "Calories", "kind": "calc", "formula": "recipe.calories * servings"]
+                        ["id": "each", "name": "Calories each", "kind": "number"],
+                        ["name": "Calories", "kind": "calc", "formula": "each * servings"]
                     ]
                 ],
                 ["name": "Calories", "kind": "calc", "formula": "sum(items.calories)"],
@@ -1052,7 +1053,7 @@ final class SpaceToolsTests: XCTestCase {
 
         let dinner = try object(call("create_space_record", [
             "space_id": spaceID, "type_key": "meal", "title": "Dinner",
-            "values": ["items": [["recipe": chili, "servings": 2], ["recipe": rice, "servings": 1.5]]]
+            "values": ["items": [["recipe": chili, "servings": 2, "each": 500], ["recipe": rice, "servings": 1.5, "each": 200]]]
         ]))
         let values = try XCTUnwrap(dinner["values"] as? [String: Any])
         XCTAssertEqual(values["calories"] as? Double, 1300)
@@ -1060,10 +1061,20 @@ final class SpaceToolsTests: XCTestCase {
         let rows = try XCTUnwrap(values["items"] as? [[String: Any]])
         XCTAssertEqual(rows.compactMap { $0["calories"] as? Double }, [1000, 300])
 
+        // The copied number is a snapshot: changing the recipe afterwards does not rewrite the meal.
+        _ = try object(call("update_space_record", ["space_id": spaceID, "record_id": chili, "values": ["calories": 900]]))
+        let dinnerID = try XCTUnwrap(dinner["id"] as? String)
+        let later = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(try text(call("list_space_records", [
+            "space_id": spaceID, "type_key": "meal"
+        ])).utf8)) as? [[String: Any]])
+        let same = try XCTUnwrap(later.first { $0["id"] as? String == dinnerID }?["values"] as? [String: Any])
+        XCTAssertEqual(same["calories"] as? Double, 1300)
+
         // A total cannot be typed, and a formula has to add up.
         let typed = call("create_space_record", ["space_id": spaceID, "type_key": "meal", "title": "Lunch", "values": ["calories": 5]])
         XCTAssertEqual(typed["isError"] as? Bool, true)
-        for formula in ["recipe.kcal * servings", "nothing + 1", "sum(items.recipe)", "2 +"] {
+        // Neither can a formula reach through a link into another record.
+        for formula in ["recipe.calories * servings", "nothing + 1", "sum(items.recipe)", "2 +"] {
             let refused = call("set_space_type", [
                 "space_id": spaceID, "key": "meal2-\(abs(formula.hashValue))", "name": "Other",
                 "fields": [

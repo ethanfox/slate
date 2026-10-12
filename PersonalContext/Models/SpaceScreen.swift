@@ -183,9 +183,9 @@ struct SpaceCalcRequest: Hashable {
 
     var name: Name
     var eventKey: String
-    /// The logged number: a field of the event, or with `onRecord` a field of the record it is about.
+    /// The logged number: a field of the event itself. A value that comes from the record the event
+    /// is about is copied into the event when it is logged.
     var field = ""
-    var onRecord = false
     var period = Period.all
 
     init?(_ raw: String) {
@@ -197,9 +197,6 @@ struct SpaceCalcRequest: Hashable {
         switch path.count {
         case 0, 1: break
         case 2: field = path[1]
-        case 3 where path[1] == "record":
-            field = path[2]
-            onRecord = true
         default: return nil
         }
         if parts.count == 3 {
@@ -509,7 +506,7 @@ enum SpaceScreenCatalog {
             screens: both,
             props: [
                 SpacePropSpec(name: "events", kind: .event, required: true, note: "The event type."),
-                SpacePropSpec(name: "field", kind: .text, note: "A number field of the event, or record.field for a field of the records it is about. Left out, the chart counts events."),
+                SpacePropSpec(name: "field", kind: .text, note: "A number field of the event. Left out, the chart counts events."),
                 SpacePropSpec(name: "period", kind: .text, note: "week, month, year or all. Defaults to month."),
                 SpacePropSpec(name: "style", kind: .text, note: "line or bar. Lines suit a measurement, bars a daily amount.")
             ]
@@ -573,7 +570,7 @@ enum SpaceScreenCatalog {
             summary: "A bar showing a number against a target, such as calories against a daily goal.",
             screens: both,
             props: [
-                SpacePropSpec(name: "value", kind: .formula, required: true, note: "A field id or formula for the number so far, or a calculation over logs such as sum:eaten.record.calories:today."),
+                SpacePropSpec(name: "value", kind: .formula, required: true, note: "A field id or formula for the number so far, or a calculation over logs such as sum:eaten.calories:today."),
                 SpacePropSpec(name: "target", kind: .formula, required: true, note: "A number, field id or formula for the target, such as goals.calories."),
                 SpacePropSpec(name: "label", kind: .text, note: "What is being measured."),
                 SpacePropSpec(name: "unit", kind: .text, note: "Shown after the numbers, such as g or kcal.")
@@ -719,7 +716,7 @@ enum SpaceScreenCatalog {
                 if let request = SpaceCalcRequest("sum:\(eventKey).\(field)") {
                     checkCalc(request, owner: "chart.field", schema: schema, eventKeys: eventKeys, events: events, into: &problems)
                 } else {
-                    problems.append("chart.field must be a field id, or record.field.")
+                    problems.append("chart.field must be the id of a number field of the event.")
                 }
             }
         }
@@ -749,12 +746,10 @@ enum SpaceScreenCatalog {
             return
         }
         guard request.name.needsField else { return }
-        let holder = request.onRecord ? schema : events[request.eventKey]
         // Without the event's fields to hand there is nothing more to check.
-        guard let holder else { return }
+        guard let holder = events[request.eventKey] else { return }
         guard let field = holder.liveFields.first(where: { $0.id == request.field }), field.kind.isNumeric else {
-            let place = request.onRecord ? "this type" : "the event \(request.eventKey)"
-            problems.append("\(owner) needs a number field, and \(place) has no number field \(request.field).")
+            problems.append("\(owner) needs a number field, and the event \(request.eventKey) has no number field \(request.field).")
             return
         }
     }

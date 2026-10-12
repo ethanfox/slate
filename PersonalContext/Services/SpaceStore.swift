@@ -481,21 +481,16 @@ enum SpaceStore {
         }
     }
 
-    /// A formula that reads `a.b` needs `a` to be a link field or a settings type, and `b` a number there.
+    /// A formula that reads `a.b` needs `a` to be a settings type, and `b` a number there.
     private static func checkFormulaPaths(of schema: SpaceSchema, ownKey: String, spaceKey: String, in context: ModelContext) throws {
         let formulas = schema.formulas
         guard formulas.contains(where: { !$0.formula.paths.isEmpty }) else { return }
         let types = fetch(#Predicate<SpaceType> { $0.spaceIDString == spaceKey }, in: context)
         for entry in formulas {
             for (head, fieldID) in entry.formula.paths {
-                let link = entry.siblings.first { $0.id == head && $0.kind == .link && !$0.isRemoved }
-                    ?? schema.liveFields.first { $0.id == head && $0.kind == .link }
                 let targetSchema: SpaceSchema?
                 let targetName: String
-                if let link {
-                    targetSchema = link.target == ownKey ? schema : types.first { $0.key == link.target }?.schema
-                    targetName = link.target
-                } else if head == ownKey {
+                if head == ownKey {
                     targetSchema = schema
                     targetName = head
                 } else if let settings = types.first(where: { $0.key == head && $0.role == .settings }) {
@@ -504,7 +499,7 @@ enum SpaceStore {
                 } else {
                     throw SpaceStoreError.badFormulaPath(
                         field: entry.field.name,
-                        reason: "\(head) is neither a link field here nor a settings type in this Space."
+                        reason: "\(head) is not a settings type in this Space."
                     )
                 }
                 guard let found = targetSchema?.liveFields.first(where: { $0.id == fieldID }), found.kind.isNumeric else {
@@ -664,11 +659,6 @@ final class SpaceLookup: SpaceFormulaSource {
         let values = record.values
         decoded[key] = values
         return values
-    }
-
-    func linked(_ recordID: String) -> (schema: SpaceSchema, values: [String: SpaceValue])? {
-        guard let record = records[recordID], let schema = schemas[record.typeIDString] else { return nil }
-        return (schema, stored(recordID, record))
     }
 
     func settings(_ typeKey: String) -> (schema: SpaceSchema, values: [String: SpaceValue])? {

@@ -179,25 +179,14 @@ struct SpaceScreenContext {
         logged(request, in: event, schema: eventType(request.eventKey)?.schema)
     }
 
-    /// The number one event carries: its own field, or a field of the records it is about.
+    /// The number one event carries in its own field.
     private func logged(_ request: SpaceCalcRequest, in event: SpaceEvent, schema: SpaceSchema?) -> Double? {
-        func plain(_ value: SpaceValue?) -> Double? {
-            switch value {
-            case .number(let number): number
-            case .quantity(let quantity): quantity.amount
-            default: nil
-            }
+        let values = schema?.resolved(event.values, source: lookup) ?? event.values
+        switch values[request.field] {
+        case .number(let number): return number
+        case .quantity(let quantity): return quantity.amount
+        default: return nil
         }
-        guard request.onRecord else {
-            let values = schema?.resolved(event.values, source: lookup) ?? event.values
-            return plain(values[request.field])
-        }
-        let numbers = event.recordIDs.compactMap { id in
-            lookup?.linked(SpaceJSON.key(id)).flatMap { found in
-                plain(found.schema.resolved(found.values, source: lookup)[request.field])
-            }
-        }
-        return numbers.isEmpty ? nil : numbers.reduce(0, +)
     }
 
     /// The record's schedule, from the first schedule field that has one.
