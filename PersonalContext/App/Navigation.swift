@@ -183,8 +183,10 @@ enum ProjectSort: String, CaseIterable, Identifiable, Hashable {
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     case chatgpt
     case cursor
-    case importRelay
     case compatible
+    case claudeCode
+    case codex
+    case importRelay
     case sources
     case mcp
     case browser
@@ -201,8 +203,10 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .chatgpt: "ChatGPT"
         case .cursor: "Cursor"
-        case .importRelay: "Import"
         case .compatible: "Compatible endpoint"
+        case .claudeCode: "Claude Code"
+        case .codex: "Codex"
+        case .importRelay: "Import"
         case .sources: "Sources"
         case .mcp: "MCP"
         case .browser: "Browser"
@@ -219,8 +223,9 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .chatgpt: "bubble.left"
         case .cursor: "sparkle"
-        case .importRelay: "square.and.arrow.down"
         case .compatible: "link.circle"
+        case .claudeCode, .codex: "terminal"
+        case .importRelay: "square.and.arrow.down"
         case .sources: "link"
         case .mcp: "cable.connector"
         case .browser: "globe"
@@ -237,6 +242,17 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .chatgpt: .chatgpt
         case .cursor: .cursor
+        default: nil
+        }
+    }
+
+    /// The AIs a user connects. The rest of Settings is always there.
+    static let providers: [SettingsSection] = [.chatgpt, .cursor, .compatible, .claudeCode, .codex]
+
+    var localAgent: LocalAgent? {
+        switch self {
+        case .claudeCode: .claudeCode
+        case .codex: .codex
         default: nil
         }
     }

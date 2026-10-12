@@ -16,6 +16,7 @@ final class RunCoordinator {
     private struct Job {
         var task: Task<Void, Never>
         var process: RunCursorProcess?
+        var local: LocalAgentProcess?
     }
 
     func attach(_ app: AppModel) {
@@ -58,6 +59,7 @@ final class RunCoordinator {
         let id = run.id
         jobs[id]?.task.cancel()
         jobs[id]?.process?.stop()
+        jobs[id]?.local?.stop()
         try? RunStore.cancel(run, in: context)
         BrowserRuntime.shared.cancel(runID: id)
         clear(id)
@@ -84,7 +86,9 @@ final class RunCoordinator {
         do {
             try Task.checkCancellation()
             try validateProvider(run, app: app)
-            if run.providerID == TalkProvider.chatgpt.rawValue {
+            if let agent = LocalAgent(rawValue: run.providerID) {
+                try await runLocalAgent(id, agent: agent)
+            } else if run.providerID == TalkProvider.chatgpt.rawValue {
                 try await runChatGPT(id, app: app)
             } else {
                 try await runCursor(id, app: app)
@@ -269,6 +273,101 @@ final class RunCoordinator {
         try await finish(id, gateway: gateway, lastText: lastText, extra: citations, roots: roots)
     }
 
+    /// Hands the brief to a coding tool on this Mac. The tool does the work under its own rules;
+    /// Membrae records what was asked and what came back.
+    private func runLocalAgent(_ id: UUID, agent: LocalAgent) async throws {
+        guard let executable = agent.locate() else {
+            throw LocalAgentError("\(agent.title) is not installed on this Mac.")
+        }
+        guard let run = resolvedRun(id) else { return }
+        let policy = policy(for: run)
+        let roots = try await selectedRoots(for: run)
+        guard let run = resolvedRun(id), let context = liveContext() else { return }
+        let folder = context.container.configurations.first?.url
+            .deletingLastPathComponent()
+            .appendingPathComponent("Agent", isDirectory: true)
+        if let folder {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        let repository = roots.first?.path
+        let allowEdits = run.allowEdits
+        let tools = policy.allowedNames(from: RunToolPolicy.membraeCatalog)
+        let request = LocalAgentRequest(
+            prompt: RunPrompt.localAgent(
+                brief: run.brief,
+                project: run.project,
+                directory: repository,
+                allowEdits: allowEdits,
+                hasMembrae: !tools.isEmpty
+            ),
+            directory: repository ?? folder?.path ?? NSTemporaryDirectory(),
+            allowEdits: allowEdits,
+            mcpCommand: Bundle.main.url(forAuxiliaryExecutable: "membrae-mcp")?.path,
+            membraeTools: tools
+        )
+        let before = repository.flatMap { try? GitHistory.commits(in: $0, limit: 1) }
+        let process = LocalAgentProcess()
+        if var job = jobs[id] {
+            job.local = process
+            jobs[id] = job
+        }
+        var lastText = ""
+        var summary = ""
+        var refused: [String] = []
+        for try await event in try process.start(agent, executable: executable, request: request) {
+            try Task.checkCancellation()
+            switch event {
+            case .activity(let label):
+                setWait(id, label)
+            case .text(let text):
+                lastText = text
+                setWait(id, ChatWaitState.writing.label)
+            case .finished(let text, let names):
+                summary = text
+                refused = names
+            case .failed(let message):
+                throw LocalAgentError(message)
+            }
+        }
+        process.stop()
+        var parts = [summary.isEmpty ? lastText : summary]
+        parts.append(agent.refusalNote(refused, allowEdits: allowEdits))
+        if let repository, let before {
+            let commits = Self.commitLines(in: repository, since: before.first?.sha)
+            if !commits.isEmpty {
+                parts.append("**Commits**\n" + commits.map { "- \($0)" }.joined(separator: "\n"))
+            }
+        }
+        let gateway = RunGateway(
+            policy: policy,
+            inner: MembraeToolGateway(
+                roots: roots,
+                includeMembraeTools: false,
+                includeProjectTools: false,
+                consult: nil,
+                mcp: nil
+            )
+        )
+        try await finish(
+            id,
+            gateway: gateway,
+            lastText: parts.filter { !$0.isEmpty }.joined(separator: "\n\n"),
+            extra: [],
+            roots: roots
+        )
+    }
+
+    /// Commits made since `sha`, newest first. A nil `sha` means the repository had none.
+    private static func commitLines(in path: String, since sha: String?) -> [String] {
+        guard let commits = try? GitHistory.commits(in: path, limit: 30) else { return [] }
+        var lines: [String] = []
+        for commit in commits {
+            if commit.sha == sha { break }
+            lines.append("`\(commit.sha.prefix(7))` \(commit.message)")
+        }
+        return lines
+    }
+
     private func finish(
         _ id: UUID,
         gateway: RunGateway,
@@ -405,6 +504,15 @@ final class RunCoordinator {
     }
 
     private func validateProvider(_ run: AgentRun, app: AppModel) throws {
+        if let agent = LocalAgent(rawValue: run.providerID) {
+            guard app.isConnected(agent) else {
+                throw LocalAgentError("Connect \(agent.title) in Settings.")
+            }
+            if agent == .codex, !run.allowEdits {
+                throw LocalAgentError("Codex can only work from Membrae with its own sandbox off. Start the Run again with “Let it edit files and run commands” turned on.")
+            }
+            return
+        }
         switch TalkProvider(rawValue: run.providerID) {
         case .chatgpt:
             guard app.sources.hasChatGPT else {
@@ -432,6 +540,7 @@ final class RunCoordinator {
 
     private func clear(_ id: UUID) {
         jobs[id]?.process?.stop()
+        jobs[id]?.local?.stop()
         jobs[id] = nil
         running.removeAll { $0.id == id }
         BrowserRuntime.shared.cancel(runID: id)

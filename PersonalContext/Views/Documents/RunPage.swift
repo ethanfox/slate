@@ -82,7 +82,7 @@ struct RunPage: View {
         } else {
             parts.append(timeLabel)
         }
-        parts.append(TalkProvider(rawValue: run.providerID)?.title ?? run.providerID)
+        parts.append(TalkProvider(rawValue: run.providerID)?.title ?? LocalAgent(rawValue: run.providerID)?.title ?? run.providerID)
         if !run.modelID.isEmpty {
             parts.append(app.modelName(for: run.modelID, providerID: run.providerID))
         }

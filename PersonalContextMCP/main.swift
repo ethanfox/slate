@@ -62,6 +62,11 @@ func openStore() throws -> ModelContainer {
 /// Name the connected client gave at initialize, kept for the action log.
 var client = ""
 
+/// Set by the app when it starts a worker for a Run, so the worker sees only that Run's tools.
+let allowedTools = ProcessInfo.processInfo.environment["MEMBRAE_ALLOWED_TOOLS"].map {
+    Set($0.split(separator: ",").map(String.init))
+}
+
 while let line = readLine(strippingNewline: true) {
     guard !line.isEmpty else { continue }
     guard let message = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any] else {
@@ -85,10 +90,21 @@ while let line = readLine(strippingNewline: true) {
     case "ping", "initialized", "notifications/initialized":
         respond(id, result: [:])
     case "tools/list":
-        respond(id, result: ["tools": Tools.definitions])
+        let definitions = Tools.definitions.filter { definition in
+            guard let allowedTools else { return true }
+            return allowedTools.contains(definition["name"] as? String ?? "")
+        }
+        respond(id, result: ["tools": definitions])
     case "tools/call":
         let name = params["name"] as? String ?? ""
         let arguments = params["arguments"] as? [String: Any] ?? [:]
+        if let allowedTools, !allowedTools.contains(name) {
+            respond(id, result: [
+                "content": [["type": "text", "text": "This run cannot use \(name)."]],
+                "isError": true
+            ])
+            continue
+        }
         do {
             let container = try openStore()
             let meta = params["_meta"] as? [String: Any] ?? [:]

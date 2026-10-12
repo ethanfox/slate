@@ -131,6 +131,8 @@ struct MembraeApp: App {
                         switch modal {
                         case .connectCursor: ConnectCursorSheet()
                         case .connectChatGPT: ConnectChatGPTSheet()
+                        case .connectAI: ConnectAISheet()
+                        case .connectLocalAgent(let agent): ConnectLocalAgentSheet(agent: agent)
                         case .connectGitHub: ConnectGitHubSheet()
                         case .connectGitLab: ConnectGitLabSheet()
                         case .replaceImportKey: ReplaceImportKeySheet()

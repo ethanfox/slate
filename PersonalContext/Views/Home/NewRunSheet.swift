@@ -15,6 +15,7 @@ struct NewRunSheet: View {
     @State private var modelID: String
     @State private var pathRaw: String
     @State private var selectedLocators: Set<String>
+    @State private var allowEdits: Bool
 
     init(draft: NewRunDraft) {
         self.draft = draft
@@ -25,6 +26,7 @@ struct NewRunSheet: View {
         _modelID = State(initialValue: draft.modelID)
         _pathRaw = State(initialValue: draft.pathRaw)
         _selectedLocators = State(initialValue: Set(draft.repositoryLocators))
+        _allowEdits = State(initialValue: draft.allowEdits)
     }
 
     var body: some View {
@@ -64,8 +66,30 @@ struct NewRunSheet: View {
                 .disabled(projectID == nil)
             }
 
-            ModalControlRow("Model") {
-                ModelPicker(providerID: $providerID, modelID: $modelID)
+            if !workers.isEmpty {
+                ModalControlRow("Send to") {
+                    Picker("Send to", selection: worker) {
+                        Text("Membrae agent").tag("")
+                        ForEach(workers) { agent in
+                            Text(agent.title).tag(agent.rawValue)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .fixedSize()
+                }
+            }
+
+            if agent == nil {
+                ModalControlRow("Model") {
+                    ModelPicker(providerID: $providerID, modelID: $modelID)
+                }
+            } else {
+                ModalControlRow("Let it edit files and run commands") {
+                    Toggle("Let it edit files and run commands", isOn: $allowEdits)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
             }
 
             if TalkProvider(rawValue: providerID) == .cursor, !WorkerRegistry.paths(for: providerID).isEmpty {
@@ -126,12 +150,47 @@ struct NewRunSheet: View {
         selectedProject.map(ProjectCodeWorkspace.attachments(on:)) ?? []
     }
 
+    private var agent: LocalAgent? {
+        LocalAgent(rawValue: providerID)
+    }
+
+    /// Coding tools the user connected, plus the one a retried Run already names.
+    private var workers: [LocalAgent] {
+        LocalAgent.allCases.filter { app.isConnected($0) || $0 == agent }
+    }
+
+    private var worker: Binding<String> {
+        Binding(
+            get: { agent?.rawValue ?? "" },
+            set: { id in
+                if id.isEmpty {
+                    providerID = app.talkProvider.rawValue
+                    modelID = app.talkModelID
+                } else {
+                    providerID = id
+                    modelID = ""
+                }
+            }
+        )
+    }
+
     private var canStart: Bool {
         !brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && app.providerConnected(providerID)
+            && !(agent == .codex && !allowEdits)
     }
 
     private var disclosure: String {
+        if let agent {
+            if agent == .codex, !allowEdits {
+                return "Codex can only work from Membrae with its own sandbox off, so it needs the switch above turned on."
+            }
+            let notes = selectedProject == nil ? "" : " It can read and write this project’s notes and tasks."
+            if allowEdits {
+                return "\(agent.title) can change the code you attach and run commands there, under its own settings on this Mac.\(notes) It is told not to complete the task."
+            }
+            return "\(agent.title) can read the code you attach but not change it.\(notes) It is told not to complete the task."
+        }
         let isCursor = TalkProvider(rawValue: providerID) == .cursor
         if selectedProject != nil {
             if isCursor {
@@ -165,6 +224,7 @@ struct NewRunSheet: View {
         next.modelID = modelID
         next.pathRaw = pathRaw
         next.repositoryLocators = Array(selectedLocators)
+        next.allowEdits = agent != nil && allowEdits
         app.startRun(next)
     }
 }

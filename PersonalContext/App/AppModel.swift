@@ -108,6 +108,14 @@ final class AppModel {
     }
     var compatibleModels: [(id: String, name: String)] = []
     var compatibleKeyPresent = false
+    /// Coding tools on this Mac the user has connected to hand work to.
+    var connectedLocalAgents: Set<String> {
+        didSet { defaults.set(connectedLocalAgents.sorted(), forKey: Keys.connectedLocalAgents) }
+    }
+
+    func isConnected(_ agent: LocalAgent) -> Bool {
+        connectedLocalAgents.contains(agent.rawValue)
+    }
     private(set) var cursorCloudRepositories: CursorCloudRepositoriesState = .idle
     @ObservationIgnored private var cursorCloudFetchStartedAt: Date?
     private(set) var chatGPTModels: [ChatGPTModel] = []
@@ -319,6 +327,7 @@ final class AppModel {
         compatibleEndpoint = UserDefaults.standard.string(forKey: Keys.compatibleEndpoint) ?? ""
         compatibleModelID = UserDefaults.standard.string(forKey: Keys.compatibleModel) ?? ""
         compatibleKeyPresent = KeychainStore.read(.compatibleAPIKey) != nil
+        connectedLocalAgents = Set(UserDefaults.standard.stringArray(forKey: Keys.connectedLocalAgents) ?? [])
         if let checkedAt = defaults.object(forKey: Keys.cursorCloudCheckedAt) as? TimeInterval,
            let urls = defaults.stringArray(forKey: Keys.cursorCloudRepoURLs) {
             cursorCloudRepositories = .ready(urls: urls, checkedAt: Date(timeIntervalSince1970: checkedAt))
@@ -919,7 +928,7 @@ final class AppModel {
         case .chatgpt: sources.hasChatGPT
         case .cursor: hasAPIKey
         case .compatible: !compatibleEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        default: false
+        default: LocalAgent(rawValue: id).map(isConnected) ?? false
         }
     }
 }
@@ -961,6 +970,7 @@ enum Keys {
     static let chatGPTModel = "chatGPTModelID"
     static let compatibleEndpoint = "compatibleEndpoint"
     static let compatibleModel = "compatibleModelID"
+    static let connectedLocalAgents = "connectedLocalAgents"
     static let cursorCloudRepoURLs = "cursorCloudRepoURLs"
     static let cursorCloudCheckedAt = "cursorCloudCheckedAt"
     static let showAgentIDs = "showAgentIDs"

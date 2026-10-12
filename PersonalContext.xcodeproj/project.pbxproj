@@ -137,6 +137,9 @@
 		B02D4F8C5E3091B27C6F5D4A /* ObjectFind.swift in Sources */ = {isa = PBXBuildFile; fileRef = A91C3E7B4D2F80A16B5E4C39 /* ObjectFind.swift */; };
 		C0F1050100000011 /* ComposerSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F1050100000001 /* ComposerSearch.swift */; };
 		11B4A4700000000000000012 /* SourceFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11B4A4700000000000000002 /* SourceFetcher.swift */; };
+		1CA1A6E00000000000000011 /* LocalAgent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E00000000000000001 /* LocalAgent.swift */; };
+		1CA1A6E00000000000000012 /* SettingsLocalAgentPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E00000000000000002 /* SettingsLocalAgentPage.swift */; };
+		1CA1A6E00000000000000013 /* LocalAgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E00000000000000003 /* LocalAgentTests.swift */; };
 		C0F1050100000012 /* ComposerSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F1050100000002 /* ComposerSession.swift */; };
 		C0F1050100000013 /* UniversalComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F1050100000003 /* UniversalComposer.swift */; };
 		C0F1050100000014 /* ComposerResults.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F1050100000004 /* ComposerResults.swift */; };
@@ -472,6 +475,9 @@
 		A91C3E7B4D2F80A16B5E4C39 /* ObjectFind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectFind.swift; sourceTree = "<group>"; };
 		C0F1050100000001 /* ComposerSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerSearch.swift; sourceTree = "<group>"; };
 		11B4A4700000000000000002 /* SourceFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceFetcher.swift; sourceTree = "<group>"; };
+		1CA1A6E00000000000000001 /* LocalAgent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAgent.swift; sourceTree = "<group>"; };
+		1CA1A6E00000000000000002 /* SettingsLocalAgentPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsLocalAgentPage.swift; sourceTree = "<group>"; };
+		1CA1A6E00000000000000003 /* LocalAgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAgentTests.swift; sourceTree = "<group>"; };
 		C0F1050100000002 /* ComposerSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerSession.swift; sourceTree = "<group>"; };
 		C0F1050100000003 /* UniversalComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UniversalComposer.swift; sourceTree = "<group>"; };
 		C0F1050100000004 /* ComposerResults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerResults.swift; sourceTree = "<group>"; };
@@ -729,6 +735,7 @@
 				E8B24C96AAB593E09C71D659 /* ChatGPTSignIn.swift */,
 				C0F1050100000001 /* ComposerSearch.swift */,
 				11B4A4700000000000000002 /* SourceFetcher.swift */,
+				1CA1A6E00000000000000001 /* LocalAgent.swift */,
 				C0F1050100000002 /* ComposerSession.swift */,
 				55C705E6D771B0D57F792CD5 /* ContextBuilder.swift */,
 				EC770F3F4A6E9C65A13777F6 /* CursorClient.swift */,
@@ -903,6 +910,7 @@
 				F11E5704A000000B /* SettingsCompatiblePage.swift */,
 				022EAD2D997C0A29F21400CA /* SettingsChrome.swift */,
 				F95931057DAA72031D16DD3F /* SettingsColumn.swift */,
+				1CA1A6E00000000000000002 /* SettingsLocalAgentPage.swift */,
 				3F3CB7A7C440980D6F3F0544 /* SettingsCursorPage.swift */,
 				F11E5704A0000033 /* SettingsImportPage.swift */,
 				4A07E5F475297DE983C9EAB1 /* SettingsDeveloperPage.swift */,
@@ -975,6 +983,7 @@
 				8F3A1C2E4B5D60718293A006 /* track-first-eval.md */,
 				B81A0C1D2E3F405162738A15 /* RunStoreTests.swift */,
 				B81A0C1D2E3F405162738A17 /* RunToolPolicyTests.swift */,
+				1CA1A6E00000000000000003 /* LocalAgentTests.swift */,
 				A91E2F3A4B5C6D7E8F901005 /* AgentRuntimeTests.swift */,
 				E1A2B3C4D5E6F708192A3B05 /* ChatEngineTests.swift */,
 				F11E5704A0000010 /* FileStoreTests.swift */,
@@ -1233,6 +1242,7 @@
 				8F3A1C2E4B5D60718293A00A /* TrackFirstEvalTests.swift in Sources */,
 				B81A0C1D2E3F405162738A16 /* RunStoreTests.swift in Sources */,
 				B81A0C1D2E3F405162738A18 /* RunToolPolicyTests.swift in Sources */,
+				1CA1A6E00000000000000013 /* LocalAgentTests.swift in Sources */,
 				A91E2F3A4B5C6D7E8F901006 /* AgentRuntimeTests.swift in Sources */,
 				E1A2B3C4D5E6F708192A3B06 /* ChatEngineTests.swift in Sources */,
 				F11E5704B0000010 /* FileStoreTests.swift in Sources */,
@@ -1330,6 +1340,8 @@
 				B02D4F8C5E3091B27C6F5D4A /* ObjectFind.swift in Sources */,
 				C0F1050100000011 /* ComposerSearch.swift in Sources */,
 				11B4A4700000000000000012 /* SourceFetcher.swift in Sources */,
+				1CA1A6E00000000000000011 /* LocalAgent.swift in Sources */,
+				1CA1A6E00000000000000012 /* SettingsLocalAgentPage.swift in Sources */,
 				C0F1050100000012 /* ComposerSession.swift in Sources */,
 				C0F1050100000013 /* UniversalComposer.swift in Sources */,
 				C0F1050100000014 /* ComposerResults.swift in Sources */,

@@ -19,6 +19,8 @@ enum AppModal: Identifiable {
     case save(SaveKind)
     case connectCursor
     case connectChatGPT
+    case connectAI
+    case connectLocalAgent(LocalAgent)
     case connectGitHub
     case connectGitLab
     case replaceImportKey
@@ -49,6 +51,8 @@ enum AppModal: Identifiable {
         case .save(let kind): "save-\(kind.id)"
         case .connectCursor: "connect-cursor"
         case .connectChatGPT: "connect-chatgpt"
+        case .connectAI: "connect-ai"
+        case .connectLocalAgent(let agent): "connect-\(agent.rawValue)"
         case .connectGitHub: "connect-github"
         case .connectGitLab: "connect-gitlab"
         case .replaceImportKey: "replace-import-key"

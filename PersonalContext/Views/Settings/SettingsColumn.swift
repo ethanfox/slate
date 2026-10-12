@@ -2,19 +2,19 @@ import SwiftUI
 
 struct SettingsColumn: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.modalHost) private var modalHost
 
     var body: some View {
         ScrollView {
             PageBody {
                 VStack(alignment: .leading, spacing: 1) {
-                    section("Account", first: true)
-                    row(.chatgpt)
-                    row(.cursor)
-                    row(.importRelay)
-                    row(.compatible)
+                    section("AI Providers", first: true)
+                    ForEach(providers) { row($0) }
+                    connectRow
                     section("Sources")
                     row(.sources)
                     row(.mcp)
+                    row(.importRelay)
                     row(.browser)
                     section("Workspace")
                     row(.calendar)
@@ -32,6 +32,20 @@ struct SettingsColumn: View {
             }
         }
         .scrollContentBackground(.hidden)
+    }
+
+    /// Only what the user connected, plus the one they are setting up now.
+    private var providers: [SettingsSection] {
+        SettingsSection.providers.filter { app.isConnected($0) || app.settingsSection == $0 }
+    }
+
+    private var connectRow: some View {
+        Button {
+            app.present(.connectAI, in: modalHost)
+        } label: {
+            SidebarRow(title: "Connect AI", systemImage: "plus", mark: nil, isSelected: false)
+        }
+        .buttonStyle(.plain)
     }
 
     private func section(_ title: String, first: Bool = false) -> some View {
@@ -56,5 +70,17 @@ struct SettingsColumn: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+extension AppModel {
+    func isConnected(_ section: SettingsSection) -> Bool {
+        switch section {
+        case .chatgpt: sources.hasChatGPT
+        case .cursor: hasAPIKey
+        case .compatible: !compatibleEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .claudeCode, .codex: section.localAgent.map(isConnected) ?? false
+        default: true
+        }
     }
 }

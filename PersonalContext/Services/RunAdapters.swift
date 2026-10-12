@@ -202,6 +202,33 @@ enum RunPrompt {
         return "Do the job. Call finish_run with a short summary when you are done. You have no project to write into. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
     }
 
+    /// For a coding tool on this Mac. It has no finish_run; its last message is the summary.
+    static func localAgent(
+        brief: String,
+        project: Project?,
+        directory: String?,
+        allowEdits: Bool,
+        hasMembrae: Bool
+    ) -> String {
+        var lines: [String] = []
+        if let project {
+            lines.append(ContextBuilder.identity(for: project))
+        }
+        if hasMembrae {
+            lines.append("The membrae tools read and write this project’s decisions, tracks, notes, and tasks in Membrae. Read what governs the work before you start. Do not complete the assigned task.")
+        }
+        if allowEdits, let directory {
+            lines.append("You are working in \(directory). Make the changes the brief asks for. If it is a git repository, commit what you change with a clear message. Do not push.")
+        } else if allowEdits {
+            lines.append("No code is attached to this run.")
+        } else {
+            lines.append("Do not change files. Report what you find, with file paths and line numbers.")
+        }
+        lines.append("Finish with a short summary of what you did.")
+        lines.append(brief)
+        return lines.filter { !$0.isEmpty }.joined(separator: "\n\n")
+    }
+
     static func body(brief: String, project: Project?, run: AgentRun? = nil) -> String {
         if run?.purpose == .indexRepository {
             let title = run.flatMap { run -> CodeAttachment? in

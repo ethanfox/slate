@@ -679,6 +679,10 @@ struct RootView: View {
             ConnectCursorSheet()
         case .connectChatGPT:
             ConnectChatGPTSheet()
+        case .connectAI:
+            ConnectAISheet()
+        case .connectLocalAgent(let agent):
+            ConnectLocalAgentSheet(agent: agent)
         case .connectGitHub:
             ConnectGitHubSheet()
         case .connectGitLab:

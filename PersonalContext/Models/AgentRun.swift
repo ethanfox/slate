@@ -101,6 +101,8 @@ struct NewRunDraft: Equatable {
     var purpose: RunPurpose
     var indexedAttachmentID: UUID?
     var retryOfID: UUID?
+    /// For a coding tool on this Mac: whether it may edit files and run commands.
+    var allowEdits = false
 
     static func blank(
         origin: RunOrigin,
@@ -205,6 +207,12 @@ final class AgentRun {
     }
 
     var path: String { pathRaw }
+
+    /// Whether the user let this Run's worker edit files and run commands. Kept in the adapter state.
+    var allowEdits: Bool {
+        get { Self.decode(adapterStateJSON, as: [String: Bool].self)?["allowEdits"] ?? false }
+        set { adapterStateJSON = Self.encode(["allowEdits": newValue]) }
+    }
 
     init(
         brief: String,

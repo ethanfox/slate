@@ -30,6 +30,10 @@ struct SettingsView: View {
             SettingsImportPage()
         case .compatible:
             SettingsCompatiblePage()
+        case .claudeCode:
+            SettingsLocalAgentPage(agent: .claudeCode)
+        case .codex:
+            SettingsLocalAgentPage(agent: .codex)
         case .sources:
             SettingsSourcesPage()
         case .mcp:

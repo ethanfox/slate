@@ -91,6 +91,7 @@ enum RunStore {
             indexedAttachmentID: draft.indexedAttachmentID
         )
         run.repositoryLocators = draft.repositoryLocators
+        if draft.allowEdits { run.allowEdits = true }
         run.append(.queued)
         context.insert(run)
         project?.touch()
@@ -112,7 +113,8 @@ enum RunStore {
             repositoryLocators: run.repositoryLocators,
             purpose: run.purpose,
             indexedAttachmentID: run.indexedAttachmentID,
-            retryOfID: run.id
+            retryOfID: run.id,
+            allowEdits: run.allowEdits
         )
     }
 

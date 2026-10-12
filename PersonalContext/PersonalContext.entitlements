@@ -21,10 +21,20 @@
 	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
 	<array>
 		<string>/Library/Application Support/Cursor/User/globalStorage/</string>
+		<string>/.agents/</string>
 	</array>
 	<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
 	<array>
 		<string>/.paper/</string>
+		<string>/.claude/</string>
+		<string>/.claude.json</string>
+		<string>/.local/</string>
+		<string>/.codex/</string>
+	</array>
+	<key>com.apple.security.temporary-exception.files.absolute-path.read-only</key>
+	<array>
+		<string>/opt/homebrew/</string>
+		<string>/usr/local/</string>
 	</array>
 	<key>keychain-access-groups</key>
 	<array>
