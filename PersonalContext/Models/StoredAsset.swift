@@ -21,6 +21,8 @@ enum AssetOwnerKind: String, Sendable {
     case spaceForm
     /// Images a Space record's image fields point at.
     case spaceRecord
+    /// The file a Library source was saved from.
+    case source
 }
 
 @Model

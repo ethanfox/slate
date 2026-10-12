@@ -216,8 +216,18 @@ enum ComposerImport {
         .png, .jpeg, .gif, .pdf, .plainText, .commaSeparatedText,
         UTType(filenameExtension: "webp") ?? .image,
         UTType(filenameExtension: "xlsx") ?? .data,
-        .sourceCode, .json
+        .sourceCode, .json, .heic, .heif, .tiff, .bmp
     ]
+
+    /// Photos in formats the models do not take, such as an iPhone's HEIC, are kept as JPEG.
+    private static func jpeg(from url: URL) -> Data? {
+        guard ["heic", "heif", "tiff", "tif", "bmp"].contains(url.pathExtension.lowercased()) else { return nil }
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        guard let image = NSImage(contentsOf: url), let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
+        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.9])
+    }
 
     @MainActor
     static func importURLs(
@@ -238,7 +248,17 @@ enum ComposerImport {
             )
             attachments.append(placeholder)
             do {
-                let asset = try store.importFile(url: url, ownerKind: ownerKind, ownerID: ownerID, orderIndex: attachments.count - 1)
+                let asset = if let photo = jpeg(from: url) {
+                    try store.importData(
+                        photo,
+                        filename: url.deletingPathExtension().lastPathComponent + ".jpg",
+                        ownerKind: ownerKind,
+                        ownerID: ownerID,
+                        orderIndex: attachments.count - 1
+                    )
+                } else {
+                    try store.importFile(url: url, ownerKind: ownerKind, ownerID: ownerID, orderIndex: attachments.count - 1)
+                }
                 if let index = attachments.firstIndex(where: { $0.id == placeholder.id }) {
                     attachments[index] = ComposerAttachment(
                         id: asset.id,

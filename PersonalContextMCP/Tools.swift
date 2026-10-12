@@ -391,6 +391,7 @@ enum Tools {
                 context.delete(track)
             case "source":
                 context.delete(try Lookup.source(id, in: context))
+                try? FileStore.default(context: context).release(ownerKind: .source, ownerID: id)
             case "record":
                 guard let record = SpaceStore.record(id, in: context) else { throw ToolError("That record is already gone.") }
                 try SpaceStore.delete(record, in: context)
@@ -1008,17 +1009,30 @@ enum Tools {
                 "title": text("Title of the page or document."),
                 "summary": text("Two lines on what it says and why it was kept."),
                 "text": text("The readable text, when you already have it."),
+                "file_id": text("Id of a file already stored in Membrae, to keep with the source. Only the app has these ids."),
                 "project_ids": ["type": "array", "items": ["type": "string"], "description": "Projects this source belongs to. May be empty."]
             ],
             required: [], readOnly: false
         ) { args, context in
             let url = args.string("url") ?? ""
             let body = args.string("text") ?? ""
-            guard !url.isEmpty || !body.isEmpty else { throw ToolError("Pass url, or text for something with no address.") }
+            let files = FileStore.default(context: context)
+            var file: StoredAsset?
+            if let fileID = try args.optionalUUID("file_id") ?? nil {
+                guard let found = files.asset(id: fileID) else { throw ToolError("No stored file with id \(fileID.uuidString).") }
+                file = found
+            }
+            guard !url.isEmpty || !body.isEmpty || file != nil else { throw ToolError("Pass url, or text for something with no address.") }
             let projects = try (args.uuids("project_ids") ?? []).map { try Lookup.project($0, in: context) }
             let existing = url.isEmpty ? nil : try context.fetch(FetchDescriptor<SavedSource>(predicate: #Predicate { $0.url == url })).first
             let source = existing ?? SavedSource(url: url, kind: url.lowercased().hasSuffix(".pdf") ? .pdf : .link)
             if existing == nil { context.insert(source) }
+            if let file {
+                // The source keeps the file, so it outlives the input or chat it arrived through.
+                source.kind = file.kind == .image ? .image : file.mediaType == "application/pdf" ? .pdf : .file
+                if source.title.isEmpty { source.title = file.filename }
+                try files.retain(assetIDs: [file.id], ownerKind: .source, ownerID: source.id)
+            }
             if let title = args.string("title"), !title.isEmpty { source.title = title }
             if let summary = args.string("summary"), !summary.isEmpty { source.summary = summary }
             if !body.isEmpty { source.text = body }

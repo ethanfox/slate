@@ -11,6 +11,10 @@ struct FileStore: Sendable {
     }
 
     static var defaultRoot: URL {
+        // Tests run inside the app and must not leave files among the user's.
+        if Store.isHostingTests {
+            return FileManager.default.temporaryDirectory.appendingPathComponent("MembraeTestAssets", isDirectory: true)
+        }
         if let store = Store.applicationGroupStoreURL {
             return store.deletingLastPathComponent().appendingPathComponent("StoredAssets", isDirectory: true)
         }

@@ -41,8 +41,11 @@ struct LibraryView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .captureBar(placeholder: "Paste a link to save it")
-        .onAppear { SourceFetcher.fillPending(container: context.container) }
+        .captureBar(placeholder: "Paste a link or drop a file to save it")
+        .onAppear {
+            SourceFetcher.fillPending(container: context.container)
+            SourceFetcher.fillFiles(container: context.container)
+        }
     }
 
     private var header: some View {
@@ -80,7 +83,7 @@ struct LibraryView: View {
                 .padding(.bottom, 12)
             Text(sources.isEmpty ? "Nothing saved yet." : "Nothing matches.")
                 .font(CraftFont.title)
-            Text(sources.isEmpty ? "Paste a link below and Membrae keeps the page for you." : "Try other words, or switch what is shown.")
+            Text(sources.isEmpty ? "Paste a link or drop a file below and Membrae keeps it for you." : "Try other words, or switch what is shown.")
                 .font(CraftFont.body)
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
@@ -101,12 +104,30 @@ struct LibraryView: View {
     }
 
     private func open(_ source: SavedSource) {
-        guard let url = URL(string: source.url) else { return }
-        openURL(url)
+        if let url = URL(string: source.url), !source.url.isEmpty {
+            openURL(url)
+        } else if !openFile(of: source) {
+            return
+        }
         if source.readAt == nil {
             source.readAt = .now
             try? context.persist()
         }
+    }
+
+    /// Opens the file a source was saved from. Stored files have no extension, so a named copy is opened.
+    private func openFile(of source: SavedSource) -> Bool {
+        let store = FileStore.default(context: context)
+        guard let asset = store.references(ownerKind: .source, ownerID: source.id).first?.assetID.flatMap(store.asset(id:)) else {
+            return false
+        }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Membrae-\(asset.id.uuidString)", isDirectory: true)
+        let copy = folder.appendingPathComponent(asset.filename)
+        if !FileManager.default.fileExists(atPath: copy.path) {
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            guard (try? FileManager.default.copyItem(at: store.resolve(asset), to: copy)) != nil else { return false }
+        }
+        return NSWorkspace.shared.open(copy)
     }
 }
 
@@ -151,12 +172,16 @@ private struct SourceRow: View {
         .onHover { hovering = $0 }
         .contextMenu { menu }
         .accessibilityLabel("\(source.displayTitle), \(source.readAt == nil ? "unread" : "read")")
-        .accessibilityHint("Opens the page")
+        .accessibilityHint(source.url.isEmpty ? "Opens the file" : "Opens the page")
     }
 
     private var meta: String {
         var parts: [String] = []
-        if !source.host.isEmpty { parts.append(source.host) }
+        if !source.host.isEmpty {
+            parts.append(source.host)
+        } else if source.url.isEmpty {
+            parts.append(source.kind.label)
+        }
         parts.append(source.createdAt.relativeLabel)
         let linked = source.projects.map(\.name).sorted()
         if !linked.isEmpty { parts.append(linked.joined(separator: ", ")) }
@@ -188,17 +213,21 @@ private struct SourceRow: View {
                 }
             }
         }
-        Button("Copy Link") {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(source.url, forType: .string)
+        if !source.url.isEmpty {
+            Button("Copy Link") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(source.url, forType: .string)
+            }
         }
         Divider()
         Button(source.isArchived ? "Move Back to Library" : "Archive") {
             change { $0.isArchived.toggle() }
         }
         Button("Delete", role: .destructive) {
+            let id = source.id
             context.delete(source)
             try? context.persist()
+            try? FileStore.default(context: context).release(ownerKind: .source, ownerID: id)
         }
     }
 

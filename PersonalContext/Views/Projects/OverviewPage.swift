@@ -104,6 +104,18 @@ struct CaptureBar: View {
         }
     }
 
+    /// Files dropped with nothing typed go straight to the Library, each with its text. No chat is opened.
+    private func keep(_ files: [ChatAttachmentRef]) -> Bool {
+        let saved = SourceFetcher.save(files, project: project, container: context.container)
+        guard !saved.isEmpty else { return false }
+        try? FileStore.default(context: context).release(ownerKind: .composer, ownerID: composerID)
+        composerID = UUID()
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            savedLink = saved.count == 1 ? saved[0] : "\(saved.count) files"
+        }
+        return true
+    }
+
     /// The exchange already showing, when it belongs to the same place as this bar.
     private var current: Conversation? {
         guard let id = app.quickChatID else { return nil }
@@ -118,6 +130,9 @@ struct CaptureBar: View {
             return true
         }
         let continuing = current
+        if continuing == nil, submission.trimmedText.isEmpty, !submission.attachments.isEmpty {
+            return keep(submission.attachments)
+        }
         if let continuing, app.chatRuntime(for: continuing, project: project).session.isGenerating {
             return false
         }

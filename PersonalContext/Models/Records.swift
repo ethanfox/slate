@@ -288,13 +288,23 @@ final class ProjectThread {
 }
 
 enum SavedSourceKind: String, CaseIterable {
-    case link, pdf, file
+    case link, pdf, file, image
 
     var symbol: String {
         switch self {
         case .link: "link"
         case .pdf: "doc.richtext"
         case .file: "doc"
+        case .image: "photo"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .link: "Link"
+        case .pdf: "PDF"
+        case .file: "File"
+        case .image: "Image"
         }
     }
 }

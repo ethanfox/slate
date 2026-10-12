@@ -429,6 +429,30 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(try sources().count, 0)
     }
 
+    func testADroppedFileIsKeptInTheLibraryWithItsFile() throws {
+        let seed = HarborEvalFixture.seed(in: context)
+        try context.save()
+        let files = FileStore.default(context: context)
+        let composer = UUID()
+        let asset = try files.importData(Data("Tide tables for March.".utf8), filename: "tides.txt", ownerKind: .composer, ownerID: composer, orderIndex: 0)
+
+        let saved = SourceFetcher.save([asset.reference], project: seed.project, container: container)
+        XCTAssertEqual(saved, ["tides.txt"])
+        try files.release(ownerKind: .composer, ownerID: composer)
+
+        let listed = try array(Tools.call("list_sources", arguments: [:], container: container))
+        let source = try XCTUnwrap(listed.first)
+        let id = try XCTUnwrap((source["id"] as? String).flatMap(UUID.init(uuidString:)))
+        XCTAssertEqual(source["title"] as? String, "tides.txt")
+        XCTAssertEqual(source["kind"] as? String, "file")
+        XCTAssertEqual(source["project_ids"] as? [String], [seed.project.id.uuidString])
+        XCTAssertEqual(files.references(ownerKind: .source, ownerID: id).compactMap(\.assetID), [asset.id], "the source keeps the file once the input lets go")
+
+        let log = try ModelContext(container).fetch(FetchDescriptor<AgentAction>())
+        try Tools.undo(try XCTUnwrap(log.first { $0.tool == "create_source" }).id, container: container)
+        XCTAssertTrue(files.references(ownerKind: .source, ownerID: id).isEmpty)
+    }
+
     func testAPageIsReducedToItsReadableText() {
         let html = """
         <html><head><title>Ignored &amp; plain</title><meta property="og:title" content="Tide tables &amp; charts">

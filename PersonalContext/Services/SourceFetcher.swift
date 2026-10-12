@@ -1,6 +1,8 @@
 import Foundation
+import ImageIO
 import PDFKit
 import SwiftData
+import Vision
 
 /// Fetches the text of saved links that do not have it yet, so the Library can be searched and the
 /// agent can answer from what was saved.
@@ -56,6 +58,66 @@ enum SourceFetcher {
             source.updatedAt = .now
         }
         try? context.persist()
+    }
+
+    /// Saves files dropped on the one input to the Library, each keeping its file. Returns what was saved.
+    @MainActor
+    static func save(_ files: [ChatAttachmentRef], project: Project?, container: ModelContainer) -> [String] {
+        var saved: [String] = []
+        for file in files {
+            var arguments: [String: Any] = ["file_id": file.id.uuidString, "title": file.filename]
+            if let project { arguments["project_ids"] = [project.id.uuidString] }
+            let result = Tools.call(
+                "create_source",
+                arguments: arguments,
+                container: container,
+                announce: false,
+                origin: ActionOrigin(client: "membrae")
+            )
+            if result["isError"] as? Bool != true { saved.append(file.filename) }
+        }
+        fillFiles(container: container)
+        return saved
+    }
+
+    /// Reads the text out of saved files that have none yet: documents by extraction, pictures by
+    /// recognizing the words in them.
+    @MainActor
+    static func fillFiles(container: ModelContainer) {
+        let context = ModelContext(container)
+        let store = FileStore.default(context: context)
+        let waiting = (try? context.fetch(FetchDescriptor<SavedSource>(
+            predicate: #Predicate { $0.text == "" && $0.fetchedAt == nil && $0.url == "" }
+        ))) ?? []
+        for source in waiting where !fetching.contains(source.id) {
+            let id = source.id
+            guard let asset = store.references(ownerKind: .source, ownerID: id).first?.assetID.flatMap(store.asset(id:)),
+                  let data = try? store.read(asset) else { continue }
+            let filename = asset.filename
+            let mimeType = asset.mediaType
+            let isImage = asset.kind == .image
+            fetching.insert(id)
+            Task.detached(priority: .utility) {
+                let text = isImage
+                    ? recognize(data)
+                    : (try? FileExtraction.extract(filename: filename, mimeType: mimeType, data: data))?.text ?? ""
+                await MainActor.run {
+                    fetching.remove(id)
+                    self.store(Page(title: "", text: String(text.prefix(textLimit))), for: id, container: container)
+                }
+            }
+        }
+    }
+
+    /// The words in a picture, top to bottom.
+    static func recognize(_ data: Data) -> String {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return "" }
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        try? VNImageRequestHandler(cgImage: image).perform([request])
+        return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
     }
 
     static func fetch(_ url: URL) async -> Page? {
