@@ -58,6 +58,8 @@ final class AppModel {
     var modalHost = ModalHost.main
     var toast: String?
     var pendingSend: PendingSend?
+    /// The chat showing as bubbles over the current screen, started from the one input. Not persisted.
+    var quickChatID: UUID?
     var chatConversationID: UUID?
     var activeReply = ""
     private(set) var runningChats: [RunningChat] = []
@@ -518,12 +520,20 @@ final class AppModel {
         tabs[project] ?? .overview
     }
 
-    func makeConversation(in project: Project?, context: ModelContext, newTab: Bool = false) -> Conversation {
+    /// `opens` false leaves the user where they are; the chat runs behind the current screen.
+    func makeConversation(
+        in project: Project?,
+        context: ModelContext,
+        newTab: Bool = false,
+        opens: Bool = true
+    ) -> Conversation {
         let conversation = Conversation(providerID: talkProvider.rawValue, modelID: talkModelID, project: project)
         context.insert(conversation)
         project?.touch()
         try? context.persist()
-        open(conversation, newTab: newTab)
+        if opens {
+            open(conversation, newTab: newTab)
+        }
         return conversation
     }
 

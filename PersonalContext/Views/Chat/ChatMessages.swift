@@ -451,6 +451,7 @@ private struct UserMessageBubble: View {
     let message: ChatEntry.User
     @Environment(AppModel.self) private var app
     @Environment(\.chatMessageLayout) private var layout
+    @State private var hovering = false
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 8) {
@@ -475,7 +476,7 @@ private struct UserMessageBubble: View {
                     .foregroundStyle(.tertiary)
             }
             if !message.text.isEmpty {
-                MessageActionRow(alignment: .trailing) {
+                MessageActionRow(alignment: .trailing, visible: hovering) {
                     MessageActionButton(title: "Copy", systemImage: "doc.on.doc", confirms: true) {
                         CraftClipboard.copy(message.text)
                     }
@@ -483,6 +484,8 @@ private struct UserMessageBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityLabel)
     }
@@ -499,6 +502,7 @@ private struct AssistantMessageBlock: View {
     var showWork = true
     @Environment(AppModel.self) private var app
     @Environment(\.chatMessageLayout) private var layout
+    @State private var hovering = false
 
     private var text: String { message.displayText }
     private var sources: [ChatSource] { message.sources }
@@ -537,7 +541,7 @@ private struct AssistantMessageBlock: View {
                     .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
             }
             if !message.isStreaming, !text.isEmpty {
-                MessageActionRow {
+                MessageActionRow(visible: hovering) {
                     MessageActionButton(title: "Copy", systemImage: "doc.on.doc", confirms: true) {
                         CraftClipboard.copy(text)
                     }
@@ -557,6 +561,8 @@ private struct AssistantMessageBlock: View {
             }
         }
         .frame(maxWidth: layout.bubbleMaxWidth, alignment: .leading)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
     }
 
     private func save(_ kind: SaveKind) {
@@ -567,6 +573,8 @@ private struct AssistantMessageBlock: View {
 
 private struct MessageActionRow<Content: View>: View {
     var alignment: HorizontalAlignment = .leading
+    /// The actions stay out of sight until the pointer is over their message.
+    var visible = true
     @ViewBuilder var content: () -> Content
 
     var body: some View {
@@ -574,6 +582,8 @@ private struct MessageActionRow<Content: View>: View {
             content()
         }
         .frame(maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .center))
+        .opacity(visible ? 1 : 0)
+        .animation(Motion.hover, value: visible)
     }
 }
 

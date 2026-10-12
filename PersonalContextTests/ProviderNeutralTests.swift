@@ -95,6 +95,17 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertFalse(projectPrompt.contains(ContextBuilder.routingRules))
     }
 
+    func testShortRepliesStayAsBubblesAndLongOnesNeedTheChatView() {
+        XCTAssertFalse(QuickReplyRule.needsChatView("Saved the chili recipe to Kitchen."))
+        XCTAssertFalse(QuickReplyRule.needsChatView("It is due Friday.\n\n[Ship sign-in](membrae://task/\(UUID().uuidString))"))
+        XCTAssertFalse(QuickReplyRule.needsChatView("Two options:\n- Keep it\n- Drop it"))
+        XCTAssertTrue(QuickReplyRule.needsChatView("## Plan\n\nFirst do this."))
+        XCTAssertTrue(QuickReplyRule.needsChatView("Run this:\n\n```swift\nprint(1)\n```"))
+        XCTAssertTrue(QuickReplyRule.needsChatView("| A | B |\n|---|---|\n| 1 | 2 |"))
+        XCTAssertTrue(QuickReplyRule.needsChatView(String(repeating: "word ", count: 200)))
+        XCTAssertTrue(QuickReplyRule.needsChatView((1...9).map { "Line \($0)" }.joined(separator: "\n")))
+    }
+
     @MainActor
     func testWritesFromAChatAreLoggedAgainstThatChat() async throws {
         let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)

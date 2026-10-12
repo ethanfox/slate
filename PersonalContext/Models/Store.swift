@@ -55,12 +55,13 @@ enum Store {
         SpaceEvent.self,
         PersonalFact.self,
         SpaceScreen.self,
-        AgentAction.self
+        AgentAction.self,
+        SavedSource.self
     ])
 
     /// Bump whenever a model or a stored property is added. A build that opens a store written by a
     /// newer schema drops the tables and columns it does not know, so older builds must refuse.
-    static let schemaVersion = 7
+    static let schemaVersion = 9
 
     /// Sits beside the store and holds the highest schema version that has opened it.
     static func schemaMarkerURL(for store: URL) -> URL {
@@ -255,6 +256,10 @@ enum Store {
         let spaceColumns = tableColumns(db, table: "ZSPACE")
         if !spaceColumns.isEmpty, !spaceColumns.contains("ZGRADIENTRAW") {
             try execIgnoringDuplicateColumn(db, "ALTER TABLE ZSPACE ADD COLUMN ZGRADIENTRAW VARCHAR DEFAULT ''")
+        }
+        let factColumns = tableColumns(db, table: "ZPERSONALFACT")
+        if !factColumns.isEmpty, !factColumns.contains("ZORIGIN") {
+            try execIgnoringDuplicateColumn(db, "ALTER TABLE ZPERSONALFACT ADD COLUMN ZORIGIN VARCHAR DEFAULT ''")
         }
     }
 

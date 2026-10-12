@@ -23,27 +23,30 @@ struct OverviewPage: View {
     }
 }
 
-/// The one input. Whatever is typed, pasted, or dropped here is handed to the agent.
-/// It opens a chat with it. With no project, that chat files it wherever it belongs.
+/// The one input. Whatever is typed, pasted, or dropped here is handed to the agent without leaving
+/// the page. The exchange shows as bubbles above the bar; a long reply moves to the chat view.
 struct CaptureBar: View {
     var project: Project?
     /// The Space the user is looking at, so the agent knows where the message most likely belongs.
     var spaceID: UUID?
     var placeholder = "Tell Membrae anything"
+    /// True while the page behind is fading out on the way to the chat view.
+    @Binding var dissolving: Bool
 
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @State private var draft = ""
     @State private var draftAttachments: [ComposerAttachment] = []
     @State private var composerID = UUID()
+    @State private var savedLink: String?
 
-    var body: some View {
+    private var input: some View {
         ChatInput(
             text: $draft,
             modelID: Bindable(app).talkModelID,
             providerID: Bindable(app).talkProviderID,
             placeholder: placeholder,
-            onSend: startChat,
+            onSend: send,
             composerOwnerID: composerID,
             attachments: $draftAttachments,
             draftKind: project == nil ? "capture" : "overview",
@@ -55,9 +58,71 @@ struct CaptureBar: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func startChat(_ submission: ChatSubmission) -> Bool {
-        let conversation = app.makeConversation(in: project, context: context)
-        if project == nil, let spaceID {
+    var body: some View {
+        VStack(spacing: 10) {
+            if let savedLink {
+                Label("Saved \(savedLink) to the Library", systemImage: "books.vertical")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(CraftColor.elevated, in: Capsule())
+                    .overlay(Capsule().strokeBorder(CraftColor.hairline))
+                    .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+                    .transition(.scale(scale: 0.8, anchor: .bottom).combined(with: .opacity))
+                    .task {
+                        try? await Task.sleep(for: .seconds(3))
+                        withAnimation(.easeOut(duration: 0.25)) { self.savedLink = nil }
+                    }
+            } else if let id = app.quickChatID {
+                QuickReply(conversationID: id, dissolving: $dissolving)
+                    .padding(.horizontal, 32)
+                    .zIndex(1)
+            }
+            input
+        }
+    }
+
+    /// A pasted link on its own goes straight to the Library. No chat is opened.
+    private func save(_ link: URL) {
+        var arguments: [String: Any] = ["url": link.absoluteString]
+        if let project { arguments["project_ids"] = [project.id.uuidString] }
+        let result = Tools.call(
+            "create_source",
+            arguments: arguments,
+            container: context.container,
+            announce: false,
+            origin: ActionOrigin(client: "membrae")
+        )
+        guard result["isError"] as? Bool != true else { return }
+        SourceFetcher.fillPending(container: context.container)
+        try? FileStore.default(context: context).release(ownerKind: .composer, ownerID: composerID)
+        composerID = UUID()
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            savedLink = link.host() ?? "the link"
+        }
+    }
+
+    /// The exchange already showing, when it belongs to the same place as this bar.
+    private var current: Conversation? {
+        guard let id = app.quickChatID else { return nil }
+        let found = try? context.fetch(FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == id })).first
+        guard let found, found.project?.id == project?.id else { return nil }
+        return found
+    }
+
+    private func send(_ submission: ChatSubmission) -> Bool {
+        if submission.attachments.isEmpty, let link = SourceFetcher.link(in: submission.trimmedText) {
+            save(link)
+            return true
+        }
+        let continuing = current
+        if let continuing, app.chatRuntime(for: continuing, project: project).session.isGenerating {
+            return false
+        }
+        let conversation = continuing ?? app.makeConversation(in: project, context: context, opens: false)
+        if continuing == nil, project == nil, let spaceID {
             conversation.spaceIDString = SpaceJSON.key(spaceID)
         }
         let store = FileStore.default(context: context)
@@ -67,14 +132,282 @@ struct CaptureBar: View {
             ownerID: conversation.id
         )
         try? store.release(ownerKind: .composer, ownerID: composerID)
-        app.pendingSend = PendingSend(
-            conversationID: conversation.id,
-            text: submission.text,
-            attachments: submission.attachments
-        )
-        ChatTrace.event("capture queued conversation=\(conversation.id) project=\(project?.name ?? "none") chars=\(submission.trimmedText.count) files=\(submission.attachments.count)")
+        let sent = app.chatRuntime(for: conversation, project: project).send(submission)
+        app.quickChatID = conversation.id
+        ChatTrace.event("capture sent=\(sent) conversation=\(conversation.id) project=\(project?.name ?? "none") chars=\(submission.trimmedText.count) files=\(submission.attachments.count)")
         composerID = UUID()
         return true
+    }
+}
+
+/// Decides when a reply has outgrown bubbles and needs the chat view.
+enum QuickReplyRule {
+    static func needsChatView(_ text: String) -> Bool {
+        if text.count > 700 { return true }
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
+        if lines.count > 8 { return true }
+        if lines.contains(where: { $0.hasPrefix("#") }) { return true }
+        return ChatMarkdown.segments(in: text).contains { segment in
+            if case .prose = segment { return false }
+            return true
+        }
+    }
+}
+
+/// The exchange from the one input, as bubbles floating above it.
+struct QuickReply: View {
+    var conversationID: UUID
+    @Binding var dissolving: Bool
+
+    @Environment(AppModel.self) private var app
+    @Query private var conversations: [Conversation]
+
+    init(conversationID: UUID, dissolving: Binding<Bool>) {
+        self.conversationID = conversationID
+        _dissolving = dissolving
+        _conversations = Query(filter: #Predicate<Conversation> { $0.id == conversationID })
+    }
+
+    var body: some View {
+        if let conversation = conversations.first {
+            QuickReplyBubbles(
+                conversation: conversation,
+                runtime: app.chatRuntime(for: conversation, project: conversation.project),
+                dissolving: $dissolving
+            )
+        }
+    }
+}
+
+private struct QuickReplyBubbles: View {
+    var conversation: Conversation
+    var runtime: ChatRuntime
+    @Binding var dissolving: Bool
+
+    @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The latest message and what came back for it. Older turns live in the chat.
+    private var entries: [ChatEntry] {
+        let all = runtime.session.entries
+        let start = all.lastIndex { entry in
+            if case .userMessage = entry { return true }
+            return false
+        }
+        return Array(all[(start ?? max(all.count - 2, 0))...])
+    }
+
+    /// The reply being written, or the last one written.
+    private var reply: String {
+        for entry in runtime.session.entries.reversed() {
+            if case .aiMessage(let message) = entry {
+                return ChatTranscript.unpack(message.text).text
+            }
+        }
+        return ""
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ForEach(entries) { entry in
+                bubble(entry)
+            }
+            if worksBelow {
+                workingLabel
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(CraftColor.elevated, in: Capsule())
+                    .overlay(Capsule().strokeBorder(CraftColor.hairline))
+                    .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.scale(scale: 0.6, anchor: .topLeading).combined(with: .opacity))
+            }
+            HStack(spacing: 6) {
+                Spacer(minLength: 0)
+                control("Open as a chat", symbol: "arrow.up.left.and.arrow.down.right") {
+                    openChat()
+                }
+                control("Close", symbol: "xmark") {
+                    app.quickChatID = nil
+                }
+            }
+            .opacity(dissolving ? 0 : 1)
+            .allowsHitTesting(!dissolving)
+        }
+        .frame(maxWidth: 680)
+        .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.82), value: worksBelow)
+        .onChange(of: reply) { _, text in
+            if QuickReplyRule.needsChatView(text) {
+                openChat()
+            }
+        }
+    }
+
+    /// The page behind blurs and fades to the chat's background while the messages and the input
+    /// hold still. Then the chat takes their place. A reply still arriving keeps streaming throughout.
+    private func openChat() {
+        guard !dissolving else { return }
+        guard !reduceMotion else {
+            app.open(conversation, newTab: false)
+            app.quickChatID = nil
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.6)) {
+            dissolving = true
+        } completion: {
+            guard app.quickChatID == conversation.id else {
+                dissolving = false
+                return
+            }
+            withAnimation(.easeInOut(duration: 0.35)) {
+                app.open(conversation, newTab: false)
+                app.quickChatID = nil
+            } completion: {
+                dissolving = false
+            }
+        }
+    }
+
+    /// The tool at work, when there is one worth naming.
+    private var working: String? {
+        runtime.session.currentTurn.tools.last { $0.status == .running }?.title
+    }
+
+    /// Whether the dots sit under the reply. Before any reply text, the reply bubble itself holds them.
+    private var worksBelow: Bool {
+        guard runtime.session.isGenerating else { return false }
+        if case .aiMessage(let message) = entries.last {
+            return !ChatTranscript.unpack(message.text).text.isEmpty
+        }
+        return true
+    }
+
+    /// The dots, with the tool in use named beside them.
+    private var workingLabel: some View {
+        HStack(spacing: 8) {
+            TypingDots()
+            if let working {
+                Text(working)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .id(working)
+                    .transition(.opacity)
+            }
+        }
+        .frame(minHeight: 20)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: working)
+    }
+
+    @ViewBuilder
+    private func bubble(_ entry: ChatEntry) -> some View {
+        switch entry {
+        case .userMessage(let message):
+            Text(message.text.isEmpty ? "Sent \(message.attachments.count) file\(message.attachments.count == 1 ? "" : "s")" : message.text)
+                .font(CraftFont.chatBody)
+                .foregroundStyle(.white)
+                .lineLimit(6)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(app.accent.color, in: RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous))
+                .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+                .opacity(message.isCancelled || message.isFailed ? 0.55 : 1)
+                .frame(maxWidth: 440, alignment: .trailing)
+                .modifier(BubbleEntrance(sent: true))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        case .aiMessage(let message):
+            let text = ChatTranscript.unpack(message.text).text
+            // The dots pill grows into the reply: the shape animates its size and clips what is arriving.
+            ZStack(alignment: .topLeading) {
+                if text.isEmpty {
+                    workingLabel
+                        .transition(.opacity)
+                } else {
+                    AssistantMarkdown(text: text, sources: message.sources, streaming: message.isStreaming)
+                        .transition(.opacity.animation(.easeOut(duration: 0.25).delay(0.1)))
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(CraftColor.elevated)
+            .clipShape(RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous).strokeBorder(CraftColor.hairline))
+            .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+            .frame(maxWidth: 520, alignment: .leading)
+            .animation(reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 0.82), value: text.isEmpty)
+            .modifier(BubbleEntrance(sent: false))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .activity(let activity):
+            Text(activity.text)
+                .font(.system(size: 12))
+                .foregroundStyle(activity.isError ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(CraftColor.elevated, in: Capsule())
+                .overlay(Capsule().strokeBorder(CraftColor.hairline))
+                .modifier(BubbleEntrance(sent: false))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func control(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+                .background(CraftColor.elevated, in: Circle())
+                .overlay(Circle().strokeBorder(CraftColor.hairline))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .accessibilityLabel(title)
+    }
+}
+
+/// How a bubble arrives. A sent one rises out of the input; a received one grows from its corner.
+private struct BubbleEntrance: ViewModifier {
+    var sent: Bool
+
+    @State private var arrived = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        let settled = arrived || reduceMotion
+        content
+            .scaleEffect(settled ? 1 : (sent ? 0.94 : 0.5), anchor: sent ? .bottomTrailing : .bottomLeading)
+            .offset(y: settled ? 0 : (sent ? 72 : 10))
+            .opacity(arrived ? 1 : (sent ? 0.6 : 0))
+            .onAppear {
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.78).delay(sent ? 0 : 0.12)) {
+                    arrived = true
+                }
+            }
+    }
+}
+
+/// Three dots that pulse in turn while a reply is on its way.
+private struct TypingDots: View {
+    @State private var pulsing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(.secondary)
+                    .frame(width: 7, height: 7)
+                    .opacity(pulsing ? 1 : 0.3)
+                    .scaleEffect(pulsing ? 1 : 0.8)
+                    .animation(
+                        reduceMotion ? nil : .easeInOut(duration: 0.55).repeatForever().delay(Double(index) * 0.18),
+                        value: pulsing
+                    )
+            }
+        }
+        .onAppear { pulsing = true }
+        .accessibilityLabel("Working")
     }
 }
 
@@ -85,9 +418,33 @@ extension View {
         spaceID: UUID? = nil,
         placeholder: String = "Tell Membrae anything"
     ) -> some View {
-        safeAreaInset(edge: .bottom, spacing: 0) {
-            CaptureBar(project: project, spaceID: spaceID, placeholder: placeholder)
-        }
+        modifier(CaptureBarHost(project: project, spaceID: spaceID, placeholder: placeholder))
+    }
+}
+
+/// Holds the bar over a page. When the exchange opens as a chat, the page blurs and fades to the
+/// chat's background while the bubbles and the input hold still.
+private struct CaptureBarHost: ViewModifier {
+    var project: Project?
+    var spaceID: UUID?
+    var placeholder: String
+
+    @State private var dissolving = false
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: dissolving ? 18 : 0)
+            .overlay {
+                CraftColor.canvas
+                    .opacity(dissolving ? 1 : 0)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
+            .allowsHitTesting(!dissolving)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                CaptureBar(project: project, spaceID: spaceID, placeholder: placeholder, dissolving: $dissolving)
+            }
+            .onAppear { dissolving = false }
     }
 }
 
@@ -299,6 +656,8 @@ struct ActionFeed: View {
     private func open(_ action: AgentAction, newTab: Bool) {
         if action.indexKind != nil, let target = row(action.targetIDString) {
             app.open(target, newTab: newTab)
+        } else if action.kindRaw == "source" {
+            app.navigate(to: .library, newTab: newTab)
         } else if let space = action.spaceID {
             if action.kindRaw == "record", let record = action.targetID {
                 app.navigate(to: .spaceRecord(space: space, record: record), newTab: newTab)

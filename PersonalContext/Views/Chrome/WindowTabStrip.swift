@@ -301,6 +301,8 @@ struct WindowTabStrip: View {
             return TabLabel(title: runTitle(id), symbol: "play.circle")
         case .settings:
             return TabLabel(title: "Settings", symbol: "gearshape")
+        case .library:
+            return TabLabel(title: "Library", symbol: "books.vertical")
         case .aboutYou:
             return TabLabel(title: "About you", symbol: "person")
         case .space(let id):

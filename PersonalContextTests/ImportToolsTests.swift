@@ -56,8 +56,36 @@ final class ImportToolsTests: XCTestCase {
         let tools = try XCTUnwrap((response["result"] as? [String: Any])?["tools"] as? [[String: Any]])
         XCTAssertEqual(tools.map { $0["name"] as? String }, ImportToolHost.allowed)
         XCTAssertEqual(tools.compactMap { $0["title"] as? String }, [
-            "List projects", "Create project", "Create track", "Create note", "Create decision"
+            "List projects", "Create project", "Create track", "Create note", "Create decision", "Save what you know about me"
         ])
+    }
+
+    func testSaveAboutUserFilesFactsUnderTheClient() throws {
+        var metadata = emptyMetadata()
+        let saved = try object(ImportToolHost.handle(
+            rpc: call("save_about_user", ["facts": [
+                ["text": "Works late most nights", "category": "work"],
+                ["text": "  "],
+                ["text": "Prefers short answers"]
+            ]]),
+            client: "ChatGPT",
+            container: container,
+            metadata: &metadata
+        ))
+        XCTAssertEqual(saved["saved"] as? Int, 2)
+        let facts = FactStore.all(in: ModelContext(container))
+        XCTAssertEqual(facts.map(\.text), ["Works late most nights", "Prefers short answers"])
+        XCTAssertEqual(facts.map(\.origin), ["ChatGPT", "ChatGPT"])
+        XCTAssertEqual(facts.first?.category, "work")
+        XCTAssertEqual(facts.first?.source, .agent)
+
+        let empty = ImportToolHost.handle(
+            rpc: call("save_about_user", ["facts": [] as [Any]]),
+            client: "ChatGPT",
+            container: container,
+            metadata: &metadata
+        )
+        XCTAssertTrue(((empty["result"] as? [String: Any])?["isError"] as? Bool) ?? false)
     }
 
     func testListProjectsReturnsIdentityOnly() throws {

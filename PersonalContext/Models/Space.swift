@@ -604,6 +604,8 @@ final class PersonalFact {
     var sourceRaw: String
     /// The chat an agent-written fact came from.
     var sourceChatIDString: String
+    /// The outside assistant that said this about the user, such as ChatGPT. Empty for Membrae's own.
+    var origin: String
     var createdAt: Date
     var updatedAt: Date
 
@@ -614,12 +616,13 @@ final class PersonalFact {
 
     var sourceChatID: UUID? { UUID(uuidString: sourceChatIDString) }
 
-    init(text: String, category: String = "", source: PersonalFactSource = .user, sourceChatID: UUID? = nil) {
+    init(text: String, category: String = "", source: PersonalFactSource = .user, sourceChatID: UUID? = nil, origin: String = "") {
         self.id = UUID()
         self.text = text
         self.category = category
         self.sourceRaw = source.rawValue
         self.sourceChatIDString = sourceChatID.map(SpaceJSON.key) ?? ""
+        self.origin = origin
         self.createdAt = .now
         self.updatedAt = .now
     }

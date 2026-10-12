@@ -60,7 +60,7 @@ struct AboutYouView: View {
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 8)
                         if fact.source == .agent {
-                            Text("from a chat")
+                            Text(fact.origin.isEmpty ? "from a chat" : "from \(fact.origin)")
                                 .font(CraftFont.caption)
                                 .foregroundStyle(.tertiary)
                         }

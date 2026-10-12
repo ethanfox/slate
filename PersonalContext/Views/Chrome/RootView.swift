@@ -747,6 +747,8 @@ struct RootView: View {
             RunHost(id: id)
         case .settings:
             SettingsView()
+        case .library:
+            LibraryView()
         case .project(let id):
             ProjectHost(id: id)
         case .quickAsk(let id):

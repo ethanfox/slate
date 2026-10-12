@@ -382,6 +382,68 @@ final class MCPToolsTests: XCTestCase {
         return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text(in: result).utf8)) as? [[String: Any]])
     }
 
+    func testSourcesLiveInTheLibraryAndLinkToProjects() throws {
+        func sources(_ arguments: [String: Any] = [:]) throws -> [[String: Any]] {
+            let data = Data(try text(in: Tools.call("list_sources", arguments: arguments, container: container)).utf8)
+            return try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        }
+        let harbor = try object(Tools.call("create_project", arguments: ["name": "Harbor"], container: container))
+        let kiln = try object(Tools.call("create_project", arguments: ["name": "Kiln"], container: container))
+        let harborID = try XCTUnwrap(harbor["id"] as? String)
+        let kilnID = try XCTUnwrap(kiln["id"] as? String)
+
+        let saved = try object(Tools.call(
+            "create_source",
+            arguments: ["url": "https://example.com/tides", "title": "Tide tables", "text": "Spring tides peak at new moon.", "project_ids": [harborID]],
+            container: container
+        ))
+        let sourceID = try XCTUnwrap(saved["id"] as? String)
+        XCTAssertEqual(saved["project_ids"] as? [String], [harborID])
+
+        let again = try object(Tools.call(
+            "create_source",
+            arguments: ["url": "https://example.com/tides", "summary": "When the tide is highest.", "project_ids": [kilnID]],
+            container: container
+        ))
+        XCTAssertEqual(again["id"] as? String, sourceID, "the same address is one source")
+        XCTAssertEqual(Set(again["project_ids"] as? [String] ?? []), [harborID, kilnID])
+
+        XCTAssertEqual(try sources().count, 1, "the Library is not scoped to a project")
+        XCTAssertEqual(try sources(["query": "new moon"]).count, 1, "the saved text is searched")
+        XCTAssertEqual(try sources(["query": "volcano"]).count, 0)
+        XCTAssertEqual(try sources(["linked_to": kilnID]).count, 1)
+        let full = try object(Tools.call("get_source", arguments: ["source_id": sourceID], container: container))
+        XCTAssertEqual(full["text"] as? String, "Spring tides peak at new moon.")
+
+        _ = try object(Tools.call("update_source", arguments: ["source_id": sourceID, "title": "Tides", "read": true], container: container))
+        let log = try ModelContext(container).fetch(FetchDescriptor<AgentAction>(sortBy: [SortDescriptor(\.createdAt)]))
+        let edit = try XCTUnwrap(log.last { $0.tool == "update_source" })
+        try Tools.undo(edit.id, container: container)
+        let restored = try object(Tools.call("get_source", arguments: ["source_id": sourceID], container: container))
+        XCTAssertEqual(restored["title"] as? String, "Tide tables")
+        XCTAssertEqual(restored["read"] as? Bool, false)
+
+        let added = try XCTUnwrap(log.first { $0.tool == "create_source" })
+        XCTAssertEqual(added.sentence, "Saved “Tide tables” to the Library")
+        try Tools.undo(added.id, container: container)
+        XCTAssertEqual(try sources().count, 0)
+    }
+
+    func testAPageIsReducedToItsReadableText() {
+        let html = """
+        <html><head><title>Ignored &amp; plain</title><meta property="og:title" content="Tide tables &amp; charts">
+        <style>p { color: red }</style></head>
+        <body><nav>Home | About</nav><article><h1>Tides</h1><p>Spring tides peak at&nbsp;new moon.</p>
+        <script>track()</script><p>Neap tides don&#39;t.</p></article><footer>Copyright</footer></body></html>
+        """
+        let page = SourceFetcher.readable(html: html)
+        XCTAssertEqual(page.title, "Tide tables & charts")
+        XCTAssertEqual(page.text, "Tides\nSpring tides peak at new moon.\nNeap tides don't.")
+        XCTAssertNotNil(SourceFetcher.link(in: "  https://example.com/a?b=1 "))
+        XCTAssertNil(SourceFetcher.link(in: "read https://example.com later"))
+        XCTAssertNil(SourceFetcher.link(in: "example"))
+    }
+
     private func text(in result: [String: Any]) throws -> String {
         let content = try XCTUnwrap(result["content"] as? [[String: Any]])
         return try XCTUnwrap(content.first?["text"] as? String)

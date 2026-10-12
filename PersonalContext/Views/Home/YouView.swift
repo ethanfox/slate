@@ -413,6 +413,7 @@ struct YouView: View {
         HStack(spacing: 6) {
             shortcut("Tasks", "checklist", .tasks)
             shortcut("Calendar", "calendar", .calendar)
+            shortcut("Library", "books.vertical", .library)
             shortcut("Chats", "bubble.left.and.bubble.right", .chats)
             shortcut("Runs", "play.circle", .runs)
             shortcut("All projects", "square.stack", .projects)

@@ -206,7 +206,7 @@ final class AgentAction {
     var canUndo: Bool {
         guard undoneAt == nil else { return false }
         switch verb {
-        case .added: return ["task", "note", "decision", "track", "record"].contains(kindRaw)
+        case .added: return ["task", "note", "decision", "track", "record", "source"].contains(kindRaw)
         case .changed, .completed, .logged: return !beforeJSON.isEmpty
         default: return false
         }
@@ -217,6 +217,7 @@ final class AgentAction {
         switch kindRaw {
         case "space": return "square.grid.2x2"
         case "record": return "doc"
+        case "source": return "books.vertical"
         case "tag": return "tag"
         case "code": return "chevron.left.forwardslash.chevron.right"
         default: return "circle"
@@ -228,7 +229,9 @@ final class AgentAction {
         let noun = kindRaw == "chat" ? "chat" : kindRaw
         let name = title.isEmpty ? noun : "\(noun) “\(title)”"
         switch verb {
-        case .added: return "Added \(name)"
+        case .added:
+            if kindRaw == "source" { return "Saved \(title.isEmpty ? "a source" : "“\(title)”") to the Library" }
+            return "Added \(name)"
         case .changed:
             if kindRaw == "space", !detail.isEmpty { return "Set up \(detail) in \(title.isEmpty ? "a Space" : title)" }
             return "Changed \(name)"

@@ -144,15 +144,17 @@ final class MembraeToolGateway: AgentToolGateway {
                 return try await mcpRuntime.execute(name: name, arguments: arguments, projectID: projectID)
             }
             if let store {
-                return try Self.localResult(
-                    Tools.call(
-                        name,
-                        arguments: arguments,
-                        container: store,
-                        announce: false,
-                        origin: ActionOrigin(client: "membrae", conversationID: conversationID?.uuidString ?? "")
-                    )
+                let result = Tools.call(
+                    name,
+                    arguments: arguments,
+                    container: store,
+                    announce: false,
+                    origin: ActionOrigin(client: "membrae", conversationID: conversationID?.uuidString ?? "")
                 )
+                if name == "create_source" {
+                    Task { @MainActor in SourceFetcher.fillPending(container: store) }
+                }
+                return try Self.localResult(result)
             }
             guard let mcp else {
                 throw ProjectWorkspaceError("The Membrae tool service is unavailable.")

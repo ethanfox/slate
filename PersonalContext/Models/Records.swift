@@ -82,6 +82,10 @@ final class Project: Identifiable {
     @Relationship(deleteRule: .cascade, inverse: \Note.project)
     var notes: [Note] = []
 
+    /// Library sources linked to this project. A source can be linked to several projects.
+    @Relationship(inverse: \SavedSource.projects)
+    var sources: [SavedSource] = []
+
     @Relationship(deleteRule: .cascade, inverse: \Decision.project)
     var decisions: [Decision] = []
 
@@ -280,6 +284,75 @@ final class ProjectThread {
             guardrail += 1
         }
         return false
+    }
+}
+
+enum SavedSourceKind: String, CaseIterable {
+    case link, pdf, file
+
+    var symbol: String {
+        switch self {
+        case .link: "link"
+        case .pdf: "doc.richtext"
+        case .file: "doc"
+        }
+    }
+}
+
+/// Something saved to the Library: a link, a PDF, or an article, with its text kept for search.
+@Model
+final class SavedSource {
+    @Attribute(.unique) var id: UUID
+    var url: String = ""
+    var title: String = ""
+    var summary: String = ""
+    /// The readable text of the page or file.
+    var text: String = ""
+    var kindRaw: String = SavedSourceKind.link.rawValue
+    var createdAt: Date = Date.now
+    var updatedAt: Date = Date.now
+    var readAt: Date?
+    /// When the app last tried to fetch the text, so a dead link is not fetched forever.
+    var fetchedAt: Date?
+    var isArchived: Bool = false
+    var projects: [Project] = []
+
+    var kind: SavedSourceKind {
+        get { SavedSourceKind(rawValue: kindRaw) ?? .link }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    var host: String {
+        guard let host = URL(string: url)?.host() else { return "" }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
+    var displayTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        return host.isEmpty ? "Untitled" : host
+    }
+
+    /// The summary, or the start of the text when nothing has summarized it yet.
+    var blurb: String {
+        let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        return String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(220))
+    }
+
+    func matches(_ query: String) -> Bool {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if needle.isEmpty { return true }
+        return [title, summary, url, text].contains { $0.localizedCaseInsensitiveContains(needle) }
+    }
+
+    init(url: String, title: String = "", summary: String = "", text: String = "", kind: SavedSourceKind = .link) {
+        id = UUID()
+        self.url = url
+        self.title = title
+        self.summary = summary
+        self.text = text
+        kindRaw = kind.rawValue
     }
 }
 

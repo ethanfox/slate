@@ -702,6 +702,7 @@ enum FactStore {
         category: String = "",
         source: PersonalFactSource = .user,
         sourceChatID: UUID? = nil,
+        origin: String = "",
         in context: ModelContext
     ) throws -> PersonalFact? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -713,7 +714,8 @@ enum FactStore {
             text: trimmed,
             category: category.trimmingCharacters(in: .whitespacesAndNewlines),
             source: source,
-            sourceChatID: sourceChatID
+            sourceChatID: sourceChatID,
+            origin: origin
         )
         context.insert(fact)
         try context.save()

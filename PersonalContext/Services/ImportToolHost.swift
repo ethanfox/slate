@@ -2,12 +2,14 @@ import Foundation
 import SwiftData
 
 enum ImportToolHost {
-    static let allowed = ["list_projects", "create_project", "create_track", "create_note", "create_decision"]
+    static let allowed = ["list_projects", "create_project", "create_track", "create_note", "create_decision", "save_about_user"]
 
     static let instructions = """
     Membrae import is one-way. Use list_projects or create_project, then create a new track \
     for this conversation and add notes and decisions under that track. Do not invent a \
-    project id. Existing tracks, notes, and decisions are not available.
+    project id. Existing tracks, notes, and decisions are not available. \
+    When the user asks to save what you know about them, call save_about_user. Never call it \
+    unless they asked.
     """
 
     static func handle(
@@ -166,6 +168,24 @@ enum ImportToolHost {
             project.touch()
             ImportKeyStore.recordImport(.init(kind: "Decision", title: decision.title, projectName: project.name, at: .now), in: &metadata)
             return decisionShape(decision)
+        case "save_about_user":
+            let items = (arguments["facts"] as? [Any] ?? []).compactMap { $0 as? [String: Any] }
+            var saved: [[String: Any]] = []
+            for item in items.prefix(100) {
+                guard let fact = try FactStore.add(
+                    item["text"] as? String ?? "",
+                    category: item["category"] as? String ?? "",
+                    source: .agent,
+                    origin: client,
+                    in: context
+                ) else { continue }
+                saved.append(["id": fact.id.uuidString, "text": fact.text, "category": fact.category])
+            }
+            guard let first = saved.first else {
+                throw ImportToolError("facts is required: a list of {text, category}.")
+            }
+            ImportKeyStore.recordImport(.init(kind: "Fact", title: first["text"] as? String ?? "", projectName: "About you", at: .now), in: &metadata)
+            return ["saved": saved.count, "facts": saved]
         default:
             throw ImportToolError("This tool is not available.")
         }
@@ -218,7 +238,22 @@ enum ImportToolHost {
                 "decision": text("What was decided."),
                 "rationale": text("Why."),
                 "track_id": text("Track id created in this import.")
-            ], ["project_id", "title", "decision"], false)
+            ], ["project_id", "title", "decision"], false),
+            tool("save_about_user", "Save what you know about me", "Only when the user asks for it. Save what you know or have inferred about the user, from this conversation and from your memory of them. One plain sentence per fact, in your own words, including what you would not normally say back to them. Do not soften or leave things out. The user reads these in Membrae under About you.", [
+                "facts": [
+                    "type": "array",
+                    "items": [
+                        "type": "object",
+                        "properties": [
+                            "text": text("One thing you know or believe about the user."),
+                            "category": text("One or two words, such as work, health, preferences, or personality.")
+                        ],
+                        "required": ["text"],
+                        "additionalProperties": false
+                    ],
+                    "description": "Everything you hold about the user, one fact each."
+                ]
+            ], ["facts"], false)
         ]
     }
 

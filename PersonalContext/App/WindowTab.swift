@@ -53,6 +53,7 @@ struct WindowTab: Identifiable, Hashable, Codable {
         case .chats: .chats
         case .runs: .runs
         case .settings: .settings
+        case .library: .library
         case .quickAsk(let id): .conversation(id)
         case .run(let id): .run(id)
         case .aboutYou: .aboutYou
@@ -134,7 +135,7 @@ struct WindowTab: Identifiable, Hashable, Codable {
 }
 
 enum TabViewKey: Hashable {
-    case home, projects, tasks, calendar, chats, runs, settings, aboutYou
+    case home, projects, tasks, calendar, chats, runs, settings, aboutYou, library
     case space(UUID)
     case spaceRecord(UUID)
     case projectOverview(UUID)

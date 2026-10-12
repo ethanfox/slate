@@ -208,7 +208,7 @@ struct RunToolDenied: LocalizedError {
 
 /// Space tools take a space id, never a project id.
 private func writesProject(_ name: String) -> Bool {
-    (name.hasPrefix("create_") || name.hasPrefix("list_")) && !name.contains("_space")
+    (name.hasPrefix("create_") || name.hasPrefix("list_")) && !name.contains("_space") && !name.contains("_source")
 }
 
 private func isMembraeWrite(_ name: String) -> Bool {

@@ -20,7 +20,7 @@ struct ConversationChat: View {
     var body: some View {
         VStack(spacing: 0) {
             if project != nil, !compact {
-                ChatTitleBar(title: conversation.title, conversation: conversation, onStartRun: startRun)
+                ChatTitleBar(title: conversation.title)
             }
             if !compact, let mark = deletionMark {
                 DeletionBanner(mark: mark, onKeep: keepMark, onDelete: { confirmDelete = true })
@@ -66,6 +66,8 @@ struct ChatTitleBar: View {
     var title: String
     var conversation: Conversation? = nil
     var onStartRun: (() -> Void)? = nil
+    @State private var shown = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var displayTitle: String {
         title.isEmpty ? "New chat" : title
@@ -80,6 +82,11 @@ struct ChatTitleBar: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(1)
+                    .blur(radius: shown || reduceMotion ? 0 : 10)
+                    .opacity(shown ? 1 : 0)
+                    .onAppear {
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.6)) { shown = true }
+                    }
                 Spacer(minLength: 8)
                 if let onStartRun {
                     Button("Start Run…", action: onStartRun)
@@ -118,9 +125,8 @@ private struct ConversationSessionView: View {
     private var session: ChatEngine { runtime.session }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ChatMessages(session: session, compact: compact)
-            Hairline()
+        // The input floats over the messages, which scroll underneath it.
+        ChatMessages(session: session, compact: compact).safeAreaInset(edge: .bottom, spacing: 0) {
             ChatInput(
                 text: $runtime.draft,
                 modelID: Bindable(runtime).modelID,
@@ -139,8 +145,10 @@ private struct ConversationSessionView: View {
                 draftObjectID: runtime.conversationID.uuidString,
                 draftRuntime: DraftTrace.runtimeID(runtime)
             )
+            .frame(maxWidth: compact ? .infinity : 680)
             .padding(.horizontal, compact ? 16 : 32)
             .padding(.vertical, 14)
+            .frame(maxWidth: .infinity)
         }
         .onAppear {
             ChatTrace.event("chat appear conversation=\(runtime.conversationID) generating=\(session.isGenerating) hasKey=\(app.hasAPIKey) pending=\(app.pendingSend != nil)")

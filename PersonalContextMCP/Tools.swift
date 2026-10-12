@@ -197,6 +197,7 @@ enum Tools {
         "create_decision": (.added, "decision"), "update_decision": (.changed, "decision"),
         "create_track": (.added, "track"), "update_track": (.changed, "track"),
         "create_note": (.added, "note"), "update_note": (.changed, "note"),
+        "create_source": (.added, "source"), "update_source": (.changed, "source"),
         "create_tag": (.added, "tag"), "update_tag": (.changed, "tag"),
         "assign_tag": (.tagged, ""), "remove_tag": (.untagged, ""),
         "mark_for_deletion": (.flagged, ""),
@@ -296,7 +297,8 @@ enum Tools {
         "complete_task": ("get_task", "task_id"),
         "update_decision": ("get_decision", "decision_id"),
         "update_track": ("get_track", "track_id"),
-        "update_note": ("get_note", "note_id")
+        "update_note": ("get_note", "note_id"),
+        "update_source": ("get_source", "source_id")
     ]
 
     /// The fields a write is about to change, as they are now, in the shape the same tool takes back.
@@ -375,6 +377,8 @@ enum Tools {
                 DeletionMarks.remove(targetingIDs: track.deletionTargetIDs, in: context)
                 track.project?.touch()
                 context.delete(track)
+            case "source":
+                context.delete(try Lookup.source(id, in: context))
             case "record":
                 guard let record = SpaceStore.record(id, in: context) else { throw ToolError("That record is already gone.") }
                 try SpaceStore.delete(record, in: context)
@@ -951,6 +955,92 @@ enum Tools {
             note.updatedAt = .now
             note.project?.touch()
             return JSONShape.note(note, full: true)
+        },
+
+        Tool(
+            name: "list_sources",
+            description: "List saved sources in the Library: links, PDFs, and articles the user kept, newest first, each with a summary. The Library is shared across projects, so search it from any project. Pass query to search titles, summaries, and the saved text.",
+            properties: [
+                "query": text("Words to look for in the title, summary, address, or saved text."),
+                "linked_to": text("Only sources linked to this project id."),
+                "unread_only": flag("Only sources not yet marked read."),
+                "include_archived": flag("Also list archived sources. Defaults to false.")
+            ],
+            required: [], readOnly: true
+        ) { args, context in
+            let linked = try args.optionalUUID("linked_to") ?? nil
+            let query = args.string("query") ?? ""
+            let all = try context.fetch(FetchDescriptor<SavedSource>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)]))
+            return all
+                .filter { args.bool("include_archived") == true || !$0.isArchived }
+                .filter { args.bool("unread_only") != true || $0.readAt == nil }
+                .filter { source in linked == nil || source.projects.contains { $0.id == linked } }
+                .filter { $0.matches(query) }
+                .prefix(100)
+                .map { JSONShape.source($0, full: false) }
+        },
+        Tool(
+            name: "get_source",
+            description: "Get one saved source with its full saved text. Cite it by title and address when you answer from it.",
+            properties: ["source_id": text("Source id from list_sources.")], required: ["source_id"], readOnly: true
+        ) { args, context in
+            JSONShape.source(try Lookup.source(try args.uuid("source_id"), in: context), full: true)
+        },
+        Tool(
+            name: "create_source",
+            description: "Save a link, article, or document to the Library. Pass the address; the app fetches the page text itself when you leave text out. Write a two-line summary when you know what the page says. Link it to every project it belongs to with project_ids, or to none. Saving an address that is already in the Library updates that source instead of adding a second one.",
+            properties: [
+                "url": text("The address of the page or file."),
+                "title": text("Title of the page or document."),
+                "summary": text("Two lines on what it says and why it was kept."),
+                "text": text("The readable text, when you already have it."),
+                "project_ids": ["type": "array", "items": ["type": "string"], "description": "Projects this source belongs to. May be empty."]
+            ],
+            required: [], readOnly: false
+        ) { args, context in
+            let url = args.string("url") ?? ""
+            let body = args.string("text") ?? ""
+            guard !url.isEmpty || !body.isEmpty else { throw ToolError("Pass url, or text for something with no address.") }
+            let projects = try (args.uuids("project_ids") ?? []).map { try Lookup.project($0, in: context) }
+            let existing = url.isEmpty ? nil : try context.fetch(FetchDescriptor<SavedSource>(predicate: #Predicate { $0.url == url })).first
+            let source = existing ?? SavedSource(url: url, kind: url.lowercased().hasSuffix(".pdf") ? .pdf : .link)
+            if existing == nil { context.insert(source) }
+            if let title = args.string("title"), !title.isEmpty { source.title = title }
+            if let summary = args.string("summary"), !summary.isEmpty { source.summary = summary }
+            if !body.isEmpty { source.text = body }
+            for project in projects where !source.projects.contains(where: { $0.id == project.id }) {
+                source.projects.append(project)
+                project.touch()
+            }
+            source.isArchived = false
+            source.updatedAt = .now
+            return JSONShape.source(source, full: false)
+        },
+        Tool(
+            name: "update_source",
+            description: "Change a saved source. Only the fields you pass are changed. project_ids replaces the whole set of linked projects.",
+            properties: [
+                "source_id": text("Source id."),
+                "title": text("New title."),
+                "summary": text("New summary."),
+                "text": text("Replaces the saved text."),
+                "project_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement set of linked projects."],
+                "read": flag("Mark read or unread."),
+                "archived": flag("Archive or bring back.")
+            ],
+            required: ["source_id"], readOnly: false
+        ) { args, context in
+            let source = try Lookup.source(try args.uuid("source_id"), in: context)
+            if let title = args.string("title") { source.title = title }
+            if let summary = args.string("summary") { source.summary = summary }
+            if let body = args.string("text") { source.text = body }
+            if let ids = try args.uuids("project_ids") {
+                source.projects = try ids.map { try Lookup.project($0, in: context) }
+            }
+            if let read = args.bool("read") { source.readAt = read ? (source.readAt ?? .now) : nil }
+            if let archived = args.bool("archived") { source.isArchived = archived }
+            source.updatedAt = .now
+            return JSONShape.source(source, full: false)
         },
 
         Tool(
@@ -1581,6 +1671,13 @@ enum Lookup {
         return found
     }
 
+    static func source(_ id: UUID, in context: ModelContext) throws -> SavedSource {
+        guard let found = try context.fetch(FetchDescriptor<SavedSource>(predicate: #Predicate { $0.id == id })).first else {
+            throw ToolError("No source with id \(id.uuidString).")
+        }
+        return found
+    }
+
     static func note(_ id: UUID, in context: ModelContext) throws -> Note {
         guard let found = try context.fetch(FetchDescriptor<Note>(predicate: #Predicate { $0.id == id })).first else {
             throw ToolError("No note with id \(id.uuidString).")
@@ -1877,6 +1974,27 @@ enum JSONShape {
             shape["preview"] = clip(lastText, 240)
         }
         attachMark(&shape, id: conversation.id, project: conversation.project)
+        return shape
+    }
+
+    static func source(_ source: SavedSource, full: Bool) -> [String: Any] {
+        var shape: [String: Any] = [
+            "id": source.id.uuidString,
+            "url": source.url,
+            "title": source.displayTitle,
+            "summary": source.summary,
+            "kind": source.kindRaw,
+            "project_ids": source.projects.map(\.id.uuidString),
+            "project_id": source.projects.first?.id.uuidString ?? "",
+            "read": source.readAt != nil,
+            "archived": source.isArchived,
+            "saved_at": iso.string(from: source.createdAt)
+        ]
+        if full {
+            shape["text"] = source.text
+        } else if source.summary.isEmpty {
+            shape["preview"] = clip(source.text, 240)
+        }
         return shape
     }
 
