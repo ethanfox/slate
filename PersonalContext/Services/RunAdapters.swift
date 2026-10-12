@@ -162,6 +162,83 @@ enum RunChatGPT {
     }
 }
 
+/// The chat agent's way to open the New Run form. The user checks it and starts the Run; the agent never does.
+@MainActor
+enum RunFormTool {
+    static let name = "start_run"
+    static weak var app: AppModel?
+
+    static let definition: [String: Any] = [
+        "type": "function",
+        "name": name,
+        "description": "Open the New Run form for the user, filled in, so they can check it and start it. Call this when the user asks to run something, to have work done in the background, or to send work to Claude Code or Codex. It does not start the Run. Afterwards tell the user the form is open; do not say the Run has started.",
+        "parameters": [
+            "type": "object",
+            "properties": [
+                "brief": [
+                    "type": "string",
+                    "description": "What the Run should do, written so the worker can act on it without this conversation."
+                ],
+                "worker": [
+                    "type": "string",
+                    "enum": ["membrae", LocalAgent.claudeCode.rawValue, LocalAgent.codex.rawValue],
+                    "description": "Who does the work. membrae is the built-in agent. Use claude-code or codex only when the user names one or the work is changing code."
+                ],
+                "project_id": [
+                    "type": "string",
+                    "description": "Project the Run belongs to, when the conversation is not already in one."
+                ]
+            ] as [String: Any],
+            "required": ["brief"]
+        ] as [String: Any]
+    ]
+
+    static var providerTool: RunnerExternalTool {
+        let parameters = definition["parameters"] as? [String: Any] ?? [:]
+        let schema = (try? JSONSerialization.data(withJSONObject: parameters, options: [.sortedKeys]))
+            .map { String(decoding: $0, as: UTF8.self) } ?? #"{"type":"object","properties":{}}"#
+        return RunnerExternalTool(
+            name: name,
+            description: definition["description"] as? String ?? "",
+            parametersJSON: schema
+        )
+    }
+
+    static func open(arguments: [String: Any], projectID: UUID?, conversationID: UUID?) throws -> String {
+        guard let app else { throw LocalAgentError("The New Run form is not available.") }
+        let brief = (arguments["brief"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !brief.isEmpty else { throw LocalAgentError("brief is required") }
+        let context = app.container.mainContext
+        let named = (arguments["project_id"] as? String).flatMap(UUID.init(uuidString:))
+        let project = (projectID ?? named).flatMap { TitleIndexStore.project($0, in: context) }
+        let defaults = app.runDefaults(for: project)
+        var draft = NewRunDraft.blank(
+            origin: .chat,
+            projectID: project?.id,
+            originChatID: conversationID,
+            brief: brief,
+            providerID: defaults.provider,
+            modelID: defaults.model,
+            pathRaw: defaults.path
+        )
+        if let agent = (arguments["worker"] as? String).flatMap(LocalAgent.init(rawValue:)) {
+            guard app.isConnected(agent) else {
+                throw LocalAgentError("\(agent.title) is not connected. The user can connect it in Settings under AI Providers.")
+            }
+            draft.providerID = agent.rawValue
+            draft.modelID = ""
+        }
+        if let project {
+            let attachments = ProjectCodeWorkspace.attachments(on: project)
+            if attachments.count == 1, let only = attachments.first {
+                draft.repositoryLocators = [only.locator.isEmpty ? only.title : only.locator]
+            }
+        }
+        app.present(.newRun(draft))
+        return "The New Run form is open for the user to check and start. The Run has not started."
+    }
+}
+
 enum RunWaitLabel {
     static func forTool(_ name: String) -> String {
         switch name {

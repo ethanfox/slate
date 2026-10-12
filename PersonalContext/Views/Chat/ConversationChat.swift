@@ -27,8 +27,7 @@ struct ConversationChat: View {
             }
             ConversationSessionView(
                 runtime: app.chatRuntime(for: conversation, project: project),
-                compact: compact,
-                onStartRun: compact ? startRun : nil
+                compact: compact
             )
         }
         .alert("Delete this conversation?", isPresented: $confirmDelete) {
@@ -37,11 +36,6 @@ struct ConversationChat: View {
         } message: {
             Text("It’s removed from this Mac. Decisions, notes, and tracks from it stay.")
         }
-    }
-
-    private func startRun() {
-        let brief = conversation.orderedMessages.last(where: { $0.role == .user })?.content ?? ""
-        app.presentNewRun(origin: .chat, project: hostProject, chat: conversation, brief: brief)
     }
 
     private func keepMark() {
@@ -65,7 +59,6 @@ struct ConversationChat: View {
 struct ChatTitleBar: View {
     var title: String
     var conversation: Conversation? = nil
-    var onStartRun: (() -> Void)? = nil
     @State private var shown = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -88,12 +81,6 @@ struct ChatTitleBar: View {
                         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.6)) { shown = true }
                     }
                 Spacer(minLength: 8)
-                if let onStartRun {
-                    Button("Start Run…", action: onStartRun)
-                        .buttonStyle(.plain)
-                        .font(CraftFont.body)
-                        .foregroundStyle(.secondary)
-                }
             }
             .padding(.horizontal, 32)
             .frame(height: 52)
@@ -119,7 +106,6 @@ struct ChatTitleBar: View {
 private struct ConversationSessionView: View {
     @Bindable var runtime: ChatRuntime
     var compact = false
-    var onStartRun: (() -> Void)? = nil
     @Environment(AppModel.self) private var app
 
     private var session: ChatEngine { runtime.session }
@@ -139,7 +125,6 @@ private struct ConversationSessionView: View {
                 attachments: Bindable(runtime).draftAttachments,
                 onStop: { session.cancel() },
                 onRetryStuck: retryStuck,
-                onStartRun: onStartRun,
                 debugLog: runtime.debugLog,
                 draftKind: "chat",
                 draftObjectID: runtime.conversationID.uuidString,

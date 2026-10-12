@@ -944,6 +944,21 @@ struct ProjectListPage: View {
                         Text("\(rows.count)")
                             .font(CraftFont.body)
                             .foregroundStyle(.tertiary)
+                        if kind == .run {
+                            Spacer(minLength: 16)
+                            Button {
+                                app.presentNewRun(origin: .project, project: project)
+                            } label: {
+                                Label("New Run", systemImage: "plus")
+                                    .font(CraftFont.body)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .contentShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .glassEffect(.regular, in: Capsule())
+                            .help("New Run")
+                        }
                     }
 
                     HStack(spacing: 8) {

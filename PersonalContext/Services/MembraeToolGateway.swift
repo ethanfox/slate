@@ -20,6 +20,7 @@ final class MembraeToolGateway: AgentToolGateway {
     private let browserRuntime: BrowserRuntime?
     private let store: ModelContainer?
     private let conversationID: UUID?
+    private let includeRunForm: Bool
 
     init(
         roots: [ProjectCodeRoot] = [],
@@ -38,7 +39,8 @@ final class MembraeToolGateway: AgentToolGateway {
         runID: UUID? = nil,
         mcpRuntime: MCPRuntime? = nil,
         browserRuntime: BrowserRuntime? = nil,
-        conversationID: UUID? = nil
+        conversationID: UUID? = nil,
+        includeRunForm: Bool = false
     ) {
         self.roots = roots
         self.includeMembraeTools = includeMembraeTools
@@ -57,6 +59,7 @@ final class MembraeToolGateway: AgentToolGateway {
         self.browserRuntime = browserRuntime ?? (includeBrowser ? .shared : nil)
         self.store = store
         self.conversationID = conversationID
+        self.includeRunForm = includeRunForm
     }
 
     func definitions() async throws -> [[String: Any]] {
@@ -74,6 +77,9 @@ final class MembraeToolGateway: AgentToolGateway {
         }
         if includeConfigTools {
             tools.append(MCPToolCatalog.importDefinition)
+        }
+        if includeRunForm {
+            tools.append(RunFormTool.definition)
         }
         if includeExternalMCP, let mcpRuntime {
             tools += await mcpRuntime.providerDefinitions(projectID: projectID)
@@ -121,6 +127,11 @@ final class MembraeToolGateway: AgentToolGateway {
             }
             let brief = (arguments["brief"] as? String) ?? (arguments["question"] as? String) ?? ""
             return try await consult(brief)
+        case RunFormTool.name:
+            guard includeRunForm else {
+                throw ProjectWorkspaceError("The New Run form is not available in this session.")
+            }
+            return try RunFormTool.open(arguments: arguments, projectID: projectID, conversationID: conversationID)
         case MCPToolName.importServers:
             guard includeConfigTools, let mcpRuntime else {
                 throw ProjectWorkspaceError("MCP import is not available in this session.")

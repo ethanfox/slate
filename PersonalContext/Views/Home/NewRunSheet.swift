@@ -50,7 +50,7 @@ struct NewRunSheet: View {
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()
-                .fixedSize()
+                .frame(maxWidth: 240, alignment: .trailing)
             }
 
             ModalControlRow("Task") {
@@ -62,7 +62,7 @@ struct NewRunSheet: View {
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()
-                .fixedSize()
+                .frame(maxWidth: 240, alignment: .trailing)
                 .disabled(projectID == nil)
             }
 
@@ -122,6 +122,7 @@ struct NewRunSheet: View {
             Text(disclosure)
                 .font(CraftFont.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             ModalFooter(actionTitle: "Start Run", actionEnabled: canStart, action: start)
         }

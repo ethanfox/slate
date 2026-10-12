@@ -20,7 +20,6 @@ struct ChatInput: View {
     @Binding var attachments: [ComposerAttachment]
     var onStop: (() -> Void)?
     var onRetryStuck: (() -> Void)?
-    var onStartRun: (() -> Void)?
     var debugLog: ChatDebugLog?
     var draftKind = "composer"
     var draftObjectID = ""
@@ -74,8 +73,7 @@ struct ChatInput: View {
                 usage: providerID == TalkProvider.cursor.rawValue ? app.usage : nil,
                 onAttach: pickFiles,
                 onSend: send,
-                onStop: onStop,
-                onStartRun: onStartRun
+                onStop: onStop
             )
 
             if let disclosure = attachments.compactMap(\.disclosure).first {
@@ -562,7 +560,6 @@ private struct ComposerToolbar: View {
     var onAttach: () -> Void
     var onSend: () -> Void
     var onStop: (() -> Void)?
-    var onStartRun: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -586,13 +583,6 @@ private struct ComposerToolbar: View {
             )
 
             Spacer(minLength: 8)
-
-            if let onStartRun {
-                Button("Start Run…", action: onStartRun)
-                    .buttonStyle(.plain)
-                    .font(CraftFont.caption)
-                    .foregroundStyle(.secondary)
-            }
 
             if let usage {
                 ChatUsage(usage: usage)

@@ -408,6 +408,7 @@ final class AppModel {
         restoreWindowTabs()
         loadPins()
         runCoordinator.attach(self)
+        RunFormTool.app = self
         runCoordinator.recover(in: container.mainContext)
         browser.onActivity = { [weak self] runID, event in
             guard let self, let runID else { return }
