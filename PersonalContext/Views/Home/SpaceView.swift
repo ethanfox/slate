@@ -25,7 +25,7 @@ struct SpaceView: View {
 
     var body: some View {
         content
-            .captureBar(placeholder: "Tell Membrae anything about \(space?.displayName ?? "this Space")")
+            .captureBar(spaceID: id, placeholder: "Tell Membrae anything about \(space?.displayName ?? "this Space")")
     }
 
     private var content: some View {

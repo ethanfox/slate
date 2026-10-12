@@ -186,8 +186,9 @@ final class CursorConversationBridge {
         }
         let focused = conversation.thread
         let context = project.map(ContextBuilder.identity(for:)) ?? ""
+        let routing = self.workspace.routing(includeMembraeTools: includeMembraeTools)
         if opening {
-            metadata.contextSnapshot = context
+            metadata.contextSnapshot = context.isEmpty ? routing : context
         }
         let workspace = codeRoots.count == 1
             ? codeRoots[0].path
@@ -203,7 +204,8 @@ final class CursorConversationBridge {
                     context: context,
                     opening: opening,
                     focusedThread: focused,
-                    transcript: opening ? TalkMessage.conversationTranscript(history) : nil
+                    transcript: opening ? TalkMessage.conversationTranscript(history) : nil,
+                    routing: routing
                 )
                 : ContextBuilder.codeConsultationPrompt(userText: userText, context: context),
             model: model,

@@ -20,6 +20,26 @@ final class RunToolPolicyTests: XCTestCase {
         XCTAssertTrue(policy.allows("finish_run"))
     }
 
+    func testChatWithNoProjectFilesAnywhere() {
+        let policy = RunToolPolicy.chat(projectID: nil)
+        XCTAssertTrue(policy.allows("create_note"))
+        XCTAssertTrue(policy.allows("create_task"))
+        XCTAssertTrue(policy.allows("create_space_record"))
+        XCTAssertTrue(policy.allows("create_decision"))
+        let projectID = UUID().uuidString
+        XCTAssertNoThrow(try policy.permitsCall("create_note", arguments: ["project_id": projectID]).get())
+        XCTAssertEqual(policy.preparedArguments("create_note", ["project_id": projectID])["project_id"] as? String, projectID)
+    }
+
+    func testChatInAProjectStaysInItButReachesSpaces() {
+        let projectID = UUID()
+        let policy = RunToolPolicy.chat(projectID: projectID)
+        XCTAssertThrowsError(try policy.permitsCall("create_note", arguments: ["project_id": UUID().uuidString]).get())
+        XCTAssertEqual(policy.preparedArguments("create_note", [:])["project_id"] as? String, projectID.uuidString)
+        XCTAssertNil(policy.preparedArguments("create_space_record", ["space_id": "x"])["project_id"])
+        XCTAssertNil(policy.preparedArguments("list_spaces", [:])["project_id"])
+    }
+
     func testRejectsCompletingAssignedTask() {
         let taskID = UUID()
         let policy = RunToolPolicy(runID: UUID(), projectID: UUID(), assignedTaskID: taskID, allowCode: false)

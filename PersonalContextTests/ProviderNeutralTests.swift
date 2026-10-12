@@ -56,6 +56,77 @@ final class ProviderNeutralTests: XCTestCase {
     }
 
     @MainActor
+    func testChatWithNoProjectGetsTheMapAndFilingRules() throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let context = container.mainContext
+        let project = Project(name: "Harbor", symbol: "folder", summary: "A marina app.")
+        let finished = Project(name: "Old site", symbol: "folder", summary: "Shipped.")
+        finished.status = .done
+        context.insert(project)
+        context.insert(finished)
+        let space = try SpaceStore.create(named: "Kitchen", summary: "Recipes and what got cooked.", in: context)
+        context.insert(SpaceType(spaceID: space.id, key: "recipe", name: "Recipe", role: .object, schema: SpaceSchema(), origin: .agent))
+        context.insert(SpaceType(spaceID: space.id, key: "cooked", name: "Cooked", role: .event, schema: SpaceSchema(), origin: .agent))
+        let loose = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        let inSpace = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        inSpace.spaceIDString = SpaceJSON.key(space.id)
+        let inProject = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test", project: project)
+        context.insert(loose)
+        context.insert(inSpace)
+        context.insert(inProject)
+        try context.save()
+
+        let prompt = ChatWorkspace(conversation: loose, project: nil, debugLog: ChatDebugLog())
+            .prepareTurn(userText: "save this chili recipe").prompt
+        XCTAssertTrue(prompt.contains(ContextBuilder.routingRules))
+        XCTAssertTrue(prompt.contains("- Harbor (id \(project.id.uuidString)): A marina app."))
+        XCTAssertFalse(prompt.contains("Old site"))
+        XCTAssertTrue(prompt.contains("- Kitchen (id \(space.id.uuidString)): Recipes and what got cooked. Holds: Recipe (recipe). Logs: Cooked (cooked)."))
+        XCTAssertFalse(prompt.contains("The user is looking at the Space"))
+
+        let spacePrompt = ChatWorkspace(conversation: inSpace, project: nil, debugLog: ChatDebugLog())
+            .prepareTurn(userText: "made this tonight").prompt
+        XCTAssertTrue(spacePrompt.contains("The user is looking at the Space Kitchen (id \(space.id.uuidString))"))
+
+        let projectPrompt = ChatWorkspace(conversation: inProject, project: project, debugLog: ChatDebugLog())
+            .prepareTurn(userText: "hi").prompt
+        XCTAssertFalse(projectPrompt.contains("<map>"))
+        XCTAssertFalse(projectPrompt.contains(ContextBuilder.routingRules))
+    }
+
+    @MainActor
+    func testWritesFromAChatAreLoggedAgainstThatChat() async throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let project = Project(name: "Harbor", symbol: "folder", summary: "A marina app.")
+        container.mainContext.insert(project)
+        try container.mainContext.save()
+        let conversationID = UUID()
+        let gateway = RunGateway(
+            policy: .chat(projectID: nil),
+            inner: MembraeToolGateway(
+                includeProjectTools: false,
+                mcp: MembraeMCPClient(command: nil),
+                store: container,
+                conversationID: conversationID
+            ),
+            includeFinishRun: false
+        )
+        let names = try await gateway.definitions().compactMap { $0["name"] as? String }
+        XCTAssertTrue(names.contains("create_note"))
+        XCTAssertTrue(names.contains("create_space_record"))
+        _ = try await gateway.execute(name: "create_note", arguments: [
+            "project_id": project.id.uuidString,
+            "title": "Dock fees",
+            "content": "Slip fees went up in March."
+        ])
+        let action = try XCTUnwrap(try container.mainContext.fetch(FetchDescriptor<AgentAction>()).first)
+        XCTAssertEqual(UUID(uuidString: action.conversationIDString), conversationID)
+        XCTAssertEqual(UUID(uuidString: action.projectIDString), project.id)
+    }
+
+    @MainActor
     func testPackageKeepsNoteTitlesAndTaskTracks() throws {
         let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Store.schema, configurations: configuration)

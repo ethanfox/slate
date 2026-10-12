@@ -29,18 +29,29 @@ final class ChatWorkspace {
         }
         let opening = conversation.contextSnapshot.isEmpty
         let context = project.map(ContextBuilder.identity(for:)) ?? ""
+        let routing = routing(includeMembraeTools: includeMembraeTools)
         if opening {
-            metadata.contextSnapshot = context
+            metadata.contextSnapshot = context.isEmpty ? routing : context
         }
         let prompt = includeMembraeTools
             ? ContextBuilder.prompt(
                 userText: "",
                 context: context,
                 opening: opening,
-                focusedThread: conversation.thread
+                focusedThread: conversation.thread,
+                routing: routing
             )
             : ContextBuilder.codeConsultationPrompt(userText: "", context: context)
         return (prompt, metadata)
+    }
+
+    /// A chat with no project files what it is given wherever it belongs.
+    func routing(includeMembraeTools: Bool = true) -> String {
+        guard includeMembraeTools, project == nil else { return "" }
+        return ContextBuilder.routing(
+            spaceID: UUID(uuidString: conversation.spaceIDString),
+            in: conversation.modelContext
+        )
     }
 
     func currentCodeRoots() async throws -> [ProjectCodeRoot] {

@@ -13,8 +13,12 @@ struct RunToolPolicy: Equatable, Sendable {
     var attachesRunSource: Bool
     var allowExternalMCP: Bool
     var allowBrowser: Bool
+    /// With no project, writes may land in any project or Space. This is how the one input files things.
+    var allowUnscopedWrites: Bool
 
-    var allowsMembraeWrites: Bool { allowMembraeKnowledgeWrite && projectID != nil }
+    var allowsMembraeWrites: Bool {
+        allowMembraeKnowledgeWrite && (projectID != nil || allowUnscopedWrites)
+    }
 
     static let denied: Set<String> = [
         "complete_task",
@@ -46,7 +50,8 @@ struct RunToolPolicy: Equatable, Sendable {
         requireProject: Bool = true,
         attachesRunSource: Bool = true,
         allowExternalMCP: Bool = false,
-        allowBrowser: Bool = true
+        allowBrowser: Bool = true,
+        allowUnscopedWrites: Bool = false
     ) {
         self.runID = runID
         self.projectID = projectID
@@ -60,6 +65,7 @@ struct RunToolPolicy: Equatable, Sendable {
         self.attachesRunSource = attachesRunSource
         self.allowExternalMCP = allowExternalMCP
         self.allowBrowser = allowBrowser
+        self.allowUnscopedWrites = allowUnscopedWrites
     }
 
     static func chat(projectID: UUID?) -> RunToolPolicy {
@@ -74,7 +80,8 @@ struct RunToolPolicy: Equatable, Sendable {
             requireProject: false,
             attachesRunSource: false,
             allowExternalMCP: true,
-            allowBrowser: true
+            allowBrowser: true,
+            allowUnscopedWrites: projectID == nil
         )
     }
 
@@ -199,8 +206,9 @@ struct RunToolDenied: LocalizedError {
     var errorDescription: String? { message }
 }
 
+/// Space tools take a space id, never a project id.
 private func writesProject(_ name: String) -> Bool {
-    name.hasPrefix("create_") || name.hasPrefix("list_")
+    (name.hasPrefix("create_") || name.hasPrefix("list_")) && !name.contains("_space")
 }
 
 private func isMembraeWrite(_ name: String) -> Bool {

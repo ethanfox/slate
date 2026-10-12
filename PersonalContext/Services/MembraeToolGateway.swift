@@ -19,6 +19,7 @@ final class MembraeToolGateway: AgentToolGateway {
     private let mcpRuntime: MCPRuntime?
     private let browserRuntime: BrowserRuntime?
     private let store: ModelContainer?
+    private let conversationID: UUID?
 
     init(
         roots: [ProjectCodeRoot] = [],
@@ -36,7 +37,8 @@ final class MembraeToolGateway: AgentToolGateway {
         includeBrowser: Bool = false,
         runID: UUID? = nil,
         mcpRuntime: MCPRuntime? = nil,
-        browserRuntime: BrowserRuntime? = nil
+        browserRuntime: BrowserRuntime? = nil,
+        conversationID: UUID? = nil
     ) {
         self.roots = roots
         self.includeMembraeTools = includeMembraeTools
@@ -54,6 +56,7 @@ final class MembraeToolGateway: AgentToolGateway {
         self.mcpRuntime = mcpRuntime ?? ((includeExternalMCP || includeConfigTools) ? .shared : nil)
         self.browserRuntime = browserRuntime ?? (includeBrowser ? .shared : nil)
         self.store = store
+        self.conversationID = conversationID
     }
 
     func definitions() async throws -> [[String: Any]] {
@@ -142,7 +145,13 @@ final class MembraeToolGateway: AgentToolGateway {
             }
             if let store {
                 return try Self.localResult(
-                    Tools.call(name, arguments: arguments, container: store, announce: false, origin: ActionOrigin(client: "membrae"))
+                    Tools.call(
+                        name,
+                        arguments: arguments,
+                        container: store,
+                        announce: false,
+                        origin: ActionOrigin(client: "membrae", conversationID: conversationID?.uuidString ?? "")
+                    )
                 )
             }
             guard let mcp else {

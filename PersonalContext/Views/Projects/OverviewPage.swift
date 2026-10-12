@@ -24,9 +24,11 @@ struct OverviewPage: View {
 }
 
 /// The one input. Whatever is typed, pasted, or dropped here is handed to the agent.
-/// For now it opens a chat with it; filing it without being asked comes with routing.
+/// It opens a chat with it. With no project, that chat files it wherever it belongs.
 struct CaptureBar: View {
     var project: Project?
+    /// The Space the user is looking at, so the agent knows where the message most likely belongs.
+    var spaceID: UUID?
     var placeholder = "Tell Membrae anything"
 
     @Environment(AppModel.self) private var app
@@ -55,6 +57,9 @@ struct CaptureBar: View {
 
     private func startChat(_ submission: ChatSubmission) -> Bool {
         let conversation = app.makeConversation(in: project, context: context)
+        if project == nil, let spaceID {
+            conversation.spaceIDString = SpaceJSON.key(spaceID)
+        }
         let store = FileStore.default(context: context)
         try? store.retain(
             assetIDs: submission.attachments.map(\.id),
@@ -75,9 +80,13 @@ struct CaptureBar: View {
 
 extension View {
     /// Floats the input over the bottom of a page. The page scrolls underneath it.
-    func captureBar(project: Project? = nil, placeholder: String = "Tell Membrae anything") -> some View {
+    func captureBar(
+        project: Project? = nil,
+        spaceID: UUID? = nil,
+        placeholder: String = "Tell Membrae anything"
+    ) -> some View {
         safeAreaInset(edge: .bottom, spacing: 0) {
-            CaptureBar(project: project, placeholder: placeholder)
+            CaptureBar(project: project, spaceID: spaceID, placeholder: placeholder)
         }
     }
 }

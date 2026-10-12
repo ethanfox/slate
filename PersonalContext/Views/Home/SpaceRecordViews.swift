@@ -15,7 +15,7 @@ struct SpaceRecordView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .captureBar()
+        .captureBar(spaceID: spaceID)
     }
 }
 

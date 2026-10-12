@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 enum ContextBuilder {
     static let knowledgeRules = "Feature and problem specs belong in track bodies. Notes hold reference material. Work to do is a task: create it with create_task and link governing tracks through track_ids; linked notes are supplementary. Whether work is done lives only on the task. Never write built, not built, shipped, or pending into a note, a track summary, or the task notes field."
@@ -52,6 +53,52 @@ enum ContextBuilder {
         if !project.workerProviderID.isEmpty {
             lines.append("A project Worker can inspect the attached code. Call consult_code with a brief when you need a repo pass. Do not call it for decisions, tracks, notes, or tasks — use the Membrae tools.")
         }
+        return lines.joined(separator: "\n")
+    }
+
+    static let routingRules = """
+    This message came through Membrae's one input. The user does not say where things go. You decide, using the map below, and file it with the tools.
+
+    Do these straight away, without asking: add a record to a Space, log an entry, save a link, create a task or a note, record a decision, or add to a track. The user sees each one in their feed and can take it back. Use get_space for a Space's fields before you add a record to it.
+
+    Propose these first and wait for a yes: creating a project, creating a Space, or changing what a Space holds.
+
+    If the message is a question, answer it and file nothing. If nothing in the map fits and it does not deserve a new project or Space, ask where it should go in one line.
+
+    After filing, say what you saved and where in one short line, with a link to it. This replaces the rule about not mentioning what you saved.
+    """
+
+    /// What a turn with no project is told: how to file what came in, and a map of where it could go.
+    static func routing(spaceID: UUID? = nil, in context: ModelContext?) -> String {
+        guard let context else { return "" }
+        let projects = ((try? context.fetch(FetchDescriptor<Project>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]))) ?? [])
+            .filter { $0.status != .done }
+        let spaces = SpaceStore.all(in: context)
+        var lines = [routingRules]
+        if let spaceID, let space = spaces.first(where: { $0.id == spaceID }) {
+            lines.append("The user is looking at the Space \(space.displayName) (id \(space.id.uuidString)). Unless the message plainly belongs somewhere else, it is about this Space.")
+        }
+        lines.append("<map>")
+        lines.append(projects.isEmpty ? "Projects: none yet." : "Projects:")
+        for project in projects.prefix(40) {
+            var line = "- \(project.displayName) (id \(project.id.uuidString))"
+            if project.status != .active { line += " [\(project.status.label)]" }
+            let about = project.summary.isEmpty ? project.currentDirection : project.summary
+            if !about.isEmpty { line += ": \(clip(about, 160))" }
+            lines.append(line)
+        }
+        lines.append(spaces.isEmpty ? "Spaces: none yet." : "Spaces:")
+        for space in spaces.prefix(40) {
+            var line = "- \(space.displayName) (id \(space.id.uuidString))"
+            if !space.summary.isEmpty { line += ": \(clip(space.summary, 160))" }
+            let types = SpaceStore.types(in: space, context: context)
+            let holds = types.filter { $0.role == .object }.map { "\($0.name) (\($0.key))" }
+            let logs = types.filter { $0.role == .event }.map { "\($0.name) (\($0.key))" }
+            if !holds.isEmpty { line += " Holds: \(holds.joined(separator: ", "))." }
+            if !logs.isEmpty { line += " Logs: \(logs.joined(separator: ", "))." }
+            lines.append(line)
+        }
+        lines.append("</map>")
         return lines.joined(separator: "\n")
     }
 
@@ -142,7 +189,8 @@ enum ContextBuilder {
         context: String,
         opening: Bool,
         focusedThread: ProjectThread? = nil,
-        transcript: String? = nil
+        transcript: String? = nil,
+        routing: String = ""
     ) -> String {
         var parts: [String] = [responseStyle]
         if opening {
@@ -174,6 +222,9 @@ enum ContextBuilder {
             \(context)
             </project-context>
             """)
+        }
+        if !routing.isEmpty {
+            parts.append(routing)
         }
         if opening, let transcript, !transcript.isEmpty {
             parts.append("""

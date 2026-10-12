@@ -83,7 +83,8 @@ struct ChatGPTProvider: ChatProvider {
                                 projectID: workspace.project?.id,
                                 includeExternalMCP: includeMembraeTools && workspace.project != nil,
                                 includeConfigTools: includeMembraeTools,
-                                includeBrowser: includeMembraeTools
+                                includeBrowser: includeMembraeTools,
+                                conversationID: workspace.conversation.id
                             ),
                             includeFinishRun: false
                         )
