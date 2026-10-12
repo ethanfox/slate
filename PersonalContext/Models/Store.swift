@@ -158,7 +158,14 @@ enum Store {
         }
     }
 
+    /// True inside the app when it is only hosting the unit tests.
+    static let isHostingTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
     static var configuration: ModelConfiguration {
+        // The tests run inside the app. It must not open, migrate, or write the user's store for them.
+        if isHostingTests {
+            return ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        }
         if let url = applicationGroupStoreURL {
             return ModelConfiguration(schema: schema, url: url)
         }

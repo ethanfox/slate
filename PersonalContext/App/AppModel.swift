@@ -140,7 +140,7 @@ final class AppModel {
     /// Reads the pins, first moving in any that an older build kept in preferences.
     func loadPins() {
         let context = container.mainContext
-        if let old = defaults.stringArray(forKey: "pinnedIDs") {
+        if !Store.isHostingTests, let old = defaults.stringArray(forKey: "pinnedIDs") {
             PinStore.adopt(old, in: context)
             try? context.persist()
             defaults.removeObject(forKey: "pinnedIDs")
