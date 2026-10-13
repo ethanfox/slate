@@ -13,40 +13,44 @@ struct RunPage: View {
         VStack(spacing: 0) {
             titleBar
             DocumentPage {
-                statusLine
-                    .padding(.bottom, 8)
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 10) {
+                        RunStatusBadge(status: run.status)
+                        Text(metaText)
+                            .font(CraftFont.body)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     .findHighlight(.status)
-                Text(originSentence)
-                    .font(CraftFont.body)
-                    .foregroundStyle(.secondary)
-                    .findHighlight(.source)
-                Text(run.brief)
-                    .font(CraftFont.body)
-                    .textSelection(.enabled)
-                    .padding(.top, 20)
-                    .findHighlight(.body)
-                    .findAnchor(.body)
-                history
-                    .padding(.top, 28)
-                if run.status == .failed || run.status == .cancelled, !run.statusDetail.isEmpty {
-                    Text(run.statusDetail)
-                        .font(CraftFont.body)
-                        .foregroundStyle(.red)
-                        .padding(.top, 28)
+
+                    actions
+                        .padding(.top, 16)
+
+                    if !run.statusDetail.isEmpty,
+                       run.status == .failed || run.status == .cancelled || run.status == .couldNot {
+                        reason
+                            .padding(.top, 20)
+                    }
+
+                    if showsResult {
+                        section("Result") { result }
+                    }
+
+                    section("Prompt") {
+                        Text(run.brief)
+                            .font(CraftFont.body)
+                            .textSelection(.enabled)
+                            .findHighlight(.body)
+                            .findAnchor(.body)
+                        Text(originSentence)
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.tertiary)
+                            .findHighlight(.source)
+                    }
+
+                    section("History") { history }
                 }
-                if run.status == .couldNot, !run.statusDetail.isEmpty {
-                    Text(run.statusDetail)
-                        .font(CraftFont.body)
-                        .foregroundStyle(.orange)
-                        .textSelection(.enabled)
-                        .padding(.top, 28)
-                }
-                if run.status == .succeeded || ((run.status == .failed || run.status == .cancelled || run.status == .couldNot) && !run.resultSummary.isEmpty) {
-                    receipt
-                        .padding(.top, 28)
-                }
-                actions
-                    .padding(.top, 28)
+                .frame(maxWidth: DocumentMeasure.proseWidth, alignment: .leading)
             }
         }
         .objectFindable(id: run.id, fields: findFields)
@@ -74,14 +78,17 @@ struct RunPage: View {
             .findHighlight(.title)
     }
 
-    private var statusLine: some View {
-        Text(statusText)
-            .font(CraftFont.section)
-            .foregroundStyle(.secondary)
+    private var showsResult: Bool {
+        run.status == .succeeded || (run.status.isTerminal && !run.resultSummary.isEmpty)
     }
 
-    private var statusText: String {
-        var parts = [run.status.label]
+    private var workerName: String {
+        TalkProvider(rawValue: run.providerID)?.title ?? LocalAgent(rawValue: run.providerID)?.title ?? run.providerID
+    }
+
+    /// What sits beside the status: what it is doing or when it ended, then who did it.
+    private var metaText: String {
+        var parts: [String] = []
         if run.status.isActive, let label = app.runCoordinator.waitLabel(for: run.id) {
             parts.append(label)
         } else if run.status.isActive, let headline = app.browser.headline(for: run.id) {
@@ -89,11 +96,44 @@ struct RunPage: View {
         } else {
             parts.append(timeLabel)
         }
-        parts.append(TalkProvider(rawValue: run.providerID)?.title ?? LocalAgent(rawValue: run.providerID)?.title ?? run.providerID)
+        parts.append(workerName)
         if !run.modelID.isEmpty {
             parts.append(app.modelName(for: run.modelID, providerID: run.providerID))
         }
         return parts.joined(separator: " · ")
+    }
+
+    private var statusText: String {
+        "\(run.status.label) · \(metaText)"
+    }
+
+    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+            content()
+        }
+        .padding(.top, 28)
+    }
+
+    /// Why it did not finish, set apart so it is read before anything else.
+    private var reason: some View {
+        let tint: Color = run.status == .failed ? .red : run.status == .couldNot ? .orange : .secondary
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: run.status == .cancelled ? "xmark.circle.fill" : "exclamationmark.triangle.fill")
+                .font(.system(size: 11, weight: .semibold))
+            Text(run.statusDetail)
+                .font(CraftFont.body)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(tint.opacity(0.3)))
     }
 
     private var timeLabel: String {
@@ -132,77 +172,71 @@ struct RunPage: View {
     }
 
     private var history: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("History")
-                .font(CraftFont.section)
+        VStack(alignment: .leading, spacing: 5) {
             ForEach(run.history) { event in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(event.at.formatted(date: .omitted, time: .shortened))
-                        .font(CraftFont.caption)
                         .foregroundStyle(.tertiary)
-                        .frame(width: 56, alignment: .leading)
+                        .monospacedDigit()
+                        .frame(width: 60, alignment: .leading)
                     Text(event.kind == .browser ? (event.detail.isEmpty ? "Browser" : event.detail) : event.kind.label)
-                        .font(CraftFont.body)
+                        .foregroundStyle(.secondary)
                     if event.kind != .browser, !event.detail.isEmpty {
                         Text(event.detail)
-                            .font(CraftFont.body)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(2)
+                    }
+                }
+                .font(.system(size: 12))
+            }
+        }
+    }
+
+    private var result: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if run.resultSummary.isEmpty {
+                Text("Finished with no summary.")
+                    .font(CraftFont.chatBody)
+                    .foregroundStyle(.secondary)
+            } else {
+                AssistantMarkdown(text: run.resultSummary)
+                    .textSelection(.enabled)
+            }
+            if !run.resultLinks.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(run.resultLinks) { link in
+                        RunActionButton(
+                            title: link.label.isEmpty ? link.url : link.label,
+                            symbol: symbol(for: link)
+                        ) { open(link) }
                     }
                 }
             }
         }
     }
 
-    private var receipt: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Receipt")
-                .font(CraftFont.section)
-            Text(run.resultSummary.isEmpty ? "Finished with no summary." : run.resultSummary)
-                .font(CraftFont.body)
-                .textSelection(.enabled)
-            ForEach(run.resultLinks) { link in
-                Button {
-                    open(link)
-                } label: {
-                    Label(link.label.isEmpty ? link.url : link.label, systemImage: symbol(for: link))
-                        .font(CraftFont.body)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
     private var actions: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 8) {
             if run.status.isActive {
-                Button("Cancel") { app.cancelRun(run) }
-                    .buttonStyle(.plain)
-                    .font(CraftFont.body)
+                RunActionButton(title: "Cancel", symbol: "stop.fill") { app.cancelRun(run) }
             } else {
-                Button("Retry…") { app.retryRun(run) }
-                    .buttonStyle(.plain)
-                    .font(CraftFont.body)
-                Button("Delete", role: .destructive) { confirmDelete = true }
-                    .buttonStyle(.plain)
-                    .font(CraftFont.body)
-                    .foregroundStyle(.red)
+                RunActionButton(title: "Retry…", symbol: "arrow.clockwise") { app.retryRun(run) }
             }
             if let task = run.task {
-                Button("Open Task") { app.selectTask(task.id) }
-                    .buttonStyle(.plain)
-                    .font(CraftFont.body)
+                RunActionButton(title: "Open Task", symbol: "checklist") { app.selectTask(task.id) }
             }
             if let chat = run.originChat {
-                Button("Open Chat") { app.open(chat) }
-                    .buttonStyle(.plain)
-                    .font(CraftFont.body)
+                RunActionButton(title: "Open Chat", symbol: "bubble.left") { app.open(chat) }
             }
             if run.purpose == .indexRepository, let attachmentID = run.indexedAttachmentID {
-                Button("View Reference") { app.present(.inspectCodeReference(attachmentID)) }
-                    .buttonStyle(.plain)
-                    .font(CraftFont.body)
+                RunActionButton(title: "View Reference", symbol: "doc.text.magnifyingglass") {
+                    app.present(.inspectCodeReference(attachmentID))
+                }
             }
-            Spacer()
+            if !run.status.isActive {
+                RunActionButton(title: "Delete", symbol: "trash", isDestructive: true) { confirmDelete = true }
+            }
+            Spacer(minLength: 0)
         }
     }
 
@@ -246,6 +280,76 @@ struct RunPage: View {
         if url.scheme?.lowercased() == "file" {
             NSWorkspace.shared.open(url)
         }
+    }
+}
+
+/// The Run's result at a glance: a tinted capsule with an icon and the word.
+struct RunStatusBadge: View {
+    var status: RunStatus
+
+    private var symbol: String {
+        switch status {
+        case .queued: "clock"
+        case .running, .waiting: "circle.dotted"
+        case .succeeded: "checkmark"
+        case .couldNot: "questionmark"
+        case .failed: "exclamationmark"
+        case .cancelled: "xmark"
+        }
+    }
+
+    private var tint: Color {
+        switch status {
+        case .succeeded: .green
+        case .couldNot: .orange
+        case .failed: .red
+        case .running, .waiting: .blue
+        case .queued, .cancelled: .secondary
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .bold))
+            Text(status.label)
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 9)
+        .frame(height: 24)
+        .background(tint.opacity(0.14), in: Capsule())
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A button on the Run page that looks like one.
+private struct RunActionButton: View {
+    var title: String
+    var symbol: String
+    var isDestructive = false
+    var action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .medium))
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(isDestructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .background(hovering ? CraftColor.selection : CraftColor.elevated, in: Capsule())
+            .overlay(Capsule().stroke(CraftColor.hairline))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }
 
