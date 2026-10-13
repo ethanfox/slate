@@ -33,6 +33,7 @@
 		B20B01000000000000000006 /* PersonalContextBrowser in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = B20B01000000000000000005 /* PersonalContextBrowser */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		05BA026B4AF137407DFFBB70 /* ColorHex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A843C76D621958EDA8D94D61 /* ColorHex.swift */; };
 		1CA1A6E0000000000000017 /* LiquidSand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E0000000000000007 /* LiquidSand.swift */; };
+		1CA1A6E0000000000000018 /* Membrane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E0000000000000008 /* Membrane.swift */; };
 		05FD064003B7CEADF8D13FE2 /* SourceChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DBE0B7BED768EB831D55245 /* SourceChip.swift */; };
 		06A4B5A5812EFA0E120BAFC9 /* DocumentSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591D54A725FC8665EAB3A680 /* DocumentSection.swift */; };
 		08E6C08EE6ADDD3911650B76 /* Hairline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35658CC3CC77FE7EF9839CD9 /* Hairline.swift */; };
@@ -463,6 +464,7 @@
 		A7F5DDBFDDE9BF6067DE5CCC /* DocumentPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPage.swift; sourceTree = "<group>"; };
 		A843C76D621958EDA8D94D61 /* ColorHex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorHex.swift; sourceTree = "<group>"; };
 		1CA1A6E0000000000000007 /* LiquidSand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidSand.swift; sourceTree = "<group>"; };
+		1CA1A6E0000000000000008 /* Membrane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Membrane.swift; sourceTree = "<group>"; };
 		A91C3E7B4D2F80A16B5E4C39 /* ObjectFind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectFind.swift; sourceTree = "<group>"; };
 		C0F1050100000001 /* ComposerSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerSearch.swift; sourceTree = "<group>"; };
 		11B4A4700000000000000002 /* SourceFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceFetcher.swift; sourceTree = "<group>"; };
@@ -627,6 +629,7 @@
 				1D8F3727FDE5E1A2896BBDC9 /* BrandMark.swift */,
 				A843C76D621958EDA8D94D61 /* ColorHex.swift */,
 				1CA1A6E0000000000000007 /* LiquidSand.swift */,
+				1CA1A6E0000000000000008 /* Membrane.swift */,
 				6954DDFB7640212B41E6025E /* Craft.swift */,
 				B530330434B899D87B7F9D1D /* Motion.swift */,
 				603696A95CC22D7F59124C6E /* OrbPalette.swift */,
@@ -1272,6 +1275,7 @@
 				11B4A4700000000000000011 /* LibraryView.swift in Sources */,
 				05BA026B4AF137407DFFBB70 /* ColorHex.swift in Sources */,
 				1CA1A6E0000000000000017 /* LiquidSand.swift in Sources */,
+				1CA1A6E0000000000000018 /* Membrane.swift in Sources */,
 				3FBE1FE7B1DA0AF6D7997503 /* ConnectAccountSheets.swift in Sources */,
 				D0BE55C67A0150AAA2EF6656 /* ConnectCursorSheet.swift in Sources */,
 				A1A0A9B87ABC17645115475D /* ContextBuilder.swift in Sources */,

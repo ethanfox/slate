@@ -114,8 +114,14 @@ struct MembraeApp: App {
                     app.toggleSidebar()
                 }
                 .keyboardShortcut("s", modifiers: [.control, .command])
+                MembraneLabButton()
             }
         }
+
+        Window("Membrane", id: MembraneLabButton.windowID) {
+            MembraneLab()
+        }
+        .defaultSize(width: 560, height: 640)
 
         Settings {
             SettingsView()
@@ -143,5 +149,16 @@ struct MembraeApp: App {
                 }
         }
         .defaultSize(width: 860, height: 720)
+    }
+}
+
+private struct MembraneLabButton: View {
+    static let windowID = "membrane-lab"
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Membrane Prototype") {
+            openWindow(id: Self.windowID)
+        }
     }
 }
