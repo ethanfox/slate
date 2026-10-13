@@ -172,13 +172,15 @@ struct SpaceCalcRequest: Hashable {
         case max
         /// How much a logged number has moved since the period began.
         case change
+        /// The most recent reading of a logged number, such as today's weight.
+        case last
         /// Where the record stands against its schedule: 2 of 3 this week, or done today.
         case pace
 
         var needsEvent: Bool { self != .records }
         var collectionOnly: Bool { self == .today || self == .records }
         /// Works on a logged number, so it needs `eventKey.field`.
-        var needsField: Bool { [.sum, .avg, .min, .max, .change].contains(self) }
+        var needsField: Bool { [.sum, .avg, .min, .max, .change, .last].contains(self) }
         /// Gives a number a progress bar can use.
         var isNumber: Bool { needsField || self == .count || self == .week }
     }
@@ -329,6 +331,8 @@ enum SpaceCalc {
             return inside.map(\.value).min()
         case .max:
             return inside.map(\.value).max()
+        case .last:
+            return inside.last?.value
         case .change:
             guard let last = inside.last else { return nil }
             let before = values.last { start != nil && $0.date < start! } ?? inside.first
@@ -584,7 +588,7 @@ enum SpaceScreenCatalog {
             summary: "One calculated number with a label.",
             screens: everywhere,
             props: [
-                SpacePropSpec(name: "value", kind: .calc, required: true, note: "count, latest, streak, best, week or pace, then :eventKey. For logged numbers: sum, avg, min, max or change, then :eventKey.field:period. In a collection also today:eventKey and records."),
+                SpacePropSpec(name: "value", kind: .calc, required: true, note: "count, latest, streak, best, week or pace, then :eventKey. latest is when the newest entry was logged, not its value. For logged numbers: last (the most recent reading), sum, avg, min, max or change, then :eventKey.field:period. In a collection also today:eventKey and records."),
                 SpacePropSpec(name: "label", kind: .text, required: true, note: "Text under the number.")
             ]
         ),

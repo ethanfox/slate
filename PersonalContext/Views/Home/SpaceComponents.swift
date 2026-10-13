@@ -150,7 +150,7 @@ struct SpaceScreenContext {
             let due = records.filter { schedule(of: $0)?.isDue(on: .now) != false || hasEventToday(request.eventKey, about: $0) }
             let done = due.filter { hasEventToday(request.eventKey, about: $0) }.count
             return "\(done) of \(due.count)"
-        case .sum, .avg, .min, .max, .change:
+        case .sum, .avg, .min, .max, .change, .last:
             return number(request, about: record).map { SpaceCalc.label($0, signed: request.name == .change) } ?? "–"
         }
     }
@@ -164,7 +164,7 @@ struct SpaceScreenContext {
             return Double(found.filter { start == nil || $0.occurredAt >= start! }.count)
         case .week:
             return Double(SpaceCalc.week(found.map(\.occurredAt)))
-        case .sum, .avg, .min, .max, .change:
+        case .sum, .avg, .min, .max, .change, .last:
             let eventSchema = eventType(request.eventKey)?.schema
             let values = found.reversed().compactMap { event -> (date: Date, value: Double)? in
                 logged(request, in: event, schema: eventSchema).map { (event.occurredAt, $0) }

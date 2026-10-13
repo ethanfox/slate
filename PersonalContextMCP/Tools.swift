@@ -2820,7 +2820,7 @@ enum SpaceTools {
             ],
             "calculations": [
                 "count:eventKey": "how many events",
-                "latest:eventKey": "when the newest event happened",
+                "latest:eventKey": "when the newest event happened, as a day. Not its value",
                 "streak:eventKey": "days in a row with an event",
                 "best:eventKey": "longest run of days with an event",
                 "week:eventKey": "events in the last seven days",
@@ -2829,10 +2829,11 @@ enum SpaceTools {
                 "avg:eventKey.field:period": "the average of a logged number",
                 "min:eventKey.field:period": "the smallest logged number",
                 "max:eventKey.field:period": "the largest logged number",
+                "last:eventKey.field": "the most recent reading of a logged number, such as the latest weight. Use this, not latest, to show a current value",
                 "change:eventKey.field:period": "how far a logged number has moved since the period began, such as weight this month",
                 "count:eventKey:period": "how many events in a period",
-                "today:eventKey": "collection only: records with an event today, out of all",
-                "records": "collection only: how many records"
+                "today:eventKey": "collection screens and widgets: records with an event today, out of all",
+                "records": "collection screens and widgets: how many records"
             ],
             "example": [
                 "type": ["key": recipe.key, "name": recipe.name, "role": "object", "fields": recipe.fields.map(field)],
