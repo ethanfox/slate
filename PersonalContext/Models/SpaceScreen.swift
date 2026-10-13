@@ -389,128 +389,17 @@ struct SpacePropSpec: Hashable {
 struct SpaceComponentSpec: Hashable {
     var name: String
     var summary: String
-    var screens: Set<SpaceScreenKind>
     var props: [SpacePropSpec] = []
     var takesChildren = false
 }
 
 enum SpaceScreenCatalog {
     private static let singles: [SpaceFieldKind] = [.text, .number, .boolean, .date, .choice, .quantity, .link, .calc, .schedule, .tags, .url, .money, .duration, .time, .dateRange, .rating, .file]
-    private static let both: Set<SpaceScreenKind> = [.collection, .detail]
-    private static let everywhere: Set<SpaceScreenKind> = [.collection, .detail, .widget]
     private static let sortNote = "A field id, title, or updated. Put - in front for largest or newest first, such as -rating."
-    private static let arrangeProps = [
-        SpacePropSpec(name: "sort", kind: .text, note: sortNote),
-        SpacePropSpec(name: "group", kind: .field([.choice, .link]), note: "A choice or link field to group the records under headings.")
-    ]
-    private static let plannerProps = [
-        SpacePropSpec(name: "date", kind: .field([.date]), required: true, note: "The date field that places a record on a day."),
-        SpacePropSpec(name: "subtitle", kind: .fields(singles), note: "Fields shown under each name."),
-        SpacePropSpec(name: "total", kind: .field(SpaceFieldKind.allCases.filter(\.isNumeric)), note: "A number field added up for each day."),
-        SpacePropSpec(name: "target", kind: .formula, note: "What each day's total is measured against, such as goals.calories."),
-        SpacePropSpec(name: "unit", kind: .text, note: "Shown after the total, such as kcal.")
-    ]
-
     static let components: [SpaceComponentSpec] = [
-        SpaceComponentSpec(
-            name: "section",
-            summary: "A heading over a group of components.",
-            screens: both,
-            props: [SpacePropSpec(name: "title", kind: .text, required: true, note: "The heading.")],
-            takesChildren: true
-        ),
-        SpaceComponentSpec(
-            name: "columns",
-            summary: "Places its children side by side.",
-            screens: both,
-            props: [SpacePropSpec(name: "leading", kind: .number, note: "Fixed width of the first column in points.")],
-            takesChildren: true
-        ),
-        SpaceComponentSpec(
-            name: "search",
-            summary: "A search box and filter chips over the records below it.",
-            screens: [.collection],
-            props: [SpacePropSpec(name: "filters", kind: .fields([.choice]), note: "Choice fields to offer as chips.")]
-        ),
-        SpaceComponentSpec(
-            name: "quickAdd",
-            summary: "A line to type a name into. Return adds a record without opening the form.",
-            screens: [.collection],
-            props: [SpacePropSpec(name: "placeholder", kind: .text, note: "Hint shown in the empty line.")]
-        ),
-        SpaceComponentSpec(
-            name: "cards",
-            summary: "The records as a grid of cards.",
-            screens: [.collection],
-            props: [
-                SpacePropSpec(name: "image", kind: .field([.image]), note: "Image field shown at the top of each card."),
-                SpacePropSpec(name: "subtitle", kind: .fields(singles), note: "Fields shown under each name.")
-            ] + arrangeProps
-        ),
-        SpaceComponentSpec(
-            name: "board",
-            summary: "The records in columns by a choice field, such as the stage of a job application. Dragging a card to another column changes the field.",
-            screens: [.collection],
-            props: [
-                SpacePropSpec(name: "by", kind: .field([.choice]), required: true, note: "The choice field whose options are the columns."),
-                SpacePropSpec(name: "subtitle", kind: .fields(singles), note: "Fields shown under each name."),
-                SpacePropSpec(name: "sort", kind: .text, note: sortNote)
-            ]
-        ),
-        SpaceComponentSpec(
-            name: "sheet",
-            summary: "The records as a table, one column per field. Clicking a heading sorts by it.",
-            screens: [.collection],
-            props: [
-                SpacePropSpec(name: "columns", kind: .fields(singles), required: true, note: "Fields shown as columns after the name."),
-                SpacePropSpec(name: "sort", kind: .text, note: sortNote)
-            ]
-        ),
-        SpaceComponentSpec(
-            name: "week",
-            summary: "Seven days side by side, each listing the records dated that day. For plans: meals for the week, workouts, appointments.",
-            screens: [.collection],
-            props: plannerProps
-        ),
-        SpaceComponentSpec(
-            name: "day",
-            summary: "One day at a time, listing the records dated that day, with a daily total.",
-            screens: [.collection],
-            props: plannerProps
-        ),
-        SpaceComponentSpec(
-            name: "month",
-            summary: "A month grid marking the days that have records. Picking a day lists them.",
-            screens: [.collection],
-            props: plannerProps
-        ),
-        SpaceComponentSpec(
-            name: "rows",
-            summary: "The records as a list, with an optional one-tap action.",
-            screens: [.collection],
-            props: [
-                SpacePropSpec(name: "subtitle", kind: .fields(singles), note: "Fields shown under each name."),
-                SpacePropSpec(name: "action", kind: .event, note: "Event to log or undo for today with one tap."),
-                SpacePropSpec(name: "week", kind: .event, note: "Event to show as seven day dots."),
-                SpacePropSpec(name: "trail", kind: .calc, note: "A calculation shown at the end of each row.")
-            ] + arrangeProps
-        ),
-        SpaceComponentSpec(
-            name: "table",
-            summary: "Rows of a group as a plain table with column headings. Use this for lists that are not ticked off, such as a meal's recipes or a nutrient list. Linked records can be opened from it.",
-            screens: [.detail],
-            props: [SpacePropSpec(name: "rows", kind: .field([.group]), required: true, note: "The group field.")]
-        ),
-        SpaceComponentSpec(
-            name: "usedIn",
-            summary: "Records of another type that link to this one, such as the meals a recipe is in.",
-            screens: [.detail],
-            props: [SpacePropSpec(name: "type", kind: .text, required: true, note: "Key of the type whose records link here.")]
-        ),
         SpaceComponentSpec(
             name: "chart",
             summary: "Logged events over time: a line for a logged number such as weight, or bars for how much happened each day.",
-            screens: everywhere,
             props: [
                 SpacePropSpec(name: "events", kind: .event, required: true, note: "The event type."),
                 SpacePropSpec(name: "field", kind: .text, note: "A number field of the event. Left out, the chart counts events."),
@@ -519,63 +408,8 @@ enum SpaceScreenCatalog {
             ]
         ),
         SpaceComponentSpec(
-            name: "header",
-            summary: "The record's name, a few fields, and its main action.",
-            screens: [.detail],
-            props: [
-                SpacePropSpec(name: "image", kind: .field([.image]), note: "Image field shown beside the name."),
-                SpacePropSpec(name: "fields", kind: .fields(singles), note: "Fields shown under the name."),
-                SpacePropSpec(name: "action", kind: .event, note: "Event the main button logs."),
-                SpacePropSpec(name: "actionLabel", kind: .text, note: "The button's label.")
-            ]
-        ),
-        SpaceComponentSpec(
-            name: "fields",
-            summary: "Chosen fields with their labels.",
-            screens: [.detail],
-            props: [SpacePropSpec(name: "fields", kind: .fields(singles + [.richText]), required: true, note: "Fields to show.")]
-        ),
-        SpaceComponentSpec(
-            name: "stepper",
-            summary: "Plus and minus on a number, to try another amount without saving it.",
-            screens: [.detail],
-            props: [
-                SpacePropSpec(name: "field", kind: .field([.number]), required: true, note: "The number field."),
-                SpacePropSpec(name: "label", kind: .text, note: "Text before the control.")
-            ]
-        ),
-        SpaceComponentSpec(
-            name: "checklist",
-            summary: "Rows of a group with tick boxes. Quantities can scale with a stepper.",
-            screens: [.detail],
-            props: [
-                SpacePropSpec(name: "rows", kind: .field([.group]), required: true, note: "The group field."),
-                SpacePropSpec(name: "scaleBy", kind: .field([.number]), note: "Number field whose stepper scales the quantities."),
-                SpacePropSpec(name: "saves", kind: .text, note: "A yes/no column of the group. Ticks are then saved into it, for a to-do list. Left out, ticks reset when the page closes.")
-            ]
-        ),
-        SpaceComponentSpec(
-            name: "steps",
-            summary: "Rows of a group as numbered steps.",
-            screens: [.detail],
-            props: [SpacePropSpec(name: "rows", kind: .field([.group]), required: true, note: "The group field.")]
-        ),
-        SpaceComponentSpec(
-            name: "timeline",
-            summary: "Logged events, newest first.",
-            screens: both,
-            props: [SpacePropSpec(name: "events", kind: .event, required: true, note: "The event type.")]
-        ),
-        SpaceComponentSpec(
-            name: "calendar",
-            summary: "A month grid marking the days an event was logged.",
-            screens: [.detail],
-            props: [SpacePropSpec(name: "events", kind: .event, required: true, note: "The event type.")]
-        ),
-        SpaceComponentSpec(
             name: "progress",
             summary: "A bar showing a number against a target, such as calories against a daily goal.",
-            screens: everywhere,
             props: [
                 SpacePropSpec(name: "value", kind: .formula, required: true, note: "A field id or formula for the number so far, or a calculation over logs such as sum:eaten.calories:today."),
                 SpacePropSpec(name: "target", kind: .formula, required: true, note: "A number, field id or formula for the target, such as goals.calories."),
@@ -586,7 +420,6 @@ enum SpaceScreenCatalog {
         SpaceComponentSpec(
             name: "metric",
             summary: "One calculated number with a label.",
-            screens: everywhere,
             props: [
                 SpacePropSpec(name: "value", kind: .calc, required: true, note: "count, latest, streak, best, week or pace, then :eventKey. latest is when the newest entry was logged, not its value. For logged numbers: last (the most recent reading), sum, avg, min, max or change, then :eventKey.field:period. In a collection also today:eventKey and records."),
                 SpacePropSpec(name: "label", kind: .text, required: true, note: "Text under the number.")
@@ -594,28 +427,17 @@ enum SpaceScreenCatalog {
         ),
         SpaceComponentSpec(
             name: "label",
-            summary: "Widget only. A short line of plain text, such as a caption over a number.",
-            screens: [.widget],
+            summary: "A short line of plain text, such as a caption over a number.",
             props: [
                 SpacePropSpec(name: "text", kind: .text, required: true, note: "What it says.")
             ]
         ),
         SpaceComponentSpec(
             name: "list",
-            summary: "Widget only. The first few records by name, such as what is coming up next.",
-            screens: [.widget],
+            summary: "The first few records by name, such as what is coming up next.",
             props: [
                 SpacePropSpec(name: "sort", kind: .text, note: sortNote),
                 SpacePropSpec(name: "subtitle", kind: .field(singles), note: "One field shown beside each name.")
-            ]
-        ),
-        SpaceComponentSpec(
-            name: "action",
-            summary: "A button that logs an event about the record.",
-            screens: [.detail],
-            props: [
-                SpacePropSpec(name: "event", kind: .event, required: true, note: "The event type."),
-                SpacePropSpec(name: "label", kind: .text, required: true, note: "The button's label.")
             ]
         )
     ]
@@ -650,9 +472,6 @@ enum SpaceScreenCatalog {
         guard let spec = spec(component.kind) else {
             problems.append("There is no component called \(component.kind).")
             return
-        }
-        if !spec.screens.contains(kind) {
-            problems.append("\(spec.name) cannot be used on a \(kind.rawValue) screen.")
         }
         if !spec.takesChildren, !component.children.isEmpty {
             problems.append("\(spec.name) does not take children.")
@@ -864,9 +683,7 @@ struct AreaWidgetDefinition: Codable, Hashable {
 
 enum AreaWidgetCatalog {
     /// The blocks a widget can be built from.
-    static var blocks: [SpaceComponentSpec] {
-        SpaceScreenCatalog.components.filter { $0.screens.contains(.widget) }
-    }
+    static var blocks: [SpaceComponentSpec] { SpaceScreenCatalog.components }
 
     /// Every reason this widget cannot be shown. Empty means it is valid.
     static func problems(

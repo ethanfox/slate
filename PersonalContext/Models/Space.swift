@@ -778,8 +778,6 @@ struct SpaceTemplate: Identifiable, Hashable {
         var name: String
         var role: SpaceTypeRole
         var fields: [SpaceField]
-        var collection: [SpaceComponent] = []
-        var detail: [SpaceComponent] = []
     }
 
     var id: String
@@ -808,35 +806,6 @@ struct SpaceTemplate: Identifiable, Hashable {
                 SpaceField(id: "step", name: "Step", kind: .text)
             ], isOrdered: true),
             SpaceField(id: "notes", name: "Notes", kind: .richText)
-        ], collection: [
-            SpaceComponent("search", ["filters": .list(["course"])]),
-            SpaceComponent("cards", ["image": .text("photo"), "subtitle": .list(["time", "course"])])
-        ], detail: [
-            SpaceComponent("header", [
-                "image": .text("photo"),
-                "fields": .list(["time", "course", "source"]),
-                "action": .text("cooked"),
-                "actionLabel": .text("Log cooked")
-            ]),
-            SpaceComponent("columns", ["leading": .number(300)], children: [
-                SpaceComponent("section", ["title": .text("Ingredients")], children: [
-                    SpaceComponent("stepper", ["field": .text("servings"), "label": .text("Serves")]),
-                    SpaceComponent("checklist", ["rows": .text("ingredients"), "scaleBy": .text("servings")])
-                ]),
-                SpaceComponent("section", ["title": .text("Method")], children: [
-                    SpaceComponent("steps", ["rows": .text("method")])
-                ])
-            ]),
-            SpaceComponent("fields", ["fields": .list(["notes"])]),
-            SpaceComponent("section", ["title": .text("History")], children: [
-                SpaceComponent("columns", ["leading": .number(300)], children: [
-                    SpaceComponent("columns", children: [
-                        SpaceComponent("metric", ["value": .text("count:cooked"), "label": .text("times cooked")]),
-                        SpaceComponent("metric", ["value": .text("latest:cooked"), "label": .text("last cooked")])
-                    ]),
-                    SpaceComponent("timeline", ["events": .text("cooked")])
-                ])
-            ])
         ]),
         TypeDraft(key: "cooked", name: "Cooked", role: .event, fields: [
             SpaceField(id: "servings", name: "Servings", kind: .number),
@@ -851,43 +820,6 @@ struct SpaceTemplate: Identifiable, Hashable {
             SpaceField(id: "started", name: "Started", kind: .date),
             SpaceField(id: "active", name: "Active", kind: .boolean),
             SpaceField(id: "notes", name: "Notes", kind: .richText)
-        ], collection: [
-            SpaceComponent("columns", children: [
-                SpaceComponent("metric", ["value": .text("today:check-in"), "label": .text("done today")]),
-                SpaceComponent("metric", ["value": .text("week:check-in"), "label": .text("check-ins this week")]),
-                SpaceComponent("metric", ["value": .text("records"), "label": .text("habits")])
-            ]),
-            SpaceComponent("section", ["title": .text("Today")], children: [
-                SpaceComponent("rows", [
-                    "subtitle": .list(["target"]),
-                    "action": .text("check-in"),
-                    "week": .text("check-in"),
-                    "trail": .text("streak:check-in")
-                ])
-            ])
-        ], detail: [
-            SpaceComponent("header", [
-                "fields": .list(["target", "started"]),
-                "action": .text("check-in"),
-                "actionLabel": .text("Check in")
-            ]),
-            SpaceComponent("columns", ["leading": .number(364)], children: [
-                SpaceComponent("calendar", ["events": .text("check-in")]),
-                SpaceComponent("section", ["title": .text("Progress")], children: [
-                    SpaceComponent("columns", children: [
-                        SpaceComponent("metric", ["value": .text("streak:check-in"), "label": .text("current streak")]),
-                        SpaceComponent("metric", ["value": .text("best:check-in"), "label": .text("best streak")])
-                    ]),
-                    SpaceComponent("columns", children: [
-                        SpaceComponent("metric", ["value": .text("week:check-in"), "label": .text("this week")]),
-                        SpaceComponent("metric", ["value": .text("count:check-in"), "label": .text("check-ins in all")])
-                    ])
-                ])
-            ]),
-            SpaceComponent("fields", ["fields": .list(["notes"])]),
-            SpaceComponent("section", ["title": .text("History")], children: [
-                SpaceComponent("timeline", ["events": .text("check-in")])
-            ])
         ]),
         TypeDraft(key: "check-in", name: "Check-in", role: .event, fields: [
             SpaceField(id: "minutes", name: "Minutes", kind: .number),

@@ -7,10 +7,8 @@ import SwiftUI
 final class SpaceScreenState {
     var search = ""
     var filters: [String: String] = [:]
-    var steppers: [String: Double] = [:]
-    var ticked: Set<String> = []
     var month = Calendar.current.dateInterval(of: .month, for: .now)?.start ?? .now
-    /// The day a day, week, or month view is on.
+    /// The day a month view is on.
     var day = Calendar.current.startOfDay(for: .now)
     /// A sheet's sort, once the viewer clicks a heading.
     var sort: String?
@@ -103,26 +101,6 @@ struct SpaceScreenContext {
     }
 
     /// The visible records sorted, and split under headings when the component groups them.
-    func arranged(sort: String?, group: String?) -> [(title: String?, records: [SpaceRecord])] {
-        let ordered = sorted(visibleRecords, by: sort)
-        guard let group, let field = schema.field(group) else { return [(nil, ordered)] }
-        var buckets: [String: [SpaceRecord]] = [:]
-        for record in ordered {
-            let key: String = { if case .text(let id) = values(record)[group] { id } else { "" } }()
-            buckets[key, default: []].append(record)
-        }
-        let keys: [String]
-        if field.kind == .choice {
-            keys = field.options.map(\.id)
-        } else {
-            keys = buckets.keys.filter { !$0.isEmpty }.sorted { (titles[$0] ?? "") < (titles[$1] ?? "") }
-        }
-        var result: [(title: String?, records: [SpaceRecord])] = keys.compactMap { key in
-            buckets[key].map { (schema.display(.text(key), for: field, titles: titles), $0) }
-        }
-        if let rest = buckets[""] { result.append(("No \(field.name.lowercased())", rest)) }
-        return result
-    }
 
     func subtitle(for record: SpaceRecord, fields: [String]) -> String {
         let values = values(record)
@@ -213,16 +191,6 @@ struct SpaceScreenContext {
         }
     }
 
-    /// One tap: log today's event, or take it back if it is already there.
-    func toggleToday(_ key: String?, about record: SpaceRecord) {
-        if let existing = events(key, about: record).first(where: { Calendar.current.isDateInToday($0.occurredAt) }) {
-            try? SpaceStore.delete(existing, in: context)
-        } else if let type = eventType(key) {
-            // A check-in stays one tap. Its details can be filled in from the history afterwards.
-            try? SpaceStore.logEvent(of: type, about: [record], in: context)
-        }
-    }
-
     func summary(of event: SpaceEvent) -> String {
         guard let type = eventTypes.first(where: { $0.id == event.typeID }) else { return "" }
         let schema = type.schema
@@ -270,393 +238,22 @@ extension SpaceScreenContext {
     }
 }
 
-struct SpaceScreenView: View {
-    var definition: SpaceScreenDefinition
-    var context: SpaceScreenContext
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 26) {
-            ForEach(Array(definition.components.enumerated()), id: \.offset) { _, component in
-                SpaceComponentView(component: component, context: context)
-            }
-        }
-    }
-}
-
 struct SpaceComponentView: View {
     var component: SpaceComponent
     var context: SpaceScreenContext
 
     var body: some View {
         switch component.kind {
-        case "section": section
-        case "columns": columns
-        case "search": SpaceSearchBar(component: component, context: context)
-        case "cards": cards
-        case "rows": rows
-        case "header": header
-        case "fields": fields
-        case "stepper": stepper
-        case "checklist": checklist
-        case "steps": steps
         case "timeline": timeline
-        case "calendar": SpaceCompletionCalendar(dates: context.events(component.text("events"), about: context.record).map(\.occurredAt), accent: context.accent, state: context.state)
-        case "metric": metric
-        case "progress": progress
-        case "table": table
-        case "quickAdd": SpaceQuickAdd(placeholder: component.text("placeholder"), context: context)
-        case "usedIn": usedIn
         case "board": board
-        case "sheet": sheet
         case "chart": chart
-        case "week": SpacePlanner(span: .week, component: component, context: context)
-        case "day": SpacePlanner(span: .day, component: component, context: context)
-        case "month": SpacePlanner(span: .month, component: component, context: context)
+        case "month": SpacePlanner(component: component, context: context)
         case "action": action
         default: EmptyView()
         }
     }
 
-    private var children: some View {
-        ForEach(Array(component.children.enumerated()), id: \.offset) { _, child in
-            SpaceComponentView(component: child, context: context)
-        }
-    }
-
-    private var section: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(component.text("title") ?? "")
-                .font(CraftFont.section)
-                .foregroundStyle(.secondary)
-            children
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var columns: some View {
-        let leading = component.number("leading").map { CGFloat($0) }
-        let allMetrics = component.children.allSatisfy { $0.kind == "metric" }
-        return HStack(alignment: .top, spacing: allMetrics ? 12 : 48) {
-            ForEach(Array(component.children.enumerated()), id: \.offset) { index, child in
-                SpaceComponentView(component: child, context: context)
-                    .frame(width: index == 0 ? leading : nil, alignment: .topLeading)
-                    .frame(maxWidth: index == 0 && leading != nil ? nil : .infinity, alignment: .topLeading)
-            }
-        }
-    }
-
-    // MARK: Collection
-
-    private var cards: some View {
-        grouped { records in cardGrid(records) }
-    }
-
-    /// Runs `content` once, or once under each heading when the component groups its records.
-    @ViewBuilder
-    private func grouped<Content: View>(@ViewBuilder _ content: @escaping ([SpaceRecord]) -> Content) -> some View {
-        let groups = context.arranged(sort: component.text("sort"), group: component.text("group"))
-        if groups.allSatisfy({ $0.records.isEmpty }) {
-            EmptyLine(text: context.records.isEmpty ? "Nothing here yet. Use New to add the first one." : "Nothing matches.")
-        } else {
-            VStack(alignment: .leading, spacing: 22) {
-                ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
-                    VStack(alignment: .leading, spacing: 10) {
-                        if let title = group.title {
-                            Text(title)
-                                .font(CraftFont.section)
-                                .foregroundStyle(.secondary)
-                        }
-                        content(group.records)
-                    }
-                }
-            }
-        }
-    }
-
-    private func cardGrid(_ records: [SpaceRecord]) -> some View {
-        let fields = component.list("subtitle")
-        let image = component.text("image")
-        return Group {
-            if records.isEmpty {
-                EmptyView()
-            } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 16, alignment: .top)], alignment: .leading, spacing: 20) {
-                    ForEach(records) { record in
-                        Button {
-                            context.open(record)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 8) {
-                                SpaceImageView(assetID: context.imageID(image, on: record), tint: context.accent)
-                                    .frame(height: 140)
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Text(record.displayTitle)
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .lineLimit(1)
-                                    let subtitle = context.subtitle(for: record, fields: fields)
-                                    if !subtitle.isEmpty {
-                                        Text(subtitle)
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu { SpaceRecordMenu(record: record, context: context) }
-                    }
-                }
-            }
-        }
-    }
-
-    private var rows: some View {
-        grouped { records in rowList(records) }
-    }
-
-    private func rowList(_ records: [SpaceRecord]) -> some View {
-        let fields = component.list("subtitle")
-        let action = component.text("action")
-        let week = component.text("week")
-        let trail: String? = { if case .text(let raw) = component.props["trail"] { raw } else { nil } }()
-        return Group {
-            if records.isEmpty {
-                EmptyView()
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(records) { record in
-                        let done = action != nil && context.hasEventToday(action, about: record)
-                        HStack(spacing: 14) {
-                            if action != nil {
-                                Button {
-                                    context.toggleToday(action, about: record)
-                                } label: {
-                                    SpaceCheckCircle(isOn: done, accent: context.accent)
-                                }
-                                .buttonStyle(.plain)
-                                .help(done ? "Undo" : context.eventType(action)?.name ?? "Log")
-                            }
-                            Button {
-                                context.open(record)
-                            } label: {
-                                HStack(spacing: 14) {
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(record.displayTitle)
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundStyle(done ? .secondary : .primary)
-                                            .lineLimit(1)
-                                        let subtitle = context.subtitle(for: record, fields: fields)
-                                        if !subtitle.isEmpty {
-                                            Text(subtitle)
-                                                .font(.system(size: 12))
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                        }
-                                    }
-                                    Spacer(minLength: 8)
-                                    if week != nil {
-                                        SpaceWeekDots(dates: context.events(week, about: record).map(\.occurredAt), accent: context.accent)
-                                    }
-                                    if let trail {
-                                        Text(context.metric(trail, about: record))
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .frame(width: 72, alignment: .trailing)
-                                    }
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .frame(height: 58)
-                        .contextMenu { SpaceRecordMenu(record: record, context: context) }
-                        Hairline()
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: Detail
-
-    private var header: some View {
-        HStack(alignment: .center, spacing: 20) {
-            if let assetID = context.imageID(component.text("image"), on: context.record) {
-                SpaceImageView(assetID: assetID, tint: context.accent, cornerRadius: 14)
-                    .frame(width: 104, height: 104)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(context.record?.displayTitle ?? "")
-                    .font(.system(size: 28, weight: .semibold))
-                labelled(component.list("fields"), spacing: 18)
-            }
-            Spacer(minLength: 12)
-            if let event = component.text("action"), let record = context.record {
-                SpaceActionButton(title: component.text("actionLabel") ?? context.eventType(event)?.name ?? "Log") {
-                    context.log(event, about: record)
-                }
-            }
-        }
-    }
-
-    private static let liveKinds: Set<SpaceFieldKind> = [.boolean, .choice, .rating]
-
-    private func labelled(_ ids: [String], spacing: CGFloat) -> some View {
-        let values = context.values(context.record)
-        let shown: [(SpaceField, SpaceValue?)] = ids.compactMap { id in
-            guard let field = context.schema.field(id) else { return nil }
-            return values[id] != nil || Self.liveKinds.contains(field.kind) ? (field, values[id]) : nil
-        }
-        return HStack(alignment: .top, spacing: spacing) {
-            ForEach(Array(shown.enumerated()), id: \.offset) { _, pair in
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(pair.0.name)
-                        .font(CraftFont.caption)
-                        .foregroundStyle(.tertiary)
-                    liveValue(pair.1, pair.0)
-                }
-            }
-        }
-    }
-
-    /// A value as text. A link is a button that opens the record it points at.
-    @ViewBuilder
-    private func valueText(_ value: SpaceValue, _ field: SpaceField, font: Font = CraftFont.body) -> some View {
-        if field.kind == .link, case .text(let id) = value, let target = context.lookup?.record(id) {
-            Button {
-                context.open(target)
-            } label: {
-                Text(target.displayTitle)
-                    .font(font)
-                    .foregroundStyle(context.accent)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
-            .buttonStyle(.plain)
-            .help("Open \(target.displayTitle)")
-        } else if field.kind == .url, case .text(let raw) = value, let url = URL(string: raw.contains("://") ? raw : "https://\(raw)") {
-            Link(context.schema.display(value, for: field), destination: url)
-                .font(font)
-                .foregroundStyle(context.accent)
-                .help(raw)
-        } else if field.kind == .file, case .text(let assetID) = value {
-            SpaceFileButton(assetID: assetID, accent: context.accent)
-        } else {
-            Text(context.schema.display(value, for: field, titles: context.titles))
-                .font(font)
-                .textSelection(.enabled)
-        }
-    }
-
-    /// A value the viewer can change where it stands: a switch, a pop-up of options, or stars.
-    /// Everything else is shown as text and changed in the form.
-    @ViewBuilder
-    private func liveValue(_ value: SpaceValue?, _ field: SpaceField) -> some View {
-        if let record = context.record, field.kind == .boolean {
-            Toggle("", isOn: Binding(
-                get: { value == .boolean(true) },
-                set: { try? SpaceStore.update(record, values: [field.id: .boolean($0)], in: context.context) }
-            ))
-            .labelsHidden()
-            .toggleStyle(.switch)
-            .controlSize(.mini)
-        } else if let record = context.record, field.kind == .choice {
-            Menu {
-                ForEach(field.options) { option in
-                    Button(option.name) {
-                        try? SpaceStore.update(record, values: [field.id: .text(option.id)], in: context.context)
-                    }
-                }
-            } label: {
-                Text(value.map { context.schema.display($0, for: field) } ?? "Choose")
-                    .font(CraftFont.body)
-                    .foregroundStyle(value == nil ? .tertiary : .primary)
-            }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .fixedSize()
-            .help("Change \(field.name.lowercased())")
-        } else if let record = context.record, field.kind == .rating {
-            let stars: Double = { if case .number(let number) = value { number } else { 0 } }()
-            SpaceStars(stars: stars, accent: context.accent) { picked in
-                try? SpaceStore.update(record, values: [field.id: .number(picked)], in: context.context)
-            }
-        } else if let value {
-            valueText(value, field)
-        }
-    }
-
     // MARK: Tables, boards, charts
-
-    @ViewBuilder
-    private var table: some View {
-        if let (field, rows) = groupRows(component.text("rows")) {
-            let columns = field.fields.filter { !$0.isRemoved }
-            Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 0) {
-                GridRow {
-                    ForEach(columns) { column in
-                        Text(column.name)
-                            .font(CraftFont.caption)
-                            .foregroundStyle(.tertiary)
-                            .gridColumnAlignment(Self.isNumeric(column) ? .trailing : .leading)
-                    }
-                }
-                .padding(.bottom, 6)
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    Hairline()
-                        .gridCellColumns(max(columns.count, 1))
-                    GridRow {
-                        ForEach(columns) { column in
-                            if let value = row[column.id] {
-                                valueText(value, column, font: Self.isNumeric(column) ? .system(size: 13, weight: .semibold) : CraftFont.body)
-                                    .monospacedDigit()
-                            } else {
-                                Text("")
-                            }
-                        }
-                    }
-                    .frame(minHeight: 34)
-                }
-            }
-            .frame(maxWidth: 560, alignment: .leading)
-        }
-    }
-
-    private static func isNumeric(_ field: SpaceField) -> Bool {
-        field.kind == .number || field.kind == .quantity || field.kind == .calc
-    }
-
-    @ViewBuilder
-    private var usedIn: some View {
-        if let record = context.record, let typeKey = component.text("type") {
-            let found = context.lookup?.linking(to: SpaceJSON.key(record.id), typeKey: typeKey) ?? []
-            if found.isEmpty {
-                EmptyLine(text: "Not used anywhere yet.")
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(found) { other in
-                        Button {
-                            context.open(other)
-                        } label: {
-                            HStack {
-                                Text(other.displayTitle)
-                                    .font(CraftFont.body)
-                                Spacer(minLength: 8)
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .frame(minHeight: 34)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        Hairline()
-                    }
-                }
-                .frame(maxWidth: 420, alignment: .leading)
-            }
-        }
-    }
 
     @ViewBuilder
     private var board: some View {
@@ -729,76 +326,6 @@ struct SpaceComponentView: View {
     }
 
     @ViewBuilder
-    private var sheet: some View {
-        let columns = component.list("columns").compactMap { context.schema.field($0) }
-        let sort = context.state.sort ?? component.text("sort")
-        let records = context.sorted(context.visibleRecords, by: sort)
-        if records.isEmpty {
-            EmptyLine(text: context.records.isEmpty ? "Nothing here yet. Use New to add the first one." : "Nothing matches.")
-        } else {
-            Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 0) {
-                GridRow {
-                    sheetHeading("Name", id: "title", sort: sort)
-                    ForEach(columns) { column in
-                        sheetHeading(column.name, id: column.id, sort: sort)
-                            .gridColumnAlignment(Self.isNumeric(column) ? .trailing : .leading)
-                    }
-                }
-                .padding(.bottom, 6)
-                ForEach(records) { record in
-                    Hairline()
-                        .gridCellColumns(columns.count + 1)
-                    GridRow {
-                        Button {
-                            context.open(record)
-                        } label: {
-                            Text(record.displayTitle)
-                                .font(.system(size: 13, weight: .medium))
-                                .lineLimit(1)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu { SpaceRecordMenu(record: record, context: context) }
-                        let values = context.values(record)
-                        ForEach(columns) { column in
-                            if let value = values[column.id] {
-                                valueText(value, column)
-                                    .monospacedDigit()
-                                    .lineLimit(1)
-                            } else {
-                                Text("")
-                            }
-                        }
-                    }
-                    .frame(minHeight: 36)
-                }
-            }
-        }
-    }
-
-    private func sheetHeading(_ title: String, id: String, sort: String?) -> some View {
-        let isUp = sort == id
-        let isDown = sort == "-\(id)"
-        return Button {
-            context.state.sort = isUp ? "-\(id)" : id
-        } label: {
-            HStack(spacing: 3) {
-                Text(title)
-                    .font(CraftFont.caption)
-                    .foregroundStyle(isUp || isDown ? .secondary : .tertiary)
-                if isUp || isDown {
-                    Image(systemName: isUp ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("Sort by \(title.lowercased())")
-    }
-
-    @ViewBuilder
     private var chart: some View {
         let points = chartPoints
         if points.isEmpty {
@@ -826,161 +353,6 @@ struct SpaceComponentView: View {
     /// One point per day. A line keeps the day's last reading; bars add the day up.
     private var chartPoints: [(day: Date, value: Double)] {
         context.chartPoints(component)
-    }
-
-    @ViewBuilder
-    private var fields: some View {
-        let values = context.values(context.record)
-        let shown: [(SpaceField, SpaceValue?)] = component.list("fields").compactMap { id in
-            guard let field = context.schema.field(id) else { return nil }
-            return values[id] != nil || Self.liveKinds.contains(field.kind) ? (field, values[id]) : nil
-        }
-        if !shown.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(Array(shown.enumerated()), id: \.offset) { _, pair in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(pair.0.name)
-                            .font(CraftFont.caption)
-                            .foregroundStyle(.tertiary)
-                        liveValue(pair.1, pair.0)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-        }
-    }
-
-    private func stored(_ id: String?) -> Double? {
-        guard let id, case .number(let number) = context.record?.values[id] else { return nil }
-        return number
-    }
-
-    @ViewBuilder
-    private var stepper: some View {
-        if let id = component.text("field"), let base = stored(id) {
-            let current = context.state.steppers[id] ?? base
-            HStack(spacing: 8) {
-                Text(component.text("label") ?? context.schema.field(id)?.name ?? "")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.tertiary)
-                HStack(spacing: 0) {
-                    stepButton("minus") { context.state.steppers[id] = max(1, current - 1) }
-                    Text(current.formatted(.number.precision(.fractionLength(0...1))))
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(minWidth: 22)
-                    stepButton("plus") { context.state.steppers[id] = current + 1 }
-                }
-                .frame(height: 26)
-                .background(CraftColor.elevated, in: Capsule())
-                .overlay(Capsule().strokeBorder(CraftColor.hairline))
-                if current != base {
-                    Button("Reset") { context.state.steppers[id] = nil }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    private func stepButton(_ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 10, weight: .semibold))
-                .frame(width: 28, height: 26)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func groupRows(_ id: String?) -> (SpaceField, [[String: SpaceValue]])? {
-        guard let id, let field = context.schema.field(id), case .rows(let rows) = context.values(context.record)[id] else { return nil }
-        return (field, rows)
-    }
-
-    /// How much the viewer's stepper has scaled the stored number.
-    private var scale: Double {
-        guard let id = component.text("scaleBy"), let base = stored(id), base > 0 else { return 1 }
-        return (context.state.steppers[id] ?? base) / base
-    }
-
-    @ViewBuilder
-    private var checklist: some View {
-        if let (field, rows) = groupRows(component.text("rows")) {
-            let columns = field.fields.filter { !$0.isRemoved }
-            VStack(spacing: 0) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                    let key = "\(field.id)#\(index)"
-                    let saves = component.text("saves")
-                    let done = saves.map { row[$0] == .boolean(true) } ?? context.state.ticked.contains(key)
-                    Button {
-                        if let saves, let record = context.record, case .rows(var stored) = record.values[field.id], index < stored.count {
-                            // A to-do list keeps its ticks on the record.
-                            stored[index][saves] = .boolean(!done)
-                            try? SpaceStore.update(record, values: [field.id: .rows(stored)], in: context.context)
-                        } else if done {
-                            context.state.ticked.remove(key)
-                        } else {
-                            context.state.ticked.insert(key)
-                        }
-                    } label: {
-                        HStack(spacing: 10) {
-                            SpaceCheckBox(isOn: done, accent: context.accent)
-                            ForEach(columns.filter { $0.id != saves }) { column in
-                                if let value = row[column.id] {
-                                    if column.kind == .quantity || column.kind == .number {
-                                        Text(context.schema.display(scaled(value), for: column, titles: context.titles))
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .frame(width: 72, alignment: .leading)
-                                    } else {
-                                        Text(context.schema.display(value, for: column, titles: context.titles))
-                                            .font(CraftFont.body)
-                                            .lineLimit(2)
-                                    }
-                                }
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        .foregroundStyle(done ? .tertiary : .primary)
-                        .frame(minHeight: 34)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    Hairline()
-                }
-            }
-        }
-    }
-
-    private func scaled(_ value: SpaceValue) -> SpaceValue {
-        guard case .quantity(var quantity) = value, quantity.scales else { return value }
-        quantity.amount *= scale
-        return .quantity(quantity)
-    }
-
-    @ViewBuilder
-    private var steps: some View {
-        if let (field, rows) = groupRows(component.text("rows")) {
-            let columns = field.fields.filter { !$0.isRemoved }
-            VStack(alignment: .leading, spacing: 14) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                    HStack(alignment: .top, spacing: 12) {
-                        Text("\(index + 1)")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 22, height: 22)
-                            .background(CraftColor.elevated, in: Circle())
-                            .overlay(Circle().strokeBorder(CraftColor.hairline))
-                        Text(columns.compactMap { column in row[column.id].map { context.schema.display($0, for: column, titles: context.titles) } }.joined(separator: " · "))
-                            .font(CraftFont.body)
-                            .lineSpacing(2)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.top, 2)
-                    }
-                }
-            }
-        }
     }
 
     @ViewBuilder
@@ -1035,59 +407,6 @@ struct SpaceComponentView: View {
         }
     }
 
-    private var metric: some View {
-        let raw: String? = { if case .text(let raw) = component.props["value"] { raw } else { nil } }()
-        return VStack(alignment: .leading, spacing: 2) {
-            Text(context.metric(raw, about: context.record))
-                .font(.system(size: 24, weight: .semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(component.text("label") ?? "")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(CraftColor.hairline))
-    }
-
-    private func formula(_ name: String) -> Double? {
-        context.amount(component, name)
-    }
-
-    private var progress: some View {
-        let value = formula("value") ?? 0
-        let target = formula("target")
-        let unit = component.text("unit").map { " \($0)" } ?? ""
-        let fraction = target.map { $0 > 0 ? min(max(value / $0, 0), 1) : 0 } ?? 0
-        func text(_ number: Double) -> String { number.formatted(.number.precision(.fractionLength(0...1))) }
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(component.text("label") ?? "")
-                    .font(CraftFont.body)
-                Spacer(minLength: 8)
-                Text(target.map { "\(text(value)) of \(text($0))\(unit)" } ?? "\(text(value))\(unit), no target set")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(CraftColor.hairline)
-                    Capsule()
-                        .fill(context.accent)
-                        .frame(width: proxy.size.width * fraction)
-                }
-            }
-            .frame(height: 6)
-        }
-        .frame(maxWidth: 420, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-
     @ViewBuilder
     private var action: some View {
         if let record = context.record {
@@ -1095,189 +414,6 @@ struct SpaceComponentView: View {
                 context.log(component.text("event"), about: record)
             }
         }
-    }
-}
-
-private struct SpaceSearchBar: View {
-    var component: SpaceComponent
-    var context: SpaceScreenContext
-
-    var body: some View {
-        @Bindable var state = context.state
-        HStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.tertiary)
-                TextField("Search \(context.type.name.lowercased())", text: $state.search)
-                    .textFieldStyle(.plain)
-                    .font(CraftFont.body)
-            }
-            .padding(.horizontal, 10)
-            .frame(width: 240, height: 32)
-            .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(CraftColor.hairline))
-
-            ForEach(component.list("filters").compactMap { context.schema.field($0) }) { field in
-                chip("All", isSelected: state.filters[field.id] == nil) { state.filters[field.id] = nil }
-                ForEach(field.options) { option in
-                    chip(option.name, isSelected: state.filters[field.id] == option.id) {
-                        state.filters[field.id] = state.filters[field.id] == option.id ? nil : option.id
-                    }
-                }
-            }
-            Spacer(minLength: 8)
-            Text("\(context.visibleRecords.count) of \(context.records.count)")
-                .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
-        }
-    }
-
-    private func chip(_ title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            ChoiceCapsule(title: title, isSelected: isSelected)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct SpaceCompletionCalendar: View {
-    var dates: [Date]
-    var accent: Color
-    var state: SpaceScreenState
-
-    private var calendar: Calendar { .current }
-
-    var body: some View {
-        let marked = SpaceCalc.days(dates)
-        let today = calendar.startOfDay(for: .now)
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(state.month.formatted(.dateTime.month(.wide).year()))
-                    .font(CraftFont.section)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                arrow("chevron.left", by: -1)
-                arrow("chevron.right", by: 1)
-            }
-            HStack(spacing: 0) {
-                ForEach(Array(calendar.veryShortWeekdaySymbols.enumerated()), id: \.offset) { _, symbol in
-                    Text(symbol)
-                        .font(CraftFont.caption)
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .padding(.top, 4)
-            ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
-                HStack(spacing: 0) {
-                    ForEach(Array(week.enumerated()), id: \.offset) { _, day in
-                        Group {
-                            if let day {
-                                let isOn = marked.contains(day)
-                                Text("\(calendar.component(.day, from: day))")
-                                    .font(.system(size: 12, weight: isOn ? .medium : .regular))
-                                    .foregroundStyle(isOn ? Color.white : day > today ? Color.secondary.opacity(0.6) : Color.primary)
-                                    .frame(width: 30, height: 30)
-                                    .background(isOn ? accent : Color.clear, in: Circle())
-                                    .overlay(Circle().strokeBorder(accent, lineWidth: day == today ? 1.5 : 0).padding(-3))
-                            } else {
-                                Color.clear.frame(width: 30, height: 30)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 40)
-                    }
-                }
-            }
-        }
-    }
-
-    private func arrow(_ symbol: String, by months: Int) -> some View {
-        Button {
-            if let next = calendar.date(byAdding: .month, value: months, to: state.month) {
-                state.month = next
-            }
-        } label: {
-            Image(systemName: symbol)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.tertiary)
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var weeks: [[Date?]] {
-        guard let range = calendar.range(of: .day, in: .month, for: state.month) else { return [] }
-        let lead = (calendar.component(.weekday, from: state.month) - calendar.firstWeekday + 7) % 7
-        var cells: [Date?] = Array(repeating: nil, count: lead)
-        for offset in 0..<range.count {
-            cells.append(calendar.date(byAdding: .day, value: offset, to: state.month))
-        }
-        while cells.count % 7 != 0 { cells.append(nil) }
-        return stride(from: 0, to: cells.count, by: 7).map { Array(cells[$0..<$0 + 7]) }
-    }
-}
-
-private struct SpaceWeekDots: View {
-    var dates: [Date]
-    var accent: Color
-
-    var body: some View {
-        let calendar = Calendar.current
-        let marked = SpaceCalc.days(dates)
-        let today = calendar.startOfDay(for: .now)
-        HStack(spacing: 5) {
-            ForEach(0..<7, id: \.self) { index in
-                let day = calendar.date(byAdding: .day, value: index - 6, to: today) ?? today
-                Circle()
-                    .fill(marked.contains(day) ? accent : CraftColor.hairline)
-                    .frame(width: 8, height: 8)
-            }
-        }
-        .accessibilityHidden(true)
-    }
-}
-
-private struct SpaceCheckCircle: View {
-    var isOn: Bool
-    var accent: Color
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(isOn ? accent : Color.clear)
-            Circle()
-                .strokeBorder(isOn ? Color.clear : Color.secondary.opacity(0.35), lineWidth: 1.5)
-            if isOn {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-        }
-        .frame(width: 26, height: 26)
-        .contentShape(Circle())
-    }
-}
-
-private struct SpaceCheckBox: View {
-    var isOn: Bool
-    var accent: Color
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(isOn ? accent : Color.clear)
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .strokeBorder(isOn ? Color.clear : Color.secondary.opacity(0.35), lineWidth: 1.5)
-            if isOn {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-        }
-        .frame(width: 16, height: 16)
     }
 }
 
@@ -1303,11 +439,8 @@ private struct SpaceActionButton: View {
     }
 }
 
-/// Records placed on days by one of their date fields: a day, a week, or a month at a time.
+/// Records placed on days by one of their date fields, a month at a time.
 private struct SpacePlanner: View {
-    enum Span { case day, week, month }
-
-    var span: Span
     var component: SpaceComponent
     var context: SpaceScreenContext
 
@@ -1359,47 +492,17 @@ private struct SpacePlanner: View {
                 arrow("chevron.left", by: -1)
                 arrow("chevron.right", by: 1)
             }
-            switch span {
-            case .day:
-                dayList(context.state.day, grouped[context.state.day] ?? [])
-            case .week:
-                HStack(alignment: .top, spacing: 8) {
-                    ForEach(weekDays, id: \.self) { day in
-                        weekColumn(day, grouped[day] ?? [])
-                    }
-                }
-            case .month:
-                monthGrid(grouped)
-                dayList(context.state.day, grouped[context.state.day] ?? [])
-            }
+            monthGrid(grouped)
+            dayList(context.state.day, grouped[context.state.day] ?? [])
         }
     }
 
     private var heading: String {
-        switch span {
-        case .day:
-            let day = context.state.day
-            let name = day.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
-            return day == today ? "Today, \(name)" : name
-        case .week:
-            guard let first = weekDays.first, let last = weekDays.last else { return "" }
-            return "\(first.formatted(.dateTime.month(.abbreviated).day())) to \(last.formatted(.dateTime.month(.abbreviated).day()))"
-        case .month:
-            return context.state.month.formatted(.dateTime.month(.wide).year())
-        }
+        context.state.month.formatted(.dateTime.month(.wide).year())
     }
 
     private var isOnToday: Bool {
-        switch span {
-        case .day: context.state.day == today
-        case .week: weekDays.contains(today)
-        case .month: calendar.isDate(context.state.month, equalTo: today, toGranularity: .month) && context.state.day == today
-        }
-    }
-
-    private var weekDays: [Date] {
-        guard let week = calendar.dateInterval(of: .weekOfYear, for: context.state.day) else { return [] }
-        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: week.start) }
+        calendar.isDate(context.state.month, equalTo: today, toGranularity: .month) && context.state.day == today
     }
 
     private func move(to day: Date) {
@@ -1409,14 +512,7 @@ private struct SpacePlanner: View {
 
     private func arrow(_ symbol: String, by step: Int) -> some View {
         Button {
-            switch span {
-            case .day:
-                if let next = calendar.date(byAdding: .day, value: step, to: context.state.day) { move(to: next) }
-            case .week:
-                if let next = calendar.date(byAdding: .day, value: step * 7, to: context.state.day) { move(to: next) }
-            case .month:
-                if let next = calendar.date(byAdding: .month, value: step, to: context.state.month) { context.state.month = next }
-            }
+            if let next = calendar.date(byAdding: .month, value: step, to: context.state.month) { context.state.month = next }
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: 10, weight: .semibold))
@@ -1484,12 +580,10 @@ private struct SpacePlanner: View {
 
     private func dayList(_ day: Date, _ records: [SpaceRecord]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            if span == .month {
-                Text(day.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                    .font(CraftFont.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.bottom, 4)
-            }
+            Text(day.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+                .font(CraftFont.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.bottom, 4)
             if records.isEmpty {
                 EmptyLine(text: "Nothing on this day.")
             } else {
@@ -1502,30 +596,6 @@ private struct SpacePlanner: View {
                 .frame(maxWidth: 320, alignment: .leading)
                 .padding(.top, 10)
         }
-    }
-
-    private func weekColumn(_ day: Date, _ records: [SpaceRecord]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
-                Text(day.formatted(.dateTime.weekday(.abbreviated)))
-                    .font(CraftFont.caption)
-                    .foregroundStyle(.tertiary)
-                Text("\(calendar.component(.day, from: day))")
-                    .font(.system(size: 12, weight: day == today ? .semibold : .regular))
-                    .foregroundStyle(day == today ? context.accent : .primary)
-            }
-            ForEach(records) { record in
-                recordButton(record, compact: true)
-            }
-            Spacer(minLength: 0)
-            totalLine(records, compact: true)
-        }
-        .padding(8)
-        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(day == today ? context.accent.opacity(0.5) : CraftColor.hairline)
-        )
     }
 
     private func monthGrid(_ grouped: [Date: [SpaceRecord]]) -> some View {
@@ -1616,37 +686,6 @@ struct SpaceRecordMenu: View {
     }
 }
 
-/// Type a name, press Return, and the record exists. Fields start from their defaults.
-private struct SpaceQuickAdd: View {
-    var placeholder: String?
-    var context: SpaceScreenContext
-    @State private var title = ""
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "plus")
-                .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
-            TextField(placeholder ?? "Add to \(context.type.name.lowercased())", text: $title)
-                .textFieldStyle(.plain)
-                .onSubmit(add)
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 34)
-        .frame(maxWidth: 420, alignment: .leading)
-        .background(CraftColor.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(CraftColor.hairline))
-    }
-
-    private func add() {
-        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        if (try? SpaceStore.createRecord(of: context.type, title: name, values: context.schema.defaults(), in: context.context)) != nil {
-            title = ""
-        }
-    }
-}
-
 struct SpaceStars: View {
     var stars: Double
     var accent: Color
@@ -1696,29 +735,6 @@ struct SpaceFileButton: View {
 }
 
 enum SpaceScreens {
-    /// The stored screen for a type, or nil when there is none or it no longer fits the type.
-    /// Nil means the plain view is shown instead.
-    static func definition(
-        for type: SpaceType,
-        kind: SpaceScreenKind,
-        screens: [SpaceScreen],
-        types: [SpaceType]
-    ) -> SpaceScreenDefinition? {
-        let key = SpaceJSON.key(type.id)
-        guard let screen = screens.first(where: { $0.typeIDString == key && $0.kind == kind }) else { return nil }
-        let definition = screen.definition
-        let eventTypes = types.filter { $0.spaceIDString == type.spaceIDString && $0.role == .event }
-        let problems = SpaceScreenCatalog.problems(
-            in: definition,
-            kind: kind,
-            schema: type.schema,
-            eventKeys: Set(eventTypes.map(\.key)),
-            events: Dictionary(eventTypes.map { ($0.key, $0.schema) }) { first, _ in first }
-        )
-        guard !definition.components.isEmpty, problems.isEmpty else { return nil }
-        return definition
-    }
-
     static func eventTypes(beside type: SpaceType, in types: [SpaceType]) -> [SpaceType] {
         types.filter { $0.spaceIDString == type.spaceIDString && $0.role == .event }
     }

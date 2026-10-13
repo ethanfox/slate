@@ -178,11 +178,9 @@ enum SpaceStore {
         return type
     }
 
-    /// Types first, then screens, because a screen can name any event type in the Space.
     static func apply(_ template: SpaceTemplate, to space: Space, in context: ModelContext) throws {
-        var made: [(SpaceTemplate.TypeDraft, SpaceType)] = []
         for draft in template.types {
-            let type = try defineType(
+            try defineType(
                 in: space,
                 key: draft.key,
                 name: draft.name,
@@ -190,25 +188,7 @@ enum SpaceStore {
                 schema: SpaceSchema(fields: draft.fields),
                 context: context
             )
-            made.append((draft, type))
         }
-        for (draft, type) in made {
-            if !draft.collection.isEmpty {
-                try setScreen(SpaceScreenDefinition(draft.collection), for: type, kind: .collection, in: context)
-            }
-            if !draft.detail.isEmpty {
-                try setScreen(SpaceScreenDefinition(draft.detail), for: type, kind: .detail, in: context)
-            }
-        }
-    }
-
-    // MARK: Screens
-
-    static func screen(for type: SpaceType, kind: SpaceScreenKind, in context: ModelContext) -> SpaceScreen? {
-        let key = SpaceJSON.key(type.id)
-        let raw = kind.rawValue
-        let descriptor = FetchDescriptor<SpaceScreen>(predicate: #Predicate { $0.typeIDString == key && $0.kindRaw == raw })
-        return try? context.fetch(descriptor).first
     }
 
     static func eventSchemas(in spaceIDString: String, context: ModelContext) -> [String: SpaceSchema] {
@@ -221,36 +201,6 @@ enum SpaceStore {
         let role = SpaceTypeRole.event.rawValue
         let descriptor = FetchDescriptor<SpaceType>(predicate: #Predicate { $0.spaceIDString == spaceIDString && $0.roleRaw == role })
         return Set(((try? context.fetch(descriptor)) ?? []).map(\.key))
-    }
-
-    /// Stores a screen only if every component and binding checks out. `byAgent` also records it as
-    /// the version Reset returns to.
-    @discardableResult
-    static func setScreen(
-        _ definition: SpaceScreenDefinition,
-        for type: SpaceType,
-        kind: SpaceScreenKind,
-        byAgent: Bool = false,
-        in context: ModelContext
-    ) throws -> SpaceScreen {
-        let problems = SpaceScreenCatalog.problems(
-            in: definition,
-            kind: kind,
-            schema: type.schema,
-            eventKeys: eventKeys(in: type.spaceIDString, context: context),
-            events: eventSchemas(in: type.spaceIDString, context: context)
-        )
-        guard problems.isEmpty else { throw SpaceStoreError.invalidScreen(problems) }
-        let screen = screen(for: type, kind: kind, in: context) ?? {
-            let created = SpaceScreen(type: type, kind: kind, definition: definition)
-            context.insert(created)
-            return created
-        }()
-        screen.definition = definition
-        if byAgent { screen.agentJSON = screen.definitionJSON }
-        screen.updatedAt = .now
-        try context.save()
-        return screen
     }
 
     // MARK: Widgets
@@ -302,17 +252,6 @@ enum SpaceStore {
 
     static func delete(_ widget: AreaWidget, in context: ModelContext) throws {
         context.delete(widget)
-        try context.save()
-    }
-
-    /// Back to the last version an agent wrote. With none, the screen is removed and the plain view shows.
-    static func resetScreen(_ screen: SpaceScreen, in context: ModelContext) throws {
-        if screen.agentJSON.isEmpty {
-            context.delete(screen)
-        } else {
-            screen.definitionJSON = screen.agentJSON
-            screen.updatedAt = .now
-        }
         try context.save()
     }
 
@@ -665,7 +604,6 @@ final class SpaceLookup: SpaceFormulaSource {
     private let records: [String: SpaceRecord]
     private let schemas: [String: SpaceSchema]
     private let settingsTypeIDs: [String: String]
-    private let typeIDs: [String: String]
     private var decoded: [String: [String: SpaceValue]] = [:]
     private var filled: [String: [String: SpaceValue]] = [:]
     let titles: [String: String]
@@ -680,10 +618,8 @@ final class SpaceLookup: SpaceFormulaSource {
         }
         var schemas: [String: SpaceSchema] = [:]
         var settings: [String: String] = [:]
-        var typeIDs: [String: String] = [:]
         for type in types where type.spaceIDString == spaceKey {
             let key = SpaceJSON.key(type.id)
-            typeIDs[type.key] = key
             schemas[key] = type.schema
             if type.role == .settings { settings[type.key] = key }
         }
@@ -691,21 +627,12 @@ final class SpaceLookup: SpaceFormulaSource {
         self.titles = titles
         self.schemas = schemas
         self.settingsTypeIDs = settings
-        self.typeIDs = typeIDs
     }
 
     func record(_ recordID: String) -> SpaceRecord? {
         records[recordID]
     }
 
-    /// Records of one type that link to `recordID`, by name.
-    func linking(to recordID: String, typeKey: String) -> [SpaceRecord] {
-        guard let typeID = typeIDs[typeKey], let schema = schemas[typeID] else { return [] }
-        return records.values
-            .filter { $0.typeIDString == typeID && $0.valuesJSON.contains(recordID) }
-            .filter { record in schema.links(in: stored(SpaceJSON.key(record.id), record)).contains { $0.recordID == recordID } }
-            .sorted { $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending }
-    }
 
     private func stored(_ key: String, _ record: SpaceRecord) -> [String: SpaceValue] {
         if let values = decoded[key] { return values }

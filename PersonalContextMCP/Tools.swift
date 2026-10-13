@@ -207,7 +207,7 @@ enum Tools {
         "assign_tag": (.tagged, ""), "remove_tag": (.untagged, ""),
         "mark_for_deletion": (.flagged, ""), "delete_record": (.removed, ""),
         "create_space": (.added, "space"), "update_space": (.changed, "space"),
-        "set_space_type": (.changed, "space"), "set_space_screen": (.changed, "space"),
+        "set_space_type": (.changed, "space"),
         "set_area_widget": (.changed, "space"), "remove_area_widget": (.changed, "space"),
         "place_area_widget": (.changed, "space"),
         "create_space_record": (.added, "record"), "update_space_record": (.changed, "record"),
@@ -267,7 +267,7 @@ enum Tools {
             target = ""
         case "create_space", "update_space":
             space = target
-        case "set_space_type", "set_space_screen", "set_area_widget", "remove_area_widget", "place_area_widget":
+        case "set_space_type", "set_area_widget", "remove_area_widget", "place_area_widget":
             detail = (shape["name"] as? String) ?? args.string("type_key") ?? ""
             target = space
             title = UUID(uuidString: space).flatMap { SpaceStore.space($0, in: context) }?.displayName ?? ""
@@ -1269,14 +1269,14 @@ enum Tools {
         },
         Tool(
             name: "get_space_catalog",
-            description: "Read this before set_space_type or set_space_screen. Lists the field kinds, every screen component with the settings it accepts, the calculations, and a worked example.",
+            description: "Read this before set_space_type or set_area_widget. Lists the field kinds, the widget blocks with the settings they accept, and the calculations.",
             properties: [:], required: [], readOnly: true
         ) { _, _ in
             SpaceTools.catalog
         },
         Tool(
             name: "create_space",
-            description: "Create an empty Area. Follow with set_space_type and set_space_screen.",
+            description: "Create an empty Area. Follow with set_space_type.",
             properties: [
                 "name": text("Short name, such as Kitchen."),
                 "summary": text("One line on what it is for."),
@@ -1330,9 +1330,7 @@ enum Tools {
                 "key": text("Stable lowercase key, such as recipe or check-in."),
                 "name": text("Name shown to the user, such as Recipes."),
                 "role": options(SpaceTypeRole.self, "object, event, or settings. Defaults to object."),
-                "fields": objectList("Fields: {id, name, kind, options?, fields?, ordered?, target?, formula?, currency?, default?}. See get_space_catalog for kinds."),
-                "collection": objectList("Leave out. The app draws every Area itself and does not show this."),
-                "detail": objectList("Leave out. The app draws every Area itself and does not show this.")
+                "fields": objectList("Fields: {id, name, kind, options?, fields?, ordered?, target?, formula?, currency?, default?}. See get_space_catalog for kinds.")
             ],
             required: ["space_id", "key", "name", "fields"], readOnly: false
         ) { args, context in
@@ -1355,34 +1353,7 @@ enum Tools {
                     context: context
                 )
             }
-            // The type is saved by now. A screen that does not fit reports its problems without undoing it,
-            // so the same call can be sent again with the screens fixed.
-            for kind in SpaceScreenKind.allCases where args.raw[kind.rawValue] != nil {
-                let components = try SpaceTools.components(try SpaceTools.objects(args, kind.rawValue))
-                do {
-                    try SpaceStore.setScreen(SpaceScreenDefinition(components), for: type, kind: kind, byAgent: true, in: context)
-                } catch SpaceStoreError.invalidScreen(let problems) {
-                    throw ToolError("The type \(key) was saved, but its \(kind.rawValue) screen was not: " + problems.joined(separator: " "))
-                }
-            }
             return SpaceTools.type(type, in: context)
-        },
-        Tool(
-            name: "set_space_screen",
-            description: "Do not call this. The app draws every Area itself and no longer shows screens set here.",
-            properties: [
-                "space_id": spaceID,
-                "type_key": typeKey,
-                "kind": options(SpaceScreenKind.self, "collection or detail."),
-                "components": objectList("Components in order: {component, ...settings, children?}.")
-            ],
-            required: ["space_id", "type_key", "kind", "components"], readOnly: false
-        ) { args, context in
-            let type = try SpaceTools.type(args, in: context)
-            guard let kind = try args.choice("kind", as: SpaceScreenKind.self) else { throw ToolError("kind is required.") }
-            let components = try SpaceTools.components(try SpaceTools.objects(args, "components"))
-            let screen = try SpaceStore.setScreen(SpaceScreenDefinition(components), for: type, kind: kind, byAgent: true, in: context)
-            return ["type_key": type.key, "kind": kind.rawValue, "components": SpaceTools.json(screen.definition.components)]
         },
         Tool(
             name: "set_area_widget",
@@ -2716,20 +2687,13 @@ enum SpaceTools {
     }
 
     static func type(_ type: SpaceType, in context: ModelContext) -> [String: Any] {
-        var shape: [String: Any] = [
+        let shape: [String: Any] = [
             "key": type.key,
             "name": type.name,
             "role": type.role.rawValue,
             "fields": type.schema.liveFields.map(field),
             "record_count": type.role == .object ? SpaceStore.records(of: type, in: context).count : 0
         ]
-        var screens: [String: Any] = [:]
-        for kind in SpaceScreenKind.allCases {
-            if let screen = SpaceStore.screen(for: type, kind: kind, in: context) {
-                screens[kind.rawValue] = json(screen.definition.components)
-            }
-        }
-        if type.role != .event { shape["screens"] = screens }
         return shape
     }
 
@@ -2805,11 +2769,10 @@ enum SpaceTools {
                 ["kind": "schedule", "value": "daily, weekly:3 (three times a week), or days:mon,wed,fri", "needs": "nothing. Give a habit or routine one schedule field; streaks, pace and done-today then follow it instead of assuming every day."],
                 ["kind": "link", "value": "the id of one record of the target type", "needs": "target: the key of an object type in the same Area, created first. Use a link whenever one thing refers to another, such as a meal made from recipes, so it can be opened from there. For several, put the link in a group with any per-row fields, such as servings. A number the row needs from the linked record, such as its calories, is a number field of the row that you fill in from the linked record when you add the row; it is a snapshot and does not change when the linked record does."]
             ],
-            "components": SpaceScreenCatalog.components.map { spec -> [String: Any] in
+            "blocks": SpaceScreenCatalog.components.map { spec -> [String: Any] in
                 [
                     "component": spec.name,
                     "does": spec.summary,
-                    "screens": spec.screens.map(\.rawValue).sorted(),
                     "takes_children": spec.takesChildren,
                     "settings": spec.props.map { prop -> [String: Any] in
                         ["name": prop.name, "accepts": accepts(prop.kind), "required": prop.required, "note": prop.note]
@@ -2817,11 +2780,10 @@ enum SpaceTools {
                 ]
             },
             "widgets": [
-                "what": "A widget is a small card about one object type, made with set_area_widget. It is rows of blocks. Use the components whose screens include widget; the other components are not shown anywhere.",
+                "what": "A widget is a small card about one object type, made with set_area_widget. It is rows of blocks, listed under blocks.",
                 "sizes": AreaWidgetSize.allCases.map { size -> [String: Any] in
                     ["size": size.rawValue, "rows": size.maxRows, "blocks_per_row": size.maxAcross]
                 },
-                "blocks": AreaWidgetCatalog.blocks.map(\.name),
                 "example": [
                     "name": "Weight",
                     "size": "2x1",
@@ -2838,7 +2800,7 @@ enum SpaceTools {
             "roles": [
                 "object": "a lasting thing with many records, such as recipes",
                 "event": "something logged about records, such as cooked",
-                "settings": "exactly one record for the whole Area, such as daily targets. It gets a detail screen only. Other types read it in formulas as key.field."
+                "settings": "exactly one record for the whole Area, such as daily targets. Other types read it in formulas as key.field."
             ],
             "calculations": [
                 "count:eventKey": "how many events",
@@ -2854,14 +2816,12 @@ enum SpaceTools {
                 "last:eventKey.field": "the most recent reading of a logged number, such as the latest weight. Use this, not latest, to show a current value",
                 "change:eventKey.field:period": "how far a logged number has moved since the period began, such as weight this month",
                 "count:eventKey:period": "how many events in a period",
-                "today:eventKey": "collection screens and widgets: records with an event today, out of all",
-                "records": "collection screens and widgets: how many records"
+                "today:eventKey": "records with an event today, out of all",
+                "records": "how many records"
             ],
             "example": [
                 "type": ["key": recipe.key, "name": recipe.name, "role": "object", "fields": recipe.fields.map(field)],
-                "event_type": ["key": "cooked", "name": "Cooked", "role": "event"],
-                "collection": json(recipe.collection),
-                "detail": json(recipe.detail)
+                "event_type": ["key": "cooked", "name": "Cooked", "role": "event"]
             ]
         ]
     }

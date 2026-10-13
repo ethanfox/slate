@@ -586,87 +586,6 @@ final class SpaceScreenTests: XCTestCase {
         XCTAssertEqual(again, definition)
     }
 
-    func testEveryTemplateScreenIsValidAndStored() throws {
-        for template in [SpaceTemplate.recipes, .habits] {
-            let space = try SpaceStore.create(named: template.name, in: context)
-            try SpaceStore.apply(template, to: space, in: context)
-            let type = try XCTUnwrap(SpaceStore.types(in: space, context: context).first { $0.role == .object })
-            for kind in SpaceScreenKind.allCases {
-                let screen = try XCTUnwrap(SpaceStore.screen(for: type, kind: kind, in: context), "\(template.name) \(kind)")
-                XCTAssertFalse(screen.definition.components.isEmpty)
-            }
-        }
-    }
-
-    func testAScreenThatDoesNotFitTheTypeIsRefusedWithReasons() throws {
-        let kitchen = try SpaceStore.create(named: "Kitchen", in: context)
-        try SpaceStore.apply(.recipes, to: kitchen, in: context)
-        let recipe = try XCTUnwrap(SpaceStore.types(in: kitchen, context: context).first)
-        let before = try XCTUnwrap(SpaceStore.screen(for: recipe, kind: .detail, in: context)).definitionJSON
-        let bad = SpaceScreenDefinition([
-            SpaceComponent("carousel"),
-            SpaceComponent("cards"),
-            SpaceComponent("checklist", ["rows": .text("servings")]),
-            SpaceComponent("steps", ["rows": .text("missing")]),
-            SpaceComponent("timeline", ["events": .text("baked")]),
-            SpaceComponent("metric", ["value": .text("today:cooked"), "label": .text("x")]),
-            SpaceComponent("metric", ["value": .text("average:cooked")]),
-            SpaceComponent("header", ["colour": .text("red")])
-        ])
-
-        XCTAssertThrowsError(try SpaceStore.setScreen(bad, for: recipe, kind: .detail, in: context)) { error in
-            guard case SpaceStoreError.invalidScreen(let problems) = error else { return XCTFail("\(error)") }
-            XCTAssertEqual(problems, [
-                "There is no component called carousel.",
-                "cards cannot be used on a detail screen.",
-                "checklist.rows cannot show Servings, which is a number field.",
-                "steps.rows names a field that does not exist: missing.",
-                "timeline.events must name an event type in this Area.",
-                "today only works on a collection screen.",
-                "metric.value is not a calculation.",
-                "metric needs label.",
-                "header has no setting called colour."
-            ])
-        }
-        XCTAssertEqual(SpaceStore.screen(for: recipe, kind: .detail, in: context)?.definitionJSON, before)
-    }
-
-    func testAStoredScreenFallsBackOnceItsFieldIsRemoved() throws {
-        let kitchen = try SpaceStore.create(named: "Kitchen", in: context)
-        try SpaceStore.apply(.recipes, to: kitchen, in: context)
-        let types = SpaceStore.types(in: kitchen, context: context)
-        let recipe = try XCTUnwrap(types.first)
-        let screens = try context.fetch(FetchDescriptor<SpaceScreen>())
-        XCTAssertNotNil(SpaceScreens.definition(for: recipe, kind: .detail, screens: screens, types: types))
-
-        try SpaceStore.reviseSchema(
-            of: recipe,
-            to: SpaceSchema(fields: recipe.schema.fields.filter { $0.id != "method" }),
-            in: context
-        )
-
-        XCTAssertNil(SpaceScreens.definition(for: recipe, kind: .detail, screens: screens, types: types))
-        XCTAssertNotNil(SpaceScreens.definition(for: recipe, kind: .collection, screens: screens, types: types))
-    }
-
-    func testResetReturnsToTheAgentVersionOrRemovesTheScreen() throws {
-        let kitchen = try SpaceStore.create(named: "Kitchen", in: context)
-        try SpaceStore.apply(.recipes, to: kitchen, in: context)
-        let recipe = try XCTUnwrap(SpaceStore.types(in: kitchen, context: context).first)
-        let byAgent = SpaceScreenDefinition([SpaceComponent("cards", ["subtitle": .list(["time"])])])
-        let byHand = SpaceScreenDefinition([SpaceComponent("cards", ["subtitle": .list(["course"])])])
-        try SpaceStore.setScreen(byAgent, for: recipe, kind: .collection, byAgent: true, in: context)
-        let screen = try SpaceStore.setScreen(byHand, for: recipe, kind: .collection, in: context)
-        XCTAssertEqual(screen.definition, byHand)
-
-        try SpaceStore.resetScreen(screen, in: context)
-        XCTAssertEqual(SpaceStore.screen(for: recipe, kind: .collection, in: context)?.definition, byAgent)
-
-        let detail = try XCTUnwrap(SpaceStore.screen(for: recipe, kind: .detail, in: context))
-        try SpaceStore.resetScreen(detail, in: context)
-        XCTAssertNil(SpaceStore.screen(for: recipe, kind: .detail, in: context))
-    }
-
     func testStreakBestAndWeekCountDaysNotEvents() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/Chicago")!
@@ -686,7 +605,7 @@ final class SpaceScreenTests: XCTestCase {
         XCTAssertEqual(SpaceCalc.dayLabel(nil, now: now, calendar: calendar), "Never")
     }
 
-    func testCheckInTogglesTodayAndFeedsTheCollectionMetrics() throws {
+    func testACheckInFeedsTheMetrics() throws {
         let space = try SpaceStore.create(named: "Habits", in: context)
         try SpaceStore.apply(.habits, to: space, in: context)
         let types = SpaceStore.types(in: space, context: context)
@@ -702,14 +621,15 @@ final class SpaceScreenTests: XCTestCase {
             )
         }
 
-        screen().toggleToday("check-in", about: stretch)
+        let checkIn = try XCTUnwrap(types.first { $0.key == "check-in" })
+        let logged = try SpaceStore.logEvent(of: checkIn, about: [stretch], in: context)
         XCTAssertTrue(screen().hasEventToday("check-in", about: stretch))
         XCTAssertFalse(screen().hasEventToday("check-in", about: read))
         XCTAssertEqual(screen().metric("today:check-in", about: nil), "1 of 2")
         XCTAssertEqual(screen().metric("streak:check-in", about: stretch), "1 day")
         XCTAssertEqual(screen().metric("records", about: nil), "2")
 
-        screen().toggleToday("check-in", about: stretch)
+        try SpaceStore.delete(logged, in: context)
         XCTAssertEqual(screen().metric("today:check-in", about: nil), "0 of 2")
         XCTAssertTrue(SpaceStore.events(in: space, context: context).isEmpty)
     }
@@ -920,8 +840,8 @@ final class SpaceToolsTests: XCTestCase {
 
     func testAnAgentCanBuildAReadingSpaceFromNothing() throws {
         let catalog = try object(call("get_space_catalog"))
-        let names = try XCTUnwrap(catalog["components"] as? [[String: Any]]).compactMap { $0["component"] as? String }
-        XCTAssertEqual(Set(names), Set(SpaceScreenCatalog.components.map(\.name)))
+        let names = try XCTUnwrap(catalog["blocks"] as? [[String: Any]]).compactMap { $0["component"] as? String }
+        XCTAssertEqual(Set(names), ["label", "metric", "chart", "progress", "list"])
 
         let space = try object(call("create_space", ["name": "Reading", "summary": "Books I read"]))
         let spaceID = try XCTUnwrap(space["id"] as? String)
@@ -940,38 +860,6 @@ final class SpaceToolsTests: XCTestCase {
             "fields": [["name": "Pages", "kind": "number"]]
         ]))
 
-        // A first attempt with mistakes comes back with every reason and saves nothing.
-        let rejected = call("set_space_screen", [
-            "space_id": spaceID, "type_key": "book", "kind": "detail",
-            "components": [
-                ["component": "header", "fields": ["author", "pages"], "action": "session"],
-                ["component": "carousel"],
-                ["component": "metric", "value": "streak:reading", "label": "streak"]
-            ]
-        ])
-        XCTAssertEqual(rejected["isError"] as? Bool, true)
-        let reasons = try text(rejected)
-        XCTAssertTrue(reasons.contains("header.fields names a field that does not exist: pages."), reasons)
-        XCTAssertTrue(reasons.contains("There is no component called carousel."), reasons)
-        XCTAssertTrue(reasons.contains("metric.value must name an event type"), reasons)
-
-        _ = try object(call("set_space_screen", [
-            "space_id": spaceID, "type_key": "book", "kind": "detail",
-            "components": [
-                ["component": "header", "fields": ["author", "status"], "action": "session", "actionLabel": "Log session"],
-                ["component": "columns", "children": [
-                    ["component": "metric", "value": "streak:session", "label": "reading streak"],
-                    ["component": "metric", "value": "count:session", "label": "sessions"]
-                ]],
-                ["component": "section", "title": "Quotes", "children": [["component": "steps", "rows": "quotes"]]],
-                ["component": "timeline", "events": "session"]
-            ]
-        ]))
-        _ = try object(call("set_space_screen", [
-            "space_id": spaceID, "type_key": "book", "kind": "collection",
-            "components": "[{\"component\":\"search\",\"filters\":[\"status\"]},{\"component\":\"rows\",\"subtitle\":[\"author\",\"status\"],\"trail\":\"count:session\"}]"
-        ]))
-
         let record = try object(call("create_space_record", [
             "space_id": spaceID, "type_key": "book", "title": "The Timeless Way of Building",
             "values": ["author": "Christopher Alexander", "Status": "Reading", "rating": 5, "quotes": ["A building is alive when it is whole."]]
@@ -983,21 +871,16 @@ final class SpaceToolsTests: XCTestCase {
 
         _ = try object(call("log_space_event", ["space_id": spaceID, "type_key": "session", "record_ids": [recordID], "values": ["pages": 24]]))
 
-        // What the app will draw: both screens are stored, valid, and marked as the agent's version.
         let stored = try XCTUnwrap(SpaceStore.all(in: context).first)
         let types = SpaceStore.types(in: stored, context: context)
         let book = try XCTUnwrap(types.first { $0.key == "book" })
         XCTAssertEqual(book.origin, .agent)
-        let screens = try context.fetch(FetchDescriptor<SpaceScreen>())
-        XCTAssertNotNil(SpaceScreens.definition(for: book, kind: .detail, screens: screens, types: types))
-        XCTAssertNotNil(SpaceScreens.definition(for: book, kind: .collection, screens: screens, types: types))
-        XCTAssertTrue(screens.allSatisfy { !$0.agentJSON.isEmpty })
         XCTAssertEqual(SpaceStore.events(in: stored, context: context).first?.values["pages"], .number(24))
 
         let read = try object(call("get_space", ["space_id": spaceID]))
         let readTypes = try XCTUnwrap(read["types"] as? [[String: Any]])
         XCTAssertEqual(readTypes.first?["record_count"] as? Int, 1)
-        XCTAssertNotNil((readTypes.first?["screens"] as? [String: Any])?["detail"])
+        XCTAssertNil(readTypes.first?["screens"])
     }
 
     func testChangingATypeThroughTheToolKeepsValuesAndRefusesAKindChange() throws {
@@ -1019,30 +902,6 @@ final class SpaceToolsTests: XCTestCase {
 
         let wrong = call("create_space_record", ["space_id": spaceID, "type_key": "book", "title": "X", "values": ["rating": 5]])
         XCTAssertTrue(try text(wrong).contains("There is no field rating"))
-    }
-
-    func testOneCallCanDefineATypeWithBothScreens() throws {
-        let space = try object(call("create_space", ["name": "Habits"]))
-        let spaceID = try XCTUnwrap(space["id"] as? String)
-        _ = try object(call("set_space_type", ["space_id": spaceID, "key": "check-in", "name": "Check-in", "role": "event", "fields": [[String: Any]]()]))
-        let habit: [String: Any] = [
-            "space_id": spaceID, "key": "habit", "name": "Habits",
-            "fields": [["name": "Target", "kind": "text"]],
-            "collection": [["component": "rows", "subtitle": ["target"], "action": "check-in", "trail": "streak:check-in"]],
-            "detail": [["component": "header", "fields": ["target"], "action": "check-in"], ["component": "calendar", "events": "check-in"]]
-        ]
-
-        var broken = habit
-        broken["detail"] = [["component": "calendar", "events": "nope"]]
-        let refused = call("set_space_type", broken)
-        XCTAssertEqual(refused["isError"] as? Bool, true)
-        let reason = try text(refused)
-        XCTAssertTrue(reason.hasPrefix("The type habit was saved, but its detail screen was not:"), reason)
-
-        let made = try object(call("set_space_type", habit))
-        let screens = try XCTUnwrap(made["screens"] as? [String: Any])
-        XCTAssertEqual(Set(screens.keys), ["collection", "detail"])
-        XCTAssertEqual(SpaceStore.types(in: try XCTUnwrap(SpaceStore.all(in: context).first), context: context).map(\.key), ["check-in", "habit"])
     }
 
     func testCreateSpaceTakesTheColorTheUserPicked() throws {
@@ -1126,8 +985,7 @@ final class SpaceToolsTests: XCTestCase {
                 ],
                 ["name": "Calories", "kind": "calc", "formula": "sum(items.calories)"],
                 ["id": "left", "name": "Left today", "kind": "calc", "formula": "goals.calories - calories"]
-            ],
-            "detail": [["component": "progress", "value": "calories", "target": "goals.calories", "label": "Calories"]]
+            ]
         ]))
 
         func recipe(_ title: String, _ calories: Int) throws -> String {
@@ -1202,16 +1060,12 @@ final class SpaceToolsTests: XCTestCase {
             "fields": [["name": "Weight", "kind": "number"]]
         ]))
         _ = try object(call("set_space_type", [
-            "space_id": spaceID, "key": "measure", "name": "Measures", "fields": [["name": "Unit", "kind": "text"]],
-            "detail": [
-                ["component": "metric", "value": "change:weigh-in.weight:month", "label": "this month"],
-                ["component": "progress", "value": "avg:weigh-in.weight:week", "target": 180, "label": "Average"]
-            ]
+            "space_id": spaceID, "key": "measure", "name": "Measures", "fields": [["name": "Unit", "kind": "text"]]
         ]))
         // A calculation has to name a number the event really has.
-        let wrong = call("set_space_screen", [
-            "space_id": spaceID, "type_key": "measure", "kind": "detail",
-            "components": [["component": "metric", "value": "sum:weigh-in.height:week", "label": "x"]]
+        let wrong = call("set_area_widget", [
+            "space_id": spaceID, "type_key": "measure", "name": "Wrong", "size": "1x1",
+            "rows": [[["component": "metric", "value": "sum:weigh-in.height:week", "label": "x"]]]
         ])
         XCTAssertEqual(wrong["isError"] as? Bool, true)
 
@@ -1286,11 +1140,7 @@ final class SpaceToolsTests: XCTestCase {
         ]))
         _ = try object(call("set_space_type", [
             "space_id": spaceID, "key": "habit", "name": "Habits",
-            "fields": [["name": "How often", "id": "often", "kind": "schedule"], ["name": "Day", "kind": "date"], ["name": "Minutes", "kind": "number"]],
-            "collection": [
-                ["component": "week", "date": "day", "total": "minutes", "target": 60, "unit": "min"],
-                ["component": "rows", "action": "check-in", "trail": "pace:check-in"]
-            ]
+            "fields": [["name": "How often", "id": "often", "kind": "schedule"], ["name": "Day", "kind": "date"], ["name": "Minutes", "kind": "number"]]
         ]))
         let habit = try object(call("create_space_record", [
             "space_id": spaceID, "type_key": "habit", "title": "Gym", "values": ["often": "weekly:3"]
@@ -1301,14 +1151,13 @@ final class SpaceToolsTests: XCTestCase {
         ])["isError"] as? Bool, true)
     }
 
-    func testRecordsSortGroupAndShowWhereTheyAreUsed() throws {
+    func testRecordsSort() throws {
         let spaceID = try XCTUnwrap(try object(call("create_space", ["name": "Jobs"]))["id"] as? String)
         _ = try object(call("set_space_type", [
             "space_id": spaceID, "key": "applied", "name": "Applied", "role": "event", "fields": [["name": "Hours", "kind": "number"]]
         ]))
         _ = try object(call("set_space_type", [
-            "space_id": spaceID, "key": "company", "name": "Companies", "fields": [["name": "City", "kind": "text"]],
-            "detail": [["component": "usedIn", "type": "role"]]
+            "space_id": spaceID, "key": "company", "name": "Companies", "fields": [["name": "City", "kind": "text"]]
         ]))
         _ = try object(call("set_space_type", [
             "space_id": spaceID, "key": "role", "name": "Roles",
@@ -1316,23 +1165,8 @@ final class SpaceToolsTests: XCTestCase {
                 ["name": "Stage", "kind": "choice", "options": ["Applied", "Interview", "Offer"]],
                 ["name": "Pay", "kind": "number"],
                 ["name": "Company", "kind": "link", "target": "company"]
-            ],
-            "collection": [
-                ["component": "board", "by": "stage", "subtitle": ["pay"], "sort": "-pay"],
-                ["component": "sheet", "columns": ["stage", "pay", "company"]],
-                ["component": "rows", "group": "stage", "sort": "title"],
-                ["component": "chart", "events": "applied", "field": "hours", "period": "week", "style": "bar"]
             ]
         ]))
-        for bad in [
-            ["component": "board", "by": "pay"],
-            ["component": "rows", "sort": "-salary"],
-            ["component": "chart", "events": "applied", "field": "minutes"],
-            ["component": "chart", "events": "applied", "period": "decade"]
-        ] {
-            let refused = call("set_space_screen", ["space_id": spaceID, "type_key": "role", "kind": "collection", "components": [bad]])
-            XCTAssertEqual(refused["isError"] as? Bool, true, "\(bad)")
-        }
 
         let acme = try XCTUnwrap(try object(call("create_space_record", [
             "space_id": spaceID, "type_key": "company", "title": "Acme"
@@ -1357,16 +1191,9 @@ final class SpaceToolsTests: XCTestCase {
         XCTAssertEqual(screen.sorted(screen.records, by: "-pay").map(\.title), ["Engineer", "Designer", "Writer"])
         XCTAssertEqual(screen.sorted(screen.records, by: "pay").map(\.title), ["Writer", "Designer", "Engineer"])
         XCTAssertEqual(screen.sorted(screen.records, by: "company").map(\.title).last, "Writer")
-        let groups = screen.arranged(sort: "title", group: "stage")
-        XCTAssertEqual(groups.map { $0.title ?? "" }, ["Applied", "Interview", "No stage"])
-        XCTAssertEqual(groups.map { $0.records.map(\.title) }, [["Engineer"], ["Designer"], ["Writer"]])
-
-        let acmeKey = SpaceJSON.key(try XCTUnwrap(UUID(uuidString: acme)))
-        XCTAssertEqual(lookup.linking(to: acmeKey, typeKey: "role").map(\.title), ["Designer", "Engineer"])
-        XCTAssertEqual(lookup.linking(to: acmeKey, typeKey: "company"), [])
     }
 
-    func testTheNewFieldKindsDefaultsArchiveAndSavedTicks() throws {
+    func testTheNewFieldKindsDefaultsAndArchive() throws {
         let spaceID = try XCTUnwrap(try object(call("create_space", ["name": "Trips"]))["id"] as? String)
         _ = try object(call("set_space_type", [
             "space_id": spaceID, "key": "trip", "name": "Trips",
@@ -1383,17 +1210,12 @@ final class SpaceToolsTests: XCTestCase {
                 ["id": "packing", "name": "Packing", "kind": "group", "fields": [
                     ["name": "Item", "kind": "text"], ["name": "Packed", "kind": "boolean"]
                 ]]
-            ],
-            "detail": [["component": "checklist", "rows": "packing", "saves": "packed"]]
+            ]
         ]))
-        // A tag list cannot be a column, and ticks can only be saved into a yes/no column.
+        // A tag list cannot be a column.
         XCTAssertEqual(call("set_space_type", [
             "space_id": spaceID, "key": "bad", "name": "Bad",
             "fields": [["id": "g", "name": "G", "kind": "group", "fields": [["name": "Tags", "kind": "tags", "options": ["A"]]]]]
-        ])["isError"] as? Bool, true)
-        XCTAssertEqual(call("set_space_screen", [
-            "space_id": spaceID, "type_key": "trip", "kind": "detail",
-            "components": [["component": "checklist", "rows": "packing", "saves": "item"]]
         ])["isError"] as? Bool, true)
 
         let trip = try object(call("create_space_record", [
