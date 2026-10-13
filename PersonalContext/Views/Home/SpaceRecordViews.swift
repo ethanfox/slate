@@ -19,98 +19,73 @@ struct SpaceRecordView: View {
     }
 }
 
-/// One record: its detail screen, or the plain detail every record falls back to.
+/// One record. Every object gets the same page: its picture, its properties as a list, then its
+/// lists and long text. Switches, choices and ratings change in place; Edit opens the full form.
 struct SpaceRecordContent: View {
     var spaceID: UUID
     var recordID: UUID
 
-    @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @Query private var records: [SpaceRecord]
     @Query private var types: [SpaceType]
     @Query private var spaces: [Space]
-    @Query private var events: [SpaceEvent]
-    @Query private var screens: [SpaceScreen]
-    @State private var screenState = SpaceScreenState()
 
     private var record: SpaceRecord? {
         records.first { $0.id == recordID }
     }
 
+    private var accent: Color {
+        spaces.first { $0.id == spaceID }?.gradient.accent ?? .accentColor
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             if let record, let type = types.first(where: { $0.id == record.typeID }) {
-                if let space = spaces.first(where: { $0.id == spaceID }),
-                   let definition = SpaceScreens.definition(for: type, kind: .detail, screens: screens, types: types) {
-                    SpaceScreenView(definition: definition, context: screenContext(record, type: type, space: space))
-                } else {
-                    VStack(alignment: .leading, spacing: 24) {
-                        Text(record.displayTitle)
-                            .font(.system(size: 28, weight: .semibold))
-                        content(record, schema: type.schema)
-                    }
-                    .frame(maxWidth: 640, alignment: .leading)
+                VStack(alignment: .leading, spacing: 24) {
+                    Text(record.displayTitle)
+                        .font(.system(size: 28, weight: .semibold))
+                        .opacity(record.isArchived ? 0.5 : 1)
+                    content(record, schema: type.schema)
                 }
+                .frame(maxWidth: 640, alignment: .leading)
             } else {
                 EmptyLine(text: "This record no longer exists.")
             }
         }
     }
 
-    private func screenContext(_ record: SpaceRecord, type: SpaceType, space: Space) -> SpaceScreenContext {
-        let spaceKey = type.spaceIDString
-        return SpaceScreenContext(
-            kind: .detail,
-            type: type,
-            schema: type.schema,
-            eventTypes: SpaceScreens.eventTypes(beside: type, in: types),
-            records: [],
-            events: events.filter { $0.spaceIDString == spaceKey },
-            record: record,
-            titles: SpaceSelection.titles(in: spaceKey, records: records),
-            lookup: SpaceLookup(spaceKey: spaceKey, records: records, types: types),
-            accent: space.gradient.accent,
-            state: screenState,
-            context: context,
-            open: { app.navigate(to: .spaceRecord(space: spaceID, record: $0.id)) },
-            present: { app.present($0) }
-        )
-    }
-
-    /// The plain detail, shown when a type has no screen or its screen no longer fits.
     @ViewBuilder
     private func content(_ record: SpaceRecord, schema: SpaceSchema) -> some View {
         let values = SpaceLookup(spaceKey: record.spaceIDString, records: records, types: types).resolved(record)
         let titles = SpaceSelection.titles(in: record.spaceIDString, records: records)
-        let filled = schema.liveFields.filter { values[$0.id] != nil }
-        if filled.isEmpty {
-            EmptyLine(text: "No details yet. Use Edit to add some.")
-        }
-        ForEach(filled.filter { $0.kind == .image }) { field in
-            if case .text(let assetID) = values[field.id] {
-                SpaceImageView(assetID: assetID, tint: .secondary)
-                    .frame(width: 220, height: 160)
+        let live = schema.liveFields
+        ForEach(live.filter { $0.kind == .image }) { field in
+            if case .text(let assetID) = values[field.id], !assetID.isEmpty {
+                SpaceImageView(assetID: assetID, tint: accent)
+                    .frame(width: 280, height: 200)
             }
         }
-        let single = filled.filter { $0.kind != .group && $0.kind != .richText && $0.kind != .image }
+        let single = live.filter { $0.kind != .group && $0.kind != .richText && $0.kind != .image && $0.kind != .file }
         if !single.isEmpty {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), alignment: .topLeading)], alignment: .leading, spacing: 14) {
+            VStack(spacing: 0) {
                 ForEach(single) { field in
-                    VStack(alignment: .leading, spacing: 1) {
+                    HStack(alignment: .center, spacing: 16) {
                         Text(field.name)
-                            .font(CraftFont.caption)
-                            .foregroundStyle(.tertiary)
-                        Text(values[field.id].map { schema.display($0, for: field, titles: titles) } ?? "")
                             .font(CraftFont.body)
-                            .textSelection(.enabled)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 150, alignment: .leading)
+                        property(field, value: values[field.id], record: record, schema: schema, titles: titles)
+                        Spacer(minLength: 0)
                     }
+                    .frame(minHeight: 36)
+                    Hairline()
                 }
             }
         }
-        ForEach(filled.filter { $0.kind == .group || $0.kind == .richText }) { field in
+        ForEach(live.filter { ($0.kind == .group || $0.kind == .richText) && values[$0.id] != nil }) { field in
             VStack(alignment: .leading, spacing: 8) {
                 Text(field.name)
-                    .font(CraftFont.section)
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 if case .rows(let rows) = values[field.id] {
                     VStack(spacing: 0) {
@@ -127,6 +102,65 @@ struct SpaceRecordContent: View {
                 }
             }
         }
+    }
+
+    /// A value as the user reads it, or as the control that changes it when one click is enough.
+    @ViewBuilder
+    private func property(
+        _ field: SpaceField,
+        value: SpaceValue?,
+        record: SpaceRecord,
+        schema: SpaceSchema,
+        titles: [String: String]
+    ) -> some View {
+        switch field.kind {
+        case .boolean:
+            Toggle(field.name, isOn: Binding(
+                get: { value == .boolean(true) },
+                set: { save(.boolean($0), to: field, on: record) }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .labelsHidden()
+        case .choice where !field.options.isEmpty:
+            let chosen: SpaceOption? = {
+                guard case .text(let id) = value else { return nil }
+                return field.options.first { $0.id == id }
+            }()
+            Menu {
+                ForEach(field.options) { option in
+                    Button(option.name) { save(.text(option.id), to: field, on: record) }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Text(chosen?.name ?? "Choose")
+                        .font(CraftFont.body)
+                        .foregroundStyle(chosen == nil ? .tertiary : .primary)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel(field.name)
+        case .rating:
+            let stars: Double = { if case .number(let number) = value { return number } else { return 0 } }()
+            SpaceStars(stars: stars, accent: accent) { save(.number($0), to: field, on: record) }
+        default:
+            let text = value.map { schema.display($0, for: field, titles: titles) } ?? ""
+            Text(text.isEmpty ? "Empty" : text)
+                .font(CraftFont.body)
+                .foregroundStyle(text.isEmpty ? .tertiary : .primary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func save(_ value: SpaceValue, to field: SpaceField, on record: SpaceRecord) {
+        try? SpaceStore.update(record, values: [field.id: value], in: context)
     }
 
     private func groupRow(_ row: [String: SpaceValue], index: Int, field: SpaceField, schema: SpaceSchema, titles: [String: String]) -> some View {
