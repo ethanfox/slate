@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-/// The inside of a Space: one type at a time, as a plain list of its records.
+/// The inside of an Area: one type at a time, in a view the app picks for its records.
 struct SpaceView: View {
     var id: UUID
 
@@ -11,7 +11,6 @@ struct SpaceView: View {
     @Query(sort: \SpaceType.createdAt) private var types: [SpaceType]
     @Query(sort: \SpaceRecord.updatedAt, order: .reverse) private var records: [SpaceRecord]
     @Query private var events: [SpaceEvent]
-    @Query private var screens: [SpaceScreen]
     @State private var pendingDelete: SpaceRecord?
     @State private var screenState = SpaceScreenState()
 
@@ -42,10 +41,8 @@ struct SpaceView: View {
                                 .task(id: type.id) { try? SpaceStore.settingsRecord(of: type, in: context) }
                         }
                     } else if let type = selectedType {
-                        if let space, let definition = SpaceScreens.definition(for: type, kind: .collection, screens: screens, types: types) {
-                            SpaceScreenView(definition: definition, context: screenContext(type, space: space))
-                        } else {
-                            list(type)
+                        if let space {
+                            AreaRecordsView(context: screenContext(type, space: space)) { pendingDelete = $0 }
                         }
                     } else {
                         EmptyLine(text: "This Space has no types yet. An agent will be able to set one up.")
@@ -92,86 +89,6 @@ struct SpaceView: View {
             open: { app.navigate(to: .spaceRecord(space: id, record: $0.id)) },
             present: { app.present($0) }
         )
-    }
-
-    /// The plain list, shown when a type has no screen or its screen no longer fits.
-    @ViewBuilder
-    private func list(_ type: SpaceType) -> some View {
-        let key = SpaceJSON.key(type.id)
-        let rows = records.filter { $0.typeIDString == key && ($0.isArchived == app.spacesShowingArchived.contains(id)) }
-        let schema = type.schema
-        let titles = SpaceSelection.titles(in: type.spaceIDString, records: records)
-        HStack(alignment: .firstTextBaseline) {
-            Text(type.name)
-                .font(CraftFont.section)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 8)
-            Text(rows.count == 1 ? "1 record" : "\(rows.count) records")
-                .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
-        }
-        if rows.isEmpty {
-            EmptyLine(text: "Nothing here yet. Use New to add the first one.")
-        } else {
-            VStack(spacing: 0) {
-                ForEach(rows) { record in
-                    Button {
-                        app.navigate(to: .spaceRecord(space: id, record: record.id))
-                    } label: {
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(record.displayTitle)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .lineLimit(1)
-                                let subtitle = SpaceSelection.subtitle(for: record, schema: schema, titles: titles)
-                                if !subtitle.isEmpty {
-                                    Text(subtitle)
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-                            Spacer(minLength: 8)
-                            Text(record.updatedAt.relativeLabel)
-                                .font(.system(size: 12))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .frame(minHeight: 48)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button {
-                            app.present(.editRecord(record))
-                        } label: {
-                            Label("Edit…", systemImage: "pencil")
-                        }
-                        Button {
-                            app.togglePin(.record, record.id)
-                        } label: {
-                            Label(app.isPinned(record.id) ? "Unpin" : "Pin", systemImage: app.isPinned(record.id) ? "pin.slash" : "pin")
-                        }
-                        Button {
-                            try? SpaceStore.duplicate(record, in: context)
-                        } label: {
-                            Label("Duplicate", systemImage: "plus.square.on.square")
-                        }
-                        Button {
-                            try? SpaceStore.setArchived(!record.isArchived, on: record, in: context)
-                        } label: {
-                            Label(record.isArchived ? "Unarchive" : "Archive", systemImage: "archivebox")
-                        }
-                        Divider()
-                        Button(role: .destructive) {
-                            pendingDelete = record
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                    Hairline()
-                }
-            }
-        }
     }
 }
 

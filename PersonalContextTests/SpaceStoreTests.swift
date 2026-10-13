@@ -281,6 +281,39 @@ final class SpaceStoreTests: XCTestCase {
         XCTAssertNil(reread.project)
     }
 
+    func testAreaRecordsPickColumnsLayoutsAndFilters() throws {
+        let schema = recipeSchema
+        XCTAssertEqual(AreaRecords.columns(schema).map(\.id), ["servings", "course", "lastCooked"])
+        XCTAssertEqual(AreaRecords.filterFields(schema).map(\.id), ["course"])
+        XCTAssertEqual(AreaRecords.layouts(for: schema), [.table, .cards])
+        XCTAssertEqual(AreaRecords.preferred(for: schema), .table)
+
+        var pictured = schema
+        pictured.fields.append(SpaceField(id: "photo", name: "Photo", kind: .image))
+        XCTAssertEqual(AreaRecords.preferred(for: pictured), .cards)
+
+        var wide = schema
+        wide.fields.append(SpaceField(id: "source", name: "Source", kind: .text))
+        wide.fields.append(SpaceField(id: "minutes", name: "Minutes", kind: .number))
+        XCTAssertEqual(AreaRecords.layouts(for: wide), [.table])
+    }
+
+    func testAreaRecordsSearchAndFilter() throws {
+        let kitchen = try SpaceStore.create(named: "Kitchen", in: context)
+        let recipe = try SpaceStore.defineType(in: kitchen, key: "recipe", name: "Recipe", schema: recipeSchema, context: context)
+        let chili = try SpaceStore.createRecord(of: recipe, title: "Chili", values: ["servings": .number(6), "course": .text("main")], in: context)
+        let tart = try SpaceStore.createRecord(of: recipe, title: "Lemon tart", values: ["servings": .number(8), "course": .text("dessert")], in: context)
+        let rows = [chili, tart].map { AreaRecords.row($0, schema: recipeSchema, values: $0.values, titles: [:]) }
+
+        XCTAssertEqual(rows[0].cells["course"], "Main")
+        XCTAssertEqual(rows[0].options["course"], ["main"])
+        XCTAssertEqual(AreaRecords.filtered(rows, search: "", filters: [:]).map(\.title), ["Chili", "Lemon tart"])
+        XCTAssertEqual(AreaRecords.filtered(rows, search: "lemon", filters: [:]).map(\.title), ["Lemon tart"])
+        XCTAssertEqual(AreaRecords.filtered(rows, search: "dessert", filters: [:]).map(\.title), ["Lemon tart"])
+        XCTAssertEqual(AreaRecords.filtered(rows, search: "", filters: ["course": "main"]).map(\.title), ["Chili"])
+        XCTAssertTrue(AreaRecords.filtered(rows, search: "lemon", filters: ["course": "main"]).isEmpty)
+    }
+
     private var recipeSchema: SpaceSchema {
         SpaceSchema(fields: [
             SpaceField(id: "servings", name: "Servings", kind: .number),
