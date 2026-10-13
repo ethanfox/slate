@@ -492,9 +492,9 @@ struct AreaRecordsView: View {
         let showsRating = fields.map { $0.contains { $0.kind == .rating } } ?? true
         let portrait = context.portraitCards
         return LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: portrait ? 150 : 200, maximum: portrait ? 200 : 280), spacing: 14, alignment: .top)],
+            columns: [GridItem(.adaptive(minimum: portrait ? 230 : 280, maximum: portrait ? 300 : 380), spacing: 16, alignment: .top)],
             alignment: .leading,
-            spacing: 14
+            spacing: 16
         ) {
             ForEach(shown) { row in
                 Button {
@@ -502,7 +502,7 @@ struct AreaRecordsView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 0) {
                         Color.clear
-                            .aspectRatio(portrait ? 2.0 / 3.0 : 2.0, contentMode: .fit)
+                            .aspectRatio(portrait ? 3.0 / 4.0 : 16.0 / 9.0, contentMode: .fit)
                             .frame(maxWidth: .infinity)
                             .overlay {
                                 if row.imageID != nil {
@@ -514,7 +514,7 @@ struct AreaRecordsView: View {
                             .clipped()
                         VStack(alignment: .leading, spacing: 6) {
                             Text(row.title)
-                                .font(.system(size: 13, weight: .medium))
+                                .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(.primary)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
@@ -522,7 +522,7 @@ struct AreaRecordsView: View {
                                 HStack(spacing: 1) {
                                     ForEach(1...5, id: \.self) { star in
                                         Image(systemName: Double(star) <= rating ? "star.fill" : "star")
-                                            .font(.system(size: 10))
+                                            .font(.system(size: 11))
                                             .foregroundStyle(Double(star) <= rating ? context.accent : Color.secondary.opacity(0.4))
                                     }
                                 }
@@ -537,17 +537,17 @@ struct AreaRecordsView: View {
                                             .foregroundStyle(.secondary)
                                             .lineLimit(1)
                                     }
-                                    .font(CraftFont.caption)
+                                    .font(.system(size: 12))
                                 }
                             }
                         }
-                        .padding(12)
+                        .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .background(CraftColor.elevated)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(CraftColor.hairline))
-                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(CraftColor.hairline))
+                    .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .opacity(row.record.isArchived ? 0.5 : 1)
