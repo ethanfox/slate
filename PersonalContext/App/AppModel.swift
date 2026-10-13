@@ -916,14 +916,7 @@ final class AppModel {
     }
 
     func runDefaults(for project: Project?) -> (provider: String, model: String, path: String) {
-        if let project, !project.workerProviderID.isEmpty {
-            return (
-                project.workerProviderID,
-                project.workerModelID.isEmpty ? talkModelID : project.workerModelID,
-                project.workerPath.isEmpty ? WorkerPath.local.rawValue : project.workerPath
-            )
-        }
-        return (talkProvider.rawValue, talkModelID, WorkerPath.local.rawValue)
+        (talkProvider.rawValue, talkModelID, WorkerPath.local.rawValue)
     }
 
     func providerConnected(_ id: String) -> Bool {

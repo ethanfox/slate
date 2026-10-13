@@ -1,9 +1,9 @@
 import Foundation
 
 enum ProjectWorker {
-    static func isConfigured(on project: Project?) -> Bool {
-        guard let project else { return false }
-        return !project.workerProviderID.isEmpty
+    /// Projects no longer choose a worker. The chat reads attached code itself, and code work goes to a Run.
+    static func isConfigured(on _: Project?) -> Bool {
+        false
     }
 
     @MainActor

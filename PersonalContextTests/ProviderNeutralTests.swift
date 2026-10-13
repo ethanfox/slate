@@ -376,16 +376,16 @@ final class ProviderNeutralTests: XCTestCase {
     }
 
     @MainActor
-    func testIdentityMentionsConsultCodeWhenWorkerIsSet() throws {
+    /// Projects no longer choose a worker, so a stored one is ignored.
+    func testStoredProjectWorkerIsIgnored() throws {
         let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Store.schema, configurations: configuration)
         let project = Project(name: "Harbor", symbol: "folder", summary: "")
         project.workerProviderID = TalkProvider.cursor.rawValue
         container.mainContext.insert(project)
         try container.mainContext.save()
-        let text = ContextBuilder.identity(for: project)
-        XCTAssertTrue(text.contains("consult_code"))
-        XCTAssertFalse(ContextBuilder.identity(for: Project(name: "Bare", symbol: "folder", summary: "")).contains("consult_code"))
+        XCTAssertFalse(ContextBuilder.identity(for: project).contains("consult_code"))
+        XCTAssertFalse(ProjectWorker.isConfigured(on: project))
     }
 
     func testRunnerReuseKeyIgnoresPromptText() {

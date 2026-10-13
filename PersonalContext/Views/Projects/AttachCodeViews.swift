@@ -18,38 +18,44 @@ struct ProjectCodeSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if !attachments.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(attachments) { attachment in
-                        attachedRow(attachment)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(attachments) { attachment in
+                attachedRow(attachment)
             }
 
-            if !attachments.isEmpty {
-                Text("Index repository reads this code with the project worker and writes an architecture reference. It cannot edit the source.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            HStack(spacing: 12) {
-                Button("Add folder…") { addFolder() }
+            HStack(spacing: 8) {
+                codeButton("Add Folder", symbol: "folder.badge.plus") { addFolder() }
                 if pickingRepo {
-                    Button("Cancel") { pickingRepo = false }
+                    codeButton("Cancel", symbol: "xmark") { pickingRepo = false }
                 } else {
-                    Button("Add remote…") { showRepos() }
+                    codeButton("Add Remote", symbol: "link") { showRepos() }
                 }
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.primary)
-            .font(CraftFont.body)
+            .padding(.top, attachments.isEmpty ? 0 : 2)
 
             if pickingRepo {
                 repoPicker
             }
         }
+    }
+
+    private func codeButton(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .medium))
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(CraftColor.elevated, in: Capsule())
+            .overlay(Capsule().stroke(CraftColor.hairline))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -97,59 +103,45 @@ struct ProjectCodeSection: View {
     }
 
     private func attachedRow(_ attachment: CodeAttachment) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: 10) {
             attachmentIcon(attachment.kind)
-                .frame(width: 22, height: 17)
-            VStack(alignment: .leading, spacing: 2) {
+                .frame(width: 20, height: 18)
+            VStack(alignment: .leading, spacing: 3) {
                 Text(attachment.title.isEmpty ? attachment.locator : attachment.title)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
                 Text(attachedSubtitle(attachment))
-                    .font(.system(size: 12))
+                    .font(CraftFont.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-                Text(referenceLine(attachment))
-                    .font(.system(size: 12))
+                    .truncationMode(attachment.kind == .folder ? .head : .tail)
+            }
+            Spacer(minLength: 4)
+            Menu {
+                Button("Open") { open(attachment) }
+                Button("Remove", role: .destructive) { remove(attachment) }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .frame(width: 24, height: 20)
+                    .contentShape(Rectangle())
             }
-            Spacer(minLength: 8)
-            if let run = CodeReferenceStore.activeIndexingRun(for: attachment, in: context) {
-                Button("Indexing…") { app.open(run) }
-                    .buttonStyle(.plain)
-                    .font(CraftFont.body)
-                    .foregroundStyle(.secondary)
-            } else {
-                Button(CodeReferenceStore.published(on: attachment, in: context) == nil ? "Index repository" : "Re-index") {
-                    app.startIndexing(attachment: attachment)
-                }
-                .buttonStyle(.plain)
-                .font(CraftFont.body)
-                .foregroundStyle(.secondary)
-            }
-            if CodeReferenceStore.published(on: attachment, in: context) != nil {
-                Button("View") { app.present(.inspectCodeReference(attachment.id)) }
-                    .buttonStyle(.plain)
-                    .font(CraftFont.body)
-                    .foregroundStyle(.secondary)
-            }
-            Button("Open") {
-                open(attachment)
-            }
-            .buttonStyle(.plain)
-            .font(CraftFont.body)
-            .foregroundStyle(.secondary)
-            Button("Remove") {
-                CodeReferenceStore.deleteOwnedReferences(for: attachment, in: context)
-                context.delete(attachment)
-                project.touch()
-                try? context.persist()
-            }
-            .buttonStyle(.plain)
-            .font(CraftFont.body)
-            .foregroundStyle(.secondary)
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel("Options for \(attachment.title)")
         }
-        .padding(.vertical, 8)
+        .padding(10)
+        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(CraftColor.hairline))
+    }
+
+    private func remove(_ attachment: CodeAttachment) {
+        CodeReferenceStore.deleteOwnedReferences(for: attachment, in: context)
+        context.delete(attachment)
+        project.touch()
+        try? context.persist()
     }
 
     private func repoRow(_ repo: GitForgeRepo) -> some View {
@@ -172,21 +164,12 @@ struct ProjectCodeSection: View {
         return "\(repo.owner) · \(repo.tokenName)"
     }
 
-    private func referenceLine(_ attachment: CodeAttachment) -> String {
-        if let run = CodeReferenceStore.activeIndexingRun(for: attachment, in: context) {
-            return "Indexing · \(run.status.label)"
-        }
-        if let published = CodeReferenceStore.published(on: attachment, in: context) {
-            return CodeReferenceStore.coverageLabel(published)
-        }
-        return "No architecture reference"
-    }
-
     private func attachedSubtitle(_ attachment: CodeAttachment) -> String {
         var parts: [String] = []
         switch attachment.kind {
         case .folder:
-            parts.append(attachment.locator)
+            let home = LocalAgent.home
+            parts.append(attachment.locator.hasPrefix(home) ? "~" + attachment.locator.dropFirst(home.count) : attachment.locator)
         case .github, .gitlab:
             parts.append(attachment.kind.title)
             parts.append(attachment.locator)

@@ -52,9 +52,6 @@ enum ContextBuilder {
             }
             lines.append("Call list_code_references with this project_id to discover published reference entries, then get_code_reference_entry. Do not ask the user to paste the reference. For source files, call project_list_files, project_search_code, project_read_file, or project_git_log. Do not use a shell or invent missing attachments.")
         }
-        if !project.workerProviderID.isEmpty {
-            lines.append("A project Worker can inspect the attached code. Call consult_code with a brief when you need a repo pass. Do not call it for decisions, tracks, notes, or tasks — use the Membrae tools.")
-        }
         return lines.joined(separator: "\n")
     }
 

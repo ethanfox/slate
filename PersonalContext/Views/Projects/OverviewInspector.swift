@@ -19,8 +19,7 @@ struct OverviewInspector: View {
 
     private var tabs: [InspectorTab<OverviewInspectorTab>] {
         [
-            InspectorTab(id: .subject, title: selectedPlate?.kind.label ?? "Settings"),
-            InspectorTab(id: .insert, title: "Insert")
+            InspectorTab(id: .subject, title: selectedPlate?.kind.label ?? "Settings")
         ]
     }
 
@@ -191,33 +190,12 @@ private struct OverviewInspectorSettings: View {
                 .labelsHidden()
             }
 
-            HStack {
-                Text("Pinned")
-                    .font(CraftFont.body)
-                Spacer()
-                Toggle("Pinned", isOn: $project.isPinned)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-            }
-
-            InspectorChoiceGroup(
-                "Overview width",
-                items: OverviewWidth.allCases,
-                selection: $project.overviewWidth,
-                label: \.compactLabel,
-                accessibilityName: \.label
-            )
-
             inspectorField("Code") {
                 ProjectCodeSection(project: project)
             }
 
             inspectorField("MCP") {
                 ProjectMCPToggles(project: project)
-            }
-
-            inspectorField("Worker") {
-                ProjectWorkerFields(project: project)
             }
         }
         .onChange(of: project.name) { _, _ in project.touch() }
@@ -227,8 +205,6 @@ private struct OverviewInspectorSettings: View {
             project.touch()
             TaskStore.syncProjectStatus(project, in: context)
         }
-        .onChange(of: project.isPinned) { _, _ in project.touch() }
-        .onChange(of: project.overviewWidthRaw) { _, _ in project.touch() }
     }
 
     private func inspectorField<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -268,102 +244,6 @@ struct ProjectMCPToggles: View {
                     .toggleStyle(.switch)
                 }
             }
-        }
-    }
-}
-
-/// The model that does code work for this project.
-struct ProjectWorkerFields: View {
-    @Bindable var project: Project
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Picker("Worker", selection: workerMode) {
-                Text("Use chat model").tag(false)
-                Text("Custom worker").tag(true)
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-
-            if !project.workerProviderID.isEmpty {
-                Picker("Provider", selection: $project.workerProviderID) {
-                    if let current = TalkProvider(rawValue: project.workerProviderID),
-                       !app.availableTalkProviders.contains(current) {
-                        Text("\(current.title) — disconnected").tag(current.rawValue)
-                    }
-                    ForEach(app.availableTalkProviders) { provider in
-                        Text(provider.title).tag(provider.rawValue)
-                    }
-                }
-                .pickerStyle(.menu)
-
-                Picker("Model", selection: $project.workerModelID) {
-                    if project.workerProviderID == TalkProvider.cursor.rawValue {
-                        Text("Account default").tag("")
-                    }
-                    ForEach(app.models(for: project.workerProviderID), id: \.id) { model in
-                        Text(model.name).tag(model.id)
-                    }
-                }
-                .pickerStyle(.menu)
-
-                Picker("Run on", selection: $project.workerPath) {
-                    ForEach(WorkerRegistry.paths(for: project.workerProviderID)) { path in
-                        Text(path.title).tag(path.rawValue)
-                    }
-                }
-                .pickerStyle(.menu)
-
-                if project.workerPath == WorkerPath.cloud.rawValue,
-                   project.workerProviderID == TalkProvider.cursor.rawValue,
-                   !project.codeAttachments.contains(where: { $0.kind == .github }) {
-                    Text("Cursor Cloud requires an attached GitHub repository.")
-                        .font(CraftFont.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .onChange(of: project.workerProviderID) { _, _ in
-            normalizeWorker()
-            project.touch()
-        }
-        .onChange(of: project.workerModelID) { _, _ in project.touch() }
-        .onChange(of: project.workerPath) { _, _ in project.touch() }
-    }
-
-    private var workerMode: Binding<Bool> {
-        Binding(
-            get: { !project.workerProviderID.isEmpty },
-            set: { custom in
-                if custom {
-                    let provider = app.availableTalkProviders.contains(app.talkProvider)
-                        ? app.talkProvider
-                        : app.availableTalkProviders.first
-                    project.workerProviderID = provider?.rawValue ?? ""
-                    project.workerModelID = provider == app.talkProvider ? app.talkModelID : ""
-                    project.workerPath = WorkerRegistry.paths(for: project.workerProviderID).first?.rawValue ?? ""
-                } else {
-                    project.workerProviderID = ""
-                    project.workerModelID = ""
-                    project.workerPath = ""
-                }
-                project.touch()
-            }
-        )
-    }
-
-    private func normalizeWorker() {
-        guard !project.workerProviderID.isEmpty else { return }
-        let paths = WorkerRegistry.paths(for: project.workerProviderID)
-        if !paths.contains(where: { $0.rawValue == project.workerPath }) {
-            project.workerPath = paths.first?.rawValue ?? ""
-        }
-        let models = app.models(for: project.workerProviderID)
-        if project.workerProviderID == TalkProvider.chatgpt.rawValue,
-           !models.contains(where: { $0.id == project.workerModelID }) {
-            project.workerModelID = models.first?.id ?? ""
         }
     }
 }
