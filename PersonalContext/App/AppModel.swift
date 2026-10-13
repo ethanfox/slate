@@ -128,8 +128,6 @@ final class AppModel {
     }
     /// The type showing in each open Space. Not persisted.
     var spaceTypeSelection: [UUID: UUID] = [:]
-    /// Spaces currently showing their archived records. Not persisted.
-    var spacesShowingArchived: Set<UUID> = []
     /// Ids of everything pinned, kept beside the store's pins so a row can ask without a fetch.
     private(set) var pinnedIDs: Set<String> = []
 

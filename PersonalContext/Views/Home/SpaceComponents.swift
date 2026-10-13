@@ -318,6 +318,7 @@ struct SpaceComponentView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .opacity(record.isArchived ? 0.5 : 1)
                 .draggable(SpaceJSON.key(record.id))
                 .contextMenu { SpaceRecordMenu(record: record, context: context) }
             }
@@ -579,6 +580,7 @@ private struct SpacePlanner: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .opacity(record.isArchived ? 0.5 : 1)
         .contextMenu { SpaceRecordMenu(record: record, context: context) }
     }
 
