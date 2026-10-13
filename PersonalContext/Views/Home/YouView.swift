@@ -179,6 +179,7 @@ struct YouView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Space.createdAt) private var spaces: [Space]
     @Query private var records: [SpaceRecord]
+    @Query private var loggedEvents: [SpaceEvent]
     @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" && $0.isCompleted == false })
     private var openTasks: [AgendaItem]
     @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "project" }, sort: \TitleIndex.updatedAt, order: .reverse)
@@ -347,6 +348,15 @@ struct YouView: View {
             line = "\(latest.displayTitle), \(latest.updatedAt.relativeLabel)"
         } else {
             line = space.summary.isEmpty ? "Nothing yet" : space.summary
+        }
+        // An Area that is mostly tracking is counted by what was logged, not by the one thing it tracks.
+        let entries = loggedEvents.filter { $0.spaceIDString == key }
+        if entries.count > owned.count, let last = entries.max(by: { $0.occurredAt < $1.occurredAt }) {
+            return SpaceCardSummary(
+                line: "Last logged \(last.occurredAt.relativeLabel)",
+                count: entries.count,
+                caption: entries.count == 1 ? "entry" : "entries"
+            )
         }
         return SpaceCardSummary(line: line, count: owned.count, caption: owned.count == 1 ? "record" : "records")
     }

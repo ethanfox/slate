@@ -53,6 +53,8 @@ struct AreaRecordRow: Identifiable {
     var record: SpaceRecord
     var title: String
     var imageID: String?
+    /// Stars out of five, when the type has a rating.
+    var rating: Double?
     /// Field id to display text, for the fields worth a column.
     var cells: [String: String]
     /// Field id to the raw option id or ids, for the fields that can be filtered.
@@ -73,6 +75,10 @@ enum AreaRecords {
             default: true
             }
         }
+    }
+
+    static func ratingField(_ schema: SpaceSchema) -> SpaceField? {
+        schema.liveFields.first { $0.kind == .rating }
     }
 
     static func imageField(_ schema: SpaceSchema) -> SpaceField? {
@@ -148,7 +154,18 @@ enum AreaRecords {
         if let image = imageField(schema), case .text(let asset) = values[image.id], !asset.isEmpty {
             imageID = asset
         }
-        return AreaRecordRow(record: record, title: record.displayTitle, imageID: imageID, cells: cells, options: options)
+        var rating: Double?
+        if let field = ratingField(schema), case .number(let stars) = values[field.id] {
+            rating = stars
+        }
+        return AreaRecordRow(
+            record: record,
+            title: record.displayTitle,
+            imageID: imageID,
+            rating: rating,
+            cells: cells,
+            options: options
+        )
     }
 
     /// Rows whose title or any shown value contains the search, and that carry every chosen option.
@@ -440,7 +457,8 @@ struct AreaRecordsView: View {
     // MARK: Cards
 
     private func cards(_ shown: [AreaRecordRow]) -> some View {
-        let details = Array(AreaRecords.columns(schema).prefix(3))
+        // A rating is drawn as stars, so it does not also take one of the three text lines.
+        let details = Array(AreaRecords.columns(schema).filter { $0.kind != .rating }.prefix(3))
         let hasImages = AreaRecords.imageField(schema) != nil
         return LazyVGrid(
             columns: [GridItem(.adaptive(minimum: 200, maximum: 280), spacing: 14, alignment: .top)],
@@ -464,6 +482,16 @@ struct AreaRecordsView: View {
                                 .foregroundStyle(.primary)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
+                            if let rating = row.rating, rating > 0 {
+                                HStack(spacing: 1) {
+                                    ForEach(1...5, id: \.self) { star in
+                                        Image(systemName: Double(star) <= rating ? "star.fill" : "star")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(Double(star) <= rating ? context.accent : Color.secondary.opacity(0.4))
+                                    }
+                                }
+                                .accessibilityLabel("\(Int(rating)) of 5 stars")
+                            }
                             ForEach(details) { field in
                                 if let text = row.cells[field.id], !text.isEmpty {
                                     HStack(alignment: .firstTextBaseline, spacing: 6) {
