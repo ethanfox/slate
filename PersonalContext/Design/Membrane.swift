@@ -351,5 +351,6 @@ struct MembraneLab: View {
         }
         .frame(minWidth: 460, minHeight: 520)
         .background(Color(hex: "F6F6F4"))
+        .preferredColorScheme(.light)
     }
 }
