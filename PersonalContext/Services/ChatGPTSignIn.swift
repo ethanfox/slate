@@ -192,6 +192,7 @@ enum ChatGPTSignIn {
             if !(200..<300).contains(status) {
                 let detail = String(data: data, encoding: .utf8)
                 if expired == nil && isExpiredTokenError(status: status, detail: detail) {
+                    ChatTrace.event("chatgpt models http \(status); renewing the token and trying once more")
                     expired = session.accessToken
                     continue
                 }
@@ -382,6 +383,7 @@ enum ChatGPTSignIn {
             throw ChatGPTAuthError("ChatGPT sign-in expired. Reconnect in Settings.")
         }
         let tokens = try JSONDecoder().decode(TokenResponse.self, from: data)
+        ChatTrace.event("chatgpt token renewed, lasts \(tokens.expiresIn ?? 0)s")
         session.accessToken = tokens.accessToken
         session.refreshToken = tokens.refreshToken ?? session.refreshToken
         session.idToken = tokens.idToken ?? session.idToken
