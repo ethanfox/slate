@@ -95,8 +95,6 @@
 		B81A0C1D2E3F405162738A14 /* RunPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A13 /* RunPage.swift */; };
 		B81A0C1D2E3F405162738A16 /* RunStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A15 /* RunStoreTests.swift */; };
 		B81A0C1D2E3F405162738A18 /* RunToolPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A17 /* RunToolPolicyTests.swift */; };
-		C0DE1A2B3C4D5E6F70819202 /* CodeReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE1A2B3C4D5E6F70819201 /* CodeReference.swift */; };
-		C0DE1A2B3C4D5E6F70819203 /* CodeReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE1A2B3C4D5E6F70819201 /* CodeReference.swift */; };
 		27EFEA7479970E75FC4AB694 /* Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD732A03D4885370CA6EC0EB /* Inspector.swift */; };
 		29D44665FC2D878340D62760 /* ChatObjectLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCA29163C23868CA9F844257 /* ChatObjectLink.swift */; };
 		29EED17BD5A4994333989D73 /* ChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A174CA3B685C41C4ABCF1D54 /* ChatScreen.swift */; };
@@ -381,7 +379,6 @@
 		B81A0C1D2E3F405162738A13 /* RunPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunPage.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A15 /* RunStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunStoreTests.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A17 /* RunToolPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunToolPolicyTests.swift; sourceTree = "<group>"; };
-		C0DE1A2B3C4D5E6F70819201 /* CodeReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeReference.swift; sourceTree = "<group>"; };
 		C0DE1A2B3C4D5E6F70819211 /* code-index-eval.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = Scenarios/code-index-eval.md; sourceTree = "<group>"; };
 		375909AB0149768B4CB292E2 /* LiquidOrbMetalB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidOrbMetalB.swift; sourceTree = "<group>"; };
 		37724CB7BB30F472C170A449 /* ModelToolbarPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelToolbarPicker.swift; sourceTree = "<group>"; };
@@ -886,7 +883,6 @@
 				5BACE0300000000000000001 /* SpaceScreen.swift */,
 				F11E5704A0000001 /* StoredAsset.swift */,
 				B81A0C1D2E3F405162738A01 /* AgentRun.swift */,
-				C0DE1A2B3C4D5E6F70819201 /* CodeReference.swift */,
 				D287C789B72E1A5CE8DC14AA /* Store.swift */,
 			);
 			path = Models;
@@ -1190,7 +1186,6 @@
 				F11E5704C0000002 /* FileStore.swift in Sources */,
 				AC3E4F5B6D708192A3B4C5D6 /* TaskStore.swift in Sources */,
 				B81A0C1D2E3F405162738A03 /* AgentRun.swift in Sources */,
-				C0DE1A2B3C4D5E6F70819203 /* CodeReference.swift in Sources */,
 				B81A0C1D2E3F405162738A06 /* RunStore.swift in Sources */,
 				53A38F15BD97D0A7F87DC464 /* TextFormat.swift in Sources */,
 				E07C1D18E64FA5C2D35EA795 /* Tools.swift in Sources */,
@@ -1394,7 +1389,6 @@
 				B81A0C1D2E3F405162738A10 /* RunsView.swift in Sources */,
 				B81A0C1D2E3F405162738A12 /* NewRunSheet.swift in Sources */,
 				B81A0C1D2E3F405162738A14 /* RunPage.swift in Sources */,
-				C0DE1A2B3C4D5E6F70819202 /* CodeReference.swift in Sources */,
 				19E0640705A6EAD921AE18AD /* RootView.swift in Sources */,
 				8F74E8CF9CC8040D5B9F908F /* SaveSheet.swift in Sources */,
 				55D821BAAFC11B0776685369 /* SelectableText.swift in Sources */,

@@ -82,7 +82,6 @@ enum SpaceStore {
     static func delete(_ space: Space, in context: ModelContext) throws {
         let key = SpaceJSON.key(space.id)
         events(in: space, context: context).forEach(context.delete)
-        fetch(#Predicate<SpaceScreen> { $0.spaceIDString == key }, in: context).forEach(context.delete)
         fetch(#Predicate<AreaWidget> { $0.spaceIDString == key }, in: context).forEach(context.delete)
         releaseImages(of: records(in: space, context: context), in: context)
         records(in: space, context: context).forEach(context.delete)
@@ -285,7 +284,6 @@ enum SpaceStore {
         let key = SpaceJSON.key(type.id)
         let ownedEvents = FetchDescriptor<SpaceEvent>(predicate: #Predicate { $0.typeIDString == key })
         ((try? context.fetch(ownedEvents)) ?? []).forEach(context.delete)
-        fetch(#Predicate<SpaceScreen> { $0.typeIDString == key }, in: context).forEach(context.delete)
         releaseImages(of: records(of: type, in: context), in: context)
         for record in records(of: type, in: context) {
             unlink(record, in: context)

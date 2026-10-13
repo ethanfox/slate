@@ -614,39 +614,6 @@ enum SpaceScreenCatalog {
     }
 }
 
-/// A stored screen for one type. `agentJSON` is the last version an agent wrote, kept for Reset.
-@Model
-final class SpaceScreen {
-    var id: UUID
-    var spaceIDString: String
-    var typeIDString: String
-    var kindRaw: String
-    var definitionJSON: String
-    var agentJSON: String
-    var updatedAt: Date
-
-    var kind: SpaceScreenKind {
-        get { SpaceScreenKind(rawValue: kindRaw) ?? .collection }
-        set { kindRaw = newValue.rawValue }
-    }
-
-    var definition: SpaceScreenDefinition {
-        get { SpaceJSON.decode(definitionJSON, as: SpaceScreenDefinition.self) ?? SpaceScreenDefinition() }
-        set { definitionJSON = SpaceJSON.encode(newValue) }
-    }
-
-    init(type: SpaceType, kind: SpaceScreenKind, definition: SpaceScreenDefinition) {
-        self.id = UUID()
-        self.spaceIDString = type.spaceIDString
-        self.typeIDString = SpaceJSON.key(type.id)
-        self.kindRaw = kind.rawValue
-        self.definitionJSON = SpaceJSON.encode(definition)
-        self.agentJSON = ""
-        self.updatedAt = .now
-    }
-}
-
-
 // MARK: Widgets
 
 /// How big a widget is, in grid cells. Every widget is one of these three.

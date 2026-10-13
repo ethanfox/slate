@@ -48,8 +48,6 @@ enum Store {
         TaskDependency.self,
         DeletionMark.self,
         CodeAttachment.self,
-        CodeReference.self,
-        CodeReferenceEntry.self,
         AgentRun.self,
         TitleIndex.self,
         Space.self,
@@ -57,7 +55,6 @@ enum Store {
         SpaceRecord.self,
         SpaceEvent.self,
         PersonalFact.self,
-        SpaceScreen.self,
         AgentAction.self,
         SavedSource.self,
         Pin.self,
@@ -66,7 +63,7 @@ enum Store {
 
     /// Bump whenever a model or a stored property is added. A build that opens a store written by a
     /// newer schema drops the tables and columns it does not know, so older builds must refuse.
-    static let schemaVersion = 11
+    static let schemaVersion = 12
 
     /// Sits beside the store and holds the highest schema version that has opened it.
     static func schemaMarkerURL(for store: URL) -> URL {
@@ -196,8 +193,6 @@ enum Store {
         if !configuration.isStoredInMemoryOnly {
             // Before the container exists: creating it is what migrates the file.
             try refuseIfOutdated(at: configuration.url, running: schemaVersion)
-            try migrateAgentRunColumns(at: configuration.url)
-            try migrateCodeReferenceOwnership(at: configuration.url)
             try migrateTagColumns(at: configuration.url)
             try migrateSpaceOwnerColumns(at: configuration.url)
         }
@@ -271,90 +266,6 @@ enum Store {
         if !factColumns.isEmpty, !factColumns.contains("ZORIGIN") {
             try execIgnoringDuplicateColumn(db, "ALTER TABLE ZPERSONALFACT ADD COLUMN ZORIGIN VARCHAR DEFAULT ''")
         }
-    }
-
-    static func migrateAgentRunColumns(at url: URL) throws {
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        var db: OpaquePointer?
-        guard sqlite3_open(url.path, &db) == SQLITE_OK, let db else {
-            throw StoreMigrationError("Could not open \(url.lastPathComponent) to migrate AgentRun columns.")
-        }
-        defer { sqlite3_close(db) }
-        let columns = tableColumns(db, table: "ZAGENTRUN")
-        guard !columns.isEmpty else { return }
-        if !columns.contains("ZPURPOSERAW") {
-            try execIgnoringDuplicateColumn(db, "ALTER TABLE ZAGENTRUN ADD COLUMN ZPURPOSERAW VARCHAR DEFAULT 'general'")
-        }
-        if !columns.contains("ZINDEXEDATTACHMENTIDSTRING") {
-            try execIgnoringDuplicateColumn(db, "ALTER TABLE ZAGENTRUN ADD COLUMN ZINDEXEDATTACHMENTIDSTRING VARCHAR DEFAULT ''")
-        }
-    }
-
-    /// Ownership lives on string ID columns, not SwiftData relationships.
-    /// Add the columns and copy IDs from leftover relationship foreign keys.
-    static func migrateCodeReferenceOwnership(at url: URL) throws {
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        var db: OpaquePointer?
-        guard sqlite3_open(url.path, &db) == SQLITE_OK, let db else {
-            throw StoreMigrationError("Could not open \(url.lastPathComponent) to migrate code-reference ownership.")
-        }
-        defer { sqlite3_close(db) }
-
-        let referenceColumns = tableColumns(db, table: "ZCODEREFERENCE")
-        if !referenceColumns.isEmpty, !referenceColumns.contains("ZATTACHMENTIDSTRING") {
-            try execIgnoringDuplicateColumn(db, "ALTER TABLE ZCODEREFERENCE ADD COLUMN ZATTACHMENTIDSTRING VARCHAR DEFAULT ''")
-        }
-        if !referenceColumns.isEmpty, !referenceColumns.contains("ZSOURCEFRESHNESSRAW") {
-            try execIgnoringDuplicateColumn(db, "ALTER TABLE ZCODEREFERENCE ADD COLUMN ZSOURCEFRESHNESSRAW VARCHAR DEFAULT ''")
-        }
-        let entryColumns = tableColumns(db, table: "ZCODEREFERENCEENTRY")
-        if !entryColumns.isEmpty, !entryColumns.contains("ZREFERENCEIDSTRING") {
-            try execIgnoringDuplicateColumn(db, "ALTER TABLE ZCODEREFERENCEENTRY ADD COLUMN ZREFERENCEIDSTRING VARCHAR DEFAULT ''")
-        }
-
-        if referenceColumns.contains("ZATTACHMENT") {
-            try copyRelationshipUUIDs(
-                db,
-                update: "ZCODEREFERENCE",
-                column: "ZATTACHMENTIDSTRING",
-                join: "SELECT ref.Z_PK, att.ZID FROM ZCODEREFERENCE ref JOIN ZCODEATTACHMENT att ON ref.ZATTACHMENT = att.Z_PK WHERE ref.ZATTACHMENTIDSTRING IS NULL OR ref.ZATTACHMENTIDSTRING = ''"
-            )
-        }
-        if entryColumns.contains("ZREFERENCE") {
-            try copyRelationshipUUIDs(
-                db,
-                update: "ZCODEREFERENCEENTRY",
-                column: "ZREFERENCEIDSTRING",
-                join: "SELECT entry.Z_PK, ref.ZID FROM ZCODEREFERENCEENTRY entry JOIN ZCODEREFERENCE ref ON entry.ZREFERENCE = ref.Z_PK WHERE entry.ZREFERENCEIDSTRING IS NULL OR entry.ZREFERENCEIDSTRING = ''"
-            )
-        }
-    }
-
-    private static func copyRelationshipUUIDs(
-        _ db: OpaquePointer,
-        update table: String,
-        column: String,
-        join sql: String
-    ) throws {
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { return }
-        defer { sqlite3_finalize(statement) }
-        while sqlite3_step(statement) == SQLITE_ROW {
-            let pk = sqlite3_column_int64(statement, 0)
-            guard let uuid = uuidString(from: statement, column: 1) else { continue }
-            try exec(db, "UPDATE \(table) SET \(column) = '\(uuid)' WHERE Z_PK = \(pk)")
-        }
-    }
-
-    private static func uuidString(from statement: OpaquePointer, column: Int32) -> String? {
-        guard sqlite3_column_bytes(statement, column) == 16, let raw = sqlite3_column_blob(statement, column) else {
-            return nil
-        }
-        let bytes = raw.bindMemory(to: UInt8.self, capacity: 16)
-        return UUID(uuid: (
-            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
-        )).uuidString.lowercased()
     }
 
     private static func tableColumns(_ db: OpaquePointer, table: String) -> Set<String> {

@@ -147,9 +147,6 @@ final class AgentRun {
     var resultSummary: String
     var resultLinksJSON: String
     var repositoryLocatorsJSON: String
-    /// Left from code indexing, which was removed. Kept so the store keeps its shape.
-    var purposeRaw: String = "general"
-    var indexedAttachmentIDString: String = ""
     var branch: String
     var statusDetail: String
     var adapterStateJSON: String
@@ -229,8 +226,6 @@ final class AgentRun {
         self.resultSummary = ""
         self.resultLinksJSON = "[]"
         self.repositoryLocatorsJSON = "[]"
-        self.purposeRaw = "general"
-        self.indexedAttachmentIDString = ""
         self.branch = ""
         self.statusDetail = ""
         self.adapterStateJSON = ""

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftData
 
@@ -260,7 +261,7 @@ final class MembraeToolGateway: AgentToolGateway {
             throw ProjectWorkspaceError("The requested path is outside the attached repository.")
         }
         let data = try Data(contentsOf: file)
-        let hash = CodeContentHash.sha256(of: data)
+        let hash = "sha256:" + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         let lines = (String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self))
             .components(separatedBy: .newlines)
         let first = max(1, start ?? 1)
