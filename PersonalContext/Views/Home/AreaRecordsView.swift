@@ -191,6 +191,8 @@ struct AreaRecordsView: View {
     @State private var filters: [String: String] = [:]
     @State private var chosenLayout: AreaRecordsLayout?
     @State private var period = SpaceCalcRequest.Period.month
+    /// How wide the card grid is, so the number of columns is worked out here and its changes can animate.
+    @State private var cardsWidth: CGFloat = 0
 
     private var schema: SpaceSchema { context.schema }
 
@@ -491,8 +493,10 @@ struct AreaRecordsView: View {
             ?? Array(AreaRecords.columns(schema).filter { $0.kind != .rating }.prefix(3))
         let showsRating = fields.map { $0.contains { $0.kind == .rating } } ?? true
         let portrait = context.portraitCards
+        let (narrowest, widest): (CGFloat, CGFloat) = portrait ? (230, 300) : (280, 380)
+        let across = max(1, Int((cardsWidth + 16) / (narrowest + 16)))
         return LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: portrait ? 230 : 280, maximum: portrait ? 300 : 380), spacing: 16, alignment: .top)],
+            columns: Array(repeating: GridItem(.flexible(minimum: 120, maximum: widest), spacing: 16, alignment: .top), count: across),
             alignment: .leading,
             spacing: 16
         ) {
@@ -554,6 +558,9 @@ struct AreaRecordsView: View {
                 .contextMenu { menu(row.record) }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { cardsWidth = $0 }
+        .animation(.snappy(duration: 0.28), value: across)
     }
 
     @ViewBuilder

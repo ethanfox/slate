@@ -26,6 +26,17 @@ struct LiquidSand: View {
                         .transition(.opacity)
                 }
             }
+            .overlay {
+                // The sand: fine grain at the screen's own pixels, so it never blurs or clumps when the
+                // picture is stretched. Overlay lightens light bands and darkens dark ones.
+                if let grain = LiquidSandRenderer.grain {
+                    Image(decorative: grain, scale: 2)
+                        .resizable(resizingMode: .tile)
+                        .blendMode(.overlay)
+                        .opacity(0.32)
+                }
+            }
+            .compositingGroup()
             .clipped()
             .task(id: spec) {
                 if let hit = LiquidSandCache.image(for: spec) {
@@ -109,10 +120,8 @@ enum LiquidSandRenderer {
                 let shade = fbm(u * 0.3 + 9, v * 6.5 + 4, seed &+ 4, octaves: 2)
                 let position = min(max((band - 0.22) * 1.8, 0), 1)
                 var color = sample(palette, at: position)
-                // Dark seams between bands, and sand: every grain a little lighter or darker.
-                let depth = 0.55 + 0.6 * smooth(shade)
-                let grain = (hash(UInt64(x), UInt64(y), seed &+ 5) - 0.5) * 0.26
-                let light = depth + grain * (0.6 + 0.8 * shade)
+                // Dark seams between bands. The grain is laid over this when it is shown.
+                let light = 0.55 + 0.6 * smooth(shade)
                 color.r *= light
                 color.g *= light
                 color.b *= light
@@ -137,6 +146,31 @@ enum LiquidSandRenderer {
             intent: .defaultIntent
         )
     }
+
+    /// A square of fine gray grain that tiles. Middle gray leaves what is under it unchanged.
+    static let grain: CGImage? = {
+        let side = 256
+        var pixels = [UInt8](repeating: 0, count: side * side)
+        for y in 0..<side {
+            for x in 0..<side {
+                pixels[y * side + x] = byte(0.5 + (hash(UInt64(x), UInt64(y), 77) - 0.5) * 0.9)
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
+        return CGImage(
+            width: side,
+            height: side,
+            bitsPerComponent: 8,
+            bitsPerPixel: 8,
+            bytesPerRow: side,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )
+    }()
 
     // MARK: Color
 
