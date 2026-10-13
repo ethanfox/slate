@@ -72,6 +72,15 @@ enum RunLinkKind: String, Codable, Hashable {
     case pullRequest
 }
 
+/// One line of the plan a worker writes for its Run and ticks off as it goes.
+struct RunStep: Codable, Hashable {
+    var title: String
+    var done: Bool
+
+    /// The most steps a Run's plan holds.
+    static let limit = 12
+}
+
 struct RunResultLink: Codable, Identifiable, Hashable {
     var id: UUID
     var label: String
@@ -151,6 +160,8 @@ final class AgentRun {
     var statusDetail: String
     var adapterStateJSON: String
     var historyJSON: String
+    /// The worker's plan for this Run, as JSON. Empty when it wrote none.
+    var stepsJSON: String = ""
     var createdAt: Date
     var startedAt: Date?
     var finishedAt: Date?
@@ -180,6 +191,11 @@ final class AgentRun {
     var history: [RunEvent] {
         get { Self.decode(historyJSON, as: [RunEvent].self) ?? [] }
         set { historyJSON = Self.encode(newValue) }
+    }
+
+    var steps: [RunStep] {
+        get { Self.decode(stepsJSON, as: [RunStep].self) ?? [] }
+        set { stepsJSON = newValue.isEmpty ? "" : Self.encode(newValue) }
     }
 
     var resultLinks: [RunResultLink] {

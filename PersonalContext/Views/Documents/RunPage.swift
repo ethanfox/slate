@@ -36,6 +36,10 @@ struct RunPage: View {
                         section("Result") { result }
                     }
 
+                    if !run.steps.isEmpty {
+                        section("Steps") { steps }
+                    }
+
                     section("Prompt") {
                         Text(run.brief)
                             .font(CraftFont.body)
@@ -190,6 +194,33 @@ struct RunPage: View {
                 .font(.system(size: 12))
             }
         }
+    }
+
+    /// The worker's own plan, ticked off as it goes.
+    private var steps: some View {
+        let all = run.steps
+        // While it works, the first step not yet done is the one in hand.
+        let current = run.status.isTerminal ? nil : all.firstIndex { !$0.done }
+        return VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(all.enumerated()), id: \.offset) { index, step in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: step.done ? "checkmark.circle.fill" : index == current ? "circle.dotted" : "circle")
+                        .font(.system(size: 13))
+                        .foregroundStyle(step.done ? Color.green : index == current ? Color.primary : Color.secondary.opacity(0.5))
+                        .frame(width: 16)
+                    Text(step.title)
+                        .font(CraftFont.body)
+                        .foregroundStyle(step.done ? .secondary : .primary)
+                        .fontWeight(index == current ? .medium : .regular)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(step.title), \(step.done ? "done" : index == current ? "in progress" : "not started")")
+            }
+            Text("\(all.filter(\.done).count) of \(all.count) done")
+                .font(CraftFont.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .animation(.snappy(duration: 0.25), value: all)
     }
 
     private var result: some View {

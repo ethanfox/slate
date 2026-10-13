@@ -31,6 +31,8 @@ enum LocalAgent: String, CaseIterable, Identifiable, Sendable {
 
     /// Passed to membrae-mcp so a worker sees only the tools its Run allows.
     static let allowedToolsVariable = "MEMBRAE_ALLOWED_TOOLS"
+    /// Passed to membrae-mcp so the worker's plan lands on its own Run.
+    static let runIDVariable = "MEMBRAE_RUN_ID"
 
     /// The sandbox container is not the user's home. The tools keep their login in the real one.
     static var home: String {
@@ -81,6 +83,7 @@ struct LocalAgentRequest: Equatable, Sendable {
     var allowEdits: Bool
     var mcpCommand: String?
     var membraeTools: [String] = []
+    var runID: String = ""
 }
 
 struct LocalAgentError: LocalizedError, Sendable {
@@ -107,7 +110,7 @@ extension LocalAgent {
                         "membrae": [
                             "command": mcp,
                             "args": [String](),
-                            "env": [Self.allowedToolsVariable: tools]
+                            "env": [Self.allowedToolsVariable: tools, Self.runIDVariable: request.runID]
                         ]
                     ]
                 ]
@@ -131,7 +134,7 @@ extension LocalAgent {
             if let mcp {
                 arguments += [
                     "-c", "mcp_servers.membrae.command=\(Self.toml(mcp))",
-                    "-c", "mcp_servers.membrae.env={\(Self.allowedToolsVariable)=\(Self.toml(tools))}"
+                    "-c", "mcp_servers.membrae.env={\(Self.allowedToolsVariable)=\(Self.toml(tools)),\(Self.runIDVariable)=\(Self.toml(request.runID))}"
                 ]
             }
             arguments.append(request.prompt)

@@ -37,6 +37,8 @@ struct RunToolPolicy: Equatable, Sendable {
     ]
 
     static let finishRun = "finish_run"
+    /// Writes the Run's own plan. Always allowed, and always pointed at this Run.
+    static let setRunSteps = "set_run_steps"
 
     init(
         runID: UUID,
@@ -82,6 +84,8 @@ struct RunToolPolicy: Equatable, Sendable {
 
     func allows(_ name: String) -> Bool {
         if name == Self.finishRun { return true }
+        // A chat has no Run to write a plan on.
+        if name == Self.setRunSteps { return attachesRunSource }
         if BrowserPermissions.isBrowserTool(name) { return allowBrowser }
         if name == MCPToolName.importServers { return allowExternalMCP }
         if MCPToolName.isExternal(name) { return allowExternalMCP }
@@ -129,6 +133,7 @@ struct RunToolPolicy: Equatable, Sendable {
 
     func preparedArguments(_ name: String, _ arguments: [String: Any]) -> [String: Any] {
         var arguments = arguments
+        if name == Self.setRunSteps { arguments["run_id"] = runID.uuidString }
         let named = (arguments["project_id"] as? String).flatMap(UUID.init(uuidString:)) != nil
         if let projectID, writesProject(name), !(allowOtherProjects && named) {
             arguments["project_id"] = projectID.uuidString
@@ -155,7 +160,7 @@ struct RunToolPolicy: Equatable, Sendable {
 
     /// The Membrae tools a general Run may be offered. Completing is only there when it has a task.
     static func generalCatalog(for run: AgentRun) -> [String] {
-        run.task == nil ? membraeCatalog : membraeCatalog + ["complete_task"]
+        (run.task == nil ? membraeCatalog : membraeCatalog + ["complete_task"]) + [setRunSteps]
     }
 }
 

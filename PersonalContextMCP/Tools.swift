@@ -1245,6 +1245,31 @@ enum Tools {
                 .map { JSONShape.run($0, full: false) }
         },
         Tool(
+            name: "set_run_steps",
+            description: "Write the plan for the Run you are working on, or update it. Send every step each time, in order, with done true on the ones you have finished. At most \(RunStep.limit) steps, each a few words.",
+            properties: [
+                "run_id": text("Leave out. It is your own Run."),
+                "steps": objectList("Every step, in order: {title, done}.")
+            ],
+            required: ["steps"], readOnly: false
+        ) { args, context in
+            // A worker started for a Run can only write that Run's steps.
+            let raw = ProcessInfo.processInfo.environment["MEMBRAE_RUN_ID"] ?? args.string("run_id") ?? ""
+            guard let id = UUID(uuidString: raw) else { throw ToolError("There is no Run to write steps for.") }
+            let run = try Lookup.run(id, in: context)
+            let steps = (try args.objects("steps") ?? []).compactMap { item -> RunStep? in
+                let title = (item["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                return title.isEmpty ? nil : RunStep(title: String(title.prefix(120)), done: item["done"] as? Bool ?? false)
+            }
+            guard steps.count <= RunStep.limit else {
+                throw ToolError("A Run's plan holds \(RunStep.limit) steps, and this has \(steps.count). Merge some and send it again.")
+            }
+            run.steps = steps
+            run.updatedAt = .now
+            try context.save()
+            return ["steps": steps.map { ["title": $0.title, "done": $0.done] }]
+        },
+        Tool(
             name: "get_run",
             description: "Get one Run: origin, history, receipt, and snapshots.",
             properties: ["run_id": text("Run id.")],
@@ -2380,6 +2405,7 @@ enum JSONShape {
             shape["title_snapshot"] = run.titleSnapshot
             shape["status_detail"] = run.statusDetail
             shape["result_summary"] = run.resultSummary
+            shape["steps"] = run.steps.map { ["title": $0.title, "done": $0.done] }
             shape["result_links"] = run.resultLinks.map {
                 ["id": $0.id.uuidString, "label": $0.label, "url": $0.url, "kind": $0.kindRaw]
             }

@@ -278,6 +278,8 @@ enum RunPrompt {
         return "Do the job. Call finish_run with a short summary when you are done. If you cannot do what was asked, call finish_run with outcome could_not and the reason. You have no project to write into. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
     }
 
+    static let stepsInstruction = "For a job with more than two or three parts, call set_run_steps before you start with your plan as short steps, and call it again each time you finish one, sending the whole list with that step marked done. The user watches the list to see how far along you are. Skip it for a job that is one step."
+
     /// For a coding tool on this Mac. It has no finish_run; its last message is the summary.
     static func localAgent(
         brief: String,
@@ -302,6 +304,7 @@ enum RunPrompt {
         } else {
             lines.append("Do not change files. Report what you find, with file paths and line numbers.")
         }
+        if hasMembrae { lines.append(stepsInstruction) }
         lines.append("Finish with a short summary of what you did.")
         lines.append(brief)
         return lines.filter { !$0.isEmpty }.joined(separator: "\n\n")
@@ -337,6 +340,7 @@ enum RunPrompt {
             assigned(run?.task),
             otherProjects(besides: project, in: run?.modelContext),
             closeInstruction(hasProject: project != nil),
+            stepsInstruction,
             brief
         ]
         return parts.filter { !$0.isEmpty }.joined(separator: "\n\n")

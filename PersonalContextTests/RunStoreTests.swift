@@ -12,6 +12,23 @@ final class RunStoreTests: XCTestCase {
         container = try ModelContainer(for: Store.schema, configurations: configuration)
     }
 
+    func testAWorkerWritesAndTicksOffItsSteps() throws {
+        let run = try RunStore.enqueue(draft(origin: .workspace, brief: "Tidy up"), in: context)
+        func set(_ steps: [[String: Any]]) -> [String: Any] {
+            Tools.call("set_run_steps", arguments: ["run_id": run.id.uuidString, "steps": steps], container: container, announce: false)
+        }
+        // The tool writes through its own context, as the helper does, so read the Run back fresh.
+        let id = run.id
+        func saved() -> [RunStep] { RunStore.run(id, in: ModelContext(container))?.steps ?? [] }
+        XCTAssertNil(set([["title": " Read the notes "], ["title": "Write the summary"], ["title": ""]])["isError"])
+        XCTAssertEqual(saved(), [RunStep(title: "Read the notes", done: false), RunStep(title: "Write the summary", done: false)])
+        XCTAssertNil(set([["title": "Read the notes", "done": true], ["title": "Write the summary"]])["isError"])
+        XCTAssertEqual(saved().map(\.done), [true, false])
+        let tooMany = (0...RunStep.limit).map { ["title": "Step \($0)"] }
+        XCTAssertEqual(set(tooMany)["isError"] as? Bool, true)
+        XCTAssertEqual(saved().count, 2)
+    }
+
     func testFourOriginsPersist() throws {
         let project = project("Harbor")
         let task = task("Write it", in: project)

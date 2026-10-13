@@ -13,6 +13,15 @@ final class RunToolPolicyTests: XCTestCase {
         XCTAssertFalse(policy.allowedNames(from: ["complete_task", "create_note"]).contains("complete_task"))
     }
 
+    func testARunWritesStepsOnlyOnItself() {
+        let runID = UUID()
+        let policy = RunToolPolicy(runID: runID, projectID: nil, assignedTaskID: nil, allowCode: false)
+        XCTAssertTrue(policy.allows("set_run_steps"))
+        let prepared = policy.preparedArguments("set_run_steps", ["run_id": UUID().uuidString, "steps": []])
+        XCTAssertEqual(prepared["run_id"] as? String, runID.uuidString)
+        XCTAssertFalse(RunToolPolicy.chat(projectID: nil).allows("set_run_steps"))
+    }
+
     func testUnprojectedHasNoMembraeWrites() {
         let policy = RunToolPolicy(runID: UUID(), projectID: nil, assignedTaskID: nil, allowCode: false)
         XCTAssertFalse(policy.allows("create_note"))

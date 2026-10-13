@@ -168,7 +168,7 @@ final class RunCoordinator {
         let listed = includeMembrae ? policy.allowedNames(from: RunToolPolicy.generalCatalog(for: run)) : []
         let request = RunnerRequest(
             apiKey: apiKey,
-            env: ProcessInfo.processInfo.environment,
+            env: ProcessInfo.processInfo.environment.merging([LocalAgent.runIDVariable: id.uuidString]) { _, new in new },
             agentId: nil,
             name: run.displayTitle,
             text: RunPrompt.body(brief: run.brief, project: run.project, run: run),
@@ -286,7 +286,8 @@ final class RunCoordinator {
             directory: repository ?? folder?.path ?? NSTemporaryDirectory(),
             allowEdits: allowEdits,
             mcpCommand: Bundle.main.url(forAuxiliaryExecutable: "membrae-mcp")?.path,
-            membraeTools: tools
+            membraeTools: tools,
+            runID: run.id.uuidString
         )
         let before = repository.flatMap { try? GitHistory.commits(in: $0, limit: 1) }
         let process = LocalAgentProcess()
