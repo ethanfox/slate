@@ -376,6 +376,14 @@ final class ProviderNeutralTests: XCTestCase {
     }
 
     @MainActor
+    func testOnlyARefusedTokenEndsTheChatGPTSignIn() {
+        XCTAssertTrue(ChatGPTSignIn.isRefusedRefresh(status: 400, body: #"{"error": "invalid_grant"}"#))
+        XCTAssertTrue(ChatGPTSignIn.isRefusedRefresh(status: 401, body: ""))
+        XCTAssertFalse(ChatGPTSignIn.isRefusedRefresh(status: 400, body: #"{"error": "invalid_request"}"#))
+        XCTAssertFalse(ChatGPTSignIn.isRefusedRefresh(status: 429, body: "slow down"))
+        XCTAssertFalse(ChatGPTSignIn.isRefusedRefresh(status: 503, body: "invalid_grant"))
+    }
+
     /// Projects no longer choose a worker, so a stored one is ignored.
     func testStoredProjectWorkerIsIgnored() throws {
         let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)

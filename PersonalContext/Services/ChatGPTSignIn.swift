@@ -337,6 +337,13 @@ enum ChatGPTSignIn {
         guard !session.refreshToken.isEmpty else {
             throw ChatGPTAuthError("ChatGPT sign-in expired. Reconnect in Settings.")
         }
+        // Another copy of the app may be refreshing too. Wait for it, then use what it saved.
+        let lock = await ChatGPTRefreshLock.acquire()
+        defer { lock.release() }
+        if let saved = load(), saved.refreshToken != session.refreshToken || saved.accessToken != session.accessToken {
+            session = saved
+            if !needsRefresh(session, refreshing: token) { return session }
+        }
         var request = URLRequest(url: tokenURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
@@ -349,7 +356,16 @@ enum ChatGPTSignIn {
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
-            ChatTrace.event("chatgpt refresh failed status=\(status) \(ChatTrace.clip(String(data: data, encoding: .utf8) ?? ""))")
+            let body = String(data: data, encoding: .utf8) ?? ""
+            ChatTrace.event("chatgpt refresh failed status=\(status) \(ChatTrace.clip(body))")
+            guard isRefusedRefresh(status: status, body: body) else {
+                // A busy or unreachable server is not an expired sign-in. The same token still works next time.
+                throw ChatGPTAuthError("ChatGPT could not renew the sign-in just now (\(status)). Try again.")
+            }
+            // The token was already used. If something else saved its replacement, carry on with that.
+            if let saved = load(), saved.refreshToken != session.refreshToken, !needsRefresh(saved, refreshing: token) {
+                return saved
+            }
             throw ChatGPTAuthError("ChatGPT sign-in expired. Reconnect in Settings.")
         }
         let tokens = try JSONDecoder().decode(TokenResponse.self, from: data)
@@ -366,6 +382,13 @@ enum ChatGPTSignIn {
         }
         try save(session)
         return session
+    }
+
+    /// Only these mean the refresh token itself is no good.
+    static func isRefusedRefresh(status: Int, body: String) -> Bool {
+        guard status == 400 || status == 401 else { return false }
+        let lower = body.lowercased()
+        return lower.contains("invalid_grant") || lower.contains("invalid_token") || status == 401
     }
 
     private struct TokenResponse: Decodable {
@@ -432,11 +455,42 @@ enum IDToken {
     }
 }
 
+/// One refresh at a time. A refresh token works once, so two refreshes at the same moment
+/// spend it twice, the second is refused, and the sign-in is over.
 private actor ChatGPTTokenRefresh {
     static let shared = ChatGPTTokenRefresh()
+    private var inFlight: Task<ChatGPTSession, Error>?
 
-    func run<T: Sendable>(_ operation: @Sendable () async throws -> T) async throws -> T {
-        try await operation()
+    func run(_ operation: @escaping @Sendable () async throws -> ChatGPTSession) async throws -> ChatGPTSession {
+        if let inFlight {
+            return try await inFlight.value
+        }
+        let task = Task { try await operation() }
+        inFlight = task
+        defer { inFlight = nil }
+        return try await task.value
+    }
+}
+
+/// Keeps two copies of the app, such as the app and a test run, from refreshing at the same moment.
+struct ChatGPTRefreshLock {
+    private let descriptor: Int32
+
+    static func acquire(timeout: TimeInterval = 20) async -> ChatGPTRefreshLock {
+        let path = (NSTemporaryDirectory() as NSString).appendingPathComponent("chatgpt-refresh.lock")
+        let descriptor = open(path, O_CREAT | O_RDWR, 0o600)
+        guard descriptor >= 0 else { return ChatGPTRefreshLock(descriptor: -1) }
+        let deadline = Date().addingTimeInterval(timeout)
+        while flock(descriptor, LOCK_EX | LOCK_NB) != 0, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return ChatGPTRefreshLock(descriptor: descriptor)
+    }
+
+    func release() {
+        guard descriptor >= 0 else { return }
+        flock(descriptor, LOCK_UN)
+        close(descriptor)
     }
 }
 
