@@ -264,7 +264,7 @@ struct SidebarView: View {
     /// Everything without a row of its own is reached from You, so it keeps that row lit.
     private var isOnYou: Bool {
         switch app.destination {
-        case .home, .aboutYou, .tasks, .calendar, .chats, .runs, .projects, .library: true
+        case .home, .aboutYou, .context, .tasks, .calendar, .chats, .runs, .projects, .library: true
         default: false
         }
     }

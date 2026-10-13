@@ -192,6 +192,7 @@
 		B82FC40282ED31CF898CD9B1 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A5537B9B75008C51A4CCB08 /* HomeView.swift */; };
 		5BACE0200000000000000012 /* YouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BACE0200000000000000011 /* YouView.swift */; };
 		5BACE0200000000000000022 /* AboutYouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BACE0200000000000000021 /* AboutYouView.swift */; };
+		1CA1A6E0000000000000019 /* ContextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E0000000000000009 /* ContextView.swift */; };
 		5BACE0200000000000000032 /* SpaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BACE0200000000000000031 /* SpaceView.swift */; };
 		1CA1A6E00000000000000015 /* AreaRecordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E00000000000000005 /* AreaRecordsView.swift */; };
 		1CA1A6E0000000000000016 /* AreaWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E0000000000000006 /* AreaWidgetView.swift */; };
@@ -396,6 +397,7 @@
 		4A5537B9B75008C51A4CCB08 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		5BACE0200000000000000011 /* YouView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouView.swift; sourceTree = "<group>"; };
 		5BACE0200000000000000021 /* AboutYouView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutYouView.swift; sourceTree = "<group>"; };
+		1CA1A6E0000000000000009 /* ContextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextView.swift; sourceTree = "<group>"; };
 		5BACE0200000000000000031 /* SpaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceView.swift; sourceTree = "<group>"; };
 		1CA1A6E00000000000000005 /* AreaRecordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaRecordsView.swift; sourceTree = "<group>"; };
 		1CA1A6E0000000000000006 /* AreaWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaWidgetView.swift; sourceTree = "<group>"; };
@@ -684,6 +686,7 @@
 				4A5537B9B75008C51A4CCB08 /* HomeView.swift */,
 				5BACE0200000000000000011 /* YouView.swift */,
 				5BACE0200000000000000021 /* AboutYouView.swift */,
+				1CA1A6E0000000000000009 /* ContextView.swift */,
 				5BACE0200000000000000031 /* SpaceView.swift */,
 				1CA1A6E00000000000000005 /* AreaRecordsView.swift */,
 				1CA1A6E0000000000000006 /* AreaWidgetView.swift */,
@@ -1302,6 +1305,7 @@
 				B82FC40282ED31CF898CD9B1 /* HomeView.swift in Sources */,
 				5BACE0200000000000000012 /* YouView.swift in Sources */,
 				5BACE0200000000000000022 /* AboutYouView.swift in Sources */,
+				1CA1A6E0000000000000019 /* ContextView.swift in Sources */,
 				5BACE0200000000000000032 /* SpaceView.swift in Sources */,
 				1CA1A6E00000000000000015 /* AreaRecordsView.swift in Sources */,
 				1CA1A6E0000000000000016 /* AreaWidgetView.swift in Sources */,

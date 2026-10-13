@@ -21,6 +21,7 @@ enum Destination: Hashable, Codable {
     case quickAsk(UUID)
     case run(UUID)
     case aboutYou
+    case context
     case space(UUID)
     case spaceRecord(space: UUID, record: UUID)
     case library

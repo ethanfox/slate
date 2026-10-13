@@ -4,10 +4,14 @@ import SwiftUI
 /// takes the room its share asks for, and the others give way.
 struct MembraneView: View {
     var model: MembraneModel
+    /// The least time between frames. A small membrane does not need every frame.
+    var frameInterval: Double?
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.animation(minimumInterval: frameInterval)) { timeline in
             Canvas { context, size in
+                model.isDark = colorScheme == .dark
                 model.advance(to: timeline.date)
                 MembraneRenderer.draw(model, in: &context, size: size)
             }
@@ -21,8 +25,18 @@ struct MembraneView: View {
     }
 }
 
+/// One of the user's things, as the membrane needs it.
+struct MembraneThing: Equatable {
+    var id: String
+    var color: SIMD3<Double>
+    /// How much room it asks for next to the others. 1 is ordinary.
+    var weight: Double
+}
+
 struct MembraneCell {
     var id: Int
+    /// The thing this cell stands for. The logo's own cells have none.
+    var key: String?
     /// In the circle's own space: the center is zero and the edge is at 1.
     var position: SIMD2<Double>
     var velocity: SIMD2<Double> = .zero
@@ -46,6 +60,10 @@ struct MembraneCell {
 final class MembraneModel {
     private(set) var cells: [MembraneCell] = []
     private(set) var isFocused = false
+    /// On a dark page the logo's cells are light, so they do not sink into it.
+    var isDark = false {
+        didSet { if isDark != oldValue { applyLook() } }
+    }
     /// Where the pointer is held down, in the view's points.
     var pointer: CGPoint?
     var viewSize: CGSize = .zero
@@ -58,8 +76,9 @@ final class MembraneModel {
 
     static let gap = 0.045
     static let graphite = SIMD3(0.14, 0.14, 0.16)
+    static let chalk = SIMD3(0.9, 0.9, 0.88)
     static let pale = SIMD3(0.87, 0.87, 0.85)
-    private static let hues: [SIMD3<Double>] = [
+    static let hues: [SIMD3<Double>] = [
         SIMD3(0.91, 0.39, 0.23), SIMD3(0.29, 0.33, 0.85), SIMD3(0.12, 0.37, 0.39), SIMD3(0.0, 0.48, 1.0),
         SIMD3(0.93, 0.68, 0.22), SIMD3(0.78, 0.27, 0.52), SIMD3(0.33, 0.63, 0.42),
     ]
@@ -95,6 +114,43 @@ final class MembraneModel {
         focused.remove(cells[index].id)
     }
 
+    /// Makes the cells match the user's things: new ones squeeze in, missing ones leave.
+    func sync(_ things: [MembraneThing]) {
+        let isFirst = !cells.contains { $0.key != nil }
+        let wanted = Dictionary(things.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for index in cells.indices {
+            guard let key = cells[index].key else { continue }
+            if let thing = wanted[key] {
+                cells[index].hue = thing.color
+                cells[index].restShare = thing.weight
+                cells[index].isLeaving = false
+            } else {
+                cells[index].isLeaving = true
+                cells[index].targetShare = 0
+            }
+        }
+        let present = Set(cells.compactMap(\.key))
+        for thing in things where !present.contains(thing.id) {
+            // Placed from its id, so the membrane looks the same every time it is opened.
+            let seed = Self.hash(thing.id)
+            let angle = Double(seed % 3600) / 3600 * 2 * .pi
+            let reach = isFirst ? 0.3 + Double(seed / 3600 % 100) / 100 * 0.5 : 0.82
+            append(
+                at: SIMD2(cos(angle), sin(angle)) * reach, share: thing.weight,
+                startShare: isFirst ? thing.weight : 0.02, isLogo: false, hue: thing.color, key: thing.id
+            )
+        }
+        applyLook()
+        if isFirst {
+            pack()
+            for _ in 0..<240 { step(1.0 / 60) }
+        }
+    }
+
+    private static func hash(_ text: String) -> UInt64 {
+        text.utf8.reduce(0xCBF2_9CE4_8422_2325) { ($0 ^ UInt64($1)) &* 0x100_0000_01B3 }
+    }
+
     func toggleFocus() {
         isFocused.toggle()
         if isFocused {
@@ -106,14 +162,20 @@ final class MembraneModel {
         applyLook()
     }
 
-    private func append(at position: SIMD2<Double>, share: Double, startShare: Double, isLogo: Bool, hue: SIMD3<Double>? = nil) {
+    private func append(at position: SIMD2<Double>, share: Double, startShare: Double, isLogo: Bool,
+        hue: SIMD3<Double>? = nil, key: String? = nil
+    ) {
         let hue = hue ?? Self.hues[nextID % Self.hues.count]
-        let rest = isLogo ? Self.graphite : hue
+        let rest = isLogo ? logoColor : hue
         cells.append(MembraneCell(
-            id: nextID, position: position, share: startShare, targetShare: share, color: rest, targetColor: rest,
+            id: nextID, key: key, position: position, share: startShare, targetShare: share, color: rest, targetColor: rest,
             hue: hue, restShare: share, isLogo: isLogo, phase: Double.random(in: 0..<100)
         ))
         nextID += 1
+    }
+
+    private var logoColor: SIMD3<Double> {
+        isDark ? Self.chalk : Self.graphite
     }
 
     private func applyLook() {
@@ -121,7 +183,7 @@ final class MembraneModel {
             let cell = cells[index]
             if !isFocused {
                 cells[index].targetShare = cell.restShare
-                cells[index].targetColor = cell.isLogo ? Self.graphite : cell.hue
+                cells[index].targetColor = cell.isLogo ? logoColor : cell.hue
             } else if focused.contains(cell.id) {
                 cells[index].targetShare = 2.3
                 cells[index].targetColor = cell.hue
@@ -271,7 +333,7 @@ private func dot(_ a: SIMD2<Double>, _ b: SIMD2<Double>) -> Double {
 
 enum MembraneRenderer {
     static func radius(in size: CGSize) -> Double {
-        min(size.width, size.height) / 2 - 16
+        min(size.width, size.height) / 2 * 0.93
     }
 
     static func draw(_ model: MembraneModel, in context: inout GraphicsContext, size: CGSize) {

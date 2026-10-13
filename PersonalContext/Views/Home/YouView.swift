@@ -210,6 +210,8 @@ struct YouView: View {
     @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "project" }, sort: \TitleIndex.updatedAt, order: .reverse)
     private var projects: [TitleIndex]
 
+    private var contextItems = ContextItems()
+
     private let gutter: CGFloat = 48
 
     var body: some View {
@@ -300,16 +302,35 @@ struct YouView: View {
             .frame(maxHeight: 480)
     }
 
+    /// The user's membrane. Opens what their context consists of.
+    private var membrane: some View {
+        Button {
+            app.navigate(to: .context)
+        } label: {
+            ContextMembrane(items: contextItems.all, frameInterval: 1.0 / 30)
+                .allowsHitTesting(false)
+                .frame(width: 64, height: 64)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Your context")
+        .accessibilityLabel("Your context")
+    }
+
     private var greeting: some View {
         HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(greetingLine)
-                    .font(.system(size: 28, weight: .semibold))
-                Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                    .font(CraftFont.body)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 14) {
+                    membrane
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(greetingLine)
+                            .font(.system(size: 28, weight: .semibold))
+                        Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                            .font(CraftFont.body)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 shortcuts
-                    .padding(.top, 12)
             }
             Spacer(minLength: 16)
             customize

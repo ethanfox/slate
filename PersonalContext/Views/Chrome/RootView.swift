@@ -366,7 +366,7 @@ struct RootView: View {
             SpaceToolbar(spaceID: id)
         } else if case .spaceRecord(_, let recordID) = app.destination {
             SpaceRecordToolbar(recordID: recordID)
-        } else if case .aboutYou = app.destination {
+        } else if app.destination == .aboutYou || app.destination == .context {
             Button {
                 app.navigate(to: .home, newTab: false)
             } label: {
@@ -734,6 +734,8 @@ struct RootView: View {
             YouView()
         case .aboutYou:
             AboutYouView()
+        case .context:
+            ContextView()
         case .space(let id):
             SpaceView(id: id)
         case .spaceRecord(let spaceID, let recordID):
