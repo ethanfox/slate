@@ -180,7 +180,7 @@ final class RunCoordinator {
         let includeMembrae = policy.allowsMembraeWrites || policy.allowCodeReferenceWrite
         let catalog = run.purpose == .indexRepository
             ? RunToolPolicy.indexingCatalog
-            : RunToolPolicy.membraeCatalog
+            : RunToolPolicy.generalCatalog(for: run)
         let listed = includeMembrae ? policy.allowedNames(from: catalog) : []
         let request = RunnerRequest(
             apiKey: apiKey,
@@ -292,7 +292,7 @@ final class RunCoordinator {
         }
         let repository = roots.first?.path
         let allowEdits = run.allowEdits
-        let tools = policy.allowedNames(from: RunToolPolicy.membraeCatalog)
+        let tools = policy.allowedNames(from: RunToolPolicy.generalCatalog(for: run))
         let request = LocalAgentRequest(
             prompt: RunPrompt.localAgent(
                 brief: run.brief,

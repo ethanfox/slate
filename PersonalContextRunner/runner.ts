@@ -808,7 +808,7 @@ function finishRunTool(): Record<string, SDKCustomTool> {
   return {
     finish_run: {
       description:
-        "Stock the run receipt with a short summary and optional links. If you could not do what was asked, set outcome to could_not and give the reason. Do not complete the assigned task.",
+        "Stock the run receipt with a short summary and optional links. If you could not do what was asked, set outcome to could_not and give the reason.",
       inputSchema: {
         type: "object",
         properties: {

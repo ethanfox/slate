@@ -275,7 +275,7 @@ enum RunWaitLabel {
 enum RunPrompt {
     static func closeInstruction(hasProject: Bool) -> String {
         if hasProject {
-            return "Do the job with the tools you have. Call finish_run with a short summary when you are done. If you cannot do what was asked, for example because it needs code changed and you cannot change code, call finish_run with outcome could_not and the reason; do not describe work you could not do as done. Do not complete the assigned task. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
+            return "Do the job with the tools you have. Call finish_run with a short summary when you are done. If you cannot do what was asked, for example because it needs code changed and you cannot change code, call finish_run with outcome could_not and the reason; do not describe work you could not do as done. If you were given an assigned task and you finished it, mark it done with complete_task; if you did not finish it, leave it as it is. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
         }
         return "Do the job. Call finish_run with a short summary when you are done. If you cannot do what was asked, call finish_run with outcome could_not and the reason. You have no project to write into. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
     }
@@ -295,7 +295,7 @@ enum RunPrompt {
         }
         lines.append(assigned(task))
         if hasMembrae {
-            lines.append("The membrae tools read and write this project’s decisions, tracks, notes, and tasks in Membrae. Read what governs the work before you start. Do not complete the assigned task.")
+            lines.append("The membrae tools read and write this project’s decisions, tracks, notes, and tasks in Membrae. Read what governs the work before you start. If you were given an assigned task and you finished it, mark it done with complete_task; if you did not finish it, leave it as it is.")
         }
         if allowEdits, let directory {
             lines.append("You are working in \(directory). Make the changes the brief asks for. If it is a git repository, commit what you change with a clear message. Do not push.")

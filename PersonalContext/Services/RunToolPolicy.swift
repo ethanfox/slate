@@ -23,7 +23,6 @@ struct RunToolPolicy: Equatable, Sendable {
     }
 
     static let denied: Set<String> = [
-        "complete_task",
         "mark_for_deletion",
         "delete_record",
         "create_project",
@@ -97,7 +96,7 @@ struct RunToolPolicy: Equatable, Sendable {
             allowMembraeKnowledgeWrite: false,
             allowCodeReferenceWrite: true,
             scopedAttachmentID: attachmentID,
-            denied: RunToolPolicy.denied.union(projectWrites),
+            denied: RunToolPolicy.denied.union(projectWrites).union(["complete_task"]),
             requireProject: false,
             attachesRunSource: false,
             allowBrowser: false
@@ -110,6 +109,8 @@ struct RunToolPolicy: Equatable, Sendable {
         if name == MCPToolName.importServers { return allowExternalMCP }
         if MCPToolName.isExternal(name) { return allowExternalMCP }
         if denied.contains(name) { return false }
+        // A Run may complete the task it was started from, and no other.
+        if name == "complete_task", attachesRunSource { return assignedTaskID != nil }
         if Self.projectWrites.contains(name) { return false }
         if RepositoryIndex.toolWrites.contains(name) { return allowCodeReferenceWrite }
         if RepositoryIndex.toolReads.contains(name) { return true }
@@ -138,17 +139,10 @@ struct RunToolPolicy: Equatable, Sendable {
             }
             return .failure(RunToolDenied("This run cannot use \(name)."))
         }
-        if name == "update_task" || name == "complete_task" {
-            if let assigned = assignedTaskID,
-               let raw = arguments["task_id"] as? String,
-               let taskID = UUID(uuidString: raw),
-               taskID == assigned {
-                if name == "complete_task" {
-                    return .failure(RunToolDenied("This run cannot complete the assigned task."))
-                }
-                if let status = arguments["status"] as? String, status.lowercased() == "done" {
-                    return .failure(RunToolDenied("This run cannot complete the assigned task."))
-                }
+        if name == "complete_task", attachesRunSource {
+            let taskID = (arguments["task_id"] as? String).flatMap(UUID.init(uuidString:))
+            if taskID == nil || taskID != assignedTaskID {
+                return .failure(RunToolDenied("This run can only complete the task it was started from."))
             }
         }
         if !allowOtherProjects,
@@ -206,6 +200,11 @@ struct RunToolPolicy: Equatable, Sendable {
             ? indexingCatalog
             : membraeCatalog
         return policy.allowedNames(from: catalog)
+    }
+
+    /// The Membrae tools a general Run may be offered. Completing is only there when it has a task.
+    static func generalCatalog(for run: AgentRun) -> [String] {
+        run.task == nil ? membraeCatalog : membraeCatalog + ["complete_task"]
     }
 }
 

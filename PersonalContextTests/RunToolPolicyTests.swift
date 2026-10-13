@@ -2,8 +2,8 @@ import XCTest
 @testable import Membrae
 
 final class RunToolPolicyTests: XCTestCase {
-    func testOmitsCompleteTask() {
-        let policy = RunToolPolicy(runID: UUID(), projectID: UUID(), assignedTaskID: UUID(), allowCode: true)
+    func testRunToolsOfferedAndWithheld() {
+        let policy = RunToolPolicy(runID: UUID(), projectID: UUID(), assignedTaskID: nil, allowCode: true)
         XCTAssertFalse(policy.allows("complete_task"))
         XCTAssertFalse(policy.allows("mark_for_deletion"))
         XCTAssertFalse(policy.allows("update_project"))
@@ -40,19 +40,16 @@ final class RunToolPolicyTests: XCTestCase {
         XCTAssertNil(policy.preparedArguments("list_spaces", [:])["project_id"])
     }
 
-    func testRejectsCompletingAssignedTask() {
+    func testRunCompletesOnlyTheTaskItWasStartedFrom() {
         let taskID = UUID()
         let policy = RunToolPolicy(runID: UUID(), projectID: UUID(), assignedTaskID: taskID, allowCode: false)
-        let denied = policy.permitsCall("update_task", arguments: [
+        XCTAssertTrue(policy.allows("complete_task"))
+        XCTAssertNoThrow(try policy.permitsCall("complete_task", arguments: ["task_id": taskID.uuidString]).get())
+        XCTAssertThrowsError(try policy.permitsCall("complete_task", arguments: ["task_id": UUID().uuidString]).get())
+        XCTAssertNoThrow(try policy.permitsCall("update_task", arguments: [
             "task_id": taskID.uuidString,
             "status": "done"
-        ])
-        XCTAssertThrowsError(try denied.get())
-        let ok = policy.permitsCall("update_task", arguments: [
-            "task_id": UUID().uuidString,
-            "title": "Follow up"
-        ])
-        XCTAssertNoThrow(try ok.get())
+        ]).get())
     }
 
     func testRejectsOtherProject() {

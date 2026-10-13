@@ -10,10 +10,12 @@ struct RunNotice: Identifiable, Equatable {
     var status: RunStatus
     var detail: String
     var fix: RunNoticeFix?
+    /// The worker marked the Run's task done.
+    var completedTask = false
 
     var headline: String {
         switch status {
-        case .succeeded: "Finished"
+        case .succeeded: completedTask ? "Finished and marked the task done" : "Finished"
         case .couldNot: "Couldn’t do it"
         default: "Failed"
         }
@@ -50,7 +52,9 @@ extension AppModel {
             title: run.displayTitle,
             status: run.status,
             detail: summary.trimmingCharacters(in: .whitespacesAndNewlines),
-            fix: fix
+            fix: fix,
+            completedTask: run.status == .succeeded
+                && (run.task?.isCompleted == true || run.task?.workflowStatus == .done)
         )
         withAnimation(Motion.snappy) {
             runNotices.removeAll { $0.id == notice.id }
