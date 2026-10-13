@@ -1,3 +1,4 @@
+import EventKit
 import Foundation
 import SwiftData
 #if MEMBRAE_TESTS
@@ -682,6 +683,43 @@ enum Tools {
                 }
             }
             return JSONShape.task(item, full: true)
+        },
+        Tool(
+            name: "list_calendars",
+            description: "The current time, the Mac's time zone, and the names of the user's calendars and Apple Reminders lists. Call it before create_event or create_reminder so the date is right.",
+            properties: [:], required: [], readOnly: true
+        ) { _, _ in
+            Agenda.context()
+        },
+        Tool(
+            name: "create_event",
+            description: "Add an event to the user's calendar on this Mac. Not a Membrae task.",
+            properties: [
+                "title": text("Event title."),
+                "start": text("ISO-8601 start, such as 2026-01-31T15:00:00. Without an offset it is read in the Mac's time zone. A bare day, 2026-01-31, makes an all-day event."),
+                "end": text("ISO-8601 end. Defaults to one hour after start, or the same day for an all-day event."),
+                "all_day": flag("Make it an all-day event."),
+                "calendar": text("Calendar name from list_calendars. Defaults to the user's default calendar."),
+                "location": text("Where it is."),
+                "notes": text("Notes on the event.")
+            ],
+            required: ["title", "start"], readOnly: false
+        ) { args, _ in
+            try Agenda.createEvent(args)
+        },
+        Tool(
+            name: "create_reminder",
+            description: "Add a reminder to Apple Reminders on this Mac. Use it when the user asks to be reminded. Not a Membrae task.",
+            properties: [
+                "title": text("What to be reminded of."),
+                "due": text("ISO-8601 time to be reminded, such as 2026-01-31T15:00:00. Without an offset it is read in the Mac's time zone. A bare day, 2026-01-31, is due that day with no time."),
+                "list": text("Reminders list name from list_calendars. Defaults to the user's default list."),
+                "notes": text("Notes on the reminder."),
+                "repeat": options(Agenda.Repeat.self, "How often it repeats. Needs due.")
+            ],
+            required: ["title"], readOnly: false
+        ) { args, _ in
+            try Agenda.createReminder(args)
         },
         Tool(
             name: "list_completions",
@@ -2882,5 +2920,157 @@ enum SpaceTools {
                 "event_type": ["key": "cooked", "name": "Cooked", "role": "event"]
             ]
         ]
+    }
+}
+
+// MARK: - Calendar and Reminders
+
+/// Calendar and Reminders through EventKit. macOS grants access to Membrae, so
+/// this process has it only when Membrae started it.
+enum Agenda {
+    enum Repeat: String, CaseIterable {
+        case daily, weekly, monthly, yearly
+
+        var frequency: EKRecurrenceFrequency {
+            switch self {
+            case .daily: .daily
+            case .weekly: .weekly
+            case .monthly: .monthly
+            case .yearly: .yearly
+            }
+        }
+    }
+
+    private static let store = EKEventStore()
+
+    static func context() -> [String: Any] {
+        let events = allowed(.event)
+        let reminders = allowed(.reminder)
+        var shape: [String: Any] = [
+            "now": stamp(.now),
+            "time_zone": TimeZone.current.identifier,
+            "calendar_access": events,
+            "reminders_access": reminders
+        ]
+        if events {
+            shape["calendars"] = names(.event)
+            shape["default_calendar"] = store.defaultCalendarForNewEvents?.title ?? ""
+        }
+        if reminders {
+            shape["reminder_lists"] = names(.reminder)
+            shape["default_reminder_list"] = store.defaultCalendarForNewReminders()?.title ?? ""
+        }
+        return shape
+    }
+
+    static func createEvent(_ args: Args) throws -> [String: Any] {
+        try require(.event)
+        let title = try args.required("title")
+        guard let start = try moment("start", in: args) else { throw ToolError("start is required.") }
+        let end = try moment("end", in: args)
+        let event = EKEvent(eventStore: store)
+        event.title = title
+        event.calendar = try list(args.string("calendar"), for: .event)
+        if args.bool("all_day") ?? start.dayOnly {
+            let calendar = Calendar.current
+            let first = calendar.startOfDay(for: start.date)
+            let last = calendar.startOfDay(for: max(start.date, end?.date ?? start.date))
+            event.startDate = first
+            event.endDate = calendar.date(byAdding: .day, value: 1, to: last) ?? last
+            event.isAllDay = true
+        } else {
+            event.startDate = start.date
+            event.endDate = max(end?.date ?? start.date.addingTimeInterval(3600), start.date)
+        }
+        if let location = args.string("location"), !location.isEmpty { event.location = location }
+        if let notes = args.string("notes"), !notes.isEmpty { event.notes = notes }
+        try store.save(event, span: .thisEvent, commit: true)
+        return [
+            "title": title,
+            "start": stamp(event.startDate),
+            "end": stamp(event.endDate),
+            "all_day": event.isAllDay,
+            "calendar": event.calendar.title
+        ]
+    }
+
+    static func createReminder(_ args: Args) throws -> [String: Any] {
+        try require(.reminder)
+        let title = try args.required("title")
+        let due = try moment("due", in: args)
+        let repeats = try args.choice("repeat", as: Repeat.self)
+        if repeats != nil, due == nil { throw ToolError("A repeating reminder needs due.") }
+        let reminder = EKReminder(eventStore: store)
+        reminder.title = title
+        reminder.calendar = try list(args.string("list"), for: .reminder)
+        if let notes = args.string("notes"), !notes.isEmpty { reminder.notes = notes }
+        if let due {
+            reminder.dueDateComponents = Calendar.current.dateComponents(
+                due.dayOnly ? [.year, .month, .day] : [.year, .month, .day, .hour, .minute],
+                from: due.date
+            )
+            if !due.dayOnly { reminder.addAlarm(EKAlarm(absoluteDate: due.date)) }
+        }
+        if let repeats {
+            reminder.recurrenceRules = [EKRecurrenceRule(recurrenceWith: repeats.frequency, interval: 1, end: nil)]
+        }
+        try store.save(reminder, commit: true)
+        var shape: [String: Any] = ["title": title, "list": reminder.calendar.title]
+        if let due { shape["due"] = due.dayOnly ? String(stamp(due.date).prefix(10)) : stamp(due.date) }
+        if let repeats { shape["repeat"] = repeats.rawValue }
+        return shape
+    }
+
+    private static func allowed(_ entity: EKEntityType) -> Bool {
+        let status = EKEventStore.authorizationStatus(for: entity)
+        return status == .fullAccess || (entity == .event && status == .writeOnly)
+    }
+
+    private static func require(_ entity: EKEntityType) throws {
+        guard allowed(entity) else {
+            let name = entity == .event ? "Calendar" : "Reminders"
+            throw ToolError("\(name) is not available here. Allow \(name) for Membrae in System Settings, Privacy & Security, and ask from a chat inside Membrae.")
+        }
+    }
+
+    private static func names(_ entity: EKEntityType) -> [String] {
+        store.calendars(for: entity).filter(\.allowsContentModifications).map(\.title).sorted()
+    }
+
+    private static func list(_ name: String?, for entity: EKEntityType) throws -> EKCalendar {
+        let kind = entity == .event ? "calendar" : "reminders list"
+        let writable = store.calendars(for: entity).filter(\.allowsContentModifications)
+        if let name, !name.isEmpty {
+            if let match = writable.first(where: { $0.title.caseInsensitiveCompare(name) == .orderedSame }) { return match }
+            throw ToolError("No \(kind) named \(name). Choose from: \(names(entity).joined(separator: ", ")).")
+        }
+        let preferred = entity == .event ? store.defaultCalendarForNewEvents : store.defaultCalendarForNewReminders()
+        guard let found = preferred ?? writable.first else { throw ToolError("There is no \(kind) to add to.") }
+        return found
+    }
+
+    /// A time with an offset, a time in the Mac's zone without one, or a bare day.
+    private static func moment(_ key: String, in args: Args) throws -> (date: Date, dayOnly: Bool)? {
+        guard let value = args.string(key), !value.isEmpty else { return nil }
+        let iso = ISO8601DateFormatter()
+        for options: ISO8601DateFormatter.Options in [[.withInternetDateTime, .withFractionalSeconds], [.withInternetDateTime]] {
+            iso.formatOptions = options
+            if let date = iso.date(from: value) { return (date, false) }
+        }
+        let local = DateFormatter()
+        local.locale = Locale(identifier: "en_US_POSIX")
+        local.timeZone = .current
+        for (format, dayOnly) in [("yyyy-MM-dd'T'HH:mm:ss", false), ("yyyy-MM-dd'T'HH:mm", false), ("yyyy-MM-dd", true)] {
+            local.dateFormat = format
+            if let date = local.date(from: value) { return (date, dayOnly) }
+        }
+        throw ToolError("\(key) must be an ISO-8601 date, such as 2026-01-31T15:00:00 or 2026-01-31.")
+    }
+
+    private static func stamp(_ date: Date) -> String {
+        let iso = ISO8601DateFormatter()
+        iso.timeZone = .current
+        iso.formatOptions = [.withInternetDateTime]
+        return iso.string(from: date)
     }
 }

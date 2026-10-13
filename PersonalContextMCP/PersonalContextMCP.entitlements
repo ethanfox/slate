@@ -6,5 +6,7 @@
 	<array>
 		<string>$(TeamIdentifierPrefix)com.ethanfox.PersonalContext</string>
 	</array>
+	<key>com.apple.security.personal-information.calendars</key>
+	<true/>
 </dict>
 </plist>

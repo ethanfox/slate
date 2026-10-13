@@ -13,6 +13,7 @@ When a decision replaces an older one, create the new decision with supersedes_i
 Use the task tools to list, create, update, and complete Membrae tasks. complete_task records repeat history; \
 do not set status to done on a repeating task. \
 \(ContextBuilder.knowledgeRules) \
+\(ContextBuilder.agendaRules) \
 \(ContextBuilder.spaceRules) \
 get_project is lean. Use get_track for a track body and its linked work, list_tasks with track_id for tasks, \
 get_note for reference material, and list_chats then get_chat to read a past conversation. \

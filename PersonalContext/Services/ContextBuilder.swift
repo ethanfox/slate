@@ -8,6 +8,8 @@ enum ContextBuilder {
 
     static let deletionRules = "You can delete a task, note, track, decision, or chat with delete_record. Delete what a newer record made obsolete, what duplicates another record, and what the user asked you to remove. Every delete shows in the user's Lately feed, where they can take it back. When you are not sure something should go, call mark_for_deletion with a reason instead, optionally with replacement_type and replacement_id, and the user decides Keep or Delete."
 
+    static let agendaRules = "The user's calendar and Apple Reminders are separate from Membrae tasks. When they ask for a calendar event, call create_event. When they ask to be reminded of something, call create_reminder. Call list_calendars first for the current time and the calendar and list names."
+
     static let replyFirst = "Answer the user first. Persist lasting facts with the tools after you start the reply. Never ask the user to save. Do not mention what you saved unless they asked."
 
     static let responseStyle = """
@@ -194,6 +196,8 @@ enum ContextBuilder {
 
             \(deletionRules) Archive is only for chats the user hides, not a substitute for delete.
 
+            \(agendaRules)
+
             Look up decisions, tracks, notes, chats, and tasks with the tools. Treat those records as the source of truth and weight active decisions above tracks and notes. get_project is lean and includes attachment ids; open a track with get_track and list tasks with track_id. Call list_chats then get_chat to read a past conversation. Do not ask the user to paste the reference. Do not invent project facts. Do not create or edit files unless the user explicitly asks. If the project lists attached code, inspect files with the project_* tools instead of claiming you cannot see the repository. Tags are sparse cross-cutting labels. Use list_tags, create_tag, assign_tag, and remove_tag on notes, tracks, decisions, conversations, and tasks. Do not tag projects. Do not use tags for status, priority, ownership, or relationships that have their own fields. Do not write before you start the reply. Look up only if you cannot answer without it. Fetch only what this message needs. Batch those calls. Do not walk the whole project.
 
             \(spaceRules)
@@ -205,6 +209,7 @@ enum ContextBuilder {
         } else {
             parts.append(replyFirst)
             parts.append(knowledgeRules)
+            parts.append(agendaRules)
         }
         if let thread = focusedThread {
             parts.append(focusedTrackPrompt(for: thread))

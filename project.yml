@@ -98,6 +98,7 @@ targets:
     entitlements:
       path: PersonalContextMCP/PersonalContextMCP.entitlements
       properties:
+        com.apple.security.personal-information.calendars: true
         com.apple.security.application-groups:
           - $(TeamIdentifierPrefix)com.ethanfox.PersonalContext
 
