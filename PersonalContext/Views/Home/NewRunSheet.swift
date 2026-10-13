@@ -61,6 +61,26 @@ struct NewRunSheet: View {
                 }
             }
 
+            if agent == .codex, !allowEdits {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Turn on the switch below to use Codex. Codex can only work from Membrae with its own sandbox off.")
+                        .font(CraftFont.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.orange.opacity(0.35))
+                )
+                .accessibilityElement(children: .combine)
+            }
+
             if agent != nil {
                 ModalControlRow("Let it edit files and run commands") {
                     Toggle("Let it edit files and run commands", isOn: $allowEdits)
@@ -71,13 +91,20 @@ struct NewRunSheet: View {
 
             if !attachments.isEmpty {
                 ModalField("Code", boxed: false) {
-                    VStack(alignment: .leading, spacing: 6) {
+                    LazyVGrid(
+                        columns: Array(
+                            repeating: GridItem(.flexible(), spacing: 8, alignment: .top),
+                            count: attachments.count == 1 ? 1 : 2
+                        ),
+                        spacing: 8
+                    ) {
                         ForEach(attachments, id: \.id) { attachment in
-                            Toggle(isOn: binding(for: attachment)) {
-                                Text(attachment.title.isEmpty ? attachment.locator : attachment.title)
-                                    .font(CraftFont.body)
-                            }
-                            .toggleStyle(.checkbox)
+                            let isOn = binding(for: attachment)
+                            CodeCard(
+                                title: attachment.title.isEmpty ? attachment.locator : attachment.title,
+                                path: Self.shortPath(attachment.locator),
+                                isSelected: isOn.wrappedValue
+                            ) { isOn.wrappedValue.toggle() }
                         }
                     }
                 }
@@ -91,16 +118,19 @@ struct NewRunSheet: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Spacer(minLength: 8)
-                    Button(action: clearFiling) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 22, height: 22)
-                            .contentShape(Circle())
+                    // A Run started from a task is about that task, so there is nothing to clear.
+                    if draft.taskID == nil {
+                        Button(action: clearFiling) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 22, height: 22)
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Run without a project")
+                        .accessibilityLabel("Remove project")
                     }
-                    .buttonStyle(.plain)
-                    .help(selectedTask == nil ? "Run without a project" : "Run without this task")
-                    .accessibilityLabel(selectedTask == nil ? "Remove project" : "Remove task")
                 }
                 .font(CraftFont.body)
             }
@@ -179,9 +209,6 @@ struct NewRunSheet: View {
 
     /// Only what the cards do not already say.
     private var disclosure: String? {
-        if agent == .codex, !allowEdits {
-            return "Codex can only work from Membrae with its own sandbox off, so it needs the switch above turned on."
-        }
         if !app.providerConnected(providerID) {
             return agent == nil
                 ? "Connect an AI in Settings to use the Membrae agent."
@@ -201,14 +228,14 @@ struct NewRunSheet: View {
         )
     }
 
-    /// Drops the task first, then the project.
     private func clearFiling() {
-        if taskID != nil {
-            taskID = nil
-        } else {
-            projectID = nil
-            selectedLocators = []
-        }
+        projectID = nil
+        selectedLocators = []
+    }
+
+    private static func shortPath(_ locator: String) -> String {
+        let home = LocalAgent.home
+        return locator.hasPrefix(home) ? "~" + locator.dropFirst(home.count) : locator
     }
 
     private func start() {
@@ -283,6 +310,58 @@ private struct WorkerCard: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(style)
+    }
+}
+
+/// One attached folder or repository in the New Run form. Any number can be on.
+private struct CodeCard: View {
+    var title: String
+    var path: String
+    var isSelected: Bool
+    var action: () -> Void
+
+    @Environment(AppModel.self) private var app
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(isSelected ? AnyShapeStyle(app.accent.color) : AnyShapeStyle(.tertiary))
+                    .frame(height: 18)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    if !path.isEmpty, path != title {
+                        Text(path)
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(
+                hovering && !isSelected ? CraftColor.hover : CraftColor.elevated,
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(isSelected ? app.accent.color : CraftColor.hairline, lineWidth: isSelected ? 1.5 : 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityLabel(title)
+        .accessibilityValue(path)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
