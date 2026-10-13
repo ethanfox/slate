@@ -287,7 +287,8 @@ struct YouView: View {
                 .overlay(Circle().strokeBorder(CraftColor.hairline))
                 .contentShape(Circle())
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+            .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Customize this page")
@@ -369,7 +370,8 @@ struct YouView: View {
                                 .frame(width: 22, height: 22)
                                 .contentShape(Rectangle())
                         }
-                        .menuStyle(.borderlessButton)
+                        .menuStyle(.button)
+            .buttonStyle(.plain)
                         .menuIndicator(.hidden)
                         .fixedSize()
                         .help("Add a widget")
@@ -414,7 +416,8 @@ struct YouView: View {
             } label: {
                 scaled(AddWidgetCard(title: "Add a Widget", detail: "Choose one from your Areas."), size: size)
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+            .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
         }
