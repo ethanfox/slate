@@ -40,6 +40,9 @@ enum SpaceGradient: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// The gradient's colors as hex, top to bottom.
+    var hexes: [String] { stops.map(\.0) }
+
     var fill: LinearGradient {
         LinearGradient(
             stops: stops.map { Gradient.Stop(color: Color(hex: $0.0), location: $0.1) },

@@ -113,9 +113,9 @@ enum AreaRecords {
 
     /// A table always works. The rest are offered only when the data suits them: cards for a picture
     /// or a few details, a board for a stage, a calendar for a date, a chart and history for what is logged.
-    static func layouts(for schema: SpaceSchema, log: AreaLog? = nil) -> [AreaRecordsLayout] {
+    static func layouts(for schema: SpaceSchema, log: AreaLog? = nil, chosenCard: Bool = false) -> [AreaRecordsLayout] {
         var layouts: [AreaRecordsLayout] = [.table]
-        if imageField(schema) != nil || columns(schema).count <= 4 { layouts.append(.cards) }
+        if chosenCard || imageField(schema) != nil || columns(schema).count <= 4 { layouts.append(.cards) }
         if boardField(schema) != nil { layouts.append(.board) }
         if dateField(schema) != nil { layouts.append(.calendar) }
         if log != nil { layouts += [.chart, .history] }
@@ -198,7 +198,7 @@ struct AreaRecordsView: View {
         AreaRecords.log(from: context.eventTypes.map { (key: $0.key, name: $0.name, schema: $0.schema) })
     }
 
-    private var layouts: [AreaRecordsLayout] { AreaRecords.layouts(for: schema, log: log) }
+    private var layouts: [AreaRecordsLayout] { AreaRecords.layouts(for: schema, log: log, chosenCard: context.type.cardFields != nil) }
 
     private var layout: AreaRecordsLayout {
         if let chosenLayout, layouts.contains(chosenLayout) { return chosenLayout }
@@ -484,11 +484,15 @@ struct AreaRecordsView: View {
     // MARK: Cards
 
     private func cards(_ shown: [AreaRecordRow]) -> some View {
-        // A rating is drawn as stars, so it does not also take one of the three text lines.
-        let details = Array(AreaRecords.columns(schema).filter { $0.kind != .rating }.prefix(3))
-        let hasImages = AreaRecords.imageField(schema) != nil
+        // A rating is drawn as stars, so it does not also take one of the text lines.
+        let chosen = context.type.cardFields
+        let fields = chosen.map { ids in ids.compactMap { id in AreaRecords.columns(schema).first { $0.id == id } } }
+        let details = fields.map { $0.filter { $0.kind != .rating } }
+            ?? Array(AreaRecords.columns(schema).filter { $0.kind != .rating }.prefix(3))
+        let showsRating = fields.map { $0.contains { $0.kind == .rating } } ?? true
+        let portrait = context.portraitCards
         return LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 200, maximum: 280), spacing: 14, alignment: .top)],
+            columns: [GridItem(.adaptive(minimum: portrait ? 150 : 200, maximum: portrait ? 200 : 280), spacing: 14, alignment: .top)],
             alignment: .leading,
             spacing: 14
         ) {
@@ -497,19 +501,24 @@ struct AreaRecordsView: View {
                     context.open(row.record)
                 } label: {
                     VStack(alignment: .leading, spacing: 0) {
-                        if hasImages {
-                            SpaceImageView(assetID: row.imageID, tint: context.accent, cornerRadius: 0)
-                                .frame(height: 120)
-                                .frame(maxWidth: .infinity)
-                                .clipped()
-                        }
+                        Color.clear
+                            .aspectRatio(portrait ? 2.0 / 3.0 : 2.0, contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                            .overlay {
+                                if row.imageID != nil {
+                                    SpaceImageView(assetID: row.imageID, tint: context.accent, cornerRadius: 0)
+                                } else {
+                                    LiquidSand(colors: context.palette, seed: LiquidSand.seed(for: row.record.id))
+                                }
+                            }
+                            .clipped()
                         VStack(alignment: .leading, spacing: 6) {
                             Text(row.title)
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundStyle(.primary)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
-                            if let rating = row.rating, rating > 0 {
+                            if showsRating, let rating = row.rating, rating > 0 {
                                 HStack(spacing: 1) {
                                     ForEach(1...5, id: \.self) { star in
                                         Image(systemName: Double(star) <= rating ? "star.fill" : "star")

@@ -434,6 +434,8 @@ final class Space {
     /// What the agent has learned about how the user talks about this Area: their names for things,
     /// units, standing preferences. The agent writes it; the user can read and fix it in Edit Area.
     var agentNotes: String = ""
+    /// The shape of the picture on this Area's cards. Empty is landscape; "portrait" suits covers and posters.
+    var cardShapeRaw: String = ""
     var createdAt: Date
     var updatedAt: Date
 
@@ -454,6 +456,11 @@ final class Space {
 
     var displayName: String {
         name.isEmpty ? "Untitled" : name
+    }
+
+    var hasPortraitCards: Bool {
+        get { cardShapeRaw == "portrait" }
+        set { cardShapeRaw = newValue ? "portrait" : "" }
     }
 
     init(name: String, symbol: String = "square.grid.2x2", summary: String = "") {
@@ -482,10 +489,22 @@ final class SpaceType {
     var schemaJSON: String
     var schemaVersion: Int
     var originRaw: String
+    /// The field ids the user chose to show on this type's cards, as JSON. Empty means the app picks.
+    var cardFieldsJSON: String = ""
     var createdAt: Date
     var updatedAt: Date
 
     var spaceID: UUID? { UUID(uuidString: spaceIDString) }
+
+    /// The most fields a card shows under the name.
+    static let cardFieldLimit = 5
+
+    /// The fields the user chose for cards. Nil means the app picks; an empty list means none,
+    /// so the card is only the picture and the name.
+    var cardFields: [String]? {
+        get { cardFieldsJSON.isEmpty ? nil : SpaceJSON.decode(cardFieldsJSON, as: [String].self) }
+        set { cardFieldsJSON = newValue.map { SpaceJSON.encode($0) } ?? "" }
+    }
 
     var role: SpaceTypeRole {
         get { SpaceTypeRole(rawValue: roleRaw) ?? .object }

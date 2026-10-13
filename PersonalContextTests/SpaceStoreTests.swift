@@ -838,6 +838,31 @@ final class SpaceToolsTests: XCTestCase {
         XCTAssertTrue(SpaceStore.events(in: reading, context: ModelContext(container)).isEmpty)
     }
 
+    func testACardShowsUpToFiveChosenFieldsOrNone() throws {
+        let spaceID = try XCTUnwrap(try object(call("create_space", ["name": "Reading"]))["id"] as? String)
+        let names = ["Author", "Year", "Pages", "Genre", "Publisher", "Language"]
+        _ = try object(call("set_space_type", [
+            "space_id": spaceID, "key": "book", "name": "Books",
+            "fields": names.map { ["name": $0, "kind": "text"] } + [["name": "Cover", "kind": "image"]]
+        ]))
+        func set(_ fields: [String]) -> [String: Any] {
+            call("set_area_card", ["space_id": spaceID, "type_key": "book", "fields": fields])
+        }
+        let six = set(names.map { $0.lowercased() })
+        XCTAssertEqual(six["isError"] as? Bool, true)
+        XCTAssertTrue(try text(six).contains("at most 5"))
+        XCTAssertEqual(set(["cover"])["isError"] as? Bool, true)
+        XCTAssertEqual(set(["isbn"])["isError"] as? Bool, true)
+        XCTAssertEqual(try object(set(["year", "author"]))["card_fields"] as? [String], ["year", "author"])
+        XCTAssertEqual(try object(set([]))["card_fields"] as? [String], [])
+        // Leaving fields out hands the choice back to the app.
+        XCTAssertNil(try object(call("set_area_card", ["space_id": spaceID, "type_key": "book"]))["card_fields"])
+
+        let shaped = try object(call("update_space", ["space_id": spaceID, "picture_shape": "portrait"]))
+        XCTAssertEqual(shaped["picture_shape"] as? String, "portrait")
+        XCTAssertEqual(call("update_space", ["space_id": spaceID, "picture_shape": "square"])["isError"] as? Bool, true)
+    }
+
     func testAnAgentKeepsNotesOnAnArea() throws {
         let spaceID = try XCTUnwrap(try object(call("create_space", ["name": "Kitchen"]))["id"] as? String)
         let saved = try object(call("update_space", ["space_id": spaceID, "notes": "  \"The usual\" means the Sunday chili.  "]))

@@ -28,6 +28,10 @@ struct SpaceScreenContext {
     /// Reaches linked and settings records, so calc fields can be worked out.
     var lookup: SpaceLookup?
     var accent: Color
+    /// The Area's colors as hex, for the placeholder where a record has no picture.
+    var palette: [String] = []
+    /// The Area shows pictures on cards upright, as covers.
+    var portraitCards = false
     var state: SpaceScreenState
     var context: ModelContext
     var open: (SpaceRecord) -> Void

@@ -69,8 +69,10 @@ enum SpaceStore {
         summary: String? = nil,
         gradient: String? = nil,
         notes: String? = nil,
+        portraitCards: Bool? = nil,
         in context: ModelContext
     ) throws {
+        if let portraitCards { space.hasPortraitCards = portraitCards }
         if let notes { space.agentNotes = String(notes.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Space.agentNotesLimit)) }
         if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { space.name = name }
         if let symbol, !symbol.isEmpty { space.symbol = symbol }
@@ -202,6 +204,35 @@ enum SpaceStore {
         let role = SpaceTypeRole.event.rawValue
         let descriptor = FetchDescriptor<SpaceType>(predicate: #Predicate { $0.spaceIDString == spaceIDString && $0.roleRaw == role })
         return Set(((try? context.fetch(descriptor)) ?? []).map(\.key))
+    }
+
+    // MARK: Cards
+
+    /// Sets which fields a type's cards show. Nil hands the choice back to the app.
+    static func setCardFields(_ fields: [String]?, for type: SpaceType, in context: ModelContext) throws {
+        if let fields {
+            var problems: [String] = []
+            if fields.count > SpaceType.cardFieldLimit {
+                problems.append("A card shows at most \(SpaceType.cardFieldLimit) fields besides the name, and this is \(fields.count). Tell the user the limit and ask which to leave off.")
+            }
+            let schema = type.schema
+            for id in fields {
+                guard let field = schema.field(id), schema.liveFields.contains(where: { $0.id == id }) else {
+                    problems.append("\(type.name) has no field with id \(id).")
+                    continue
+                }
+                switch field.kind {
+                case .group, .richText, .image, .file:
+                    problems.append("\(field.name) is a \(field.kind.rawValue) field, which a card cannot show.")
+                default: break
+                }
+            }
+            if Set(fields).count != fields.count { problems.append("A field can be on a card only once.") }
+            guard problems.isEmpty else { throw SpaceStoreError.invalidScreen(problems) }
+        }
+        type.cardFields = fields
+        type.updatedAt = .now
+        try context.save()
     }
 
     // MARK: Widgets

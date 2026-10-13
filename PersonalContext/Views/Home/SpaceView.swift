@@ -85,6 +85,8 @@ struct SpaceView: View {
             titles: SpaceSelection.titles(in: spaceKey, records: records),
             lookup: SpaceLookup(spaceKey: spaceKey, records: records, types: types),
             accent: space.gradient.accent,
+            palette: space.gradient.hexes,
+            portraitCards: space.hasPortraitCards,
             state: screenState,
             context: context,
             open: { app.navigate(to: .spaceRecord(space: id, record: $0.id)) },
@@ -248,6 +250,7 @@ struct NewSpaceSheet: View {
     @State private var template = SpaceTemplate.empty
     @State private var brief = ""
     @State private var notes = ""
+    @State private var portrait = false
 
     private var chosen: SpaceGradient {
         gradient ?? SpaceGradient.next(after: spaces.map(\.gradientRaw))
@@ -311,6 +314,14 @@ struct NewSpaceSheet: View {
             }
 
             if space != nil {
+                ModalField("Pictures on cards", boxed: false) {
+                    HStack(spacing: 6) {
+                        Button { portrait = false } label: { ChoiceCapsule(title: "Landscape", isSelected: !portrait) }
+                            .buttonStyle(.plain)
+                        Button { portrait = true } label: { ChoiceCapsule(title: "Portrait", isSelected: portrait) }
+                            .buttonStyle(.plain)
+                    }
+                }
                 ModalField("Notes for Membrae") {
                     TextField("What you call things here, units you use, and anything Membrae should remember", text: $notes, axis: .vertical)
                         .textFieldStyle(.plain)
@@ -330,6 +341,7 @@ struct NewSpaceSheet: View {
                 symbol = space.symbol
                 gradient = space.gradient
                 notes = space.agentNotes
+                portrait = space.hasPortraitCards
             }
             focusName = true
         }
@@ -348,7 +360,7 @@ struct NewSpaceSheet: View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if let space {
-            try? SpaceStore.update(space, name: trimmed, symbol: symbol, gradient: chosen.rawValue, notes: notes, in: context)
+            try? SpaceStore.update(space, name: trimmed, symbol: symbol, gradient: chosen.rawValue, notes: notes, portraitCards: portrait, in: context)
         } else if describing {
             let conversation = app.makeConversation(in: nil, context: context)
             conversation.title = "Set up \(trimmed)"

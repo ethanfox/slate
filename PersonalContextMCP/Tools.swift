@@ -207,7 +207,7 @@ enum Tools {
         "assign_tag": (.tagged, ""), "remove_tag": (.untagged, ""),
         "mark_for_deletion": (.flagged, ""), "delete_record": (.removed, ""),
         "create_space": (.added, "space"), "update_space": (.changed, "space"),
-        "set_space_type": (.changed, "space"),
+        "set_space_type": (.changed, "space"), "set_area_card": (.changed, "space"),
         "set_area_widget": (.changed, "space"), "remove_area_widget": (.changed, "space"),
         "place_area_widget": (.changed, "space"),
         "create_space_record": (.added, "record"), "update_space_record": (.changed, "record"),
@@ -267,7 +267,7 @@ enum Tools {
             target = ""
         case "create_space", "update_space":
             space = target
-        case "set_space_type", "set_area_widget", "remove_area_widget", "place_area_widget":
+        case "set_space_type", "set_area_card", "set_area_widget", "remove_area_widget", "place_area_widget":
             detail = (shape["name"] as? String) ?? args.string("type_key") ?? ""
             target = space
             title = UUID(uuidString: space).flatMap { SpaceStore.space($0, in: context) }?.displayName ?? ""
@@ -1305,11 +1305,16 @@ enum Tools {
                 "summary": text("One line on what it is for."),
                 "symbol": text("SF Symbol name for its icon."),
                 "color": text("Card color: \(SpaceGradientName.all.joined(separator: ", "))."),
+                "picture_shape": text("The shape of pictures on this Area's cards: landscape, or portrait for covers and posters."),
                 "notes": text("Your own notes on this Area: what the user calls things, the units they use, standing preferences. This replaces the notes, so send the whole text, old lines included. At most \(Space.agentNotesLimit) characters.")
             ],
             required: ["space_id"], readOnly: false
         ) { args, context in
             let space = try SpaceTools.space(args, in: context)
+            let shape = args.string("picture_shape")
+            if let shape, !["landscape", "portrait"].contains(shape) {
+                throw ToolError("picture_shape must be landscape or portrait.")
+            }
             if let notes = args.string("notes"), notes.count > Space.agentNotesLimit {
                 throw ToolError("notes can hold \(Space.agentNotesLimit) characters, and this is \(notes.count). Shorten it and send it again.")
             }
@@ -1323,6 +1328,7 @@ enum Tools {
                 summary: args.string("summary"),
                 gradient: args.string("color"),
                 notes: args.string("notes"),
+                portraitCards: shape.map { $0 == "portrait" },
                 in: context
             )
             return SpaceTools.space(space, full: false, in: context)
@@ -1397,6 +1403,24 @@ enum Tools {
                 in: context
             )
             return SpaceTools.widget(widget, typeKey: type.key)
+        },
+        Tool(
+            name: "set_area_card",
+            description: "Choose which fields show on the cards of an object type, under the name, in the order given. At most \(SpaceType.cardFieldLimit). An empty list shows only the picture and the name. Leave fields out to let the app choose again.",
+            properties: [
+                "space_id": spaceID,
+                "type_key": typeKey,
+                "fields": ["type": "array", "items": ["type": "string"], "description": "Field ids, at most \(SpaceType.cardFieldLimit). Not group, long text, image, or file fields."]
+            ],
+            required: ["space_id", "type_key"], readOnly: false
+        ) { args, context in
+            let type = try SpaceTools.type(args, in: context)
+            do {
+                try SpaceStore.setCardFields(try args.strings("fields"), for: type, in: context)
+            } catch SpaceStoreError.invalidScreen(let problems) {
+                throw ToolError(problems.joined(separator: " "))
+            }
+            return SpaceTools.type(type, in: context)
         },
         Tool(
             name: "place_area_widget",
@@ -2692,13 +2716,14 @@ enum SpaceTools {
     }
 
     static func type(_ type: SpaceType, in context: ModelContext) -> [String: Any] {
-        let shape: [String: Any] = [
+        var shape: [String: Any] = [
             "key": type.key,
             "name": type.name,
             "role": type.role.rawValue,
             "fields": type.schema.liveFields.map(field),
             "record_count": type.role == .object ? SpaceStore.records(of: type, in: context).count : 0
         ]
+        if let chosen = type.cardFields { shape["card_fields"] = chosen }
         return shape
     }
 
@@ -2709,6 +2734,7 @@ enum SpaceTools {
             "name": space.displayName,
             "summary": space.summary,
             "notes": space.agentNotes,
+            "picture_shape": space.hasPortraitCards ? "portrait" : "landscape",
             "types": full
                 ? types.map { type($0, in: context) }
                 : types.map { ["key": $0.key, "name": $0.name, "role": $0.role.rawValue] }
