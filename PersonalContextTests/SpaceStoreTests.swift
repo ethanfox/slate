@@ -1460,7 +1460,7 @@ final class SpaceToolsTests: XCTestCase {
         let message = NewSpaceSheet.setupMessage(name: "Kitchen", symbol: "leaf", color: "zen", brief: "  recipes and a weekly meal plan ")
         XCTAssertTrue(message.contains("What it is for: recipes and a weekly meal plan\n"))
         XCTAssertTrue(message.contains("before you make anything"))
-        XCTAssertTrue(ContextBuilder.spaceRules.contains("Do not call create_space, set_space_type, or set_space_screen until they agree"))
+        XCTAssertTrue(ContextBuilder.spaceRules.contains("Do not call create_space or set_space_type until they agree"))
         XCTAssertTrue(SpaceStore.all(in: context).isEmpty)
     }
 

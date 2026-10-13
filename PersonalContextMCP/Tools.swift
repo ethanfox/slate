@@ -1262,7 +1262,7 @@ enum Tools {
         },
         Tool(
             name: "get_space",
-            description: "Get one Area: each type with its fields and its collection and detail screens.",
+            description: "Get one Area: each type with its fields.",
             properties: ["space_id": spaceID], required: ["space_id"], readOnly: true
         ) { args, context in
             SpaceTools.space(try SpaceTools.space(args, in: context), full: true, in: context)
@@ -1331,8 +1331,8 @@ enum Tools {
                 "name": text("Name shown to the user, such as Recipes."),
                 "role": options(SpaceTypeRole.self, "object, event, or settings. Defaults to object."),
                 "fields": objectList("Fields: {id, name, kind, options?, fields?, ordered?, target?, formula?, currency?, default?}. See get_space_catalog for kinds."),
-                "collection": objectList("Optional. Components for this object type's collection screen, set in the same call."),
-                "detail": objectList("Optional. Components for this object type's detail screen, set in the same call.")
+                "collection": objectList("Leave out. The app draws every Area itself and does not show this."),
+                "detail": objectList("Leave out. The app draws every Area itself and does not show this.")
             ],
             required: ["space_id", "key", "name", "fields"], readOnly: false
         ) { args, context in
@@ -1369,7 +1369,7 @@ enum Tools {
         },
         Tool(
             name: "set_space_screen",
-            description: "Set the collection screen (browsing all records) or the detail screen (one record) of an object type. Built only from catalog components. If anything does not fit the type, nothing is saved and every problem is returned; fix them and call again.",
+            description: "Do not call this. The app draws every Area itself and no longer shows screens set here.",
             properties: [
                 "space_id": spaceID,
                 "type_key": typeKey,
@@ -2782,7 +2782,7 @@ enum SpaceTools {
     static var catalog: [String: Any] {
         let recipe = SpaceTemplate.recipes.types[0]
         return [
-            "how_to": "1. create_space, unless you were given a space id. 2. set_space_type for each event type first. 3. set_space_type for each object type, passing its collection and detail screens in the same call. Use set_space_screen later to change one screen. Screens name fields by id and events by key. Every record already has a name; do not add a name field.",
+            "how_to": "1. create_space, unless you were given a space id. 2. set_space_type for each event type first. 3. set_space_type for each object type. Do not build screens: the app draws every Area itself from the fields. 4. set_area_widget for anything worth a glance. Widgets name fields by id and events by key. Every record already has a name; do not add a name field.",
             "field_kinds": [
                 ["kind": "text", "value": "text"],
                 ["kind": "richText", "value": "long text"],
@@ -2817,7 +2817,7 @@ enum SpaceTools {
                 ]
             },
             "widgets": [
-                "what": "A widget is a small card about one object type, made with set_area_widget. It is rows of blocks. Use the components whose screens include widget.",
+                "what": "A widget is a small card about one object type, made with set_area_widget. It is rows of blocks. Use the components whose screens include widget; the other components are not shown anywhere.",
                 "sizes": AreaWidgetSize.allCases.map { size -> [String: Any] in
                     ["size": size.rawValue, "rows": size.maxRows, "blocks_per_row": size.maxAcross]
                 },
