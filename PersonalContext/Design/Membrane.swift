@@ -64,8 +64,10 @@ final class MembraneModel {
     var isDark = false {
         didSet { if isDark != oldValue { applyLook() } }
     }
-    /// Barely moves. For a small membrane, where drifting cells read as flicker.
-    var isCalm = false
+    /// How much the cells drift and breathe. 1 is lively; a small membrane wants far less, or it reads as flicker.
+    var motion = 1.0
+    /// How strongly the sand grain shows on the cells.
+    var grain = 0.3
     /// Where the pointer is held down, in the view's points.
     var pointer: CGPoint?
     var viewSize: CGSize = .zero
@@ -237,7 +239,7 @@ final class MembraneModel {
 
             // Pulled to the middle of its own room, which is what lets neighbors shove it around.
             var pull = 46 * (center - cell.position) - 6.5 * cell.velocity
-            pull += (isCalm ? 0.35 : 2.2) * SIMD2(sin(time * 0.53 + cell.phase), cos(time * 0.41 + cell.phase * 1.7))
+            pull += 2.2 * motion * SIMD2(sin(time * 0.53 + cell.phase), cos(time * 0.41 + cell.phase * 1.7))
             if let hold, grabbed == cell.id {
                 pull += 160 * (hold - cell.position) - 10 * cell.velocity
             }
@@ -251,7 +253,7 @@ final class MembraneModel {
             }
 
             // The size overshoots a little and settles, so a cell pops in rather than fading in.
-            let breath = 1 + (isCalm ? 0.012 : 0.05) * sin(time * 0.8 + cell.phase)
+            let breath = 1 + 0.05 * motion * sin(time * 0.8 + cell.phase)
             cell.shareVelocity += (90 * (cell.targetShare * breath - cell.share) - 11 * cell.shareVelocity) * dt
             cell.share = max(cell.share + cell.shareVelocity * dt, 0.001)
             cell.color += (cell.targetColor - cell.color) * min(dt * 5, 1)
@@ -376,7 +378,7 @@ enum MembraneRenderer {
             // Grain is drawn at the screen's pixels, so on a small membrane it would be coarse.
             if radius > 70, let grain = LiquidSandRenderer.grain {
                 inside.blendMode = .overlay
-                inside.opacity = 0.3
+                inside.opacity = model.grain
                 inside.fill(Path(box), with: .tiledImage(Image(decorative: grain, scale: 2)))
             }
         }

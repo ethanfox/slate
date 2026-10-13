@@ -130,7 +130,7 @@ struct ContextItems: DynamicProperty {
 /// The user's own membrane: the logo's cells for them, and one cell for each thing they have.
 struct ContextMembrane: View {
     var items: [ContextItem]
-    /// Small: one cell for each kind of thing, and nearly still.
+    /// Small: one cell for each kind of thing, and nearly still. Otherwise a cell for each thing, drifting slowly.
     var isCompact = false
     @State private var model = MembraneModel()
 
@@ -141,7 +141,8 @@ struct ContextMembrane: View {
     var body: some View {
         MembraneView(model: model, frameInterval: isCompact ? 1.0 / 30 : nil)
             .onChange(of: things, initial: true) { _, things in
-                model.isCalm = isCompact
+                model.motion = isCompact ? 0.16 : 0.4
+                model.grain = 0.14
                 model.sync(things)
             }
     }
@@ -194,13 +195,8 @@ struct ContextView: View {
         ScrollView {
             PageBody {
                 HStack(alignment: .top, spacing: 56) {
-                    VStack(spacing: 12) {
-                        ContextMembrane(items: items)
-                            .frame(width: 300, height: 300)
-                        Text("Drag a cell to move it.")
-                            .font(CraftFont.caption)
-                            .foregroundStyle(.tertiary)
-                    }
+                    ContextMembrane(items: items)
+                        .frame(width: 300, height: 300)
                     VStack(alignment: .leading, spacing: 24) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Your context")
