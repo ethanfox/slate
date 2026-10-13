@@ -102,6 +102,39 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(late.stop?.id, log.id)
     }
 
+    func testNestedTrackBecomesAStopOnItsParent() throws {
+        let harbor = Project(name: "Harbor", symbol: "folder", summary: "")
+        context.insert(harbor)
+        let runs = ProjectThread(title: "Runs", kind: .feature, project: harbor)
+        let capability = ProjectThread(title: "Code read", kind: .feature, project: harbor, parent: runs)
+        capability.summary = "Read selected code roots."
+        capability.body = "Only roots the user picked."
+        context.insert(runs)
+        context.insert(capability)
+        let work = task("Wire the grant", in: harbor)
+        _ = AssociationService.link(thread: capability, onto: work)
+        let decision = Decision(title: "Read only", decision: "No writes.", project: harbor, thread: capability)
+        context.insert(decision)
+        ThemeStore.setTheme("Agents", on: runs, in: context)
+        TaskStore.setActiveTrack(capability, on: harbor, in: context)
+        try context.save()
+
+        let stop = try StopStore.absorb(capability, in: context)
+
+        XCTAssertEqual(runs.orderedStops.map(\.title), ["Code read"])
+        XCTAssertEqual(stop.body, "Read selected code roots.\n\nOnly roots the user picked.")
+        XCTAssertEqual(work.stop?.id, stop.id)
+        XCTAssertEqual(work.liveTracks.map(\.id), [runs.id])
+        XCTAssertEqual(work.project?.id, harbor.id)
+        XCTAssertEqual(decision.thread?.id, runs.id)
+        XCTAssertEqual(harbor.activeTrackID, runs.id)
+        XCTAssertTrue(runs.children.isEmpty)
+        XCTAssertEqual(harbor.orderedThemes.map(\.name), ["Agents"])
+
+        ThemeStore.setTheme("", on: runs, in: context)
+        XCTAssertTrue(harbor.themes.isEmpty)
+    }
+
     func testNextRequiresActiveProject() throws {
         let inbox = AgendaItem(kind: .task, eventKitID: "", title: "Inbox")
         context.insert(inbox)

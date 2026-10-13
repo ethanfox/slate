@@ -426,6 +426,55 @@ enum StopStore {
         try? context.persist()
     }
 
+    /// Turns a child track into the last stop on its parent. The stop takes the child's title, and its summary
+    /// and body as the stop's text. The child's tasks move onto the stop; its decisions, notes, and chats move
+    /// to the parent. The child is then removed.
+    @discardableResult
+    static func absorb(_ child: ProjectThread, in context: ModelContext) throws -> TrackStop {
+        guard let parent = child.parent else { throw StopStoreError.noParent }
+        guard child.children.isEmpty else { throw StopStoreError.hasChildren }
+        let text = [child.summary, child.body]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+        let stop = TrackStop(
+            title: child.title,
+            body: text,
+            order: (parent.stops.map(\.order).max() ?? -1) + 1,
+            thread: parent
+        )
+        stop.isDone = child.status == .completed || child.status == .rejected
+        context.insert(stop)
+        // The child's own stops follow it onto the parent.
+        for (offset, inner) in child.orderedStops.enumerated() {
+            inner.thread = parent
+            inner.order = stop.order + 1 + offset
+        }
+        for item in AgendaStore.items(on: child, includingChildren: false) {
+            // Link the parent first, so the task never sits on no track and loses its project.
+            if !item.liveTracks.contains(where: { $0.id == parent.id }) {
+                AssociationService.applyLink(thread: parent, onto: item)
+            }
+            AssociationService.unlink(threadID: child.id, from: item, in: context)
+            if item.stop == nil { item.stop = stop }
+            item.touch()
+        }
+        for decision in child.decisions { decision.thread = parent }
+        for note in child.notes { note.thread = parent }
+        for conversation in child.conversations { conversation.thread = parent }
+        for tag in child.tags where !parent.tags.contains(where: { $0.id == tag.id }) {
+            parent.tags.append(tag)
+        }
+        if let project = child.project, project.activeTrackID == child.id {
+            project.activeTrackID = parent.id
+        }
+        DeletionMarks.remove(targetingIDs: [child.id], in: context)
+        context.delete(child)
+        touch(parent)
+        try? context.persist()
+        return stop
+    }
+
     private static func renumber(_ ordered: [TrackStop]) {
         for (index, stop) in ordered.enumerated() where stop.order != index {
             stop.order = index
@@ -442,13 +491,50 @@ enum StopStoreError: LocalizedError {
     case notOnTrack(UUID)
     case listedTwice(UUID)
     case untitled
+    case noParent
+    case hasChildren
 
     var errorDescription: String? {
         switch self {
         case .notOnTrack(let id): "Stop \(id.uuidString) is not on this track. Leave id out to add a new stop."
         case .listedTwice(let id): "Stop \(id.uuidString) is listed twice."
         case .untitled: "A new stop needs a title."
+        case .noParent: "This track is not under another track, so there is nothing to make it a stop on."
+        case .hasChildren: "This track has tracks under it. Turn those into stops first."
         }
+    }
+}
+
+enum ThemeStore {
+    /// Puts a track under the theme with this name, making the theme when the project has none by that name.
+    /// An empty name takes the track out of its theme. A theme left with no tracks is removed.
+    static func setTheme(_ name: String, on track: ProjectThread, in context: ModelContext) {
+        guard let project = track.project else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previous = track.theme
+        if trimmed.isEmpty {
+            track.theme = nil
+        } else if let existing = project.themes.first(where: { $0.name.localizedCaseInsensitiveCompare(trimmed) == .orderedSame }) {
+            track.theme = existing
+        } else {
+            let theme = TrackTheme(name: trimmed, order: (project.themes.map(\.order).max() ?? -1) + 1, project: project)
+            context.insert(theme)
+            track.theme = theme
+        }
+        if let previous, previous.id != track.theme?.id, previous.tracks.allSatisfy({ $0.id == track.id }) {
+            context.delete(previous)
+        }
+        track.updatedAt = .now
+        project.touch()
+        try? context.persist()
+    }
+
+    static func rename(_ theme: TrackTheme, to name: String, in context: ModelContext) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        theme.name = trimmed
+        theme.project?.touch()
+        try? context.persist()
     }
 }
 

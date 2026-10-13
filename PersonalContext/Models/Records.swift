@@ -107,6 +107,13 @@ final class Project: Identifiable {
     @Relationship(deleteRule: .cascade, inverse: \AgentRun.project)
     var runs: [AgentRun] = []
 
+    @Relationship(deleteRule: .cascade, inverse: \TrackTheme.project)
+    var themes: [TrackTheme] = []
+
+    var orderedThemes: [TrackTheme] {
+        themes.sorted { ($0.order, $0.createdAt) < ($1.order, $1.createdAt) }
+    }
+
     var overviewWidthRaw: String = "twoThirds"
     var overviewLayoutJSON: String = ""
     var workerProviderID: String = ""
@@ -244,6 +251,8 @@ final class ProjectThread {
     var project: Project?
     var parent: ProjectThread?
     var spaceIDString: String = ""
+    /// The group this track is listed under.
+    var theme: TrackTheme?
 
     @Relationship(deleteRule: .cascade, inverse: \ProjectThread.parent)
     var children: [ProjectThread] = []
@@ -314,9 +323,35 @@ final class ProjectThread {
     }
 }
 
+/// A named group of tracks. It holds no work of its own: no tasks, no stops, and it cannot be active.
+@Model
+final class TrackTheme: Identifiable {
+    var id: UUID
+    var name: String
+    var order: Int
+    var createdAt: Date
+    var project: Project?
+
+    @Relationship(deleteRule: .nullify, inverse: \ProjectThread.theme)
+    var tracks: [ProjectThread] = []
+
+    var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled" : trimmed
+    }
+
+    init(name: String, order: Int, project: Project) {
+        self.id = UUID()
+        self.name = name
+        self.order = order
+        self.createdAt = .now
+        self.project = project
+    }
+}
+
 /// One idea inside a track. A track's stops are in the order they are to be worked on.
 @Model
-final class TrackStop {
+final class TrackStop: Identifiable {
     var id: UUID
     var title: String
     var body: String

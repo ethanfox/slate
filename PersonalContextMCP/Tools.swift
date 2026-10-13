@@ -201,7 +201,7 @@ enum Tools {
         "create_task": (.added, "task"), "update_task": (.changed, "task"), "complete_task": (.completed, "task"),
         "delete_completion": (.removed, "completion"),
         "create_decision": (.added, "decision"), "update_decision": (.changed, "decision"),
-        "create_track": (.added, "track"), "update_track": (.changed, "track"), "set_stops": (.changed, "track"),
+        "create_track": (.added, "track"), "update_track": (.changed, "track"), "set_stops": (.changed, "track"), "convert_track_to_stop": (.changed, "track"),
         "create_note": (.added, "note"), "update_note": (.changed, "note"),
         "create_source": (.added, "source"), "update_source": (.changed, "source"),
         "create_tag": (.added, "tag"), "update_tag": (.changed, "tag"),
@@ -846,7 +846,7 @@ enum Tools {
 
         Tool(
             name: "list_tracks",
-            description: "List a project's tracks with ids, kinds, statuses, summaries, and parent ids.",
+            description: "List a project's tracks with ids, kinds, statuses, summaries, themes, and which one is active. A theme is a named group of tracks and holds no work of its own. parent_id is set only on a track still nested from before; tracks no longer nest.",
             properties: ["project_id": projectID], required: ["project_id"], readOnly: true
         ) { args, context in
             let project = try Lookup.project(try args.uuid("project_id"), in: context)
@@ -875,7 +875,7 @@ enum Tools {
                 "status": options(ThreadStatus.self, "Defaults to exploring."),
                 "summary": text("One or two sentences."),
                 "body": text("Markdown spec."),
-                "parent_id": text("Parent track id, to nest this track.")
+                "theme": text("Name of the theme to list this track under. A theme with that name is made if the project has none.")
             ],
             required: ["project_id", "title"], readOnly: false
         ) { args, context in
@@ -891,6 +891,7 @@ enum Tools {
             thread.summary = args.string("summary") ?? ""
             thread.body = args.string("body") ?? ""
             context.insert(thread)
+            if let theme = args.string("theme") { ThemeStore.setTheme(theme, on: thread, in: context) }
             project.touch()
             return JSONShape.track(thread, full: true)
         },
@@ -905,7 +906,8 @@ enum Tools {
                 "summary": text("New summary."),
                 "body": text("Replaces the whole markdown spec. Omit or leave empty to keep the current body."),
                 "append_to_body": text("Markdown appended to the end of the spec."),
-                "parent_id": text("New parent track id. Empty string makes it a top-level track.")
+                "parent_id": text("Empty string takes a nested track out from under its parent. Tracks no longer nest, so do not set a parent."),
+                "theme": text("Name of the theme to list this track under. Empty string takes it out of its theme.")
             ],
             required: ["track_id"], readOnly: false
         ) { args, context in
@@ -923,9 +925,25 @@ enum Tools {
                 if let parent, thread.contains(parent) { throw ToolError("A track can't be nested under itself or its own children.") }
                 thread.parent = parent
             }
+            if let theme = args.string("theme") { ThemeStore.setTheme(theme, on: thread, in: context) }
             thread.updatedAt = .now
             thread.project?.touch()
             return JSONShape.track(thread, full: true)
+        },
+        Tool(
+            name: "convert_track_to_stop",
+            description: "Turn a track that is nested under another into a stop on that parent. The stop takes its title, and its summary and body as the stop's text. Its tasks move onto the stop, and its decisions, notes, and chats move to the parent. The nested track is then removed. Its own nested tracks must be converted first. Returns the parent.",
+            properties: ["track_id": text("The nested track to convert.")],
+            required: ["track_id"], readOnly: false
+        ) { args, context in
+            let thread = try Lookup.thread(try args.uuid("track_id"), in: context)
+            guard let parent = thread.parent else { throw ToolError(StopStoreError.noParent.localizedDescription) }
+            do {
+                try StopStore.absorb(thread, in: context)
+            } catch let error as StopStoreError {
+                throw ToolError(error.localizedDescription)
+            }
+            return JSONShape.track(parent, full: true)
         },
         Tool(
             name: "set_stops",
@@ -2400,6 +2418,7 @@ enum JSONShape {
             "summary": thread.summary,
             "parent_id": thread.parent?.id.uuidString ?? "",
             "is_active": thread.project?.activeTrackID == thread.id,
+            "theme": thread.theme?.displayName ?? "",
             "updated_at": iso.string(from: thread.updatedAt),
             "tags": tags(thread.tags)
         ]

@@ -6,6 +6,8 @@ struct ThreadPage: View {
     var project: Project
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
+    @State private var namingTheme = false
+    @State private var newThemeName = ""
 
     var body: some View {
         DeletionChrome(
@@ -58,17 +60,20 @@ struct ThreadPage: View {
                         Button(status.label, systemImage: status.symbol) { thread.status = status; touch() }
                     }
                 }
-                PropertyPill(
-                    title: thread.parent.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "No parent",
-                    systemImage: "arrow.turn.left.up",
-                    field: .parent,
-                    onOpen: thread.parent.map { parent in { app.open(parent) } }
-                ) {
-                    Button("No parent") { thread.parent = nil; touch() }
-                    ForEach(parentCandidates) { candidate in
-                        Button(candidate.title.isEmpty ? "Untitled" : candidate.title) { thread.parent = candidate; touch() }
+                // Tracks no longer nest. One still under another can be taken out, or made a stop on it.
+                if let parent = thread.parent {
+                    PropertyPill(
+                        title: parent.title.isEmpty ? "Untitled" : parent.title,
+                        systemImage: "arrow.turn.left.up",
+                        field: .parent,
+                        onOpen: { app.open(parent) }
+                    ) {
+                        Button("Make This Its Own Track") { thread.parent = nil; touch() }
+                        Button("Make This a Stop on \(parent.title.isEmpty ? "Untitled" : parent.title)") { becomeStop(on: parent) }
+                            .disabled(!thread.children.isEmpty)
                     }
                 }
+                themePill
                 activePill
                 linked
             }
@@ -109,6 +114,36 @@ struct ThreadPage: View {
         .onChange(of: thread.body) { _, _ in touch() }
     }
 
+    private var themePill: some View {
+        PropertyPill(title: thread.theme?.displayName ?? "No theme", systemImage: "square.stack") {
+            Button("No theme") { ThemeStore.setTheme("", on: thread, in: context) }
+            ForEach(project.orderedThemes) { theme in
+                Button(theme.displayName) { ThemeStore.setTheme(theme.name, on: thread, in: context) }
+            }
+            Divider()
+            Button("New Theme…") { namingTheme = true }
+        }
+        .alert("New Theme", isPresented: $namingTheme) {
+            TextField("Name", text: $newThemeName)
+            Button("Cancel", role: .cancel) { newThemeName = "" }
+            Button("Add") {
+                ThemeStore.setTheme(newThemeName, on: thread, in: context)
+                newThemeName = ""
+            }
+        } message: {
+            Text("A theme groups tracks. It holds no work of its own.")
+        }
+    }
+
+    private func becomeStop(on parent: ProjectThread) {
+        do {
+            try StopStore.absorb(thread, in: context)
+            app.open(parent)
+        } catch {
+            app.flash(error.localizedDescription)
+        }
+    }
+
     private var activePill: some View {
         let isActive = project.activeTrackID == thread.id
         return PropertyPill(title: isActive ? "Active track" : "Not active", systemImage: isActive ? "scope" : "circle.dashed") {
@@ -124,7 +159,6 @@ struct ThreadPage: View {
     private var linked: some View {
         let count = thread.decisions.count + thread.notes.count + thread.conversations.count
         PropertyPill(title: count == 0 ? "Link" : "\(count) linked", systemImage: "link", field: .linked) {
-            Button("New Sub-track", systemImage: "plus") { createChild() }
             if !thread.decisions.isEmpty {
                 Section("Decisions") {
                     ForEach(thread.decisions) { decision in
@@ -185,23 +219,9 @@ struct ThreadPage: View {
         return fields
     }
 
-    private var parentCandidates: [ProjectThread] {
-        project.threads
-            .filter { $0.id != thread.id && !thread.contains($0) }
-            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-    }
-
     private func touch() {
         thread.updatedAt = .now
         project.touch()
-    }
-
-    private func createChild() {
-        let child = ProjectThread(title: "", kind: .feature, project: project, parent: thread)
-        context.insert(child)
-        touch()
-        try? context.persist()
-        app.open(child)
     }
 
     private func keepMark() {

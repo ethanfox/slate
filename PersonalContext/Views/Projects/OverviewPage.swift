@@ -801,9 +801,18 @@ struct ProjectOverview: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                         VStack(alignment: .leading, spacing: 26) {
-                            block("Active tracks", more: tracks.count > 5 ? .track : nil) {
-                                if tracks.isEmpty { EmptyLine(text: "No track is active.") }
-                                ForEach(tracks.prefix(5)) { row in
+                            block("Active track") {
+                                if let active = project.activeTrack, let row = of(.track).first(where: { $0.id == active.id }) {
+                                    IndexRow(row: row, caption: activeCaption(active))
+                                    Hairline()
+                                } else {
+                                    EmptyLine(text: "No active track. Open a track and make it the active one.")
+                                }
+                            }
+                            block("In progress", more: tracks.count > 5 ? .track : nil) {
+                                let others = tracks.filter { $0.id != project.activeTrackID }
+                                if others.isEmpty { EmptyLine(text: "No other track is in progress.") }
+                                ForEach(others.prefix(5)) { row in
                                     IndexRow(row: row)
                                     Hairline()
                                 }
@@ -835,6 +844,18 @@ struct ProjectOverview: View {
             }
         }
         .scrollContentBackground(.hidden)
+    }
+
+    /// The stop the active track is on, and the task that is next.
+    private func activeCaption(_ track: ProjectThread) -> String {
+        var parts: [String] = []
+        if let stop = track.orderedStops.first(where: { !$0.isDone }) {
+            parts.append("Stop: \(stop.displayTitle)")
+        }
+        if let next = TaskStore.nextTask(in: project) {
+            parts.append("Next: \(next.displayTitle)")
+        }
+        return parts.joined(separator: " · ")
     }
 
     /// The full lists, each with how many it holds.
@@ -1005,6 +1026,31 @@ struct ProjectListPage: View {
                     let items = shown
                     if items.isEmpty {
                         EmptyLine(text: rows.isEmpty ? "No \(kind.plural.lowercased()) in this project yet." : "Nothing matches.")
+                    } else if kind == .track, !project.themes.isEmpty {
+                        // Tracks are listed under their themes; the ones with no theme come last.
+                        let themeOf = Dictionary(uniqueKeysWithValues: project.threads.compactMap { track in
+                            track.theme.map { (track.id, $0.id) }
+                        })
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(project.orderedThemes) { theme in
+                                let group = items.filter { themeOf[$0.id] == theme.id }
+                                if !group.isEmpty {
+                                    themeHeader(theme.displayName, count: group.count)
+                                    ForEach(group) { row in
+                                        IndexRow(row: row, caption: caption(row))
+                                        Hairline()
+                                    }
+                                }
+                            }
+                            let loose = items.filter { themeOf[$0.id] == nil }
+                            if !loose.isEmpty {
+                                themeHeader("No theme", count: loose.count)
+                                ForEach(loose) { row in
+                                    IndexRow(row: row, caption: caption(row))
+                                    Hairline()
+                                }
+                            }
+                        }
                     } else {
                         LazyVStack(spacing: 0) {
                             ForEach(items) { row in
@@ -1022,10 +1068,25 @@ struct ProjectListPage: View {
         .scrollContentBackground(.hidden)
     }
 
+    private func themeHeader(_ name: String, count: Int) -> some View {
+        HStack(spacing: 8) {
+            Text(name)
+                .font(CraftFont.section)
+                .foregroundStyle(.secondary)
+            Text("\(count)")
+                .font(CraftFont.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.top, 20)
+        .padding(.bottom, 4)
+    }
+
     private func caption(_ row: TitleIndex) -> String {
         switch kind {
         case .track:
-            [row.detailRaw.capitalized, row.statusRaw.capitalized].filter { !$0.isEmpty }.joined(separator: " · ")
+            ([row.id == project.activeTrackID ? "Active track" : ""]
+                + [row.detailRaw.capitalized, row.statusRaw.capitalized])
+                .filter { !$0.isEmpty }.joined(separator: " · ")
         case .run:
             row.runStatus.label
         case .decision:
