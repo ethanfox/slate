@@ -365,6 +365,28 @@ struct AreaRecordsView: View {
         }
     }
 
+    /// Logging is about a record. With one record it is a button; with several, a menu to pick which.
+    @ViewBuilder
+    private func logButton(_ log: AreaLog) -> some View {
+        if context.records.count == 1, let only = context.records.first {
+            Button("Log \(log.name)") { context.log(log.eventKey, about: only) }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .medium))
+                .padding(.horizontal, 12)
+                .frame(height: 28)
+                .background(CraftColor.elevated, in: Capsule())
+                .overlay(Capsule().stroke(CraftColor.hairline))
+        } else if context.records.count > 1 {
+            Menu("Log \(log.name)") {
+                ForEach(context.records) { record in
+                    Button(record.displayTitle) { context.log(log.eventKey, about: record) }
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+    }
+
     @ViewBuilder
     private var logged: some View {
         if let log {
@@ -373,6 +395,7 @@ struct AreaRecordsView: View {
                     Text(log.name)
                         .font(CraftFont.body)
                         .foregroundStyle(.secondary)
+                    logButton(log)
                     Spacer(minLength: 8)
                     Picker("Period", selection: $period) {
                         Text("Week").tag(SpaceCalcRequest.Period.week)
@@ -388,9 +411,13 @@ struct AreaRecordsView: View {
                 let _ = log.numberField.map { props["field"] = .text($0) }
                 SpaceComponentView(component: SpaceComponent("chart", props), context: context)
             } else {
-                Text(log.name)
-                    .font(CraftFont.body)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Text(log.name)
+                        .font(CraftFont.body)
+                        .foregroundStyle(.secondary)
+                    logButton(log)
+                    Spacer(minLength: 0)
+                }
                 SpaceComponentView(
                     component: SpaceComponent("timeline", ["events": .text(log.eventKey)]),
                     context: context

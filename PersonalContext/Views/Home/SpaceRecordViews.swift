@@ -25,10 +25,13 @@ struct SpaceRecordContent: View {
     var spaceID: UUID
     var recordID: UUID
 
+    @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @Query private var records: [SpaceRecord]
-    @Query private var types: [SpaceType]
+    @Query(sort: \SpaceType.createdAt) private var types: [SpaceType]
     @Query private var spaces: [Space]
+    @Query private var events: [SpaceEvent]
+    @State private var screenState = SpaceScreenState()
 
     private var record: SpaceRecord? {
         records.first { $0.id == recordID }
@@ -46,10 +49,52 @@ struct SpaceRecordContent: View {
                         .font(.system(size: 28, weight: .semibold))
                         .opacity(record.isArchived ? 0.5 : 1)
                     content(record, schema: type.schema)
+                    logged(record, type: type)
                 }
                 .frame(maxWidth: 640, alignment: .leading)
             } else {
                 EmptyLine(text: "This record no longer exists.")
+            }
+        }
+    }
+
+    /// What gets logged about this record: a button to log it, and the entries so far.
+    @ViewBuilder
+    private func logged(_ record: SpaceRecord, type: SpaceType) -> some View {
+        let spaceKey = type.spaceIDString
+        let eventTypes = SpaceScreens.eventTypes(beside: type, in: types)
+        let screen = SpaceScreenContext(
+            kind: .detail,
+            type: type,
+            schema: type.schema,
+            eventTypes: eventTypes,
+            records: [],
+            events: events.filter { $0.spaceIDString == spaceKey },
+            record: record,
+            titles: SpaceSelection.titles(in: spaceKey, records: records),
+            lookup: SpaceLookup(spaceKey: spaceKey, records: records, types: types),
+            accent: accent,
+            state: screenState,
+            context: context,
+            open: { app.navigate(to: .spaceRecord(space: spaceID, record: $0.id)) },
+            present: { app.present($0) }
+        )
+        ForEach(eventTypes) { eventType in
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center, spacing: 12) {
+                    Text(eventType.name)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    SpaceComponentView(
+                        component: SpaceComponent("action", ["event": .text(eventType.key), "label": .text("Log \(eventType.name)")]),
+                        context: screen
+                    )
+                }
+                SpaceComponentView(
+                    component: SpaceComponent("timeline", ["events": .text(eventType.key)]),
+                    context: screen
+                )
             }
         }
     }
