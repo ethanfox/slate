@@ -122,7 +122,9 @@ final class AppModel {
     }
     private(set) var cursorCloudRepositories: CursorCloudRepositoriesState = .idle
     @ObservationIgnored private var cursorCloudFetchStartedAt: Date?
-    private(set) var chatGPTModels: [ChatGPTModel] = []
+    private(set) var chatGPTModels: [ChatGPTModel] = AppModel.savedChatGPTModels()
+    /// Why the last attempt to list ChatGPT's models failed. Nil once one succeeds.
+    private(set) var chatGPTModelsError: String?
     var showAgentIDs: Bool {
         didSet { defaults.set(showAgentIDs, forKey: Keys.showAgentIDs) }
     }
@@ -726,12 +728,16 @@ final class AppModel {
     func refreshChatGPTModels() {
         guard let session = ChatGPTSignIn.load() else {
             chatGPTModels = []
+            chatGPTModelsError = nil
+            UserDefaults.standard.removeObject(forKey: Self.chatGPTModelsKey)
             return
         }
         Task {
             do {
                 let fetched = try await ChatGPTSignIn.models(session: session)
                 chatGPTModels = fetched
+                chatGPTModelsError = nil
+                UserDefaults.standard.set(fetched.map { ["id": $0.id, "name": $0.displayName] }, forKey: Self.chatGPTModelsKey)
                 for model in fetched {
                     guard model.endpointImage != nil || model.endpointDocument != nil else { continue }
                     AttachmentCapabilityStore.applyEndpoint(
@@ -747,9 +753,23 @@ final class AppModel {
                     chatGPTModelID = first.id
                 }
             } catch {
-                chatGPTModels = []
+                // A failed refresh keeps the last list. ChatGPT being down is not a reason to lose the models.
+                chatGPTModelsError = error.localizedDescription
                 ChatTrace.event("chatgpt models failed: \(error.localizedDescription)")
             }
+        }
+    }
+
+    private static let chatGPTModelsKey = "chatGPTModels"
+
+    /// The list from the last time ChatGPT answered, so the picker has models before and without a fresh one.
+    private static func savedChatGPTModels() -> [ChatGPTModel] {
+        guard ChatGPTSignIn.load() != nil,
+              let saved = UserDefaults.standard.array(forKey: chatGPTModelsKey) as? [[String: String]]
+        else { return [] }
+        return saved.compactMap { item in
+            guard let id = item["id"], let name = item["name"] else { return nil }
+            return ChatGPTModel(id: id, displayName: name)
         }
     }
 

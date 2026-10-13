@@ -96,7 +96,8 @@ private struct ModelPickerPanel: View {
                         ModelPickerSection(
                             provider: provider,
                             models: models(for: provider),
-                            selectedID: selectedID(for: provider)
+                            selectedID: selectedID(for: provider),
+                            problem: provider == .chatgpt ? app.chatGPTModelsError : nil
                         ) { modelID in
                             pick(provider: provider, modelID: modelID)
                         }
@@ -166,6 +167,7 @@ private struct ModelPickerSection: View {
     var provider: TalkProvider
     var models: [(id: String, name: String)]
     var selectedID: String?
+    var problem: String?
     var onPick: (String) -> Void
 
     var body: some View {
@@ -183,12 +185,22 @@ private struct ModelPickerSection: View {
             .padding(.bottom, 4)
             .accessibilityAddTraits(.isHeader)
 
-            if models.isEmpty {
-                Text("None yet")
-                    .font(CraftFont.body)
-                    .foregroundStyle(.tertiary)
+            if let problem {
+                Text(problem)
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 8)
-                    .frame(height: 28)
+                    .padding(.vertical, 4)
+            }
+            if models.isEmpty {
+                if problem == nil {
+                    Text("None yet")
+                        .font(CraftFont.body)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 8)
+                        .frame(height: 28)
+                }
             } else {
                 ForEach(models, id: \.id) { model in
                     ModelPickerRow(

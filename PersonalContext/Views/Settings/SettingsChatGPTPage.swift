@@ -36,6 +36,21 @@ struct SettingsChatGPTPage: View {
                 if case .connected = app.sources.chatGPT {
                     Hairline().padding(.horizontal, 16)
                     SettingsRow {
+                        Text("Status")
+                        Spacer(minLength: 16)
+                        if let problem = app.chatGPTModelsError {
+                            Text(problem)
+                                .foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.trailing)
+                            Button("Try Again") { app.refreshChatGPTModels() }
+                        } else {
+                            Text(app.chatGPTModels.isEmpty ? "Checking" : "Working")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Hairline().padding(.horizontal, 16)
+                    SettingsRow {
                         Text("Plan")
                         Spacer(minLength: 16)
                         Text("Using ChatGPT plan")
@@ -52,7 +67,10 @@ struct SettingsChatGPTPage: View {
                 }
             }
         }
-        .onAppear { app.sources.refresh() }
+        .onAppear {
+            app.sources.refresh()
+            app.refreshChatGPTModels()
+        }
     }
 
     private func removeChatGPT() {

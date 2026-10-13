@@ -225,7 +225,7 @@ struct ChatGPTProvider: ChatProvider {
                     continue
                 }
                 ChatTrace.event("chatgpt http \(status): \(ChatTrace.clip(detail ?? String(data: data, encoding: .utf8) ?? "", 800))")
-                throw ChatGPTAuthError(detail ?? "ChatGPT request failed (\(status)).")
+                throw ChatGPTAuthError(ChatGPTSignIn.outage(status: status) ?? detail ?? "ChatGPT request failed (\(status)).")
             }
             return bytes
         }

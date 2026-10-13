@@ -195,7 +195,8 @@ enum ChatGPTSignIn {
                     expired = session.accessToken
                     continue
                 }
-                throw ChatGPTAuthError("ChatGPT would not list models.")
+                ChatTrace.event("chatgpt models http \(status): \(ChatTrace.clip(detail ?? "", 800))")
+                throw ChatGPTAuthError(outage(status: status) ?? "ChatGPT refused to list its models (error \(status)). Remove and reconnect ChatGPT if this keeps happening.")
             }
             guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 throw ChatGPTAuthError("ChatGPT returned an unreadable model list.")
@@ -304,6 +305,18 @@ enum ChatGPTSignIn {
     static func needsRefresh(_ session: ChatGPTSession, refreshing token: String? = nil, leeway: TimeInterval = 60) -> Bool {
         if let token, session.accessToken == token { return true }
         return remainingLifetime(session) < leeway
+    }
+
+    /// What to tell the user when the failure is OpenAI's servers and nothing here can fix it.
+    static func outage(status: Int) -> String? {
+        switch status {
+        case 500...599:
+            "OpenAI's servers are failing right now (error \(status)). Your sign-in is fine. Try again in a minute, or use another model."
+        case 429:
+            "ChatGPT is rate limiting this account. Try again in a minute, or use another model."
+        default:
+            nil
+        }
     }
 
     static func isExpiredTokenError(status: Int, detail: String?) -> Bool {
