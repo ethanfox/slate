@@ -182,6 +182,9 @@ struct YouView: View {
     @Query(sort: \AreaWidget.createdAt) private var widgets: [AreaWidget]
     @Query private var loggedEvents: [SpaceEvent]
     @State private var pendingDelete: Space?
+    @State private var showsCustomize = false
+    @State private var showsGallery = false
+    @State private var showsEmptyGallery = false
     /// What the user chose to see on this page.
     @AppStorage("youShowsWidgets") private var showsWidgets = true
     @AppStorage("youShowsAreas") private var showsAreas = true
@@ -192,11 +195,12 @@ struct YouView: View {
 
     private var scale: CGFloat { large ? 1.18 : 1 }
 
-    /// Draws a fixed-size card bigger, and tells the layout its new size.
-    private func scaled<Content: View>(_ content: Content, size: CGSize) -> some View {
+    /// Has a card lay itself out bigger, so nothing is stretched and text stays sharp.
+    private func scaled<Content: View>(_ content: Content) -> some View {
         content
-            .scaleEffect(scale, anchor: .topLeading)
-            .frame(width: size.width * scale, height: size.height * scale, alignment: .topLeading)
+            .environment(\.cardScale, scale)
+            .contentTransition(.interpolate)
+            .animation(.snappy(duration: 0.3), value: large)
     }
     @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" && $0.isCompleted == false })
     private var openTasks: [AgendaItem]
@@ -259,25 +263,8 @@ struct YouView: View {
 
     /// Lets the user choose what this page shows and how big.
     private var customize: some View {
-        Menu {
-            Section("Show") {
-                Toggle("Widgets", isOn: $showsWidgets)
-                Toggle("Areas", isOn: $showsAreas)
-                Toggle("Lately", isOn: $showsLately)
-                Toggle("Coming Up", isOn: $showsComingUp)
-            }
-            Section("Size") {
-                Picker("Size", selection: $large) {
-                    Text("Normal").tag(false)
-                    Text("Large").tag(true)
-                }
-                .pickerStyle(.inline)
-                .labelsHidden()
-            }
-            let others = widgets.filter { !$0.isOnYou }
-            if !others.isEmpty {
-                Section("Add a Widget") { addWidgetItems(others) }
-            }
+        Button {
+            showsCustomize = true
         } label: {
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 12))
@@ -287,23 +274,27 @@ struct YouView: View {
                 .overlay(Circle().strokeBorder(CraftColor.hairline))
                 .contentShape(Circle())
         }
-        .menuStyle(.button)
-            .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
+        .buttonStyle(.plain)
         .help("Customize this page")
         .accessibilityLabel("Customize this page")
+        .popover(isPresented: $showsCustomize, arrowEdge: .bottom) {
+            YouCustomizePanel(
+                showsWidgets: $showsWidgets,
+                showsAreas: $showsAreas,
+                showsLately: $showsLately,
+                showsComingUp: $showsComingUp,
+                large: $large,
+                widgets: widgets,
+                spaces: spaces,
+                place: place
+            )
+        }
     }
 
-    @ViewBuilder
-    private func addWidgetItems(_ others: [AreaWidget]) -> some View {
-        ForEach(spaces) { space in
-            let key = SpaceJSON.key(space.id)
-            let owned = others.filter { $0.spaceIDString == key }
-            ForEach(owned) { widget in
-                Button("\(space.displayName): \(widget.name)") { place(widget, onYou: true) }
-            }
-        }
+    private func gallery() -> some View {
+        WidgetGallery(widgets: widgets, spaces: spaces, place: place)
+            .frame(width: WidgetGallery.width)
+            .frame(maxHeight: 480)
     }
 
     private var greeting: some View {
@@ -361,8 +352,8 @@ struct YouView: View {
                         .font(CraftFont.section)
                         .foregroundStyle(.secondary)
                     if !others.isEmpty, !chosen.isEmpty {
-                        Menu {
-                            addWidgetItems(others)
+                        Button {
+                            showsGallery = true
                         } label: {
                             Image(systemName: "plus")
                                 .font(.system(size: 11, weight: .semibold))
@@ -370,10 +361,8 @@ struct YouView: View {
                                 .frame(width: 22, height: 22)
                                 .contentShape(Rectangle())
                         }
-                        .menuStyle(.button)
-            .buttonStyle(.plain)
-                        .menuIndicator(.hidden)
-                        .fixedSize()
+                        .buttonStyle(.plain)
+                        .popover(isPresented: $showsGallery, arrowEdge: .bottom) { gallery() }
                         .help("Add a widget")
                         .accessibilityLabel("Add a widget")
                     }
@@ -384,7 +373,7 @@ struct YouView: View {
             } else {
                 WidgetFlow(spacing: AreaWidgetMetrics.gap * scale) {
                     ForEach(chosen) { widget in
-                        scaled(AreaWidgetHost(id: widget.id), size: AreaWidgetMetrics.size(widget.size))
+                        scaled(AreaWidgetHost(id: widget.id))
                             .contextMenu {
                                 Button {
                                     place(widget, onYou: false)
@@ -402,24 +391,21 @@ struct YouView: View {
     /// Nothing chosen yet: one card that adds a widget, or starts asking for one when none exist.
     @ViewBuilder
     private func emptyWidgets(_ others: [AreaWidget]) -> some View {
-        let size = AreaWidgetMetrics.size(.wide)
         if others.isEmpty {
             Button {
                 app.captureDrafts["capture", default: CaptureDraft()].text = "Make a widget for "
             } label: {
-                scaled(AddWidgetCard(title: "Add a Widget", detail: "Ask Membrae to make one for an Area."), size: size)
+                scaled(AddWidgetCard(title: "Add a Widget", detail: "Ask Membrae to make one for an Area."))
             }
             .buttonStyle(.plain)
         } else {
-            Menu {
-                addWidgetItems(others)
+            Button {
+                showsEmptyGallery = true
             } label: {
-                scaled(AddWidgetCard(title: "Add a Widget", detail: "Choose one from your Areas."), size: size)
+                scaled(AddWidgetCard(title: "Add a Widget", detail: "Choose one from your Areas."))
             }
-            .menuStyle(.button)
             .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .fixedSize()
+            .popover(isPresented: $showsEmptyGallery, arrowEdge: .bottom) { gallery() }
         }
     }
 
@@ -437,7 +423,7 @@ struct YouView: View {
                         Button {
                             app.navigate(to: .space(space.id))
                         } label: {
-                            scaled(SpaceCard(space: space, summary: summary(for: space)), size: CGSize(width: 212, height: 236))
+                            scaled(SpaceCard(space: space, summary: summary(for: space)))
                         }
                         .buttonStyle(.plain)
                         .contextMenu { spaceMenu(space) }
@@ -446,7 +432,7 @@ struct YouView: View {
                         Button {
                             app.present(.newSpace)
                         } label: {
-                            scaled(NewSpaceCard(), size: CGSize(width: 212, height: 236))
+                            scaled(NewSpaceCard())
                         }
                         .buttonStyle(.plain)
                     }
@@ -664,63 +650,67 @@ private struct SpaceCard: View {
     var space: Space
     var summary: SpaceCardSummary
 
+    @Environment(\.cardScale) private var k
+
     private static let ink = Color(hex: "16151A")
 
     var body: some View {
         let gradient = space.gradient
         let top: Color = gradient.hasDarkTop ? .white : Self.ink
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top, spacing: 8 * k) {
+                VStack(alignment: .leading, spacing: 2 * k) {
                     Text(space.displayName)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 17 * k, weight: .semibold))
                         .foregroundStyle(top)
                         .lineLimit(1)
                     Text(summary.line)
-                        .font(.system(size: 12))
+                        .font(.system(size: 12 * k))
                         .foregroundStyle(top.opacity(gradient.hasDarkTop ? 0.72 : 0.6))
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: space.symbol)
-                    .font(.system(size: 15))
+                    .font(.system(size: 15 * k))
                     .foregroundStyle(top)
             }
             Spacer(minLength: 0)
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: 7 * k) {
                 Text("\(summary.count)")
-                    .font(.system(size: 34, weight: .semibold))
+                    .font(.system(size: 34 * k, weight: .semibold))
                     .foregroundStyle(Self.ink)
                 Text(summary.caption)
-                    .font(.system(size: 12))
+                    .font(.system(size: 12 * k))
                     .foregroundStyle(Self.ink.opacity(0.7))
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 18)
-        .frame(width: 212, height: 236, alignment: .topLeading)
-        .background(gradient.fill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.horizontal, 20 * k)
+        .padding(.vertical, 18 * k)
+        .frame(width: 212 * k, height: 236 * k, alignment: .topLeading)
+        .background(gradient.fill, in: RoundedRectangle(cornerRadius: 16 * k, style: .continuous))
         .shadow(color: .black.opacity(0.2), radius: 14, y: 10)
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 16 * k, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 }
 
 private struct NewSpaceCard: View {
+    @Environment(\.cardScale) private var k
+
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 8 * k) {
             Image(systemName: "plus")
-                .font(.system(size: 18))
+                .font(.system(size: 18 * k))
             Text("New Area")
-                .font(CraftFont.body)
+                .font(.system(size: 13 * k))
         }
         .foregroundStyle(.secondary)
-        .frame(width: 212, height: 236)
+        .frame(width: 212 * k, height: 236 * k)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 16 * k, style: .continuous)
                 .strokeBorder(CraftColor.hairline, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
         )
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 16 * k, style: .continuous))
     }
 }
 
@@ -757,25 +747,230 @@ private struct AddWidgetCard: View {
     var title: String
     var detail: String
 
+    @Environment(\.cardScale) private var k
+
     var body: some View {
         let size = AreaWidgetMetrics.size(.wide)
-        VStack(spacing: 6) {
+        VStack(spacing: 6 * k) {
             Image(systemName: "plus")
-                .font(.system(size: 18, weight: .medium))
+                .font(.system(size: 18 * k, weight: .medium))
                 .foregroundStyle(.secondary)
             Text(title)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 13 * k, weight: .medium))
                 .foregroundStyle(.primary)
             Text(detail)
-                .font(CraftFont.caption)
+                .font(.system(size: 11 * k))
                 .foregroundStyle(.secondary)
         }
-        .frame(width: size.width, height: size.height)
-        .background(CraftColor.elevated.opacity(0.5), in: RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner, style: .continuous))
+        .frame(width: size.width * k, height: size.height * k)
+        .background(CraftColor.elevated.opacity(0.5), in: RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner * k, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner, style: .continuous)
+            RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner * k, style: .continuous)
                 .strokeBorder(CraftColor.hairline, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
         )
-        .contentShape(RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner * k, style: .continuous))
+    }
+}
+
+
+/// What the You page shows and how big, as switches and two pictures to pick from.
+private struct YouCustomizePanel: View {
+    @Binding var showsWidgets: Bool
+    @Binding var showsAreas: Bool
+    @Binding var showsLately: Bool
+    @Binding var showsComingUp: Bool
+    @Binding var large: Bool
+    var widgets: [AreaWidget]
+    var spaces: [Space]
+    var place: (AreaWidget, Bool) -> Void
+
+    @State private var choosingWidgets = false
+
+    var body: some View {
+        if choosingWidgets {
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    choosingWidgets = false
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("Customize")
+                            .font(CraftFont.body)
+                    }
+                    .foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                WidgetGallery(widgets: widgets, spaces: spaces, place: place)
+            }
+            .frame(width: WidgetGallery.width)
+            .frame(maxHeight: 480)
+        } else {
+            settings
+                .padding(16)
+                .frame(width: 280)
+        }
+    }
+
+    private var settings: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                heading("Size")
+                HStack(spacing: 10) {
+                    sizeTile("Normal", isLarge: false)
+                    sizeTile("Large", isLarge: true)
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                heading("Show")
+                row("Widgets", icon: "square.grid.2x2", isOn: $showsWidgets)
+                row("Areas", icon: "rectangle.stack", isOn: $showsAreas)
+                row("Lately", icon: "clock", isOn: $showsLately)
+                row("Coming Up", icon: "calendar", isOn: $showsComingUp)
+            }
+            if !widgets.isEmpty {
+                Button {
+                    choosingWidgets = true
+                } label: {
+                    HStack {
+                        Text("Choose Widgets")
+                            .font(CraftFont.body)
+                        Spacer()
+                        Text("\(widgets.filter(\.isOnYou).count) of \(widgets.count)")
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 32)
+                    .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(CraftColor.hairline))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func heading(_ text: String) -> some View {
+        Text(text)
+            .font(CraftFont.caption)
+            .foregroundStyle(.secondary)
+    }
+
+    private func row(_ title: String, icon: String, isOn: Binding<Bool>) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+            Text(title)
+                .font(CraftFont.body)
+            Spacer()
+            Toggle(title, isOn: isOn)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+        }
+        .frame(height: 28)
+    }
+
+    /// A small picture of the page at this size: Normal has labels over small cards, Large has bigger cards alone.
+    private func sizeTile(_ title: String, isLarge: Bool) -> some View {
+        let selected = large == isLarge
+        return Button {
+            withAnimation(.snappy(duration: 0.3)) { large = isLarge }
+        } label: {
+            VStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if !isLarge {
+                        Capsule()
+                            .fill(.tertiary)
+                            .frame(width: 22, height: 3)
+                    }
+                    HStack(spacing: isLarge ? 5 : 4) {
+                        ForEach(0..<(isLarge ? 2 : 3), id: \.self) { _ in
+                            RoundedRectangle(cornerRadius: isLarge ? 6 : 4, style: .continuous)
+                                .fill(.quaternary)
+                                .frame(width: isLarge ? 38 : 24, height: isLarge ? 38 : 24)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                Text(title)
+                    .font(.system(size: 12, weight: selected ? .semibold : .regular))
+            }
+            .padding(10)
+            .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(selected ? Color.accentColor : CraftColor.hairline, lineWidth: selected ? 2 : 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// Every widget, drawn small and grouped by Area. Clicking one puts it on You or takes it off.
+private struct WidgetGallery: View {
+    var widgets: [AreaWidget]
+    var spaces: [Space]
+    var place: (AreaWidget, Bool) -> Void
+
+    static let preview: CGFloat = 0.62
+    static let width: CGFloat = (AreaWidgetMetrics.size(.wide).width + AreaWidgetMetrics.cell + AreaWidgetMetrics.gap) * preview + 12 + 32
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(spaces) { space in
+                    let owned = widgets.filter { $0.spaceIDString == SpaceJSON.key(space.id) }
+                    if !owned.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(space.displayName)
+                                .font(CraftFont.caption)
+                                .foregroundStyle(.secondary)
+                            WidgetFlow(spacing: 12) {
+                                ForEach(owned) { widget in
+                                    tile(widget)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func tile(_ widget: AreaWidget) -> some View {
+        Button {
+            place(widget, !widget.isOnYou)
+        } label: {
+            AreaWidgetHost(id: widget.id)
+                .allowsHitTesting(false)
+                .environment(\.cardScale, Self.preview)
+                .overlay(alignment: .topTrailing) {
+                    Image(systemName: widget.isOnYou ? "checkmark.circle.fill" : "plus.circle.fill")
+                        .font(.system(size: 18))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, widget.isOnYou ? Color.accentColor : Color.secondary)
+                        .padding(6)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(widget.isOnYou ? "Remove \(widget.name) from You" : "Add \(widget.name) to You")
+        .accessibilityLabel(widget.name)
+        .accessibilityAddTraits(widget.isOnYou ? .isSelected : [])
     }
 }

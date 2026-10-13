@@ -2,6 +2,11 @@ import Charts
 import SwiftData
 import SwiftUI
 
+extension EnvironmentValues {
+    /// How much bigger or smaller than normal widgets and Area cards draw. They lay out at this size, so text stays sharp.
+    @Entry var cardScale: CGFloat = 1
+}
+
 /// The fixed geometry every widget shares. A definition places blocks; it never sets these.
 enum AreaWidgetMetrics {
     static let cell: CGFloat = 164
@@ -81,18 +86,21 @@ struct AreaWidgetView: View {
     var widget: AreaWidget
     var context: SpaceScreenContext
 
+    /// How much bigger or smaller than normal to draw, set by the page showing the widget.
+    @Environment(\.cardScale) private var k
+
     private var size: AreaWidgetSize { widget.size }
     private var rows: [[SpaceComponent]] { widget.definition.rows }
 
     var body: some View {
         let frame = AreaWidgetMetrics.size(size)
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8 * k) {
             Text(widget.name)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 11 * k, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: 12 * k) {
                     ForEach(Array(row.enumerated()), id: \.offset) { _, block in
                         self.block(block, across: row.count)
                             .frame(maxWidth: .infinity, maxHeight: fills(block) ? .infinity : nil, alignment: .topLeading)
@@ -101,14 +109,14 @@ struct AreaWidgetView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(AreaWidgetMetrics.padding)
-        .frame(width: frame.width, height: frame.height, alignment: .topLeading)
-        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner, style: .continuous))
+        .padding(AreaWidgetMetrics.padding * k)
+        .frame(width: frame.width * k, height: frame.height * k, alignment: .topLeading)
+        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner * k, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner, style: .continuous)
+            RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner * k, style: .continuous)
                 .strokeBorder(CraftColor.hairline)
         )
-        .contentShape(RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner * k, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(widget.name)
     }
@@ -132,7 +140,7 @@ struct AreaWidgetView: View {
 
     private func label(_ block: SpaceComponent) -> some View {
         Text(block.text("text") ?? "")
-            .font(CraftFont.caption)
+            .font(.system(size: 11 * k))
             .foregroundStyle(.secondary)
             .lineLimit(2)
     }
@@ -141,12 +149,12 @@ struct AreaWidgetView: View {
         let raw: String? = { if case .text(let raw) = block.props["value"] { raw } else { nil } }()
         return VStack(alignment: .leading, spacing: 1) {
             Text(context.metric(raw, about: nil))
-                .font(.system(size: size == .small || across > 1 ? 24 : 30, weight: .semibold))
+                .font(.system(size: (size == .small || across > 1 ? 24 : 30) * k, weight: .semibold))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text(block.text("label") ?? "")
-                .font(CraftFont.caption)
+                .font(.system(size: 11 * k))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         }
@@ -157,7 +165,7 @@ struct AreaWidgetView: View {
         let points = context.chartPoints(block)
         if points.isEmpty {
             Text("Nothing logged yet")
-                .font(CraftFont.caption)
+                .font(.system(size: 11 * k))
                 .foregroundStyle(.tertiary)
         } else {
             let asLine = (block.text("style") ?? (block.text("field") == nil ? "bar" : "line")) == "line"
@@ -188,9 +196,9 @@ struct AreaWidgetView: View {
         let unit = block.text("unit").map { " \($0)" } ?? ""
         let fraction = target.map { $0 > 0 ? min(max(value / $0, 0), 1) : 0 } ?? 0
         func text(_ number: Double) -> String { number.formatted(.number.precision(.fractionLength(0...1))) }
-        return VStack(alignment: .leading, spacing: 5) {
+        return VStack(alignment: .leading, spacing: 5 * k) {
             Text(target.map { "\(text(value)) of \(text($0))\(unit)" } ?? "\(text(value))\(unit)")
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 13 * k, weight: .medium))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -202,10 +210,10 @@ struct AreaWidgetView: View {
                         .frame(width: proxy.size.width * fraction)
                 }
             }
-            .frame(height: 6)
+            .frame(height: 6 * k)
             if let label = block.text("label"), !label.isEmpty {
                 Text(label)
-                    .font(CraftFont.caption)
+                    .font(.system(size: 11 * k))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -219,21 +227,21 @@ struct AreaWidgetView: View {
         return VStack(alignment: .leading, spacing: 0) {
             if shown.isEmpty {
                 Text("Nothing here yet")
-                    .font(CraftFont.caption)
+                    .font(.system(size: 11 * k))
                     .foregroundStyle(.tertiary)
             }
             ForEach(shown) { record in
-                HStack(spacing: 8) {
+                HStack(spacing: 8 * k) {
                     Text(record.displayTitle)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 12 * k, weight: .medium))
                         .lineLimit(1)
                     Spacer(minLength: 4)
                     Text(context.subtitle(for: record, fields: subtitle))
-                        .font(CraftFont.caption)
+                        .font(.system(size: 11 * k))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                .frame(height: 24)
+                .frame(height: 24 * k)
             }
         }
     }
