@@ -134,6 +134,21 @@ enum RunStore {
         try save(context)
     }
 
+    /// The worker finished without doing the job. Its own account is kept beside the reason.
+    static func couldNot(
+        _ run: AgentRun,
+        reason: String,
+        summary: String,
+        links: [RunResultLink],
+        in context: ModelContext
+    ) throws {
+        guard run.status.isActive else { throw RunStoreError.invalidTransition }
+        run.resultSummary = summary
+        run.resultLinks = links
+        apply(.couldNot, on: run, detail: reason, event: .couldNot)
+        try save(context)
+    }
+
     static func fail(_ run: AgentRun, detail: String, event: RunEventKind = .failed, in context: ModelContext) throws {
         guard !run.status.isTerminal else { throw RunStoreError.invalidTransition }
         apply(.failed, on: run, detail: detail, event: event)
@@ -214,7 +229,7 @@ enum RunStore {
         switch (from, to) {
         case (.queued, .running), (.queued, .failed), (.queued, .cancelled):
             return true
-        case (.running, .waiting), (.running, .succeeded), (.running, .failed), (.running, .cancelled):
+        case (.running, .waiting), (.running, .succeeded), (.running, .couldNot), (.running, .failed), (.running, .cancelled):
             return true
         case (.waiting, .running), (.waiting, .failed), (.waiting, .cancelled):
             return true
@@ -229,6 +244,7 @@ enum RunStore {
         case .running: .running
         case .waiting: .waiting
         case .succeeded: .succeeded
+        case .couldNot: .couldNot
         case .failed: .failed
         case .cancelled: .cancelled
         }

@@ -138,6 +138,7 @@
 		C0F1050100000011 /* ComposerSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F1050100000001 /* ComposerSearch.swift */; };
 		11B4A4700000000000000012 /* SourceFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11B4A4700000000000000002 /* SourceFetcher.swift */; };
 		1CA1A6E00000000000000011 /* LocalAgent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E00000000000000001 /* LocalAgent.swift */; };
+		1CA1A6E00000000000000014 /* RunNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E00000000000000004 /* RunNotice.swift */; };
 		1CA1A6E00000000000000012 /* SettingsLocalAgentPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E00000000000000002 /* SettingsLocalAgentPage.swift */; };
 		1CA1A6E00000000000000013 /* LocalAgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E00000000000000003 /* LocalAgentTests.swift */; };
 		C0F1050100000012 /* ComposerSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F1050100000002 /* ComposerSession.swift */; };
@@ -476,6 +477,7 @@
 		C0F1050100000001 /* ComposerSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerSearch.swift; sourceTree = "<group>"; };
 		11B4A4700000000000000002 /* SourceFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceFetcher.swift; sourceTree = "<group>"; };
 		1CA1A6E00000000000000001 /* LocalAgent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAgent.swift; sourceTree = "<group>"; };
+		1CA1A6E00000000000000004 /* RunNotice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunNotice.swift; sourceTree = "<group>"; };
 		1CA1A6E00000000000000002 /* SettingsLocalAgentPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsLocalAgentPage.swift; sourceTree = "<group>"; };
 		1CA1A6E00000000000000003 /* LocalAgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAgentTests.swift; sourceTree = "<group>"; };
 		C0F1050100000002 /* ComposerSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerSession.swift; sourceTree = "<group>"; };
@@ -852,6 +854,7 @@
 				F721FDC648EAE06103D02D53 /* SidebarSectionHeader.swift */,
 				3E67767C42C9589E3B832171 /* SidebarView.swift */,
 				E57195853AAFC087CC563F2F /* MembraeModal.swift */,
+				1CA1A6E00000000000000004 /* RunNotice.swift */,
 				B20A01000000000000000013 /* BrowserVerification.swift */,
 				ECC1D1E59D9D3C62BF5F531A /* WindowTabStrip.swift */,
 			);
@@ -1341,6 +1344,7 @@
 				C0F1050100000011 /* ComposerSearch.swift in Sources */,
 				11B4A4700000000000000012 /* SourceFetcher.swift in Sources */,
 				1CA1A6E00000000000000011 /* LocalAgent.swift in Sources */,
+				1CA1A6E00000000000000014 /* RunNotice.swift in Sources */,
 				1CA1A6E00000000000000012 /* SettingsLocalAgentPage.swift in Sources */,
 				C0F1050100000012 /* ComposerSession.swift in Sources */,
 				C0F1050100000013 /* UniversalComposer.swift in Sources */,

@@ -998,7 +998,9 @@ struct ProjectListPage: View {
         switch kind {
         case .track:
             [row.detailRaw.capitalized, row.statusRaw.capitalized].filter { !$0.isEmpty }.joined(separator: " · ")
-        case .decision, .run:
+        case .run:
+            row.runStatus.label
+        case .decision:
             row.statusRaw.capitalized
         default:
             ""

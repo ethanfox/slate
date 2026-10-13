@@ -807,11 +807,19 @@ function asRequest(message: Record<string, unknown>): Request | undefined {
 function finishRunTool(): Record<string, SDKCustomTool> {
   return {
     finish_run: {
-      description: "Stock the run receipt with a short summary and optional links. Do not complete the assigned task.",
+      description:
+        "Stock the run receipt with a short summary and optional links. If you could not do what was asked, set outcome to could_not and give the reason. Do not complete the assigned task.",
       inputSchema: {
         type: "object",
         properties: {
           summary: { type: "string", description: "What was done." },
+          outcome: {
+            type: "string",
+            enum: ["done", "could_not"],
+            description:
+              "done when the job was done. could_not when you were unable to do it, for example because you lack a tool it needs.",
+          },
+          reason: { type: "string", description: "With could_not: one plain sentence saying why." },
           links: {
             type: "array",
             items: {

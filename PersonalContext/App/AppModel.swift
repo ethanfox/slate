@@ -57,6 +57,8 @@ final class AppModel {
     var modal: AppModal?
     var modalHost = ModalHost.main
     var toast: String?
+    /// Cards at the top right saying a Run ended. Not persisted.
+    var runNotices: [RunNotice] = []
     var pendingSend: PendingSend?
     /// The chat showing as bubbles over the current screen, started from the one input. Not persisted.
     var quickChatID: UUID?

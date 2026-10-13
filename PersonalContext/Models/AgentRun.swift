@@ -22,19 +22,23 @@ enum RunStatus: String, Codable, CaseIterable, Identifiable, Hashable {
     case running
     case waiting
     case succeeded
+    /// The worker ran but could not do what was asked. Not a crash, and not done.
+    case couldNot
     case failed
     case cancelled
 
     var id: String { rawValue }
 
-    var label: String { rawValue.capitalized }
+    var label: String {
+        self == .couldNot ? "Couldn’t do it" : rawValue.capitalized
+    }
 
     var isActive: Bool {
         self == .queued || self == .running || self == .waiting
     }
 
     var isTerminal: Bool {
-        self == .succeeded || self == .failed || self == .cancelled
+        self == .succeeded || self == .couldNot || self == .failed || self == .cancelled
     }
 }
 
@@ -43,10 +47,15 @@ enum RunEventKind: String, Codable, Hashable {
     case running
     case waiting
     case succeeded
+    case couldNot
     case failed
     case cancelled
     case quit
     case browser
+
+    var label: String {
+        self == .couldNot ? RunStatus.couldNot.label : rawValue.capitalized
+    }
 }
 
 struct RunEvent: Codable, Identifiable, Hashable {

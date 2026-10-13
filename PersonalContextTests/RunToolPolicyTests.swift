@@ -87,4 +87,35 @@ final class RunToolPolicyTests: XCTestCase {
         XCTAssertEqual(prepared["source"] as? String, "membrae://run/\(runID.uuidString)")
         XCTAssertEqual(prepared["project_id"] as? String, projectID.uuidString)
     }
+
+    func testRunFollowsTheProjectThePromptNames() {
+        let own = UUID()
+        var policy = RunToolPolicy(runID: UUID(), projectID: own, assignedTaskID: nil, allowCode: false)
+        policy.allowOtherProjects = true
+        let other = UUID().uuidString
+        XCTAssertNoThrow(try policy.permitsCall("create_note", arguments: ["project_id": other]).get())
+        XCTAssertEqual(policy.preparedArguments("create_note", ["project_id": other])["project_id"] as? String, other)
+        XCTAssertEqual(policy.preparedArguments("create_note", [:])["project_id"] as? String, own.uuidString)
+    }
+
+    @MainActor
+    func testFinishRunCanSayItCouldNot() async throws {
+        let gateway = RunGateway(
+            policy: RunToolPolicy(runID: UUID(), projectID: nil, assignedTaskID: nil, allowCode: false),
+            inner: MembraeToolGateway(includeMembraeTools: false, includeProjectTools: false, consult: nil, mcp: nil)
+        )
+        _ = try await gateway.execute(
+            name: "finish_run",
+            arguments: ["summary": "Nothing changed.", "outcome": "could_not", "reason": "I cannot change code."]
+        )
+        XCTAssertEqual(gateway.finishCouldNot, "I cannot change code.")
+        _ = try await gateway.execute(name: "finish_run", arguments: ["summary": "Done."])
+        XCTAssertNil(gateway.finishCouldNot)
+    }
+
+    func testCouldNotIsItsOwnResult() {
+        XCTAssertTrue(RunStatus.couldNot.isTerminal)
+        XCTAssertFalse(RunStatus.couldNot.isActive)
+        XCTAssertEqual(RunStatus.couldNot.label, "Couldn’t do it")
+    }
 }

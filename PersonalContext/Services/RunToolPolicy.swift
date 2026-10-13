@@ -15,6 +15,8 @@ struct RunToolPolicy: Equatable, Sendable {
     var allowBrowser: Bool
     /// With no project, writes may land in any project or Space. This is how the one input files things.
     var allowUnscopedWrites: Bool
+    /// The prompt may name another project. The Run's own project is then only the default.
+    var allowOtherProjects = false
 
     var allowsMembraeWrites: Bool {
         allowMembraeKnowledgeWrite && (projectID != nil || allowUnscopedWrites)
@@ -149,7 +151,8 @@ struct RunToolPolicy: Equatable, Sendable {
                 }
             }
         }
-        if let expected = projectID,
+        if !allowOtherProjects,
+           let expected = projectID,
            let raw = arguments["project_id"] as? String,
            let incoming = UUID(uuidString: raw),
            incoming != expected {
@@ -167,7 +170,8 @@ struct RunToolPolicy: Equatable, Sendable {
 
     func preparedArguments(_ name: String, _ arguments: [String: Any]) -> [String: Any] {
         var arguments = arguments
-        if let projectID, writesProject(name) {
+        let named = (arguments["project_id"] as? String).flatMap(UUID.init(uuidString:)) != nil
+        if let projectID, writesProject(name), !(allowOtherProjects && named) {
             arguments["project_id"] = projectID.uuidString
         }
         if attachesRunSource, name == "create_note",
@@ -184,12 +188,16 @@ struct RunToolPolicy: Equatable, Sendable {
         if run.purpose == .indexRepository, let attachmentID = run.indexedAttachmentID {
             return .indexing(runID: run.id, projectID: run.project?.id, attachmentID: attachmentID)
         }
-        return RunToolPolicy(
+        var policy = RunToolPolicy(
             runID: run.id,
             projectID: run.project?.id,
             assignedTaskID: run.task?.id,
-            allowCode: run.project != nil && !run.repositoryLocators.isEmpty
+            allowCode: run.project != nil && !run.repositoryLocators.isEmpty,
+            requireProject: false,
+            allowUnscopedWrites: run.project == nil
         )
+        policy.allowOtherProjects = true
+        return policy
     }
 
     static func catalogNames(for run: AgentRun) -> [String] {

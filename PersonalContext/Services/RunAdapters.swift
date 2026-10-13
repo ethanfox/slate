@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 enum RunLiveEvent {
     case wait(String)
@@ -274,9 +275,9 @@ enum RunWaitLabel {
 enum RunPrompt {
     static func closeInstruction(hasProject: Bool) -> String {
         if hasProject {
-            return "Do the job with the tools you have. Call finish_run with a short summary when you are done. Do not complete the assigned task. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
+            return "Do the job with the tools you have. Call finish_run with a short summary when you are done. If you cannot do what was asked, for example because it needs code changed and you cannot change code, call finish_run with outcome could_not and the reason; do not describe work you could not do as done. Do not complete the assigned task. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
         }
-        return "Do the job. Call finish_run with a short summary when you are done. You have no project to write into. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
+        return "Do the job. Call finish_run with a short summary when you are done. If you cannot do what was asked, call finish_run with outcome could_not and the reason. You have no project to write into. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
     }
 
     /// For a coding tool on this Mac. It has no finish_run; its last message is the summary.
@@ -285,12 +286,14 @@ enum RunPrompt {
         project: Project?,
         directory: String?,
         allowEdits: Bool,
-        hasMembrae: Bool
+        hasMembrae: Bool,
+        task: AgendaItem? = nil
     ) -> String {
         var lines: [String] = []
         if let project {
             lines.append(ContextBuilder.identity(for: project))
         }
+        lines.append(assigned(task))
         if hasMembrae {
             lines.append("The membrae tools read and write this project’s decisions, tracks, notes, and tasks in Membrae. Read what governs the work before you start. Do not complete the assigned task.")
         }
@@ -306,6 +309,30 @@ enum RunPrompt {
         return lines.filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 
+    /// The task a Run was started from. The prompt may add to it or stand in for it.
+    static func assigned(_ task: AgendaItem?) -> String {
+        guard let task else { return "" }
+        var text = "Assigned task: \(task.displayTitle) (id \(task.id.uuidString))."
+        let comment = task.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !comment.isEmpty {
+            text += "\nTask comment: \(comment)"
+        }
+        return text
+    }
+
+    /// Lets the prompt send the work to another project by naming it.
+    static func otherProjects(besides project: Project?, in context: ModelContext?) -> String {
+        guard let context else { return "" }
+        let all = (try? context.fetch(FetchDescriptor<Project>(sortBy: [SortDescriptor(\.name)]))) ?? []
+        let others = all.filter { $0.id != project?.id && $0.status != .done }.prefix(40)
+        guard !others.isEmpty else { return "" }
+        let list = others.map { "- \($0.name) (id \($0.id.uuidString))" }.joined(separator: "\n")
+        let lead = project == nil
+            ? "File what you make in the project the prompt names, passing that project’s id."
+            : "If the prompt names another project, do the notes and tasks work there, passing that project’s id."
+        return "\(lead)\n\(list)"
+    }
+
     static func body(brief: String, project: Project?, run: AgentRun? = nil) -> String {
         if run?.purpose == .indexRepository {
             let title = run.flatMap { run -> CodeAttachment? in
@@ -314,11 +341,13 @@ enum RunPrompt {
             }.map { $0.title.isEmpty ? $0.locator : $0.title } ?? "the attached repository"
             return RepositoryIndex.prompt(brief: brief, project: project, attachmentTitle: title)
         }
-        let context = project.map(ContextBuilder.identity(for:)) ?? ""
-        let close = closeInstruction(hasProject: project != nil)
-        if context.isEmpty {
-            return "\(close)\n\n\(brief)"
-        }
-        return "\(context)\n\n\(close)\n\n\(brief)"
+        let parts = [
+            project.map(ContextBuilder.identity(for:)) ?? "",
+            assigned(run?.task),
+            otherProjects(besides: project, in: run?.modelContext),
+            closeInstruction(hasProject: project != nil),
+            brief
+        ]
+        return parts.filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 }

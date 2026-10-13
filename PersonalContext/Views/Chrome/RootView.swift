@@ -305,6 +305,11 @@ struct RootView: View {
                 .padding(18)
             }
         }
+        .overlay(alignment: .topTrailing) {
+            RunNoticeStack()
+                .padding(.top, 56)
+                .padding(.trailing, 18)
+        }
         .overlay(alignment: .bottom) {
             ZStack {
                 if let toast = app.toast {

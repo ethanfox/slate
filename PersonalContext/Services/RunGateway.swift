@@ -8,6 +8,8 @@ final class RunGateway: AgentToolGateway {
     private(set) var journal: [RunResultLink] = []
     private(set) var finishSummary: String?
     private(set) var finishLinks: [RunResultLink] = []
+    /// Set when the worker says it could not do the job. Holds its reason.
+    private(set) var finishCouldNot: String?
 
     init(policy: RunToolPolicy, inner: any AgentToolGateway, includeFinishRun: Bool = true) {
         self.policy = policy
@@ -58,6 +60,13 @@ final class RunGateway: AgentToolGateway {
         }
         finishSummary = summary
         finishLinks = Self.links(from: arguments["links"])
+        if (arguments["outcome"] as? String) == "could_not" {
+            let reason = (arguments["reason"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            finishCouldNot = reason.isEmpty ? summary : reason
+        } else {
+            finishCouldNot = nil
+        }
         return "{\"ok\":true}"
     }
 
@@ -98,11 +107,17 @@ final class RunGateway: AgentToolGateway {
     private static let finishDefinition: [String: Any] = [
         "type": "function",
         "name": RunToolPolicy.finishRun,
-        "description": "Stock the run receipt with a short summary and optional links. Do not complete the assigned task.",
+        "description": "Stock the run receipt with a short summary and optional links. If you could not do what was asked, set outcome to could_not and give the reason. Do not complete the assigned task.",
         "parameters": [
             "type": "object",
             "properties": [
                 "summary": ["type": "string", "description": "What was done."],
+                "outcome": [
+                    "type": "string",
+                    "enum": ["done", "could_not"],
+                    "description": "done when the job was done. could_not when you were unable to do it, for example because you lack a tool it needs."
+                ],
+                "reason": ["type": "string", "description": "With could_not: one plain sentence saying why."],
                 "links": [
                     "type": "array",
                     "items": [

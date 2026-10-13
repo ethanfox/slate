@@ -103,6 +103,7 @@ final class RunCoordinator {
                 try? RunStore.fail(run, detail: error.localizedDescription, in: context)
             }
             clear(id)
+            announce(id)
         }
     }
 
@@ -298,7 +299,8 @@ final class RunCoordinator {
                 project: run.project,
                 directory: repository,
                 allowEdits: allowEdits,
-                hasMembrae: !tools.isEmpty
+                hasMembrae: !tools.isEmpty,
+                task: run.task
             ),
             directory: repository ?? folder?.path ?? NSTemporaryDirectory(),
             allowEdits: allowEdits,
@@ -331,11 +333,11 @@ final class RunCoordinator {
         }
         process.stop()
         var parts = [summary.isEmpty ? lastText : summary]
-        parts.append(agent.refusalNote(refused, allowEdits: allowEdits))
+        let refusal = agent.refusalNote(refused, allowEdits: allowEdits)
         if let repository, let before {
             let commits = Self.commitLines(in: repository, since: before.first?.sha)
             if !commits.isEmpty {
-                parts.append("**Commits**\n" + commits.map { "- \($0)" }.joined(separator: "\n"))
+                parts.append("Commits\n" + commits.map { "- \($0)" }.joined(separator: "\n"))
             }
         }
         let gateway = RunGateway(
@@ -353,7 +355,8 @@ final class RunCoordinator {
             gateway: gateway,
             lastText: parts.filter { !$0.isEmpty }.joined(separator: "\n\n"),
             extra: [],
-            roots: roots
+            roots: roots,
+            couldNot: refusal.isEmpty ? nil : refusal
         )
     }
 
@@ -363,7 +366,7 @@ final class RunCoordinator {
         var lines: [String] = []
         for commit in commits {
             if commit.sha == sha { break }
-            lines.append("`\(commit.sha.prefix(7))` \(commit.message)")
+            lines.append("\(commit.sha.prefix(7)) \(commit.message)")
         }
         return lines
     }
@@ -373,7 +376,8 @@ final class RunCoordinator {
         gateway: RunGateway,
         lastText: String,
         extra: [RunResultLink],
-        roots: [ProjectCodeRoot]
+        roots: [ProjectCodeRoot],
+        couldNot: String? = nil
     ) async throws {
         var run: AgentRun?
         var context: ModelContext?
@@ -386,7 +390,7 @@ final class RunCoordinator {
         guard let run, let context else {
             throw CursorAPIError(status: 0, message: "The run disappeared before it could be published.")
         }
-        try finish(run, gateway: gateway, lastText: lastText, extra: extra, roots: roots, in: context)
+        try finish(run, gateway: gateway, lastText: lastText, extra: extra, roots: roots, couldNot: couldNot, in: context)
     }
 
     private func finish(
@@ -395,6 +399,7 @@ final class RunCoordinator {
         lastText: String,
         extra: [RunResultLink],
         roots: [ProjectCodeRoot],
+        couldNot: String? = nil,
         in context: ModelContext
     ) throws {
         guard run.status.isActive else { return }
@@ -423,6 +428,7 @@ final class RunCoordinator {
                     in: context
                 )
                 clear(run.id)
+                announce(run.id)
                 return
             }
         }
@@ -433,8 +439,19 @@ final class RunCoordinator {
             if !RunLinkSafety.allows(link.url) { continue }
             links.append(link)
         }
-        try RunStore.succeed(run, summary: summary, links: links, in: context)
+        if let reason = couldNot ?? gateway.finishCouldNot {
+            try RunStore.couldNot(run, reason: reason, summary: summary, links: links, in: context)
+        } else {
+            try RunStore.succeed(run, summary: summary, links: links, in: context)
+        }
         clear(run.id)
+        announce(run.id)
+    }
+
+    /// Tells the user a Run ended. Runs are not in the sidebar, so nothing else would.
+    private func announce(_ id: UUID) {
+        guard let run = resolvedRun(id) else { return }
+        app?.postRunNotice(for: run)
     }
 
     private func policy(for run: AgentRun) -> RunToolPolicy {

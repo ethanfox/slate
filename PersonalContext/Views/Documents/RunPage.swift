@@ -34,7 +34,14 @@ struct RunPage: View {
                         .foregroundStyle(.red)
                         .padding(.top, 28)
                 }
-                if run.status == .succeeded || ((run.status == .failed || run.status == .cancelled) && !run.resultSummary.isEmpty) {
+                if run.status == .couldNot, !run.statusDetail.isEmpty {
+                    Text(run.statusDetail)
+                        .font(CraftFont.body)
+                        .foregroundStyle(.orange)
+                        .textSelection(.enabled)
+                        .padding(.top, 28)
+                }
+                if run.status == .succeeded || ((run.status == .failed || run.status == .cancelled || run.status == .couldNot) && !run.resultSummary.isEmpty) {
                     receipt
                         .padding(.top, 28)
                 }
@@ -134,7 +141,7 @@ struct RunPage: View {
                         .font(CraftFont.caption)
                         .foregroundStyle(.tertiary)
                         .frame(width: 56, alignment: .leading)
-                    Text(event.kind == .browser ? (event.detail.isEmpty ? "Browser" : event.detail) : event.kind.rawValue.capitalized)
+                    Text(event.kind == .browser ? (event.detail.isEmpty ? "Browser" : event.detail) : event.kind.label)
                         .font(CraftFont.body)
                     if event.kind != .browser, !event.detail.isEmpty {
                         Text(event.detail)

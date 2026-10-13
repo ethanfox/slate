@@ -533,7 +533,7 @@ enum CodeReferenceStore {
         if let lastRun {
             let detail = lastRun.statusDetail.trimmingCharacters(in: .whitespacesAndNewlines)
             switch lastRun.status {
-            case .failed:
+            case .failed, .couldNot:
                 return detail.isEmpty ? "The last indexing run failed." : "The last indexing run failed: \(detail)"
             case .cancelled:
                 return "The last indexing run was cancelled."

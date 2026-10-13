@@ -4,27 +4,24 @@ import SwiftUI
 struct NewRunSheet: View {
     var draft: NewRunDraft
     @Environment(AppModel.self) private var app
-    @Environment(\.modelContext) private var context
     @Query(sort: \Project.name) private var projects: [Project]
-    @FocusState private var focusBrief: Bool
+    @FocusState private var focusPrompt: Bool
 
-    @State private var brief: String
+    @State private var prompt: String
     @State private var projectID: UUID?
     @State private var taskID: UUID?
     @State private var providerID: String
     @State private var modelID: String
-    @State private var pathRaw: String
     @State private var selectedLocators: Set<String>
     @State private var allowEdits: Bool
 
     init(draft: NewRunDraft) {
         self.draft = draft
-        _brief = State(initialValue: draft.brief)
+        _prompt = State(initialValue: draft.brief)
         _projectID = State(initialValue: draft.projectID)
         _taskID = State(initialValue: draft.taskID)
         _providerID = State(initialValue: draft.providerID)
         _modelID = State(initialValue: draft.modelID)
-        _pathRaw = State(initialValue: draft.pathRaw)
         _selectedLocators = State(initialValue: Set(draft.repositoryLocators))
         _allowEdits = State(initialValue: draft.allowEdits)
     }
@@ -34,74 +31,41 @@ struct NewRunSheet: View {
             Text("New Run")
                 .font(CraftFont.title)
 
-            ModalField("Brief") {
-                TextField("What should this run do?", text: $brief, axis: .vertical)
+            ModalField("Prompt") {
+                TextField(promptPlaceholder, text: $prompt, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .lineLimit(3...8)
-                    .focused($focusBrief)
-            }
-
-            ModalControlRow("Project") {
-                Picker("Project", selection: $projectID) {
-                    Text("No project").tag(Optional<UUID>.none)
-                    ForEach(projects) { project in
-                        Text(project.displayName).tag(Optional(project.id))
-                    }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .frame(maxWidth: 240, alignment: .trailing)
-            }
-
-            ModalControlRow("Task") {
-                Picker("Task", selection: $taskID) {
-                    Text("None").tag(Optional<UUID>.none)
-                    ForEach(incompleteTasks) { item in
-                        Text(item.displayTitle).tag(Optional(item.id))
-                    }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .frame(maxWidth: 240, alignment: .trailing)
-                .disabled(projectID == nil)
+                    .lineLimit(4...10)
+                    .focused($focusPrompt)
             }
 
             if !workers.isEmpty {
-                ModalControlRow("Send to") {
-                    Picker("Send to", selection: worker) {
-                        Text("Membrae agent").tag("")
-                        ForEach(workers) { agent in
-                            Text(agent.title).tag(agent.rawValue)
+                ModalField("Send to", boxed: false) {
+                    HStack(alignment: .top, spacing: 8) {
+                        WorkerCard(
+                            title: "Membrae agent",
+                            symbol: "sparkles",
+                            can: ["Notes and tasks", "Browses the web", "Reads code"],
+                            cannot: ["Change code"],
+                            isSelected: agent == nil
+                        ) { worker.wrappedValue = "" }
+                        ForEach(workers) { option in
+                            WorkerCard(
+                                title: option.title,
+                                symbol: "terminal",
+                                can: ["Changes code", "Runs commands", "Notes and tasks"],
+                                cannot: ["Browse the web"],
+                                isSelected: agent == option
+                            ) { worker.wrappedValue = option.rawValue }
                         }
                     }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    .fixedSize()
                 }
             }
 
-            if agent == nil {
-                ModalControlRow("Model") {
-                    ModelPicker(providerID: $providerID, modelID: $modelID)
-                }
-            } else {
+            if agent != nil {
                 ModalControlRow("Let it edit files and run commands") {
                     Toggle("Let it edit files and run commands", isOn: $allowEdits)
                         .toggleStyle(.switch)
                         .labelsHidden()
-                }
-            }
-
-            if TalkProvider(rawValue: providerID) == .cursor, !WorkerRegistry.paths(for: providerID).isEmpty {
-                ModalControlRow("Path") {
-                    Picker("Path", selection: $pathRaw) {
-                        ForEach(WorkerRegistry.paths(for: providerID)) { path in
-                            Text(path.title).tag(path.rawValue)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    .fixedSize()
                 }
             }
 
@@ -119,36 +83,65 @@ struct NewRunSheet: View {
                 }
             }
 
-            Text(disclosure)
-                .font(CraftFont.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            ModalFooter(actionTitle: "Start Run", actionEnabled: canStart, action: start)
-        }
-        .onAppear { focusBrief = true }
-        .onChange(of: projectID) { _, _ in
-            if projectID == nil { taskID = nil }
-            if let selected = taskID, !incompleteTasks.contains(where: { $0.id == selected }) {
-                taskID = nil
+            if let selectedProject {
+                HStack(spacing: 6) {
+                    Text("For")
+                        .foregroundStyle(.secondary)
+                    Text(selectedTask.map { "\(selectedProject.displayName) · \($0.displayTitle)" } ?? selectedProject.displayName)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 8)
+                    Button(action: clearFiling) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 22, height: 22)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(selectedTask == nil ? "Run without a project" : "Run without this task")
+                    .accessibilityLabel(selectedTask == nil ? "Remove project" : "Remove task")
+                }
+                .font(CraftFont.body)
             }
-            selectedLocators = []
+
+            if let disclosure {
+                Text(disclosure)
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            ModalFooter(
+                actionTitle: hasPrompt ? "Start Run with Prompt" : "Start Run",
+                actionEnabled: canStart,
+                action: start
+            )
         }
+        .onAppear { focusPrompt = true }
     }
 
     private var selectedProject: Project? {
         projects.first { $0.id == projectID }
     }
 
-    private var incompleteTasks: [AgendaItem] {
-        guard let selectedProject else { return [] }
-        return selectedProject.agendaItems
-            .filter { $0.kind == .task && !$0.isCompleted }
-            .sorted { $0.updatedAt > $1.updatedAt }
+    private var selectedTask: AgendaItem? {
+        guard let taskID else { return nil }
+        return selectedProject?.agendaItems.first { $0.id == taskID }
     }
 
     private var attachments: [CodeAttachment] {
         selectedProject.map(ProjectCodeWorkspace.attachments(on:)) ?? []
+    }
+
+    private var hasPrompt: Bool {
+        !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var promptPlaceholder: String {
+        selectedTask == nil
+            ? "What should this run do?"
+            : "Add anything the task doesn’t say, or leave this empty to run the task as written."
     }
 
     private var agent: LocalAgent? {
@@ -164,45 +157,37 @@ struct NewRunSheet: View {
         Binding(
             get: { agent?.rawValue ?? "" },
             set: { id in
-                if id.isEmpty {
-                    providerID = app.talkProvider.rawValue
-                    modelID = app.talkModelID
-                } else {
+                if !id.isEmpty {
                     providerID = id
                     modelID = ""
+                } else if LocalAgent(rawValue: draft.providerID) == nil {
+                    providerID = draft.providerID
+                    modelID = draft.modelID
+                } else {
+                    providerID = app.talkProvider.rawValue
+                    modelID = app.talkModelID
                 }
             }
         )
     }
 
     private var canStart: Bool {
-        !brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        (hasPrompt || selectedTask != nil)
             && app.providerConnected(providerID)
             && !(agent == .codex && !allowEdits)
     }
 
-    private var disclosure: String {
-        if let agent {
-            if agent == .codex, !allowEdits {
-                return "Codex can only work from Membrae with its own sandbox off, so it needs the switch above turned on."
-            }
-            let notes = selectedProject == nil ? "" : " It can read and write this project’s notes and tasks."
-            if allowEdits {
-                return "\(agent.title) can change the code you attach and run commands there, under its own settings on this Mac.\(notes) It is told not to complete the task."
-            }
-            return "\(agent.title) can read the code you attach but not change it.\(notes) It is told not to complete the task."
+    /// Only what the cards do not already say.
+    private var disclosure: String? {
+        if agent == .codex, !allowEdits {
+            return "Codex can only work from Membrae with its own sandbox off, so it needs the switch above turned on."
         }
-        let isCursor = TalkProvider(rawValue: providerID) == .cursor
-        if selectedProject != nil {
-            if isCursor {
-                return "Can read and write this project’s notes and tasks, search the web, and read only the code you attach. It will not complete the task."
-            }
-            return "Can read and write this project’s notes and tasks, and read only the code you attach. ChatGPT cannot search the web. It will not complete the task."
+        if !app.providerConnected(providerID) {
+            return agent == nil
+                ? "Connect an AI in Settings to use the Membrae agent."
+                : "Connect \(agent?.title ?? "it") in Settings first."
         }
-        if isCursor {
-            return "Can search the web. It has no project to write into."
-        }
-        return "ChatGPT cannot search the web and has no project to write into."
+        return nil
     }
 
     private func binding(for attachment: CodeAttachment) -> Binding<Bool> {
@@ -216,17 +201,88 @@ struct NewRunSheet: View {
         )
     }
 
+    /// Drops the task first, then the project.
+    private func clearFiling() {
+        if taskID != nil {
+            taskID = nil
+        } else {
+            projectID = nil
+            selectedLocators = []
+        }
+    }
+
     private func start() {
         var next = draft
-        next.brief = brief
+        let typed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.brief = typed.isEmpty ? (selectedTask?.displayTitle ?? "") : typed
         next.projectID = projectID
         next.taskID = projectID == nil ? nil : taskID
         next.providerID = providerID
         next.modelID = modelID
-        next.pathRaw = pathRaw
         next.repositoryLocators = Array(selectedLocators)
         next.allowEdits = agent != nil && allowEdits
         app.startRun(next)
+    }
+}
+
+/// One worker in the New Run form, with what it can and cannot do.
+private struct WorkerCard: View {
+    var title: String
+    var symbol: String
+    var can: [String]
+    var cannot: [String]
+    var isSelected: Bool
+    var action: () -> Void
+
+    @Environment(AppModel.self) private var app
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(isSelected ? AnyShapeStyle(app.accent.color) : AnyShapeStyle(.secondary))
+                    .frame(height: 20)
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(can, id: \.self) { line(text: $0, symbol: "checkmark", style: AnyShapeStyle(.secondary)) }
+                    ForEach(cannot, id: \.self) { line(text: $0, symbol: "xmark", style: AnyShapeStyle(.tertiary)) }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 148, alignment: .topLeading)
+            .background(
+                hovering && !isSelected ? CraftColor.hover : CraftColor.elevated,
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(isSelected ? app.accent.color : CraftColor.hairline, lineWidth: isSelected ? 1.5 : 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityLabel(title)
+        .accessibilityValue("Can: \(can.joined(separator: ", ")). Cannot: \(cannot.joined(separator: ", ")).")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func line(text: String, symbol: String, style: AnyShapeStyle) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Image(systemName: symbol)
+                .font(.system(size: 8, weight: .bold))
+                .frame(width: 10)
+            Text(text)
+                .font(CraftFont.caption)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(style)
     }
 }
 

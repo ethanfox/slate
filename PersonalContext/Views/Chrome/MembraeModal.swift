@@ -70,7 +70,7 @@ enum AppModal: Identifiable {
 
     var panelWidth: CGFloat {
         switch self {
-        case .newEvent, .editEvent, .newTask, .newTaskFromNote, .editReminder, .editTask, .newRecord, .editRecord, .logSpaceEvent, .editSpaceEvent: 520
+        case .newEvent, .editEvent, .newTask, .newTaskFromNote, .editReminder, .editTask, .newRecord, .editRecord, .logSpaceEvent, .editSpaceEvent, .newRun: 520
         case .inspectCodeReference: 560
         default: 440
         }
