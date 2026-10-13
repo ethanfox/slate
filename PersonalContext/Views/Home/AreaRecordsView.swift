@@ -5,6 +5,10 @@ import SwiftUI
 enum AreaRecordsLayout: String, CaseIterable, Identifiable {
     case table
     case cards
+    case board
+    case calendar
+    case chart
+    case history
 
     var id: String { rawValue }
 
@@ -12,6 +16,10 @@ enum AreaRecordsLayout: String, CaseIterable, Identifiable {
         switch self {
         case .table: "Table"
         case .cards: "Cards"
+        case .board: "Board"
+        case .calendar: "Calendar"
+        case .chart: "Chart"
+        case .history: "History"
         }
     }
 
@@ -19,8 +27,25 @@ enum AreaRecordsLayout: String, CaseIterable, Identifiable {
         switch self {
         case .table: "tablecells"
         case .cards: "square.grid.2x2"
+        case .board: "rectangle.split.3x1"
+        case .calendar: "calendar"
+        case .chart: "chart.xyaxis.line"
+        case .history: "clock"
         }
     }
+
+    /// The first four show records. The last two show what was logged about them.
+    var showsRecords: Bool {
+        self != .chart && self != .history
+    }
+}
+
+/// What gets logged in an Area, as far as a view needs to know: which entries, and a number to plot if there is one.
+struct AreaLog: Equatable {
+    var eventKey: String
+    var name: String
+    /// A number each entry records, such as a weight. Nil when entries are only counted.
+    var numberField: String?
 }
 
 /// One record, with what each field shows as text.
@@ -59,13 +84,47 @@ enum AreaRecords {
         schema.liveFields.filter { ($0.kind == .choice || $0.kind == .tags) && !$0.options.isEmpty }
     }
 
-    /// A table always works. Cards suit records with a picture or only a few details.
-    static func layouts(for schema: SpaceSchema) -> [AreaRecordsLayout] {
-        imageField(schema) != nil || columns(schema).count <= 4 ? [.table, .cards] : [.table]
+    /// The stage or status a board groups by: the first choice field.
+    static func boardField(_ schema: SpaceSchema) -> SpaceField? {
+        schema.liveFields.first { $0.kind == .choice && !$0.options.isEmpty }
     }
 
-    static func preferred(for schema: SpaceSchema) -> AreaRecordsLayout {
-        imageField(schema) == nil ? .table : .cards
+    /// The date a calendar places records on: the first date field.
+    static func dateField(_ schema: SpaceSchema) -> SpaceField? {
+        schema.liveFields.first { $0.kind == .date }
+    }
+
+    /// What to chart and list: the first kind of entry that records a number, else the first kind at all.
+    static func log(from eventTypes: [(key: String, name: String, schema: SpaceSchema)]) -> AreaLog? {
+        let numeric: [SpaceFieldKind] = [.number, .money, .duration, .rating]
+        for type in eventTypes {
+            if let field = type.schema.liveFields.first(where: { numeric.contains($0.kind) }) {
+                return AreaLog(eventKey: type.key, name: type.name, numberField: field.id)
+            }
+        }
+        return eventTypes.first.map { AreaLog(eventKey: $0.key, name: $0.name, numberField: nil) }
+    }
+
+    /// A table always works. The rest are offered only when the data suits them: cards for a picture
+    /// or a few details, a board for a stage, a calendar for a date, a chart and history for what is logged.
+    static func layouts(for schema: SpaceSchema, log: AreaLog? = nil) -> [AreaRecordsLayout] {
+        var layouts: [AreaRecordsLayout] = [.table]
+        if imageField(schema) != nil || columns(schema).count <= 4 { layouts.append(.cards) }
+        if boardField(schema) != nil { layouts.append(.board) }
+        if dateField(schema) != nil { layouts.append(.calendar) }
+        if log != nil { layouts += [.chart, .history] }
+        return layouts
+    }
+
+    /// An Area that is mostly tracking opens on its chart. Otherwise cards when there is a picture, else a table.
+    static func preferred(
+        for schema: SpaceSchema,
+        log: AreaLog? = nil,
+        records: Int = 0,
+        entries: Int = 0
+    ) -> AreaRecordsLayout {
+        if log != nil, entries > records { return .chart }
+        return imageField(schema) == nil ? .table : .cards
     }
 
     static func row(
@@ -114,14 +173,24 @@ struct AreaRecordsView: View {
     @State private var search = ""
     @State private var filters: [String: String] = [:]
     @State private var chosenLayout: AreaRecordsLayout?
+    @State private var period = SpaceCalcRequest.Period.month
 
     private var schema: SpaceSchema { context.schema }
 
-    private var layouts: [AreaRecordsLayout] { AreaRecords.layouts(for: schema) }
+    private var log: AreaLog? {
+        AreaRecords.log(from: context.eventTypes.map { (key: $0.key, name: $0.name, schema: $0.schema) })
+    }
+
+    private var layouts: [AreaRecordsLayout] { AreaRecords.layouts(for: schema, log: log) }
 
     private var layout: AreaRecordsLayout {
         if let chosenLayout, layouts.contains(chosenLayout) { return chosenLayout }
-        return AreaRecords.preferred(for: schema)
+        return AreaRecords.preferred(
+            for: schema,
+            log: log,
+            records: context.records.count,
+            entries: context.events.count
+        )
     }
 
     private var rows: [AreaRecordRow] {
@@ -146,18 +215,21 @@ struct AreaRecordsView: View {
                 }
             }
 
-            if !all.isEmpty {
-                controls
-            }
-
-            if all.isEmpty {
+            if !layout.showsRecords {
+                logged
+            } else if all.isEmpty {
                 EmptyLine(text: "Nothing here yet. Tell Membrae what to add, or use New.")
-            } else if shown.isEmpty {
-                EmptyLine(text: "Nothing matches.")
             } else {
-                switch layout {
-                case .table: table(shown)
-                case .cards: cards(shown)
+                controls
+                if shown.isEmpty {
+                    EmptyLine(text: "Nothing matches.")
+                } else {
+                    switch layout {
+                    case .cards: cards(shown)
+                    case .board: board(shown)
+                    case .calendar: calendar(shown)
+                    default: table(shown)
+                    }
                 }
             }
         }
@@ -244,6 +316,70 @@ struct AreaRecordsView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel("Filter by \(field.name)")
+    }
+
+    // MARK: Board, calendar, chart, history
+
+    /// The same context with only the records the search and filters leave.
+    private func narrowed(to shown: [AreaRecordRow]) -> SpaceScreenContext {
+        var copy = context
+        copy.records = shown.map(\.record)
+        return copy
+    }
+
+    @ViewBuilder
+    private func board(_ shown: [AreaRecordRow]) -> some View {
+        if let field = AreaRecords.boardField(schema) {
+            let subtitle = AreaRecords.columns(schema).filter { $0.id != field.id }.prefix(2).map(\.id)
+            SpaceComponentView(
+                component: SpaceComponent("board", ["by": .text(field.id), "subtitle": .list(Array(subtitle))]),
+                context: narrowed(to: shown)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func calendar(_ shown: [AreaRecordRow]) -> some View {
+        if let field = AreaRecords.dateField(schema) {
+            SpaceComponentView(
+                component: SpaceComponent("month", ["date": .text(field.id)]),
+                context: narrowed(to: shown)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var logged: some View {
+        if let log {
+            if layout == .chart {
+                HStack(spacing: 8) {
+                    Text(log.name)
+                        .font(CraftFont.body)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Picker("Period", selection: $period) {
+                        Text("Week").tag(SpaceCalcRequest.Period.week)
+                        Text("Month").tag(SpaceCalcRequest.Period.month)
+                        Text("Year").tag(SpaceCalcRequest.Period.year)
+                        Text("All").tag(SpaceCalcRequest.Period.all)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                var props: [String: SpaceProp] = ["events": .text(log.eventKey), "period": .text(period.rawValue)]
+                let _ = log.numberField.map { props["field"] = .text($0) }
+                SpaceComponentView(component: SpaceComponent("chart", props), context: context)
+            } else {
+                Text(log.name)
+                    .font(CraftFont.body)
+                    .foregroundStyle(.secondary)
+                SpaceComponentView(
+                    component: SpaceComponent("timeline", ["events": .text(log.eventKey)]),
+                    context: context
+                )
+            }
+        }
     }
 
     // MARK: Table

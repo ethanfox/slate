@@ -285,8 +285,22 @@ final class SpaceStoreTests: XCTestCase {
         let schema = recipeSchema
         XCTAssertEqual(AreaRecords.columns(schema).map(\.id), ["servings", "course", "lastCooked"])
         XCTAssertEqual(AreaRecords.filterFields(schema).map(\.id), ["course"])
-        XCTAssertEqual(AreaRecords.layouts(for: schema), [.table, .cards])
+        XCTAssertEqual(AreaRecords.layouts(for: schema), [.table, .cards, .board, .calendar])
         XCTAssertEqual(AreaRecords.preferred(for: schema), .table)
+        XCTAssertEqual(AreaRecords.boardField(schema)?.id, "course")
+        XCTAssertEqual(AreaRecords.dateField(schema)?.id, "lastCooked")
+
+        let plain = SpaceSchema(fields: [SpaceField(id: "note", name: "Note", kind: .text)])
+        XCTAssertEqual(AreaRecords.layouts(for: plain), [.table, .cards])
+        let weighIn = SpaceSchema(fields: [SpaceField(id: "kg", name: "Weight", kind: .number)])
+        let checkIn = SpaceSchema(fields: [])
+        let log = AreaRecords.log(from: [(key: "check", name: "Check-in", schema: checkIn), (key: "weigh", name: "Weigh-in", schema: weighIn)])
+        XCTAssertEqual(log, AreaLog(eventKey: "weigh", name: "Weigh-in", numberField: "kg"))
+        XCTAssertEqual(AreaRecords.log(from: [(key: "check", name: "Check-in", schema: checkIn)])?.numberField, nil)
+        XCTAssertNil(AreaRecords.log(from: []))
+        XCTAssertEqual(AreaRecords.layouts(for: plain, log: log), [.table, .cards, .chart, .history])
+        XCTAssertEqual(AreaRecords.preferred(for: plain, log: log, records: 1, entries: 30), .chart)
+        XCTAssertEqual(AreaRecords.preferred(for: plain, log: log, records: 12, entries: 3), .table)
 
         var pictured = schema
         pictured.fields.append(SpaceField(id: "photo", name: "Photo", kind: .image))
@@ -295,7 +309,7 @@ final class SpaceStoreTests: XCTestCase {
         var wide = schema
         wide.fields.append(SpaceField(id: "source", name: "Source", kind: .text))
         wide.fields.append(SpaceField(id: "minutes", name: "Minutes", kind: .number))
-        XCTAssertEqual(AreaRecords.layouts(for: wide), [.table])
+        XCTAssertEqual(AreaRecords.layouts(for: wide), [.table, .board, .calendar])
     }
 
     func testAreaRecordsSearchAndFilter() throws {
