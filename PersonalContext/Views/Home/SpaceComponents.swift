@@ -236,6 +236,40 @@ struct SpaceScreenContext {
     }
 }
 
+extension SpaceScreenContext {
+    /// One point per day for a chart block. A line keeps the day's last reading; bars add the day up.
+    func chartPoints(_ component: SpaceComponent) -> [(day: Date, value: Double)] {
+        let period = component.text("period").flatMap(SpaceCalcRequest.Period.init(rawValue:)) ?? .month
+        let start = period.start()
+        let calendar = Calendar.current
+        let field = component.text("field")
+        let asLine = (component.text("style") ?? (field == nil ? "bar" : "line")) == "line"
+        let request = field.flatMap { SpaceCalcRequest("sum:\(component.text("events") ?? "").\($0)") }
+        var days: [Date: Double] = [:]
+        for event in events(component.text("events"), about: record).reversed() {
+            if let start, event.occurredAt < start { continue }
+            let day = calendar.startOfDay(for: event.occurredAt)
+            if let request {
+                guard let value = logged(request, in: event) else { continue }
+                days[day] = asLine ? value : (days[day] ?? 0) + value
+            } else {
+                days[day, default: 0] += 1
+            }
+        }
+        return days.map { (day: $0.key, value: $0.value) }.sorted { $0.day < $1.day }
+    }
+
+    /// A progress setting: a calculation over logs, or a formula over the record's fields.
+    func amount(_ component: SpaceComponent, _ name: String) -> Double? {
+        guard let raw = component.text(name) ?? component.number(name).map({ "\($0)" }) else { return nil }
+        if raw.contains(":") {
+            return SpaceCalcRequest(raw).flatMap { number($0, about: record) }
+        }
+        guard let formula = SpaceFormula(raw) else { return nil }
+        return schema.value(of: formula, in: record?.values ?? [:], source: lookup)
+    }
+}
+
 struct SpaceScreenView: View {
     var definition: SpaceScreenDefinition
     var context: SpaceScreenContext
@@ -791,24 +825,7 @@ struct SpaceComponentView: View {
 
     /// One point per day. A line keeps the day's last reading; bars add the day up.
     private var chartPoints: [(day: Date, value: Double)] {
-        let period = component.text("period").flatMap(SpaceCalcRequest.Period.init(rawValue:)) ?? .month
-        let start = period.start()
-        let calendar = Calendar.current
-        let field = component.text("field")
-        let asLine = (component.text("style") ?? (field == nil ? "bar" : "line")) == "line"
-        let request = field.flatMap { SpaceCalcRequest("sum:\(component.text("events") ?? "").\($0)") }
-        var days: [Date: Double] = [:]
-        for event in context.events(component.text("events"), about: context.record).reversed() {
-            if let start, event.occurredAt < start { continue }
-            let day = calendar.startOfDay(for: event.occurredAt)
-            if let request {
-                guard let value = context.logged(request, in: event) else { continue }
-                days[day] = asLine ? value : (days[day] ?? 0) + value
-            } else {
-                days[day, default: 0] += 1
-            }
-        }
-        return days.map { (day: $0.key, value: $0.value) }.sorted { $0.day < $1.day }
+        context.chartPoints(component)
     }
 
     @ViewBuilder
@@ -1037,14 +1054,8 @@ struct SpaceComponentView: View {
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(CraftColor.hairline))
     }
 
-    /// A progress setting: a calculation over logs, or a formula over the record's fields.
     private func formula(_ name: String) -> Double? {
-        guard let raw = component.text(name) ?? component.number(name).map({ "\($0)" }) else { return nil }
-        if raw.contains(":") {
-            return SpaceCalcRequest(raw).flatMap { context.number($0, about: context.record) }
-        }
-        guard let formula = SpaceFormula(raw) else { return nil }
-        return context.schema.value(of: formula, in: context.record?.values ?? [:], source: context.lookup)
+        context.amount(component, name)
     }
 
     private var progress: some View {

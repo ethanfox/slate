@@ -25,8 +25,12 @@ struct AssistantMarkdown: View {
                         streaming: streaming && isLastText(index, in: blocks) && !reduceMotion
                     )
                 case .object(let source):
-                    ObjectLinkCard(source: source) {
-                        source.open(app: app, context: modelContext)
+                    if source.kind == .widget, let id = UUID(uuidString: source.id) {
+                        AreaWidgetHost(id: id)
+                    } else {
+                        ObjectLinkCard(source: source) {
+                            source.open(app: app, context: modelContext)
+                        }
                     }
                 }
             }

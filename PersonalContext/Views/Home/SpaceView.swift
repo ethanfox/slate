@@ -31,6 +31,7 @@ struct SpaceView: View {
         ScrollView {
             PageBody {
                 VStack(alignment: .leading, spacing: 20) {
+                    AreaWidgetShelf(spaceID: id)
                     if space == nil {
                         EmptyLine(text: "This Area no longer exists.")
                     } else if let type = selectedType, type.role == .settings {

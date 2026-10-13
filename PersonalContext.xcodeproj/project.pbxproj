@@ -194,6 +194,7 @@
 		5BACE0200000000000000022 /* AboutYouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BACE0200000000000000021 /* AboutYouView.swift */; };
 		5BACE0200000000000000032 /* SpaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BACE0200000000000000031 /* SpaceView.swift */; };
 		1CA1A6E00000000000000015 /* AreaRecordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E00000000000000005 /* AreaRecordsView.swift */; };
+		1CA1A6E0000000000000016 /* AreaWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E0000000000000006 /* AreaWidgetView.swift */; };
 		5BACE0200000000000000042 /* SpaceRecordViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BACE0200000000000000041 /* SpaceRecordViews.swift */; };
 		5BACE0300000000000000012 /* SpaceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BACE0300000000000000011 /* SpaceComponents.swift */; };
 		B8870ECA941ADC69B2339111 /* MembraeToolGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1AFC28C1F00D3700732A654 /* MembraeToolGateway.swift */; };
@@ -398,6 +399,7 @@
 		5BACE0200000000000000021 /* AboutYouView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutYouView.swift; sourceTree = "<group>"; };
 		5BACE0200000000000000031 /* SpaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceView.swift; sourceTree = "<group>"; };
 		1CA1A6E00000000000000005 /* AreaRecordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaRecordsView.swift; sourceTree = "<group>"; };
+		1CA1A6E0000000000000006 /* AreaWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaWidgetView.swift; sourceTree = "<group>"; };
 		5BACE0200000000000000041 /* SpaceRecordViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceRecordViews.swift; sourceTree = "<group>"; };
 		5BACE0300000000000000011 /* SpaceComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceComponents.swift; sourceTree = "<group>"; };
 		4ACAF5E092DAC75A07EC0875 /* ConnectAccountSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectAccountSheets.swift; sourceTree = "<group>"; };
@@ -681,6 +683,7 @@
 				5BACE0200000000000000021 /* AboutYouView.swift */,
 				5BACE0200000000000000031 /* SpaceView.swift */,
 				1CA1A6E00000000000000005 /* AreaRecordsView.swift */,
+				1CA1A6E0000000000000006 /* AreaWidgetView.swift */,
 				5BACE0200000000000000041 /* SpaceRecordViews.swift */,
 				5BACE0300000000000000011 /* SpaceComponents.swift */,
 				F87366046EA0F345AB8B54B2 /* NewEventSheet.swift */,
@@ -1298,6 +1301,7 @@
 				5BACE0200000000000000022 /* AboutYouView.swift in Sources */,
 				5BACE0200000000000000032 /* SpaceView.swift in Sources */,
 				1CA1A6E00000000000000015 /* AreaRecordsView.swift in Sources */,
+				1CA1A6E0000000000000016 /* AreaWidgetView.swift in Sources */,
 				5BACE0200000000000000042 /* SpaceRecordViews.swift in Sources */,
 				5BACE0300000000000000012 /* SpaceComponents.swift in Sources */,
 				27EFEA7479970E75FC4AB694 /* Inspector.swift in Sources */,

@@ -208,6 +208,7 @@ enum Tools {
         "mark_for_deletion": (.flagged, ""), "delete_record": (.removed, ""),
         "create_space": (.added, "space"), "update_space": (.changed, "space"),
         "set_space_type": (.changed, "space"), "set_space_screen": (.changed, "space"),
+        "set_area_widget": (.changed, "space"), "remove_area_widget": (.changed, "space"),
         "create_space_record": (.added, "record"), "update_space_record": (.changed, "record"),
         "update_space_event": (.changed, "record"), "log_space_event": (.logged, "record")
     ]
@@ -265,7 +266,7 @@ enum Tools {
             target = ""
         case "create_space", "update_space":
             space = target
-        case "set_space_type", "set_space_screen":
+        case "set_space_type", "set_space_screen", "set_area_widget", "remove_area_widget":
             detail = (shape["name"] as? String) ?? args.string("type_key") ?? ""
             target = space
             title = UUID(uuidString: space).flatMap { SpaceStore.space($0, in: context) }?.displayName ?? ""
@@ -1383,6 +1384,70 @@ enum Tools {
             return ["type_key": type.key, "kind": kind.rawValue, "components": SpaceTools.json(screen.definition.components)]
         },
         Tool(
+            name: "set_area_widget",
+            description: "Make a widget for an Area, or change one by passing widget_id. A widget is a small card about one object type: rows of blocks from the widget part of get_space_catalog. You choose which blocks go in which row; the app sets the spacing. If anything does not fit, nothing is saved and you are told every reason. Show a widget to the user by writing its link on a line by itself.",
+            properties: [
+                "space_id": spaceID,
+                "type_key": typeKey,
+                "widget_id": text("Pass to change an existing widget. Leave out to make a new one."),
+                "name": text("A short title shown at the top, such as Weight or This week."),
+                "size": options(AreaWidgetSize.self, "1x1 holds 2 rows of 1 block. 2x1 holds 2 rows of up to 2. 2x2 holds 4 rows of up to 2."),
+                "rows": [
+                    "type": "array",
+                    "items": ["type": "array", "items": ["type": "object", "additionalProperties": true]],
+                    "description": "Rows from top to bottom. Each row is a list of blocks left to right: {component, ...settings}."
+                ]
+            ],
+            required: ["space_id", "type_key", "name", "size", "rows"], readOnly: false
+        ) { args, context in
+            let type = try SpaceTools.type(args, in: context)
+            guard let size = try args.choice("size", as: AreaWidgetSize.self) else { throw ToolError("size is required.") }
+            let name = try args.required("name")
+            let rows = try SpaceTools.widgetRows(args)
+            var existing: AreaWidget?
+            if let id = try args.optionalUUID("widget_id").flatMap({ $0 }) {
+                guard let found = SpaceStore.widget(id, in: context), found.spaceIDString == type.spaceIDString else {
+                    throw ToolError("This Area has no widget with id \(id.uuidString).")
+                }
+                existing = found
+            }
+            let widget = try SpaceStore.setWidget(
+                AreaWidgetDefinition(rows: rows),
+                for: type,
+                name: name,
+                size: size,
+                replacing: existing,
+                in: context
+            )
+            return SpaceTools.widget(widget, typeKey: type.key)
+        },
+        Tool(
+            name: "list_area_widgets",
+            description: "List the widgets of an Area, with their rows.",
+            properties: ["space_id": spaceID], required: ["space_id"], readOnly: true
+        ) { args, context in
+            let space = try SpaceTools.space(args, in: context)
+            let types = SpaceStore.types(in: space, context: context)
+            return SpaceStore.widgets(in: space, context: context).map { widget in
+                SpaceTools.widget(widget, typeKey: types.first { SpaceJSON.key($0.id) == widget.typeIDString }?.key ?? "")
+            }
+        },
+        Tool(
+            name: "remove_area_widget",
+            description: "Remove a widget from an Area. Its data is not touched.",
+            properties: ["space_id": spaceID, "widget_id": text("Widget id from list_area_widgets.")],
+            required: ["space_id", "widget_id"], readOnly: false, destructive: true
+        ) { args, context in
+            let space = try SpaceTools.space(args, in: context)
+            let id = try args.uuid("widget_id")
+            guard let widget = SpaceStore.widget(id, in: context), widget.spaceIDString == SpaceJSON.key(space.id) else {
+                throw ToolError("This Area has no widget with id \(id.uuidString).")
+            }
+            let name = widget.name
+            try SpaceStore.delete(widget, in: context)
+            return ["removed": name]
+        },
+        Tool(
             name: "list_space_records",
             description: "List the records of one type in an Area, with their values. Archived records are left out unless asked for.",
             properties: [
@@ -2423,6 +2488,30 @@ enum SpaceTools {
         }
     }
 
+    /// A widget's rows: a list of lists of blocks, also accepted as a JSON string.
+    static func widgetRows(_ args: Args) throws -> [[SpaceComponent]] {
+        var raw = args.raw["rows"]
+        if let text = raw as? String {
+            raw = try? JSONSerialization.jsonObject(with: Data(text.utf8))
+        }
+        guard let rows = raw as? [[[String: Any]]] else {
+            throw ToolError("rows must be a list of rows, and each row a list of blocks.")
+        }
+        return try rows.map(components)
+    }
+
+    static func widget(_ widget: AreaWidget, typeKey: String) -> [String: Any] {
+        [
+            "id": widget.id.uuidString,
+            "name": widget.name,
+            "type_key": typeKey,
+            "size": widget.size.rawValue,
+            "rows": widget.definition.rows.map(json),
+            "link": "membrae://widget/\(widget.id.uuidString)",
+            "on_you_page": widget.isOnYou
+        ]
+    }
+
     static func components(_ raw: [[String: Any]]) throws -> [SpaceComponent] {
         guard let data = try? JSONSerialization.data(withJSONObject: raw),
               let parsed = try? JSONDecoder().decode([SpaceComponent].self, from: data) else {
@@ -2705,6 +2794,24 @@ enum SpaceTools {
                     }
                 ]
             },
+            "widgets": [
+                "what": "A widget is a small card about one object type, made with set_area_widget. It is rows of blocks. Use the components whose screens include widget.",
+                "sizes": AreaWidgetSize.allCases.map { size -> [String: Any] in
+                    ["size": size.rawValue, "rows": size.maxRows, "blocks_per_row": size.maxAcross]
+                },
+                "blocks": AreaWidgetCatalog.blocks.map(\.name),
+                "example": [
+                    "name": "Weight",
+                    "size": "2x1",
+                    "rows": [
+                        [
+                            ["component": "metric", "value": "avg:weighed.weight:week", "label": "Average this week"],
+                            ["component": "metric", "value": "change:weighed.weight:month", "label": "Change this month"]
+                        ],
+                        [["component": "chart", "events": "weighed", "field": "weight", "period": "month"]]
+                    ]
+                ] as [String: Any]
+            ] as [String: Any],
             "defaults": "Any field can take default: what a new record starts with. A number, an option id, true, or today for a date.",
             "roles": [
                 "object": "a lasting thing with many records, such as recipes",

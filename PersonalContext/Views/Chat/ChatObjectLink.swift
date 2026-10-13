@@ -172,6 +172,7 @@ enum ChatObjectLink {
         case "conversation", "conversations", "chat", "chats": return .conversation
         case "task", "tasks": return .task
         case "run", "runs": return .run
+        case "widget", "widgets": return .widget
         default: return nil
         }
     }

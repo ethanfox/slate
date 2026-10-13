@@ -83,6 +83,7 @@ enum SpaceStore {
         let key = SpaceJSON.key(space.id)
         events(in: space, context: context).forEach(context.delete)
         fetch(#Predicate<SpaceScreen> { $0.spaceIDString == key }, in: context).forEach(context.delete)
+        fetch(#Predicate<AreaWidget> { $0.spaceIDString == key }, in: context).forEach(context.delete)
         releaseImages(of: records(in: space, context: context), in: context)
         records(in: space, context: context).forEach(context.delete)
         types(in: space, context: context).forEach(context.delete)
@@ -250,6 +251,58 @@ enum SpaceStore {
         screen.updatedAt = .now
         try context.save()
         return screen
+    }
+
+    // MARK: Widgets
+
+    static func widgets(in space: Space, context: ModelContext) -> [AreaWidget] {
+        let key = SpaceJSON.key(space.id)
+        let descriptor = FetchDescriptor<AreaWidget>(
+            predicate: #Predicate { $0.spaceIDString == key },
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    static func widget(_ id: UUID, in context: ModelContext) -> AreaWidget? {
+        try? context.fetch(FetchDescriptor<AreaWidget>(predicate: #Predicate { $0.id == id })).first
+    }
+
+    /// Makes a widget, or replaces one when `existing` is given. Nothing is saved unless every block checks out.
+    @discardableResult
+    static func setWidget(
+        _ definition: AreaWidgetDefinition,
+        for type: SpaceType,
+        name: String,
+        size: AreaWidgetSize,
+        replacing existing: AreaWidget? = nil,
+        in context: ModelContext
+    ) throws -> AreaWidget {
+        let problems = AreaWidgetCatalog.problems(
+            in: definition,
+            size: size,
+            schema: type.schema,
+            eventKeys: eventKeys(in: type.spaceIDString, context: context),
+            events: eventSchemas(in: type.spaceIDString, context: context)
+        )
+        guard problems.isEmpty else { throw SpaceStoreError.invalidScreen(problems) }
+        let widget = existing ?? {
+            let created = AreaWidget(type: type, name: name, size: size, definition: definition)
+            context.insert(created)
+            return created
+        }()
+        widget.typeIDString = SpaceJSON.key(type.id)
+        widget.name = name
+        widget.size = size
+        widget.definition = definition
+        widget.updatedAt = .now
+        try context.save()
+        return widget
+    }
+
+    static func delete(_ widget: AreaWidget, in context: ModelContext) throws {
+        context.delete(widget)
+        try context.save()
     }
 
     /// Back to the last version an agent wrote. With none, the screen is removed and the plain view shows.

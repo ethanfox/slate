@@ -6,6 +6,8 @@ enum SpaceScreenKind: String, Codable, CaseIterable, Identifiable, Hashable {
     case collection
     /// One record.
     case detail
+    /// A small card about the whole type. See `AreaWidgetDefinition`.
+    case widget
 
     var id: String { rawValue }
 }
@@ -391,6 +393,7 @@ struct SpaceComponentSpec: Hashable {
 enum SpaceScreenCatalog {
     private static let singles: [SpaceFieldKind] = [.text, .number, .boolean, .date, .choice, .quantity, .link, .calc, .schedule, .tags, .url, .money, .duration, .time, .dateRange, .rating, .file]
     private static let both: Set<SpaceScreenKind> = [.collection, .detail]
+    private static let everywhere: Set<SpaceScreenKind> = [.collection, .detail, .widget]
     private static let sortNote = "A field id, title, or updated. Put - in front for largest or newest first, such as -rating."
     private static let arrangeProps = [
         SpacePropSpec(name: "sort", kind: .text, note: sortNote),
@@ -503,7 +506,7 @@ enum SpaceScreenCatalog {
         SpaceComponentSpec(
             name: "chart",
             summary: "Logged events over time: a line for a logged number such as weight, or bars for how much happened each day.",
-            screens: both,
+            screens: everywhere,
             props: [
                 SpacePropSpec(name: "events", kind: .event, required: true, note: "The event type."),
                 SpacePropSpec(name: "field", kind: .text, note: "A number field of the event. Left out, the chart counts events."),
@@ -568,7 +571,7 @@ enum SpaceScreenCatalog {
         SpaceComponentSpec(
             name: "progress",
             summary: "A bar showing a number against a target, such as calories against a daily goal.",
-            screens: both,
+            screens: everywhere,
             props: [
                 SpacePropSpec(name: "value", kind: .formula, required: true, note: "A field id or formula for the number so far, or a calculation over logs such as sum:eaten.calories:today."),
                 SpacePropSpec(name: "target", kind: .formula, required: true, note: "A number, field id or formula for the target, such as goals.calories."),
@@ -579,10 +582,27 @@ enum SpaceScreenCatalog {
         SpaceComponentSpec(
             name: "metric",
             summary: "One calculated number with a label.",
-            screens: both,
+            screens: everywhere,
             props: [
                 SpacePropSpec(name: "value", kind: .calc, required: true, note: "count, latest, streak, best, week or pace, then :eventKey. For logged numbers: sum, avg, min, max or change, then :eventKey.field:period. In a collection also today:eventKey and records."),
                 SpacePropSpec(name: "label", kind: .text, required: true, note: "Text under the number.")
+            ]
+        ),
+        SpaceComponentSpec(
+            name: "label",
+            summary: "Widget only. A short line of plain text, such as a caption over a number.",
+            screens: [.widget],
+            props: [
+                SpacePropSpec(name: "text", kind: .text, required: true, note: "What it says.")
+            ]
+        ),
+        SpaceComponentSpec(
+            name: "list",
+            summary: "Widget only. The first few records by name, such as what is coming up next.",
+            screens: [.widget],
+            props: [
+                SpacePropSpec(name: "sort", kind: .text, note: sortNote),
+                SpacePropSpec(name: "subtitle", kind: .field(singles), note: "One field shown beside each name.")
             ]
         ),
         SpaceComponentSpec(
@@ -668,7 +688,7 @@ enum SpaceScreenCatalog {
                     problems.append("\(spec.name).\(prop.name) is not a calculation.")
                     continue
                 }
-                if request.name.collectionOnly, kind != .collection {
+                if request.name.collectionOnly, kind == .detail {
                     problems.append("\(request.name.rawValue) only works on a collection screen.")
                 }
                 checkCalc(request, owner: "\(spec.name).\(prop.name)", schema: schema, eventKeys: eventKeys, events: events, into: &problems)
@@ -799,6 +819,123 @@ final class SpaceScreen {
         self.kindRaw = kind.rawValue
         self.definitionJSON = SpaceJSON.encode(definition)
         self.agentJSON = ""
+        self.updatedAt = .now
+    }
+}
+
+
+// MARK: Widgets
+
+/// How big a widget is, in grid cells. Every widget is one of these three.
+enum AreaWidgetSize: String, Codable, CaseIterable, Identifiable, Hashable {
+    case small = "1x1"
+    case wide = "2x1"
+    case large = "2x2"
+
+    var id: String { rawValue }
+
+    /// How many rows of blocks fit.
+    var maxRows: Int {
+        switch self {
+        case .small, .wide: 2
+        case .large: 4
+        }
+    }
+
+    /// How many blocks fit side by side.
+    var maxAcross: Int {
+        self == .small ? 1 : 2
+    }
+}
+
+/// A widget is rows of blocks. The definition says which blocks sit in which row and in what order;
+/// the app sets the padding, the spacing, and the type sizes.
+struct AreaWidgetDefinition: Codable, Hashable {
+    var rows: [[SpaceComponent]]
+
+    init(rows: [[SpaceComponent]] = []) {
+        self.rows = rows
+    }
+}
+
+enum AreaWidgetCatalog {
+    /// The blocks a widget can be built from.
+    static var blocks: [SpaceComponentSpec] {
+        SpaceScreenCatalog.components.filter { $0.screens.contains(.widget) }
+    }
+
+    /// Every reason this widget cannot be shown. Empty means it is valid.
+    static func problems(
+        in definition: AreaWidgetDefinition,
+        size: AreaWidgetSize,
+        schema: SpaceSchema,
+        eventKeys: Set<String>,
+        events: [String: SpaceSchema] = [:]
+    ) -> [String] {
+        var problems: [String] = []
+        if definition.rows.isEmpty {
+            problems.append("A widget needs at least one row with a block in it.")
+        }
+        if definition.rows.count > size.maxRows {
+            problems.append("A \(size.rawValue) widget fits \(size.maxRows) rows, and this has \(definition.rows.count).")
+        }
+        for (index, row) in definition.rows.enumerated() {
+            if row.isEmpty {
+                problems.append("Row \(index + 1) is empty.")
+            }
+            if row.count > size.maxAcross {
+                problems.append("A \(size.rawValue) widget fits \(size.maxAcross) across, and row \(index + 1) has \(row.count).")
+            }
+            if size == .small, row.contains(where: { $0.kind == "list" }) {
+                problems.append("A list does not fit a 1x1 widget. Use 2x1 or 2x2.")
+            }
+        }
+        return problems + SpaceScreenCatalog.problems(
+            in: SpaceScreenDefinition(definition.rows.flatMap { $0 }),
+            kind: .widget,
+            schema: schema,
+            eventKeys: eventKeys,
+            events: events
+        )
+    }
+}
+
+/// A small card an agent builds for one type in an Area. It keeps its definition and reads live data,
+/// so it is the same widget every time it is shown.
+@Model
+final class AreaWidget {
+    var id: UUID
+    var spaceIDString: String
+    var typeIDString: String
+    var name: String
+    var sizeRaw: String
+    var definitionJSON: String
+    /// The user chose to keep it on the You page.
+    var isOnYou: Bool = false
+    var createdAt: Date
+    var updatedAt: Date
+
+    var size: AreaWidgetSize {
+        get { AreaWidgetSize(rawValue: sizeRaw) ?? .small }
+        set { sizeRaw = newValue.rawValue }
+    }
+
+    var definition: AreaWidgetDefinition {
+        get { SpaceJSON.decode(definitionJSON, as: AreaWidgetDefinition.self) ?? AreaWidgetDefinition() }
+        set { definitionJSON = SpaceJSON.encode(newValue) }
+    }
+
+    var typeID: UUID? { UUID(uuidString: typeIDString) }
+    var spaceID: UUID? { UUID(uuidString: spaceIDString) }
+
+    init(type: SpaceType, name: String, size: AreaWidgetSize, definition: AreaWidgetDefinition) {
+        self.id = UUID()
+        self.spaceIDString = type.spaceIDString
+        self.typeIDString = SpaceJSON.key(type.id)
+        self.name = name
+        self.sizeRaw = size.rawValue
+        self.definitionJSON = SpaceJSON.encode(definition)
+        self.createdAt = .now
         self.updatedAt = .now
     }
 }

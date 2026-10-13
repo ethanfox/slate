@@ -7,6 +7,8 @@ import UniformTypeIdentifiers
 struct ChatSource: Identifiable, Equatable, Codable, Hashable, Sendable {
     enum Kind: String, Codable, Sendable {
         case url, note, thread, decision, project, conversation, task, run
+        /// An Area widget, drawn in place where its link appears.
+        case widget
     }
 
     var id: String
@@ -23,7 +25,7 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable, Sendable {
     var shortName: String {
         switch kind {
         case .url: return host ?? title
-        case .note, .thread, .decision, .project, .conversation, .task, .run:
+        case .note, .thread, .decision, .project, .conversation, .task, .run, .widget:
             return title.isEmpty ? kindLabel : title
         }
     }
@@ -38,6 +40,7 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable, Sendable {
         case .conversation: return "Chat"
         case .task: return "Task"
         case .run: return "Run"
+        case .widget: return "Widget"
         }
     }
 
@@ -51,6 +54,7 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable, Sendable {
         case .conversation: return "bubble.left"
         case .task: return "checklist"
         case .run: return "play.circle"
+        case .widget: return "square.grid.2x2"
         }
     }
 
@@ -101,6 +105,9 @@ extension ChatSource {
         case .run:
             guard let run = run(in: context) else { return missing(kindLabel) }
             return live(id: run.id, title: run.displayTitle, kindLabel: kindLabel)
+        case .widget:
+            let widget = UUID(uuidString: id).flatMap { SpaceStore.widget($0, in: context) }
+            return (self, widget?.name ?? (title.isEmpty ? kindLabel : title), widget == nil ? "Missing" : kindLabel)
         }
     }
 
@@ -140,6 +147,12 @@ extension ChatSource {
             }
         case .run:
             if let run = run(in: context) { app.open(run, newTab: newTab) }
+        case .widget:
+            // A widget opens the Area it belongs to.
+            if let widget = UUID(uuidString: id).flatMap({ SpaceStore.widget($0, in: context) }),
+               let spaceID = widget.spaceID {
+                app.navigate(to: .space(spaceID), newTab: newTab)
+            }
         }
     }
 
@@ -228,6 +241,8 @@ extension ChatSource {
             return firstLine(task(in: context)?.notes)
         case .run:
             return firstLine(run(in: context)?.resultSummary.isEmpty == false ? run(in: context)?.resultSummary : run(in: context)?.brief)
+        case .widget:
+            return ""
         }
     }
 

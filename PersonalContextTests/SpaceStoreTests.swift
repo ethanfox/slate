@@ -312,6 +312,55 @@ final class SpaceStoreTests: XCTestCase {
         XCTAssertEqual(AreaRecords.layouts(for: wide), [.table, .board, .calendar])
     }
 
+    func testWidgetsAreCheckedAgainstTheirSizeAndTheType() throws {
+        let health = try SpaceStore.create(named: "Health", in: context)
+        let weighSchema = SpaceSchema(fields: [SpaceField(id: "weight", name: "Weight", kind: .number)])
+        _ = try SpaceStore.defineType(in: health, key: "weighed", name: "Weighed", role: .event, schema: weighSchema, context: context)
+        let body = try SpaceStore.defineType(in: health, key: "body", name: "Body", schema: SpaceSchema(fields: [
+            SpaceField(id: "goal", name: "Goal", kind: .number)
+        ]), context: context)
+
+        let rows: [[SpaceComponent]] = [
+            [
+                SpaceComponent("metric", ["value": .text("avg:weighed.weight:week"), "label": .text("Average this week")]),
+                SpaceComponent("metric", ["value": .text("change:weighed.weight:month"), "label": .text("Change")])
+            ],
+            [SpaceComponent("chart", ["events": .text("weighed"), "field": .text("weight")])]
+        ]
+        let widget = try SpaceStore.setWidget(AreaWidgetDefinition(rows: rows), for: body, name: "Weight", size: .wide, in: context)
+        XCTAssertEqual(SpaceStore.widgets(in: health, context: context).map(\.name), ["Weight"])
+        XCTAssertEqual(widget.definition.rows, rows)
+
+        // Two across does not fit 1x1, and a list is too tall for it.
+        XCTAssertThrowsError(try SpaceStore.setWidget(AreaWidgetDefinition(rows: rows), for: body, name: "Small", size: .small, in: context))
+        XCTAssertThrowsError(try SpaceStore.setWidget(
+            AreaWidgetDefinition(rows: [[SpaceComponent("list")]]), for: body, name: "List", size: .small, in: context
+        ))
+        // A block has to exist, be allowed in a widget, and name things the Area has.
+        for bad in [
+            SpaceComponent("carousel"),
+            SpaceComponent("board", ["by": .text("goal")]),
+            SpaceComponent("chart", ["events": .text("slept")]),
+            SpaceComponent("metric", ["value": .text("sum:weighed.height"), "label": .text("Height")])
+        ] {
+            XCTAssertThrowsError(try SpaceStore.setWidget(
+                AreaWidgetDefinition(rows: [[bad]]), for: body, name: "Bad", size: .large, in: context
+            ), bad.kind)
+        }
+        XCTAssertEqual(SpaceStore.widgets(in: health, context: context).count, 1)
+
+        // Changing a widget keeps its id.
+        let changed = try SpaceStore.setWidget(
+            AreaWidgetDefinition(rows: [[SpaceComponent("label", ["text": .text("Goal weight")])]]),
+            for: body, name: "Goal", size: .small, replacing: widget, in: context
+        )
+        XCTAssertEqual(changed.id, widget.id)
+        XCTAssertEqual(SpaceStore.widgets(in: health, context: context).map(\.name), ["Goal"])
+
+        try SpaceStore.delete(health, in: context)
+        XCTAssertNil(SpaceStore.widget(widget.id, in: context))
+    }
+
     func testAreaRecordsSearchAndFilter() throws {
         let kitchen = try SpaceStore.create(named: "Kitchen", in: context)
         let recipe = try SpaceStore.defineType(in: kitchen, key: "recipe", name: "Recipe", schema: recipeSchema, context: context)
