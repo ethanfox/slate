@@ -247,6 +247,7 @@ struct NewSpaceSheet: View {
     @State private var gradient: SpaceGradient?
     @State private var template = SpaceTemplate.empty
     @State private var brief = ""
+    @State private var notes = ""
 
     private var chosen: SpaceGradient {
         gradient ?? SpaceGradient.next(after: spaces.map(\.gradientRaw))
@@ -309,6 +310,14 @@ struct NewSpaceSheet: View {
             }
             }
 
+            if space != nil {
+                ModalField("Notes for Membrae") {
+                    TextField("What you call things here, units you use, and anything Membrae should remember", text: $notes, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .lineLimit(2...6)
+                }
+            }
+
             ModalFooter(
                 actionTitle: space != nil ? "Save" : describing ? "Plan it with an agent" : "Create",
                 actionEnabled: canCreate,
@@ -320,6 +329,7 @@ struct NewSpaceSheet: View {
                 name = space.name
                 symbol = space.symbol
                 gradient = space.gradient
+                notes = space.agentNotes
             }
             focusName = true
         }
@@ -338,7 +348,7 @@ struct NewSpaceSheet: View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if let space {
-            try? SpaceStore.update(space, name: trimmed, symbol: symbol, gradient: chosen.rawValue, in: context)
+            try? SpaceStore.update(space, name: trimmed, symbol: symbol, gradient: chosen.rawValue, notes: notes, in: context)
         } else if describing {
             let conversation = app.makeConversation(in: nil, context: context)
             conversation.title = "Set up \(trimmed)"

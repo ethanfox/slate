@@ -838,6 +838,18 @@ final class SpaceToolsTests: XCTestCase {
         XCTAssertTrue(SpaceStore.events(in: reading, context: ModelContext(container)).isEmpty)
     }
 
+    func testAnAgentKeepsNotesOnAnArea() throws {
+        let spaceID = try XCTUnwrap(try object(call("create_space", ["name": "Kitchen"]))["id"] as? String)
+        let saved = try object(call("update_space", ["space_id": spaceID, "notes": "  \"The usual\" means the Sunday chili.  "]))
+        XCTAssertEqual(saved["notes"] as? String, "\"The usual\" means the Sunday chili.")
+        // Changing something else leaves the notes alone.
+        _ = try object(call("update_space", ["space_id": spaceID, "summary": "What I cook"]))
+        XCTAssertEqual(try object(call("get_space", ["space_id": spaceID]))["notes"] as? String, "\"The usual\" means the Sunday chili.")
+        let long = String(repeating: "x", count: Space.agentNotesLimit + 1)
+        XCTAssertEqual(call("update_space", ["space_id": spaceID, "notes": long])["isError"] as? Bool, true)
+        XCTAssertTrue(ContextBuilder.routing(in: context).contains("Your notes: \"The usual\" means the Sunday chili."))
+    }
+
     func testAnAgentCanBuildAReadingSpaceFromNothing() throws {
         let catalog = try object(call("get_space_catalog"))
         let names = try XCTUnwrap(catalog["blocks"] as? [[String: Any]]).compactMap { $0["component"] as? String }

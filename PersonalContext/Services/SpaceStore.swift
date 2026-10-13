@@ -68,8 +68,10 @@ enum SpaceStore {
         symbol: String? = nil,
         summary: String? = nil,
         gradient: String? = nil,
+        notes: String? = nil,
         in context: ModelContext
     ) throws {
+        if let notes { space.agentNotes = String(notes.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Space.agentNotesLimit)) }
         if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { space.name = name }
         if let symbol, !symbol.isEmpty { space.symbol = symbol }
         if let summary { space.summary = summary }

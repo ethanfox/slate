@@ -1298,17 +1298,21 @@ enum Tools {
         },
         Tool(
             name: "update_space",
-            description: "Rename an Area, or change its summary, icon, or card color. Only what you pass changes.",
+            description: "Rename an Area, change its summary, icon, or card color, or rewrite your notes on it. Only what you pass changes.",
             properties: [
                 "space_id": spaceID,
                 "name": text("New name."),
                 "summary": text("One line on what it is for."),
                 "symbol": text("SF Symbol name for its icon."),
-                "color": text("Card color: \(SpaceGradientName.all.joined(separator: ", ")).")
+                "color": text("Card color: \(SpaceGradientName.all.joined(separator: ", "))."),
+                "notes": text("Your own notes on this Area: what the user calls things, the units they use, standing preferences. This replaces the notes, so send the whole text, old lines included. At most \(Space.agentNotesLimit) characters.")
             ],
             required: ["space_id"], readOnly: false
         ) { args, context in
             let space = try SpaceTools.space(args, in: context)
+            if let notes = args.string("notes"), notes.count > Space.agentNotesLimit {
+                throw ToolError("notes can hold \(Space.agentNotesLimit) characters, and this is \(notes.count). Shorten it and send it again.")
+            }
             if let color = args.string("color"), !color.isEmpty, !SpaceGradientName.all.contains(color) {
                 throw ToolError("color must be one of: \(SpaceGradientName.all.joined(separator: ", ")).")
             }
@@ -1318,6 +1322,7 @@ enum Tools {
                 symbol: args.string("symbol"),
                 summary: args.string("summary"),
                 gradient: args.string("color"),
+                notes: args.string("notes"),
                 in: context
             )
             return SpaceTools.space(space, full: false, in: context)
@@ -2703,6 +2708,7 @@ enum SpaceTools {
             "id": space.id.uuidString,
             "name": space.displayName,
             "summary": space.summary,
+            "notes": space.agentNotes,
             "types": full
                 ? types.map { type($0, in: context) }
                 : types.map { ["key": $0.key, "name": $0.name, "role": $0.role.rawValue] }

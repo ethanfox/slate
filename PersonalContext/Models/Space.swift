@@ -431,8 +431,14 @@ final class Space {
     var enabledKindsRaw: String
     /// A `SpaceGradient` name. Empty falls back to one picked from the id.
     var gradientRaw: String = ""
+    /// What the agent has learned about how the user talks about this Area: their names for things,
+    /// units, standing preferences. The agent writes it; the user can read and fix it in Edit Area.
+    var agentNotes: String = ""
     var createdAt: Date
     var updatedAt: Date
+
+    /// The most an Area's notes may hold, so they stay cheap to send with every message.
+    static let agentNotesLimit = 1500
 
     var enabledKinds: Set<SpaceBuiltInKind> {
         get {
