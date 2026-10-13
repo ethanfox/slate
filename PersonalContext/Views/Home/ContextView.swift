@@ -11,6 +11,22 @@ struct ContextItem: Identifiable, Equatable {
     /// How much it holds, which sets the size of its cell.
     var count: Int
     var destination: Destination
+    var kind = Kind.you
+
+    enum Kind: String, CaseIterable {
+        case you, project, area, library, assistant
+
+        /// The color for everything of this kind when the membrane is too small to show each thing.
+        var hex: String {
+            switch self {
+            case .you: ""
+            case .project: "007AFF"
+            case .area: "E8643A"
+            case .library: "EDAD38"
+            case .assistant: "10A37F"
+            }
+        }
+    }
     /// What Membrae knows about the user. The logo's own cells stand for it.
     var isYou = false
 
@@ -22,9 +38,22 @@ struct ContextItem: Identifiable, Equatable {
     }
 
     var thing: MembraneThing {
+        Self.thing(id: id, hex: hex, count: count)
+    }
+
+    private static func thing(id: String, hex: String, count: Int) -> MembraneThing {
         let value = UInt32(hex, radix: 16) ?? 0
         let color = SIMD3(Double(value >> 16 & 0xFF), Double(value >> 8 & 0xFF), Double(value & 0xFF)) / 255
         return MembraneThing(id: id, color: color, weight: min(0.55 + 0.22 * log2(1 + Double(count)), 1.7))
+    }
+
+    /// One cell for each kind of thing, sized by how many there are.
+    static func grouped(_ items: [ContextItem]) -> [MembraneThing] {
+        Kind.allCases.compactMap { kind in
+            let count = items.count { $0.kind == kind }
+            guard kind != .you, count > 0 else { return nil }
+            return thing(id: kind.rawValue, hex: kind.hex, count: count)
+        }
     }
 }
 
@@ -56,7 +85,7 @@ struct ContextItems: DynamicProperty {
                 id: project.id.uuidString, name: project.name,
                 detail: (["Project"] + [parts.joined(separator: ", ")].filter { !$0.isEmpty }).joined(separator: " · "),
                 hex: ContextItem.color(for: project.id), count: counts.values.reduce(0, +),
-                destination: .project(project.id)
+                destination: .project(project.id), kind: .project
             ))
         }
 
@@ -65,14 +94,15 @@ struct ContextItems: DynamicProperty {
             let count = filed[space.id.uuidString] ?? filed[space.id.uuidString.lowercased()] ?? 0
             items.append(ContextItem(
                 id: space.id.uuidString, name: space.displayName, detail: "Area · " + Self.counted(count, "thing"),
-                hex: space.gradient.accent.hexString, count: count, destination: .space(space.id)
+                hex: space.gradient.accent.hexString, count: count, destination: .space(space.id),
+                kind: .area
             ))
         }
 
         if !sources.isEmpty {
             items.append(ContextItem(
                 id: "library", name: "Library", detail: Self.counted(sources.count, "saved source"),
-                hex: "B08A4A", count: sources.count, destination: .library
+                hex: "B08A4A", count: sources.count, destination: .library, kind: .library
             ))
         }
 
@@ -85,7 +115,8 @@ struct ContextItems: DynamicProperty {
         ]
         for (id, name, hex) in assistants where app.providerConnected(id) {
             items.append(ContextItem(
-                id: "ai-" + id, name: name, detail: "Your AI · connected", hex: hex, count: 3, destination: .settings
+                id: "ai-" + id, name: name, detail: "Your AI · connected", hex: hex, count: 3, destination: .settings,
+                kind: .assistant
             ))
         }
         return items
@@ -99,16 +130,18 @@ struct ContextItems: DynamicProperty {
 /// The user's own membrane: the logo's cells for them, and one cell for each thing they have.
 struct ContextMembrane: View {
     var items: [ContextItem]
-    var frameInterval: Double?
+    /// Small: one cell for each kind of thing, and nearly still.
+    var isCompact = false
     @State private var model = MembraneModel()
 
     private var things: [MembraneThing] {
-        items.filter { !$0.isYou }.map(\.thing)
+        isCompact ? ContextItem.grouped(items) : items.filter { !$0.isYou }.map(\.thing)
     }
 
     var body: some View {
-        MembraneView(model: model, frameInterval: frameInterval)
+        MembraneView(model: model, frameInterval: isCompact ? 1.0 / 30 : nil)
             .onChange(of: things, initial: true) { _, things in
+                model.isCalm = isCompact
                 model.sync(things)
             }
     }

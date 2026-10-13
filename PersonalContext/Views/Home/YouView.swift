@@ -307,7 +307,7 @@ struct YouView: View {
         Button {
             app.navigate(to: .context)
         } label: {
-            ContextMembrane(items: contextItems.all, frameInterval: 1.0 / 30)
+            ContextMembrane(items: contextItems.all, isCompact: true)
                 .allowsHitTesting(false)
                 .frame(width: 64, height: 64)
                 .contentShape(Circle())
