@@ -9,6 +9,7 @@ struct SidebarView: View {
     @Query(sort: \Space.createdAt) private var spaces: [Space]
     @Query(sort: \Pin.createdAt) private var pins: [Pin]
     @State private var pendingDelete: TitleIndex?
+    @State private var pendingAreaDelete: Space?
 
     private struct PinnedItem: Identifiable {
         var id: UUID
@@ -123,6 +124,12 @@ struct SidebarView: View {
                                 } label: {
                                     Label(app.isPinned(space.id) ? "Unpin" : "Pin", systemImage: app.isPinned(space.id) ? "pin.slash" : "pin")
                                 }
+                                Divider()
+                                Button(role: .destructive) {
+                                    pendingAreaDelete = space
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
                             }
                         }
                     }
@@ -178,6 +185,20 @@ struct SidebarView: View {
                 .padding(.bottom, 12)
             }
             .scrollContentBackground(.hidden)
+            .alert(
+                "Delete \(pendingAreaDelete?.displayName ?? "this Area")?",
+                isPresented: Binding(get: { pendingAreaDelete != nil }, set: { if !$0 { pendingAreaDelete = nil } })
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let space = pendingAreaDelete {
+                        try? SpaceStore.delete(space, in: context)
+                    }
+                    pendingAreaDelete = nil
+                }
+                Button("Cancel", role: .cancel) { pendingAreaDelete = nil }
+            } message: {
+                Text("Everything in this Area will be deleted. This can’t be undone.")
+            }
 
             row("Settings", "gearshape", destination: .settings)
                 .padding(.horizontal, 8)

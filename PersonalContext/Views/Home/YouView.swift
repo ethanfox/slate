@@ -179,12 +179,11 @@ struct YouView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Space.createdAt) private var spaces: [Space]
     @Query private var records: [SpaceRecord]
-    @Query private var loggedEvents: [SpaceEvent]
+    @Query(sort: \AreaWidget.createdAt) private var widgets: [AreaWidget]
     @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" && $0.isCompleted == false })
     private var openTasks: [AgendaItem]
     @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "project" }, sort: \TitleIndex.updatedAt, order: .reverse)
     private var projects: [TitleIndex]
-    @State private var pendingDelete: Space?
 
     private let gutter: CGFloat = 48
 
@@ -210,23 +209,6 @@ struct YouView: View {
         .scrollContentBackground(.hidden)
         .captureBar()
         .task { await app.eventKit.prepareEvents() }
-        .alert(
-            "Delete \(pendingDelete?.displayName ?? "this Space")?",
-            isPresented: Binding(
-                get: { pendingDelete != nil },
-                set: { if !$0 { pendingDelete = nil } }
-            )
-        ) {
-            Button("Delete", role: .destructive) {
-                if let space = pendingDelete {
-                    try? SpaceStore.delete(space, in: context)
-                }
-                pendingDelete = nil
-            }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
-        } message: {
-            Text("Everything in this Area will be deleted. This can’t be undone.")
-        }
     }
 
     private var greeting: some View {
@@ -272,93 +254,77 @@ struct YouView: View {
         return first.isEmpty ? salutation : "\(salutation), \(first)"
     }
 
+    /// The widgets the user chose to keep here, from any Area.
     private var shelf: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Areas")
-                .font(CraftFont.section)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, gutter)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    ForEach(spaces) { space in
-                        Button {
-                            app.navigate(to: .space(space.id))
-                        } label: {
-                            SpaceCard(space: space, summary: summary(for: space))
+        let chosen = widgets.filter(\.isOnYou)
+        let others = widgets.filter { !$0.isOnYou }
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text("Widgets")
+                    .font(CraftFont.section)
+                    .foregroundStyle(.secondary)
+                if !others.isEmpty {
+                    Menu {
+                        ForEach(spaces) { space in
+                            let key = SpaceJSON.key(space.id)
+                            let owned = others.filter { $0.spaceIDString == key }
+                            if !owned.isEmpty {
+                                Section(space.displayName) {
+                                    ForEach(owned) { widget in
+                                        Button(widget.name) { place(widget, onYou: true) }
+                                    }
+                                }
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .contextMenu { spaceMenu(space) }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
                     }
-                    if spaces.isEmpty {
-                        Button {
-                            app.present(.newSpace)
-                        } label: {
-                            NewSpaceCard()
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, gutter)
-                .padding(.bottom, 18)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func spaceMenu(_ space: Space) -> some View {
-        Button {
-            app.present(.editSpace(space))
-        } label: {
-            Label("Edit…", systemImage: "pencil")
-        }
-        Button {
-            app.togglePin(.space, space.id)
-        } label: {
-            Label(app.isPinned(space.id) ? "Unpin" : "Pin", systemImage: app.isPinned(space.id) ? "pin.slash" : "pin")
-        }
-        Menu("Color") {
-            ForEach(SpaceGradient.allCases) { gradient in
-                Button {
-                    space.gradientRaw = gradient.rawValue
-                    space.touch()
-                    try? context.persist()
-                } label: {
-                    if space.gradient == gradient {
-                        Label(gradient.label, systemImage: "checkmark")
-                    } else {
-                        Text(gradient.label)
-                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Add a widget")
+                    .accessibilityLabel("Add a widget")
                 }
             }
+            if chosen.isEmpty {
+                if spaces.isEmpty {
+                    Button {
+                        app.present(.newSpace)
+                    } label: {
+                        NewSpaceCard()
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    EmptyLine(text: widgets.isEmpty
+                        ? "No widgets yet. Ask Membrae to make one for an Area."
+                        : "Nothing here yet. Use + to add a widget from one of your Areas.")
+                }
+            } else {
+                WidgetFlow(spacing: AreaWidgetMetrics.gap) {
+                    ForEach(chosen) { widget in
+                        AreaWidgetHost(id: widget.id)
+                            .contextMenu {
+                                Button {
+                                    place(widget, onYou: false)
+                                } label: {
+                                    Label("Remove from You", systemImage: "minus.circle")
+                                }
+                            }
+                    }
+                }
+            }
         }
-        Divider()
-        Button(role: .destructive) {
-            pendingDelete = space
-        } label: {
-            Label("Delete", systemImage: "trash")
-        }
+        .padding(.horizontal, gutter)
     }
 
-    private func summary(for space: Space) -> SpaceCardSummary {
-        let key = SpaceJSON.key(space.id)
-        let owned = records.filter { $0.spaceIDString == key }
-        let latest = owned.max { $0.updatedAt < $1.updatedAt }
-        let line: String
-        if let latest {
-            line = "\(latest.displayTitle), \(latest.updatedAt.relativeLabel)"
-        } else {
-            line = space.summary.isEmpty ? "Nothing yet" : space.summary
-        }
-        // An Area that is mostly tracking is counted by what was logged, not by the one thing it tracks.
-        let entries = loggedEvents.filter { $0.spaceIDString == key }
-        if entries.count > owned.count, let last = entries.max(by: { $0.occurredAt < $1.occurredAt }) {
-            return SpaceCardSummary(
-                line: "Last logged \(last.occurredAt.relativeLabel)",
-                count: entries.count,
-                caption: entries.count == 1 ? "entry" : "entries"
-            )
-        }
-        return SpaceCardSummary(line: line, count: owned.count, caption: owned.count == 1 ? "record" : "records")
+    private func place(_ widget: AreaWidget, onYou: Bool) {
+        widget.isOnYou = onYou
+        widget.updatedAt = .now
+        try? context.persist()
     }
 
     private var upcoming: [ComingUpItem] {

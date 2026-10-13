@@ -239,10 +239,51 @@ struct AreaWidgetView: View {
     }
 }
 
+/// Lays widgets out left to right and wraps to a new row when the width runs out.
+struct WidgetFlow: Layout {
+    var spacing: CGFloat
+
+    private func rows(_ subviews: Subviews, width: CGFloat) -> [[(index: Int, size: CGSize)]] {
+        var rows: [[(index: Int, size: CGSize)]] = [[]]
+        var x: CGFloat = 0
+        for (index, subview) in subviews.enumerated() {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                rows.append([])
+                x = 0
+            }
+            rows[rows.count - 1].append((index, size))
+            x += size.width + spacing
+        }
+        return rows.filter { !$0.isEmpty }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
+        let width = proposal.width ?? .infinity
+        let rows = rows(subviews, width: width)
+        let height = rows.reduce(0) { $0 + ($1.map(\.size.height).max() ?? 0) } + spacing * CGFloat(max(rows.count - 1, 0))
+        let widest = rows.map { $0.reduce(0) { $0 + $1.size.width } + spacing * CGFloat(max($0.count - 1, 0)) }.max() ?? 0
+        return CGSize(width: proposal.width ?? widest, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
+        var y = bounds.minY
+        for row in rows(subviews, width: bounds.width) {
+            var x = bounds.minX
+            for item in row {
+                subviews[item.index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(item.size))
+                x += item.size.width + spacing
+            }
+            y += (row.map(\.size.height).max() ?? 0) + spacing
+        }
+    }
+}
+
 /// An Area's widgets in a row, above its records.
 struct AreaWidgetShelf: View {
     var spaceID: UUID
 
+    @Environment(\.modelContext) private var context
     @Query(sort: \AreaWidget.createdAt) private var widgets: [AreaWidget]
 
     var body: some View {
@@ -253,6 +294,18 @@ struct AreaWidgetShelf: View {
                 HStack(alignment: .top, spacing: AreaWidgetMetrics.gap) {
                     ForEach(owned) { widget in
                         AreaWidgetHost(id: widget.id)
+                            .contextMenu {
+                                Button {
+                                    widget.isOnYou.toggle()
+                                    widget.updatedAt = .now
+                                    try? context.persist()
+                                } label: {
+                                    Label(
+                                        widget.isOnYou ? "Remove from You" : "Add to You",
+                                        systemImage: widget.isOnYou ? "minus.circle" : "plus.circle"
+                                    )
+                                }
+                            }
                     }
                 }
                 .padding(.vertical, 1)

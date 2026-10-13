@@ -209,6 +209,7 @@ enum Tools {
         "create_space": (.added, "space"), "update_space": (.changed, "space"),
         "set_space_type": (.changed, "space"), "set_space_screen": (.changed, "space"),
         "set_area_widget": (.changed, "space"), "remove_area_widget": (.changed, "space"),
+        "place_area_widget": (.changed, "space"),
         "create_space_record": (.added, "record"), "update_space_record": (.changed, "record"),
         "update_space_event": (.changed, "record"), "log_space_event": (.logged, "record")
     ]
@@ -266,7 +267,7 @@ enum Tools {
             target = ""
         case "create_space", "update_space":
             space = target
-        case "set_space_type", "set_space_screen", "set_area_widget", "remove_area_widget":
+        case "set_space_type", "set_space_screen", "set_area_widget", "remove_area_widget", "place_area_widget":
             detail = (shape["name"] as? String) ?? args.string("type_key") ?? ""
             target = space
             title = UUID(uuidString: space).flatMap { SpaceStore.space($0, in: context) }?.displayName ?? ""
@@ -1420,6 +1421,27 @@ enum Tools {
                 in: context
             )
             return SpaceTools.widget(widget, typeKey: type.key)
+        },
+        Tool(
+            name: "place_area_widget",
+            description: "Put a widget on the user's You page, or take it off. After you make a widget, ask the user in one line whether they want it on their You page, and call this only if they say yes.",
+            properties: [
+                "space_id": spaceID,
+                "widget_id": text("Widget id from set_area_widget or list_area_widgets."),
+                "on_you_page": flag("true to put it on the You page, false to take it off.")
+            ],
+            required: ["space_id", "widget_id", "on_you_page"], readOnly: false
+        ) { args, context in
+            let space = try SpaceTools.space(args, in: context)
+            let id = try args.uuid("widget_id")
+            guard let widget = SpaceStore.widget(id, in: context), widget.spaceIDString == SpaceJSON.key(space.id) else {
+                throw ToolError("This Area has no widget with id \(id.uuidString).")
+            }
+            widget.isOnYou = args.bool("on_you_page") ?? false
+            widget.updatedAt = .now
+            try context.save()
+            let types = SpaceStore.types(in: space, context: context)
+            return SpaceTools.widget(widget, typeKey: types.first { SpaceJSON.key($0.id) == widget.typeIDString }?.key ?? "")
         },
         Tool(
             name: "list_area_widgets",
