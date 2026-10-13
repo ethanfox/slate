@@ -195,7 +195,7 @@ struct NewTaskSheet: View {
     private var isReminder: Bool { reminder != nil }
 
     private var canMarkNext: Bool {
-        guard let project = agenda?.project, project.status == .active else { return false }
+        guard let project = agenda?.project, project.status == .active, project.activeTrack == nil else { return false }
         return status == .ready || status == .inProgress
     }
 
@@ -357,7 +357,7 @@ struct NewTaskSheet: View {
         agenda.repeatRule = hasDueDate ? repeatRule : .none
         TaskStore.setStatus(status, on: agenda, in: context)
         TaskStore.setBlockedReason(blockedReason, on: agenda, in: context)
-        if wantsNext {
+        if wantsNext, agenda.project?.activeTrack == nil {
             try TaskStore.setNext(agenda, in: context)
         } else if agenda.isNext {
             TaskStore.clearNext(on: agenda, in: context)

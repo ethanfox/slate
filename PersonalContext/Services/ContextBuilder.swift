@@ -156,6 +156,9 @@ enum ContextBuilder {
         if !tasks.isEmpty {
             lines.append("")
             lines.append("Tasks:")
+            if let track = project.activeTrack {
+                lines.append("Active track: \(track.title.isEmpty ? "Untitled" : track.title) (id \(track.id.uuidString)). Work on this track unless the user says otherwise.")
+            }
             if let next = TaskStore.nextTask(in: project) {
                 lines.append("Next: \(next.displayTitle) (id \(next.id.uuidString))")
             }
@@ -307,7 +310,7 @@ enum ContextBuilder {
 
     private static func taskLine(_ task: AgendaItem) -> String {
         var line = "\(task.displayTitle) (id \(task.id.uuidString), \(task.workflowStatus.rawValue)"
-        if task.isNext { line += ", next" }
+        if TaskStore.isNext(task) { line += ", next" }
         line += ")"
         let tracks = task.liveTracks.map { $0.title.isEmpty ? "Untitled" : $0.title }
         if !tracks.isEmpty {

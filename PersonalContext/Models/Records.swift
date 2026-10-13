@@ -112,6 +112,13 @@ final class Project: Identifiable {
     var workerProviderID: String = ""
     var workerModelID: String = ""
     var workerPath: String = ""
+    /// The one track this project is being worked on. It sets what the task board shows and which task is Next.
+    var activeTrackID: UUID?
+
+    var activeTrack: ProjectThread? {
+        guard let activeTrackID else { return nil }
+        return threads.first { $0.id == activeTrackID }
+    }
 
     var status: ProjectStatus {
         get { ProjectStatus(rawValue: statusRaw) ?? .active }

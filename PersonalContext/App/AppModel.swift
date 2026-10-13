@@ -195,6 +195,8 @@ final class AppModel {
     var inspectorOpen = false
     var selectedOverviewPlate: UUID?
     var selectedTaskID: UUID?
+    /// The task board's track filter for each project. A project not listed shows its active track.
+    var taskTrackFilters: [UUID: TaskTrackFilter] = [:]
     let objectFind = ObjectFindSession()
     let composer = ComposerSession()
 

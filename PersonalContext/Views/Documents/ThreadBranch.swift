@@ -140,6 +140,21 @@ struct ThreadBranch: View {
                 } label: {
                     Label("New Sub-track", systemImage: "plus")
                 }
+                if let thread = TitleIndexStore.thread(node.id, in: context), let project = thread.project {
+                    if project.activeTrackID == thread.id {
+                        Button {
+                            TaskStore.setActiveTrack(nil, on: project, in: context)
+                        } label: {
+                            Label("Stop Working on This Track", systemImage: "circle.dashed")
+                        }
+                    } else {
+                        Button {
+                            TaskStore.setActiveTrack(thread, on: project, in: context)
+                        } label: {
+                            Label("Make Active Track", systemImage: "scope")
+                        }
+                    }
+                }
                 Divider()
                 if isMarked {
                     Button {

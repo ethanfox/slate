@@ -121,6 +121,14 @@ enum OverviewWidth: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+/// Which track's tasks a project's board shows.
+enum TaskTrackFilter: Hashable {
+    /// The project's active track, or every task when it has none.
+    case active
+    case all
+    case track(UUID)
+}
+
 enum ProjectTasksLayout: String, CaseIterable, Identifiable, Hashable {
     case kanban
     case list

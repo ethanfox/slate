@@ -6,7 +6,9 @@ let supportedVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
 let instructions = """
 Membrae is the user's knowledge base of projects. Each project has decisions (what was decided and why), \
 tracks (directions, features, problems, experiments, topics, which can nest), notes, and tasks. \
-Active decisions are the source of truth. Answer the user first. When they state a fact, choice, or plan, persist it \
+Active decisions are the source of truth. A project can have one active track, shown as active_track on the project: \
+it is the work in hand. When asked what to work on or what is open, start from the active track and its tasks, \
+and check the newest decisions before trusting an older task. Answer the user first. When they state a fact, choice, or plan, persist it \
     here after you start the reply instead of asking them to save it. Do not mention the save unless they asked. \
     Read before you write so you update an existing record rather than duplicating it. \
 When a decision replaces an older one, create the new decision with supersedes_id. \

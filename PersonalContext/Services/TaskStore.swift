@@ -5,6 +5,7 @@ enum TaskStoreError: LocalizedError {
     case notATask
     case nextRequiresActiveProject
     case nextNotEligible
+    case nextFollowsActiveTrack
     case selfLink
     case duplicateBlocker
     case cycle
@@ -15,6 +16,7 @@ enum TaskStoreError: LocalizedError {
         case .notATask: "That record is not a Membrae task."
         case .nextRequiresActiveProject: "Next needs an active project."
         case .nextNotEligible: "Only Ready or In Progress tasks can be Next."
+        case .nextFollowsActiveTrack: "Next comes from the project's active track. Link the task to that track instead."
         case .selfLink: "A task cannot block itself."
         case .duplicateBlocker: "That blocker is already linked."
         case .cycle: "That blocker would create a cycle."
@@ -42,8 +44,36 @@ enum TaskStore {
             .sorted(by: boardSort)
     }
 
+    /// With an active track, the first open task on it that nothing blocks. Without one, the task marked by hand.
     static func nextTask(in project: Project) -> AgendaItem? {
-        project.agendaItems.first { $0.kind == .task && $0.isNext }
+        guard let track = project.activeTrack else {
+            return project.agendaItems.first { $0.kind == .task && $0.isNext }
+        }
+        return AgendaStore.items(on: track, includingChildren: true)
+            .filter { $0.project?.id == project.id && $0.canBeNext && $0.unresolvedBlockers.isEmpty }
+            .min { lhs, rhs in
+                let started = (lhs.workflowStatus == .inProgress, rhs.workflowStatus == .inProgress)
+                if started.0 != started.1 { return started.0 }
+                return lhs.createdAt < rhs.createdAt
+            }
+    }
+
+    static func isNext(_ item: AgendaItem) -> Bool {
+        guard item.kind == .task, let project = item.project else { return false }
+        if project.activeTrack == nil { return item.isNext }
+        return nextTask(in: project)?.id == item.id
+    }
+
+    /// Pass nil to leave the project with no active track.
+    static func setActiveTrack(_ track: ProjectThread?, on project: Project, in context: ModelContext) {
+        project.activeTrackID = track?.id
+        if track != nil {
+            for item in project.agendaItems where item.isNext {
+                item.isNext = false
+            }
+        }
+        project.touch()
+        save(context)
     }
 
     static func setStatus(_ status: TaskWorkflowStatus, on item: AgendaItem, in context: ModelContext) {
@@ -66,6 +96,7 @@ enum TaskStore {
                 : TaskStoreError.nextNotEligible
         }
         guard let project = item.project else { throw TaskStoreError.nextRequiresActiveProject }
+        guard project.activeTrack == nil else { throw TaskStoreError.nextFollowsActiveTrack }
         for other in project.agendaItems where other.kind == .task && other.isNext && other.id != item.id {
             other.isNext = false
             other.touch()
@@ -252,7 +283,8 @@ enum TaskStore {
     }
 
     static func boardSort(_ lhs: AgendaItem, _ rhs: AgendaItem) -> Bool {
-        if lhs.isNext != rhs.isNext { return lhs.isNext }
+        let next = (isNext(lhs), isNext(rhs))
+        if next.0 != next.1 { return next.0 }
         switch (lhs.due, rhs.due) {
         case let (left?, right?):
             if left != right { return left < right }

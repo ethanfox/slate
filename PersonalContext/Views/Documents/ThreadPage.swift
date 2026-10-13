@@ -69,6 +69,7 @@ struct ThreadPage: View {
                         Button(candidate.title.isEmpty ? "Untitled" : candidate.title) { thread.parent = candidate; touch() }
                     }
                 }
+                activePill
                 linked
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -104,6 +105,17 @@ struct ThreadPage: View {
         .onChange(of: thread.title) { _, _ in touch() }
         .onChange(of: thread.summary) { _, _ in touch() }
         .onChange(of: thread.body) { _, _ in touch() }
+    }
+
+    private var activePill: some View {
+        let isActive = project.activeTrackID == thread.id
+        return PropertyPill(title: isActive ? "Active track" : "Not active", systemImage: isActive ? "scope" : "circle.dashed") {
+            if isActive {
+                Button("Stop Working on This Track") { TaskStore.setActiveTrack(nil, on: project, in: context) }
+            } else {
+                Button("Make This the Active Track") { TaskStore.setActiveTrack(thread, on: project, in: context) }
+            }
+        }
     }
 
     @ViewBuilder

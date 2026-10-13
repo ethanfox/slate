@@ -193,8 +193,10 @@ private struct TaskDocument: View {
     }
 
     private var nextPill: some View {
-        PropertyPill(title: item.isNext ? "Next" : "Not next", systemImage: "arrow.forward") {
-            if item.isNext {
+        PropertyPill(title: TaskStore.isNext(item) ? "Next" : "Not next", systemImage: "arrow.forward") {
+            if let track = item.project?.activeTrack {
+                Text("Next comes from the active track, \(track.title.isEmpty ? "Untitled" : track.title).")
+            } else if item.isNext {
                 Button("Clear Next") { TaskStore.clearNext(on: item, in: context) }
             } else {
                 Button("Mark Next") {

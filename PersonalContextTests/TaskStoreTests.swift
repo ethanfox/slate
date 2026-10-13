@@ -37,6 +37,35 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertTrue(c.isNext)
     }
 
+    func testNextComesFromTheActiveTrack() throws {
+        let harbor = Project(name: "Harbor", symbol: "folder", summary: "")
+        context.insert(harbor)
+        let sync = ProjectThread(title: "Sync", kind: .feature, project: harbor)
+        let other = ProjectThread(title: "Other", kind: .feature, project: harbor)
+        context.insert(sync)
+        context.insert(other)
+        let elsewhere = task("Elsewhere", in: harbor)
+        _ = AssociationService.link(thread: other, onto: elsewhere)
+        try TaskStore.setNext(elsewhere, in: context)
+        let first = task("First", in: harbor)
+        let second = task("Second", in: harbor)
+        second.createdAt = first.createdAt.addingTimeInterval(1)
+        _ = AssociationService.link(thread: sync, onto: first)
+        _ = AssociationService.link(thread: sync, onto: second)
+        try context.save()
+
+        TaskStore.setActiveTrack(sync, on: harbor, in: context)
+        XCTAssertEqual(TaskStore.nextTask(in: harbor)?.id, first.id)
+        XCTAssertFalse(TaskStore.isNext(elsewhere))
+        XCTAssertThrowsError(try TaskStore.setNext(second, in: context))
+
+        TaskStore.setStatus(.done, on: first, in: context)
+        XCTAssertEqual(TaskStore.nextTask(in: harbor)?.id, second.id)
+
+        TaskStore.setActiveTrack(nil, on: harbor, in: context)
+        XCTAssertNil(TaskStore.nextTask(in: harbor))
+    }
+
     func testNextRequiresActiveProject() throws {
         let inbox = AgendaItem(kind: .task, eventKitID: "", title: "Inbox")
         context.insert(inbox)

@@ -10,13 +10,30 @@ struct ProjectTasksBoard: View {
     @Query private var completions: [TaskCompletion]
     @State private var inspectCompletion: TaskCompletion?
 
+    /// The track the board is limited to, or nil when it shows every task.
+    private var shownTrack: ProjectThread? {
+        TaskTrackFilterMenu.track(for: project, filter: app.taskTrackFilters[project.id] ?? .active)
+    }
+
+    /// Ids of the tasks on the shown track, or nil when the board is not limited.
+    private var shownTaskIDs: Set<UUID>? {
+        shownTrack.map { Set(AgendaStore.items(on: $0, includingChildren: true).map(\.id)) }
+    }
+
     private var projectTasks: [AgendaItem] {
-        membraeTasks.filter { $0.project?.id == project.id }
+        let all = membraeTasks.filter { $0.project?.id == project.id }
+        guard let ids = shownTaskIDs else { return all }
+        return all.filter { ids.contains($0.id) }
     }
 
     private var projectCompletions: [TaskCompletion] {
-        completions
-            .filter { $0.project?.id == project.id }
+        let ids = shownTaskIDs
+        return completions
+            .filter { completion in
+                guard completion.project?.id == project.id else { return false }
+                guard let ids else { return true }
+                return completion.parentTask.map { ids.contains($0.id) } ?? false
+            }
             .sorted { $0.completedAt > $1.completedAt }
     }
 
@@ -216,7 +233,7 @@ private struct TaskBoardCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if item.isNext {
+            if TaskStore.isNext(item) {
                 Text("Next")
                     .font(CraftFont.caption)
                     .foregroundStyle(.secondary)
@@ -298,16 +315,18 @@ private struct TaskBoardCard: View {
 
     @ViewBuilder
     private var menu: some View {
-        if item.isNext {
-            Button("Clear Next") { TaskStore.clearNext(on: item, in: context) }
-        } else {
-            Button("Mark Next") {
-                do { try TaskStore.setNext(item, in: context) }
-                catch { app.flash(error.localizedDescription) }
+        if item.project?.activeTrack == nil {
+            if item.isNext {
+                Button("Clear Next") { TaskStore.clearNext(on: item, in: context) }
+            } else {
+                Button("Mark Next") {
+                    do { try TaskStore.setNext(item, in: context) }
+                    catch { app.flash(error.localizedDescription) }
+                }
+                .disabled(!item.canBeNext)
             }
-            .disabled(!item.canBeNext)
+            Divider()
         }
-        Divider()
         ForEach(TaskWorkflowStatus.allCases) { status in
             Button("Move to \(status.label)") {
                 TaskStore.setStatus(status, on: item, in: context)
@@ -353,7 +372,7 @@ private struct TaskListRow: View {
                             .strikethrough(item.workflowStatus == .done)
                             .foregroundStyle(item.workflowStatus == .done ? .tertiary : .primary)
                             .lineLimit(1)
-                        if item.isNext {
+                        if TaskStore.isNext(item) {
                             Text("Next")
                                 .font(CraftFont.caption)
                                 .foregroundStyle(.secondary)
@@ -394,16 +413,18 @@ private struct TaskListRow: View {
 
     @ViewBuilder
     private var menu: some View {
-        if item.isNext {
-            Button("Clear Next") { TaskStore.clearNext(on: item, in: context) }
-        } else {
-            Button("Mark Next") {
-                do { try TaskStore.setNext(item, in: context) }
-                catch { app.flash(error.localizedDescription) }
+        if item.project?.activeTrack == nil {
+            if item.isNext {
+                Button("Clear Next") { TaskStore.clearNext(on: item, in: context) }
+            } else {
+                Button("Mark Next") {
+                    do { try TaskStore.setNext(item, in: context) }
+                    catch { app.flash(error.localizedDescription) }
+                }
+                .disabled(!item.canBeNext)
             }
-            .disabled(!item.canBeNext)
+            Divider()
         }
-        Divider()
         ForEach(TaskWorkflowStatus.allCases) { status in
             Button("Move to \(status.label)") {
                 TaskStore.setStatus(status, on: item, in: context)
@@ -555,5 +576,75 @@ private struct CompletionPopover: View {
         }
         .padding(16)
         .frame(minWidth: 200, alignment: .leading)
+    }
+}
+
+/// Toolbar menu that picks which track's tasks the board shows.
+struct TaskTrackFilterMenu: View {
+    var project: Project
+    @Environment(AppModel.self) private var app
+
+    static func track(for project: Project, filter: TaskTrackFilter) -> ProjectThread? {
+        switch filter {
+        case .active: project.activeTrack
+        case .all: nil
+        case .track(let id): project.threads.first { $0.id == id }
+        }
+    }
+
+    private var filter: TaskTrackFilter { app.taskTrackFilters[project.id] ?? .active }
+
+    private var title: String {
+        guard let track = Self.track(for: project, filter: filter) else { return "All Tasks" }
+        return track.title.isEmpty ? "Untitled" : track.title
+    }
+
+    /// Tracks with open tasks, so the menu lists only places there is work.
+    private var tracksWithWork: [ProjectThread] {
+        project.threads
+            .filter { track in
+                track.id != project.activeTrackID
+                    && track.agendaTrackLinks.contains { $0.item.map { $0.kind == .task && !$0.isCompleted } ?? false }
+            }
+            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    var body: some View {
+        Menu {
+            if let active = project.activeTrack {
+                Toggle(isOn: binding(.active)) {
+                    Text("Active Track: \(active.title.isEmpty ? "Untitled" : active.title)")
+                }
+            }
+            Toggle("All Tasks", isOn: binding(project.activeTrack == nil ? .active : .all, alsoMatching: .all))
+            if !tracksWithWork.isEmpty {
+                Divider()
+                ForEach(tracksWithWork) { track in
+                    Toggle(track.title.isEmpty ? "Untitled" : track.title, isOn: binding(.track(track.id)))
+                }
+            }
+        } label: {
+            Label(title, systemImage: "line.3.horizontal.decrease")
+                .lineLimit(1)
+                .frame(maxWidth: 220)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .contentShape(Capsule())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .glassEffect(.regular, in: Capsule())
+        .help("Show tasks for one track")
+        .accessibilityLabel("Track filter")
+        .accessibilityValue(title)
+    }
+
+    private func binding(_ value: TaskTrackFilter, alsoMatching other: TaskTrackFilter? = nil) -> Binding<Bool> {
+        Binding(
+            get: { filter == value || (other.map { filter == $0 } ?? false) },
+            set: { _ in app.taskTrackFilters[project.id] = value }
+        )
     }
 }

@@ -567,7 +567,8 @@ enum Tools {
                 "current_direction": text("New current direction."),
                 "status": options(ProjectStatus.self, "Project status."),
                 "is_pinned": flag("Pin the project to the top of the sidebar."),
-                "symbol": text("SF Symbol name for the icon.")
+                "symbol": text("SF Symbol name for the icon."),
+                "active_track_id": text("The one track this project is being worked on. Its tasks are what the board shows and where Next comes from. Empty string clears it. Change it only when the user asks.")
             ],
             required: ["project_id"], readOnly: false
         ) { args, context in
@@ -581,19 +582,22 @@ enum Tools {
             }
             if let pinned = args.bool("is_pinned") { project.isPinned = pinned }
             if let symbol = args.string("symbol"), !symbol.isEmpty { project.symbol = symbol }
+            if let link = try args.optionalUUID("active_track_id") {
+                TaskStore.setActiveTrack(try Lookup.thread(link, in: project), on: project, in: context)
+            }
             project.touch()
             return JSONShape.project(project)
         },
 
         Tool(
             name: "list_tasks",
-            description: "List Membrae tasks. Completions are not included. Use list_completions for repeat history. Pass track_id to list work on a track.",
+            description: "List Membrae tasks. Completions are not included. Use list_completions for repeat history. Pass track_id to list work on a track. When asked what to work on, read the project's active_track and list that track's tasks; tasks elsewhere are not the current work.",
             properties: [
                 "project_id": text("Optional project id. Omit to list every task."),
                 "track_id": text("Only tasks linked to this track."),
                 "include_descendants": flag("When track_id is set, also include tasks on child tracks. Defaults to false."),
                 "status": options(TaskWorkflowStatus.self, "Only tasks with this workflow status."),
-                "next_only": flag("Only the Next task in each project.")
+                "next_only": flag("Only the Next task in each project. With an active track that is the first open, unblocked task on it.")
             ],
             required: [], readOnly: true
         ) { args, context in
@@ -608,7 +612,7 @@ enum Tools {
                 .filter { task in
                     if let project, track != nil, task.project?.id != project.id { return false }
                     if let status, task.workflowStatus != status { return false }
-                    if nextOnly, !task.isNext { return false }
+                    if nextOnly, !TaskStore.isNext(task) { return false }
                     return true
                 }
                 .sorted(by: TaskStore.boardSort)
@@ -624,7 +628,7 @@ enum Tools {
         },
         Tool(
             name: "create_task",
-            description: "Create a Membrae task. project_id is optional. is_next requires an active project. Link governing tracks with track_ids. Reference notes are supplementary via note_ids. Do not put built/not-built in notes.",
+            description: "Create a Membrae task. project_id is optional. is_next requires an active project and is refused when the project has an active track, where Next is worked out from the track. Link governing tracks with track_ids. Reference notes are supplementary via note_ids. Do not put built/not-built in notes.",
             properties: [
                 "title": text("Task title."),
                 "project_id": text("Optional project id."),
@@ -2248,6 +2252,9 @@ enum JSONShape {
                 "tasks": project.agendaItems.filter { $0.kind == .task }.count
             ]
         ]
+        if let track = project.activeTrack {
+            shape["active_track"] = ["id": track.id.uuidString, "title": track.title]
+        }
         if let next = TaskStore.nextTask(in: project) {
             shape["next_task"] = ["id": next.id.uuidString, "title": next.displayTitle]
         }
@@ -2274,7 +2281,7 @@ enum JSONShape {
             "notes": item.notes,
             "due": item.due.map { iso.string(from: $0) } ?? "",
             "status": item.workflowStatus.rawValue,
-            "is_next": item.isNext,
+            "is_next": TaskStore.isNext(item),
             "project_id": item.project?.id.uuidString ?? "",
             "project_name": item.project?.name ?? "",
             "repeat": item.repeatRule.rawValue,
@@ -2335,6 +2342,7 @@ enum JSONShape {
             "status": thread.status.rawValue,
             "summary": thread.summary,
             "parent_id": thread.parent?.id.uuidString ?? "",
+            "is_active": thread.project?.activeTrackID == thread.id,
             "updated_at": iso.string(from: thread.updatedAt),
             "tags": tags(thread.tags)
         ]
