@@ -180,6 +180,24 @@ struct YouView: View {
     @Query(sort: \Space.createdAt) private var spaces: [Space]
     @Query private var records: [SpaceRecord]
     @Query(sort: \AreaWidget.createdAt) private var widgets: [AreaWidget]
+    @Query private var loggedEvents: [SpaceEvent]
+    @State private var pendingDelete: Space?
+    /// What the user chose to see on this page.
+    @AppStorage("youShowsWidgets") private var showsWidgets = true
+    @AppStorage("youShowsAreas") private var showsAreas = true
+    @AppStorage("youShowsLately") private var showsLately = true
+    @AppStorage("youShowsComingUp") private var showsComingUp = true
+    /// Large draws widgets and Areas a little bigger and drops the section labels.
+    @AppStorage("youLarge") private var large = false
+
+    private var scale: CGFloat { large ? 1.18 : 1 }
+
+    /// Draws a fixed-size card bigger, and tells the layout its new size.
+    private func scaled<Content: View>(_ content: Content, size: CGSize) -> some View {
+        content
+            .scaleEffect(scale, anchor: .topLeading)
+            .frame(width: size.width * scale, height: size.height * scale, alignment: .topLeading)
+    }
     @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" && $0.isCompleted == false })
     private var openTasks: [AgendaItem]
     @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "project" }, sort: \TitleIndex.updatedAt, order: .reverse)
@@ -193,14 +211,25 @@ struct YouView: View {
                 VStack(alignment: .leading, spacing: 32) {
                     greeting
                         .padding(.horizontal, gutter)
-                    shelf
-                    HStack(alignment: .top, spacing: 48) {
-                        latelyFeed
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        comingUp
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    if showsWidgets {
+                        shelf
                     }
-                    .padding(.horizontal, gutter)
+                    if showsAreas {
+                        areaShelf
+                    }
+                    if showsLately || showsComingUp {
+                        HStack(alignment: .top, spacing: 48) {
+                            if showsLately {
+                                latelyFeed
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            if showsComingUp {
+                                comingUp
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .padding(.horizontal, gutter)
+                    }
                 }
                 .padding(.vertical, 40)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -209,6 +238,71 @@ struct YouView: View {
         .scrollContentBackground(.hidden)
         .captureBar()
         .task { await app.eventKit.prepareEvents() }
+        .alert(
+            "Delete \(pendingDelete?.displayName ?? "this Area")?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            )
+        ) {
+            Button("Delete", role: .destructive) {
+                if let space = pendingDelete {
+                    try? SpaceStore.delete(space, in: context)
+                }
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: {
+            Text("Everything in this Area will be deleted. This can’t be undone.")
+        }
+    }
+
+    /// Lets the user choose what this page shows and how big.
+    private var customize: some View {
+        Menu {
+            Section("Show") {
+                Toggle("Widgets", isOn: $showsWidgets)
+                Toggle("Areas", isOn: $showsAreas)
+                Toggle("Lately", isOn: $showsLately)
+                Toggle("Coming Up", isOn: $showsComingUp)
+            }
+            Section("Size") {
+                Picker("Size", selection: $large) {
+                    Text("Normal").tag(false)
+                    Text("Large").tag(true)
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            }
+            let others = widgets.filter { !$0.isOnYou }
+            if !others.isEmpty {
+                Section("Add a Widget") { addWidgetItems(others) }
+            }
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .background(CraftColor.elevated, in: Circle())
+                .overlay(Circle().strokeBorder(CraftColor.hairline))
+                .contentShape(Circle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Customize this page")
+        .accessibilityLabel("Customize this page")
+    }
+
+    @ViewBuilder
+    private func addWidgetItems(_ others: [AreaWidget]) -> some View {
+        ForEach(spaces) { space in
+            let key = SpaceJSON.key(space.id)
+            let owned = others.filter { $0.spaceIDString == key }
+            ForEach(owned) { widget in
+                Button("\(space.displayName): \(widget.name)") { place(widget, onYou: true) }
+            }
+        }
     }
 
     private var greeting: some View {
@@ -223,6 +317,7 @@ struct YouView: View {
                     .padding(.top, 12)
             }
             Spacer(minLength: 16)
+            customize
             Button {
                 app.navigate(to: .aboutYou)
             } label: {
@@ -259,54 +354,35 @@ struct YouView: View {
         let chosen = widgets.filter(\.isOnYou)
         let others = widgets.filter { !$0.isOnYou }
         return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Text("Widgets")
-                    .font(CraftFont.section)
-                    .foregroundStyle(.secondary)
-                if !others.isEmpty {
-                    Menu {
-                        ForEach(spaces) { space in
-                            let key = SpaceJSON.key(space.id)
-                            let owned = others.filter { $0.spaceIDString == key }
-                            if !owned.isEmpty {
-                                Section(space.displayName) {
-                                    ForEach(owned) { widget in
-                                        Button(widget.name) { place(widget, onYou: true) }
-                                    }
-                                }
-                            }
+            if !large {
+                HStack(spacing: 8) {
+                    Text("Widgets")
+                        .font(CraftFont.section)
+                        .foregroundStyle(.secondary)
+                    if !others.isEmpty, !chosen.isEmpty {
+                        Menu {
+                            addWidgetItems(others)
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 22, height: 22)
+                                .contentShape(Rectangle())
                         }
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 22, height: 22)
-                            .contentShape(Rectangle())
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("Add a widget")
+                        .accessibilityLabel("Add a widget")
                     }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .help("Add a widget")
-                    .accessibilityLabel("Add a widget")
                 }
             }
             if chosen.isEmpty {
-                if spaces.isEmpty {
-                    Button {
-                        app.present(.newSpace)
-                    } label: {
-                        NewSpaceCard()
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    EmptyLine(text: widgets.isEmpty
-                        ? "No widgets yet. Ask Membrae to make one for an Area."
-                        : "Nothing here yet. Use + to add a widget from one of your Areas.")
-                }
+                emptyWidgets(others)
             } else {
-                WidgetFlow(spacing: AreaWidgetMetrics.gap) {
+                WidgetFlow(spacing: AreaWidgetMetrics.gap * scale) {
                     ForEach(chosen) { widget in
-                        AreaWidgetHost(id: widget.id)
+                        scaled(AreaWidgetHost(id: widget.id), size: AreaWidgetMetrics.size(widget.size))
                             .contextMenu {
                                 Button {
                                     place(widget, onYou: false)
@@ -319,6 +395,120 @@ struct YouView: View {
             }
         }
         .padding(.horizontal, gutter)
+    }
+
+    /// Nothing chosen yet: one card that adds a widget, or starts asking for one when none exist.
+    @ViewBuilder
+    private func emptyWidgets(_ others: [AreaWidget]) -> some View {
+        let size = AreaWidgetMetrics.size(.wide)
+        if others.isEmpty {
+            Button {
+                app.captureDrafts["capture", default: CaptureDraft()].text = "Make a widget for "
+            } label: {
+                scaled(AddWidgetCard(title: "Add a Widget", detail: "Ask Membrae to make one for an Area."), size: size)
+            }
+            .buttonStyle(.plain)
+        } else {
+            Menu {
+                addWidgetItems(others)
+            } label: {
+                scaled(AddWidgetCard(title: "Add a Widget", detail: "Choose one from your Areas."), size: size)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
+    }
+
+    private var areaShelf: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !large {
+                Text("Areas")
+                    .font(CraftFont.section)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, gutter)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 16 * scale) {
+                    ForEach(spaces) { space in
+                        Button {
+                            app.navigate(to: .space(space.id))
+                        } label: {
+                            scaled(SpaceCard(space: space, summary: summary(for: space)), size: CGSize(width: 212, height: 236))
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu { spaceMenu(space) }
+                    }
+                    if spaces.isEmpty {
+                        Button {
+                            app.present(.newSpace)
+                        } label: {
+                            scaled(NewSpaceCard(), size: CGSize(width: 212, height: 236))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, gutter)
+                .padding(.bottom, 18)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func spaceMenu(_ space: Space) -> some View {
+        Button {
+            app.present(.editSpace(space))
+        } label: {
+            Label("Edit…", systemImage: "pencil")
+        }
+        Button {
+            app.togglePin(.space, space.id)
+        } label: {
+            Label(app.isPinned(space.id) ? "Unpin" : "Pin", systemImage: app.isPinned(space.id) ? "pin.slash" : "pin")
+        }
+        Menu("Color") {
+            ForEach(SpaceGradient.allCases) { gradient in
+                Button {
+                    space.gradientRaw = gradient.rawValue
+                    space.touch()
+                    try? context.persist()
+                } label: {
+                    if space.gradient == gradient {
+                        Label(gradient.label, systemImage: "checkmark")
+                    } else {
+                        Text(gradient.label)
+                    }
+                }
+            }
+        }
+        Divider()
+        Button(role: .destructive) {
+            pendingDelete = space
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
+    }
+
+    private func summary(for space: Space) -> SpaceCardSummary {
+        let key = SpaceJSON.key(space.id)
+        let owned = records.filter { $0.spaceIDString == key }
+        let latest = owned.max { $0.updatedAt < $1.updatedAt }
+        let line: String
+        if let latest {
+            line = "\(latest.displayTitle), \(latest.updatedAt.relativeLabel)"
+        } else {
+            line = space.summary.isEmpty ? "Nothing yet" : space.summary
+        }
+        // An Area that is mostly tracking is counted by what was logged, not by the one thing it tracks.
+        let entries = loggedEvents.filter { $0.spaceIDString == key }
+        if entries.count > owned.count, let last = entries.max(by: { $0.occurredAt < $1.occurredAt }) {
+            return SpaceCardSummary(
+                line: "Last logged \(last.occurredAt.relativeLabel)",
+                count: entries.count,
+                caption: entries.count == 1 ? "entry" : "entries"
+            )
+        }
+        return SpaceCardSummary(line: line, count: owned.count, caption: owned.count == 1 ? "record" : "records")
     }
 
     private func place(_ widget: AreaWidget, onYou: Bool) {
@@ -555,5 +745,34 @@ private struct ComingUpRow: View {
         }
         .frame(height: 40)
         .contentShape(Rectangle())
+    }
+}
+
+
+/// The empty state of the widgets on You: a dashed card that adds one.
+private struct AddWidgetCard: View {
+    var title: String
+    var detail: String
+
+    var body: some View {
+        let size = AreaWidgetMetrics.size(.wide)
+        VStack(spacing: 6) {
+            Image(systemName: "plus")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.primary)
+            Text(detail)
+                .font(CraftFont.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(width: size.width, height: size.height)
+        .background(CraftColor.elevated.opacity(0.5), in: RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner, style: .continuous)
+                .strokeBorder(CraftColor.hairline, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+        )
+        .contentShape(RoundedRectangle(cornerRadius: AreaWidgetMetrics.corner, style: .continuous))
     }
 }
