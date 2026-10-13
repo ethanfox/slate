@@ -24,7 +24,6 @@ enum AppModal: Identifiable {
     case connectGitHub
     case connectGitLab
     case replaceImportKey
-    case editProject(Project)
     case editConversation(Conversation)
     case editThread(ProjectThread)
     case editDecision(Decision)
@@ -56,7 +55,6 @@ enum AppModal: Identifiable {
         case .connectGitHub: "connect-github"
         case .connectGitLab: "connect-gitlab"
         case .replaceImportKey: "replace-import-key"
-        case .editProject(let project): "edit-project-\(project.id.uuidString)"
         case .editConversation(let conversation): "edit-conversation-\(conversation.id.uuidString)"
         case .editThread(let thread): "edit-thread-\(thread.id.uuidString)"
         case .editDecision(let decision): "edit-decision-\(decision.id.uuidString)"

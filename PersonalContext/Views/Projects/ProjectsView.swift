@@ -119,7 +119,7 @@ struct ProjectsView: View {
 
     private func edit(_ row: TitleIndex) {
         if let project = TitleIndexStore.project(row.id, in: context) {
-            app.present(.editProject(project))
+            app.showProjectSettings(project)
         }
     }
 

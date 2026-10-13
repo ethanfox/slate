@@ -144,10 +144,10 @@ struct SidebarView: View {
                             .contextMenu {
                                 Button {
                                     if let record = TitleIndexStore.project(project.id, in: context) {
-                                        app.present(.editProject(record))
+                                        app.showProjectSettings(record)
                                     }
                                 } label: {
-                                    Label("Edit…", systemImage: "pencil")
+                                    Label("Project Settings", systemImage: "gearshape")
                                 }
                                 Button {
                                     app.open(project, newTab: true)

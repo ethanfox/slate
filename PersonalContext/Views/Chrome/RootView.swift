@@ -694,8 +694,6 @@ struct RootView: View {
             ConnectGitLabSheet()
         case .replaceImportKey:
             ReplaceImportKeySheet()
-        case .editProject(let project):
-            EditProjectModal(project: project)
         case .editConversation(let conversation):
             EditConversationModal(conversation: conversation)
         case .editThread(let thread):

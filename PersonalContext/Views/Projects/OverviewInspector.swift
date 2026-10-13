@@ -61,6 +61,25 @@ struct OverviewInspector: View {
     }
 }
 
+extension AppModel {
+    /// Project settings live in the sidebar beside the overview. There is no modal for them.
+    func showProjectSettings(_ project: Project) {
+        open(project, tab: .overview, newTab: false)
+        selectedOverviewPlate = nil
+        if !inspectorOpen { toggleInspector() }
+    }
+
+    /// The gear on the overview: shows the settings, or hides them when they are already showing.
+    func toggleProjectSettings() {
+        if inspectorOpen, selectedOverviewPlate == nil {
+            toggleInspector()
+        } else {
+            selectedOverviewPlate = nil
+            if !inspectorOpen { toggleInspector() }
+        }
+    }
+}
+
 private struct OverviewInspectorWidget: View {
     @Bindable var project: Project
     var plate: OverviewPlate
@@ -155,6 +174,13 @@ private struct OverviewInspectorSettings: View {
                 SymbolPicker(selection: $project.symbol, columns: 6)
             }
 
+            inspectorField("Description") {
+                TextField("What this project is", text: $project.summary, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(CraftFont.body)
+                    .lineLimit(2...8)
+            }
+
             inspectorField("Status") {
                 Picker("Status", selection: $project.status) {
                     ForEach(ProjectStatus.allCases) { status in
@@ -196,6 +222,7 @@ private struct OverviewInspectorSettings: View {
         }
         .onChange(of: project.name) { _, _ in project.touch() }
         .onChange(of: project.symbol) { _, _ in project.touch() }
+        .onChange(of: project.summary) { _, _ in project.touch() }
         .onChange(of: project.statusRaw) { _, _ in
             project.touch()
             TaskStore.syncProjectStatus(project, in: context)

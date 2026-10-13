@@ -724,7 +724,7 @@ struct ProjectOverview: View {
                                 .font(.system(size: 28, weight: .semibold))
                             Spacer(minLength: 8)
                             Button {
-                                app.present(.editProject(project))
+                                app.toggleProjectSettings()
                             } label: {
                                 Image(systemName: "gearshape")
                                     .font(.system(size: 13))
