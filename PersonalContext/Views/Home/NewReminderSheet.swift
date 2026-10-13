@@ -59,10 +59,7 @@ struct NewTaskSheet: View {
             Text(headerTitle)
                 .font(CraftFont.title)
 
-            ViewThatFits(in: .vertical) {
-                fields
-                ModalScroll { fields }
-            }
+            ModalScroll { fields }
 
             if let meeting = meetingURL {
                 ModalActionRow(title: meetingTitle(meeting), systemImage: "video") {
@@ -423,8 +420,6 @@ private struct BlockerPicker: View {
     @Binding var query: String
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" }, sort: \AgendaItem.updatedAt, order: .reverse)
-    private var tasks: [AgendaItem]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -443,23 +438,39 @@ private struct BlockerPicker: View {
                 }
                 .font(CraftFont.caption)
             }
-            ForEach(matches) { candidate in
-                Button {
-                    do { try TaskStore.addBlocker(candidate, to: item, in: context) }
-                    catch { app.flash(error.localizedDescription) }
-                    query = ""
-                } label: {
-                    HStack {
-                        Text(candidate.displayTitle)
-                        if let name = candidate.project?.displayName {
-                            Text(name)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .font(CraftFont.caption)
-                }
-                .buttonStyle(.plain)
+            if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                BlockerMatches(item: item, query: $query)
             }
+        }
+    }
+}
+
+/// Reads every task, so it is only on screen while the user is searching.
+private struct BlockerMatches: View {
+    var item: AgendaItem
+    @Binding var query: String
+    @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
+    @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" }, sort: \AgendaItem.updatedAt, order: .reverse)
+    private var tasks: [AgendaItem]
+
+    var body: some View {
+        ForEach(matches) { candidate in
+            Button {
+                do { try TaskStore.addBlocker(candidate, to: item, in: context) }
+                catch { app.flash(error.localizedDescription) }
+                query = ""
+            } label: {
+                HStack {
+                    Text(candidate.displayTitle)
+                    if let name = candidate.project?.displayName {
+                        Text(name)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(CraftFont.caption)
+            }
+            .buttonStyle(.plain)
         }
     }
 

@@ -95,11 +95,13 @@ struct AssociationFields: View {
 
     private var trackMenu: some View {
         Menu {
-            ForEach(tracksInScope) { thread in
-                Button {
-                    toggle(thread)
-                } label: {
-                    trackLabel(thread)
+            MenuItemsOnOpen {
+                ForEach(tracksInScope) { thread in
+                    Button {
+                        toggle(thread)
+                    } label: {
+                        trackLabel(thread)
+                    }
                 }
             }
         } label: {
@@ -113,13 +115,17 @@ struct AssociationFields: View {
     private var noteMenu: some View {
         Menu {
             Button("New Note…") { creatingNote = true }
-            if !notesInScope.isEmpty {
-                Divider()
-                ForEach(notesInScope) { note in
-                    Button {
-                        toggle(note)
-                    } label: {
-                        Label(note.displayTitle, systemImage: linkedNoteIDs.contains(note.id) ? "checkmark" : "note.text")
+            MenuItemsOnOpen {
+                let notes = notesInScope
+                let linked = linkedNoteIDs
+                if !notes.isEmpty {
+                    Divider()
+                    ForEach(notes) { note in
+                        Button {
+                            toggle(note)
+                        } label: {
+                            Label(note.displayTitle, systemImage: linked.contains(note.id) ? "checkmark" : "note.text")
+                        }
                     }
                 }
             }
@@ -236,6 +242,13 @@ struct AssociationFields: View {
         project.touch()
         try? context.persist()
     }
+}
+
+/// Builds a menu's items when the menu opens, not when the form is drawn.
+private struct MenuItemsOnOpen<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View { content() }
 }
 
 private struct AssociationOpenRow: View {
