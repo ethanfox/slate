@@ -79,6 +79,8 @@ struct ThreadPage: View {
                 .padding(.top, 16)
                 .findAnchor(.body)
 
+            StopsSection(thread: thread)
+
             AgendaLinkedSection(items: AgendaStore.items(on: thread, includingChildren: true)) { item in
                 item.liveTracks.first { $0.id != thread.id }?.title
             }
@@ -215,5 +217,155 @@ struct ThreadPage: View {
         context.delete(thread)
         project.touch()
         try? context.persist()
+    }
+}
+
+/// The track's stops in order, each with its tasks. New stops are typed into the last row.
+private struct StopsSection: View {
+    var thread: ProjectThread
+    @Environment(\.modelContext) private var context
+    @State private var newTitle = ""
+
+    var body: some View {
+        let stops = thread.orderedStops
+        DocumentSection("Stops") {
+            ForEach(Array(stops.enumerated()), id: \.element.id) { index, stop in
+                StopRow(stop: stop, number: index + 1, isFirst: index == 0, isLast: index == stops.count - 1)
+            }
+            HStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 28, height: 28)
+                TextField("Add a stop", text: $newTitle)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .onSubmit(add)
+            }
+        }
+    }
+
+    private func add() {
+        let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        StopStore.add(title, to: thread, in: context)
+        newTitle = ""
+    }
+}
+
+private struct StopRow: View {
+    @Bindable var stop: TrackStop
+    var number: Int
+    var isFirst: Bool
+    var isLast: Bool
+    @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
+    @State private var expanded = false
+    @State private var hovering = false
+
+    private var tasks: [AgendaItem] {
+        stop.tasks.filter { $0.kind == .task }.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private var progress: String {
+        let all = tasks
+        guard !all.isEmpty else { return "" }
+        return "\(all.count { $0.isCompleted }) of \(all.count)"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 8) {
+                Button {
+                    StopStore.setDone(!stop.isDone, on: stop, in: context)
+                } label: {
+                    Image(systemName: stop.isDone ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 13))
+                        .foregroundStyle(stop.isDone ? .secondary : .tertiary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(stop.isDone ? "Mark not done" : "Mark done")
+                .accessibilityLabel(stop.isDone ? "Mark stop \(number) not done" : "Mark stop \(number) done")
+
+                Text("\(number)")
+                    .font(.system(size: 12).monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .frame(minWidth: 14, alignment: .trailing)
+
+                TextField("Stop", text: $stop.title)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(stop.isDone ? .secondary : .primary)
+
+                Text(progress)
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.tertiary)
+
+                Button {
+                    expanded.toggle()
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(expanded ? "Hide details" : "Show details")
+                .accessibilityLabel(expanded ? "Hide details" : "Show details")
+            }
+            if expanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField("What this stop covers", text: $stop.body, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1...8)
+                    ForEach(tasks) { task in
+                        Button {
+                            app.present(.editTask(task))
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.tertiary)
+                                Text(task.displayTitle)
+                                    .font(.system(size: 13))
+                                    .strikethrough(task.isCompleted)
+                                    .foregroundStyle(task.isCompleted ? .tertiary : .primary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if tasks.isEmpty {
+                        Text("No tasks on this stop.")
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(.leading, 58)
+                .padding(.bottom, 8)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(hovering ? CraftColor.hover : Color.clear)
+                .padding(.horizontal, -8)
+        )
+        .onHover { hovering = $0 }
+        .contextMenu {
+            Button("Move Up") { StopStore.move(stop, by: -1, in: context) }
+                .disabled(isFirst)
+            Button("Move Down") { StopStore.move(stop, by: 1, in: context) }
+                .disabled(isLast)
+            Divider()
+            Button("Delete Stop", role: .destructive) { StopStore.delete(stop, in: context) }
+        }
+        .onChange(of: stop.title) { _, _ in stop.updatedAt = .now }
+        .onChange(of: stop.body) { _, _ in stop.updatedAt = .now }
     }
 }

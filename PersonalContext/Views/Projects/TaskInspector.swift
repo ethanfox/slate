@@ -66,6 +66,7 @@ private struct TaskDocument: View {
                     HStack(alignment: .center, spacing: 6) {
                         projectPill
                         tracksPill
+                        stopPill
                         notesPill
                     }
                     .padding(.top, 6)
@@ -271,6 +272,24 @@ private struct TaskDocument: View {
             ForEach(tracksInScope) { thread in
                 Button(thread.title.isEmpty ? "Untitled" : thread.title) {
                     toggle(thread)
+                }
+            }
+        }
+    }
+
+    /// Stops on the task's tracks, to place the task on one.
+    @ViewBuilder
+    private var stopPill: some View {
+        let tracks = item.liveTracks.filter { !$0.stops.isEmpty }
+        if !tracks.isEmpty {
+            PropertyPill(title: item.stop?.displayTitle ?? "No stop", systemImage: "smallcircle.filled.circle") {
+                Button("No stop") { StopStore.assign(item, to: nil, in: context) }
+                ForEach(tracks) { track in
+                    Section(track.title.isEmpty ? "Untitled" : track.title) {
+                        ForEach(track.orderedStops) { stop in
+                            Button(stop.displayTitle) { StopStore.assign(item, to: stop, in: context) }
+                        }
+                    }
                 }
             }
         }

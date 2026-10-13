@@ -52,10 +52,18 @@ enum TaskStore {
         return AgendaStore.items(on: track, includingChildren: true)
             .filter { $0.project?.id == project.id && $0.canBeNext && $0.unresolvedBlockers.isEmpty }
             .min { lhs, rhs in
+                let stops = (stopRank(lhs, on: track), stopRank(rhs, on: track))
+                if stops.0 != stops.1 { return stops.0 < stops.1 }
                 let started = (lhs.workflowStatus == .inProgress, rhs.workflowStatus == .inProgress)
                 if started.0 != started.1 { return started.0 }
                 return lhs.createdAt < rhs.createdAt
             }
+    }
+
+    /// Where a task falls in the track's order: its stop's place, or after every stop when it has none.
+    private static func stopRank(_ item: AgendaItem, on track: ProjectThread) -> Int {
+        guard let stop = item.stop, stop.thread?.id == track.id, !stop.isDone else { return .max }
+        return stop.order
     }
 
     static func isNext(_ item: AgendaItem) -> Bool {
@@ -324,6 +332,123 @@ enum TaskStore {
 
     private static func save(_ context: ModelContext) {
         try? context.persist()
+    }
+}
+
+struct StopEntry {
+    var id: UUID?
+    var title: String
+    var body: String?
+    var isDone: Bool?
+}
+
+enum StopStore {
+    @discardableResult
+    static func add(_ title: String, body: String = "", to track: ProjectThread, in context: ModelContext) -> TrackStop {
+        let stop = TrackStop(title: title, body: body, order: (track.stops.map(\.order).max() ?? -1) + 1, thread: track)
+        context.insert(stop)
+        touch(track)
+        try? context.persist()
+        return stop
+    }
+
+    /// Moves a stop earlier (negative) or later in its track.
+    static func move(_ stop: TrackStop, by offset: Int, in context: ModelContext) {
+        guard let track = stop.thread else { return }
+        var ordered = track.orderedStops
+        guard let from = ordered.firstIndex(where: { $0.id == stop.id }) else { return }
+        let to = min(max(from + offset, 0), ordered.count - 1)
+        guard to != from else { return }
+        ordered.insert(ordered.remove(at: from), at: to)
+        renumber(ordered)
+        touch(track)
+        try? context.persist()
+    }
+
+    static func setDone(_ done: Bool, on stop: TrackStop, in context: ModelContext) {
+        stop.isDone = done
+        stop.updatedAt = .now
+        if let track = stop.thread { touch(track) }
+        try? context.persist()
+    }
+
+    /// Its tasks stay on the track with no stop.
+    static func delete(_ stop: TrackStop, in context: ModelContext) {
+        let track = stop.thread
+        context.delete(stop)
+        if let track {
+            renumber(track.orderedStops.filter { $0.id != stop.id })
+            touch(track)
+        }
+        try? context.persist()
+    }
+
+    /// Puts a task on a stop, linking it to the stop's track when it is not already. Pass nil to take it off its stop.
+    static func assign(_ item: AgendaItem, to stop: TrackStop?, in context: ModelContext) {
+        if let stop, let track = stop.thread, !item.liveTracks.contains(where: { $0.id == track.id }) {
+            AssociationService.applyLink(thread: track, onto: item)
+        }
+        item.stop = stop
+        item.touch()
+        item.project?.touch()
+        try? context.persist()
+    }
+
+    /// Rewrites a track's stops in the order given. An entry with an id keeps that stop and its tasks;
+    /// an entry without one is new; a stop left out is removed and its tasks stay on the track.
+    static func replace(on track: ProjectThread, with entries: [StopEntry], in context: ModelContext) throws {
+        let existing = Dictionary(uniqueKeysWithValues: track.stops.map { ($0.id, $0) })
+        var kept: [TrackStop] = []
+        for entry in entries {
+            let title = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let id = entry.id {
+                guard let stop = existing[id] else { throw StopStoreError.notOnTrack(id) }
+                guard !kept.contains(where: { $0.id == id }) else { throw StopStoreError.listedTwice(id) }
+                if !title.isEmpty { stop.title = title }
+                if let body = entry.body { stop.body = body }
+                if let done = entry.isDone { stop.isDone = done }
+                stop.updatedAt = .now
+                kept.append(stop)
+            } else {
+                guard !title.isEmpty else { throw StopStoreError.untitled }
+                let stop = TrackStop(title: title, body: entry.body ?? "", order: kept.count, thread: track)
+                stop.isDone = entry.isDone ?? false
+                context.insert(stop)
+                kept.append(stop)
+            }
+        }
+        let keptIDs = Set(kept.map(\.id))
+        for stop in track.stops where !keptIDs.contains(stop.id) {
+            context.delete(stop)
+        }
+        renumber(kept)
+        touch(track)
+        try? context.persist()
+    }
+
+    private static func renumber(_ ordered: [TrackStop]) {
+        for (index, stop) in ordered.enumerated() where stop.order != index {
+            stop.order = index
+        }
+    }
+
+    private static func touch(_ track: ProjectThread) {
+        track.updatedAt = .now
+        track.project?.touch()
+    }
+}
+
+enum StopStoreError: LocalizedError {
+    case notOnTrack(UUID)
+    case listedTwice(UUID)
+    case untitled
+
+    var errorDescription: String? {
+        switch self {
+        case .notOnTrack(let id): "Stop \(id.uuidString) is not on this track. Leave id out to add a new stop."
+        case .listedTwice(let id): "Stop \(id.uuidString) is listed twice."
+        case .untitled: "A new stop needs a title."
+        }
     }
 }
 

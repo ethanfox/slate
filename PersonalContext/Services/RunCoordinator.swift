@@ -504,7 +504,7 @@ extension RunToolPolicy {
         "list_tasks", "get_task", "create_task", "update_task",
         "list_completions", "get_completion",
         "list_decisions", "get_decision", "create_decision", "update_decision",
-        "list_tracks", "get_track", "create_track", "update_track",
+        "list_tracks", "get_track", "create_track", "update_track", "set_stops",
         "list_notes", "get_note", "create_note", "update_note",
         "list_sources", "get_source", "create_source", "update_source",
         "list_chats", "get_chat",

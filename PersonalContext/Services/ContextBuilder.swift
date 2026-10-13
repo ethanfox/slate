@@ -254,6 +254,15 @@ enum ContextBuilder {
             lines.append(clipPreservingBreaks(thread.body, 4000))
         }
 
+        let stops = thread.orderedStops
+        if !stops.isEmpty {
+            lines.append("Stops, in order:")
+            for (index, stop) in stops.enumerated() {
+                let open = stop.tasks.count { $0.kind == .task && !$0.isCompleted }
+                lines.append("\(index + 1). \(stop.displayTitle) (id \(stop.id.uuidString)\(stop.isDone ? ", done" : ""), \(open) open tasks)")
+            }
+        }
+
         let decisions = thread.decisions
             .filter { $0.status == .active }
             .sorted { $0.createdAt > $1.createdAt }
@@ -300,7 +309,7 @@ enum ContextBuilder {
     private static func focusedTrackPrompt(for thread: ProjectThread) -> String {
         let title = thread.title.isEmpty ? "Untitled" : thread.title
         return """
-        You are in the side chat on track "\(title)" (id \(thread.id.uuidString)). When the user asks you to add a requirement or append to this track, call update_track on that id with append_to_body. When they ask you to rewrite or replace the spec, get the current body and call update_track with body, keeping existing requirements unless they asked to remove them. When they ask for a task, call create_task with this id in track_ids. Answer questions and look up other project records with the tools. Do not create a new track for work that belongs here.
+        You are in the side chat on track "\(title)" (id \(thread.id.uuidString)). When the user asks you to add a requirement or append to this track, call update_track on that id with append_to_body. When they ask you to rewrite or replace the spec, get the current body and call update_track with body, keeping existing requirements unless they asked to remove them. When they ask for a task, call create_task with this id in track_ids, and stop_id when it belongs to one of the track's stops. The stops are the track's ordered pieces; change them with set_stops. Answer questions and look up other project records with the tools. Do not create a new track for work that belongs here.
 
         <focused-track>
         \(focusedTrack(for: thread))

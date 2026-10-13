@@ -201,7 +201,7 @@ enum Tools {
         "create_task": (.added, "task"), "update_task": (.changed, "task"), "complete_task": (.completed, "task"),
         "delete_completion": (.removed, "completion"),
         "create_decision": (.added, "decision"), "update_decision": (.changed, "decision"),
-        "create_track": (.added, "track"), "update_track": (.changed, "track"),
+        "create_track": (.added, "track"), "update_track": (.changed, "track"), "set_stops": (.changed, "track"),
         "create_note": (.added, "note"), "update_note": (.changed, "note"),
         "create_source": (.added, "source"), "update_source": (.changed, "source"),
         "create_tag": (.added, "tag"), "update_tag": (.changed, "tag"),
@@ -637,6 +637,7 @@ enum Tools {
                 "status": options(TaskWorkflowStatus.self, "Workflow status. Defaults to ready."),
                 "is_next": flag("Mark this task Next for its project."),
                 "track_ids": ["type": "array", "items": ["type": "string"], "description": "Governing track ids. Feature and problem work lives on these tracks."],
+                "stop_id": text("The stop this task sits on. It is linked to the stop's track if it is not already."),
                 "note_ids": ["type": "array", "items": ["type": "string"], "description": "Optional reference note ids. Notes are not the spec."],
                 "blocked_reason": text("Free-text blocked reason."),
                 "blocker_ids": ["type": "array", "items": ["type": "string"], "description": "Task ids that block this one."],
@@ -661,6 +662,7 @@ enum Tools {
                 "is_next": flag("Set or clear Next."),
                 "project_id": text("Move to this project. Empty string clears it."),
                 "track_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement governing track ids."],
+                "stop_id": text("The stop this task sits on. Empty string takes it off its stop."),
                 "note_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement reference note ids. Notes are not the spec."],
                 "blocked_reason": text("Free-text blocked reason."),
                 "blocker_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement blocker task ids."],
@@ -852,7 +854,7 @@ enum Tools {
         },
         Tool(
             name: "get_track",
-            description: "Get one track with its full body, linked decisions, note previews, tasks including child-track tasks, and child-track summaries.",
+            description: "Get one track with its full body, its stops in order, linked decisions, note previews, tasks including child-track tasks, and child-track summaries.",
             properties: ["track_id": text("Track id.")], required: ["track_id"], readOnly: true
         ) { args, context in
             let thread = try Lookup.thread(try args.uuid("track_id"), in: context)
@@ -923,6 +925,37 @@ enum Tools {
             }
             thread.updatedAt = .now
             thread.project?.touch()
+            return JSONShape.track(thread, full: true)
+        },
+        Tool(
+            name: "set_stops",
+            description: "Write a track's stops, or update them. A stop is one idea inside the track, and the stops are in the order they are to be worked on, most important first. Send every stop each time, in order. Give id for a stop that already exists, so it keeps its tasks; leave id out for a new one. A stop you leave out is removed and its tasks stay on the track. Put a task on a stop with stop_id on create_task or update_task.",
+            properties: [
+                "track_id": text("Track id."),
+                "stops": objectList("Every stop, in order: {id, title, body, is_done}. id only for an existing stop. body is a short spec for the stop.")
+            ],
+            required: ["track_id", "stops"], readOnly: false
+        ) { args, context in
+            let thread = try Lookup.thread(try args.uuid("track_id"), in: context)
+            let entries = try (try args.objects("stops") ?? []).map { item -> StopEntry in
+                let rawID = (item["id"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                var id: UUID?
+                if !rawID.isEmpty {
+                    guard let parsed = UUID(uuidString: rawID) else { throw ToolError("id is not a valid stop id: \(rawID)") }
+                    id = parsed
+                }
+                return StopEntry(
+                    id: id,
+                    title: item["title"] as? String ?? "",
+                    body: item["body"] as? String,
+                    isDone: item["is_done"] as? Bool
+                )
+            }
+            do {
+                try StopStore.replace(on: thread, with: entries, in: context)
+            } catch let error as StopStoreError {
+                throw ToolError(error.localizedDescription)
+            }
             return JSONShape.track(thread, full: true)
         },
 
@@ -1693,6 +1726,9 @@ enum TaskMutations {
                 AssociationService.applyLink(thread: try Lookup.thread(id, in: context), onto: item)
             }
         }
+        if let stopLink = try args.optionalUUID("stop_id") {
+            StopStore.assign(item, to: try stopLink.map { try Lookup.stop($0, in: context) }, in: context)
+        }
         if let noteIDs = try args.uuids("note_ids") {
             AssociationService.clearNotes(from: item, in: context)
             for id in noteIDs {
@@ -2116,6 +2152,13 @@ enum Lookup {
         return found
     }
 
+    static func stop(_ id: UUID, in context: ModelContext) throws -> TrackStop {
+        guard let found = try context.fetch(FetchDescriptor<TrackStop>(predicate: #Predicate { $0.id == id })).first else {
+            throw ToolError("No stop with id \(id.uuidString).")
+        }
+        return found
+    }
+
     static func completion(_ id: UUID, in context: ModelContext) throws -> TaskCompletion {
         guard let found = try context.fetch(FetchDescriptor<TaskCompletion>(predicate: #Predicate { $0.id == id })).first else {
             throw ToolError("No completion with id \(id.uuidString).")
@@ -2287,6 +2330,7 @@ enum JSONShape {
             "repeat": item.repeatRule.rawValue,
             "blocked_reason": item.blockedReason,
             "tracks": item.liveTracks.map { ["id": $0.id.uuidString, "title": $0.title] },
+            "stop": item.stop.map { ["id": $0.id.uuidString, "title": $0.displayTitle] } ?? [:],
             "linked_notes": item.liveNotes.map { ["id": $0.id.uuidString, "title": $0.displayTitle] },
             "blockers": item.unresolvedBlockers.map {
                 [
@@ -2333,6 +2377,19 @@ enum JSONShape {
         return shape
     }
 
+    static func stop(_ stop: TrackStop) -> [String: Any] {
+        [
+            "id": stop.id.uuidString,
+            "title": stop.displayTitle,
+            "body": stop.body,
+            "is_done": stop.isDone,
+            "tasks": stop.tasks
+                .filter { $0.kind == .task }
+                .sorted { $0.createdAt < $1.createdAt }
+                .map { ["id": $0.id.uuidString, "title": $0.displayTitle, "status": $0.workflowStatus.rawValue] }
+        ]
+    }
+
     static func track(_ thread: ProjectThread, full: Bool) -> [String: Any] {
         var shape: [String: Any] = [
             "id": thread.id.uuidString,
@@ -2348,6 +2405,7 @@ enum JSONShape {
         ]
         if full {
             shape["body"] = thread.body
+            shape["stops"] = thread.orderedStops.map(stop)
             shape["children"] = thread.orderedChildren.map { child in
                 [
                     "id": child.id.uuidString,

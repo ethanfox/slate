@@ -255,7 +255,7 @@ private struct TaskBoardCard: View {
                 Button {
                     app.open(thread)
                 } label: {
-                    Text(thread.title.isEmpty ? "Untitled" : thread.title)
+                    Text(trackLabel(thread))
                         .font(CraftFont.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -311,6 +311,12 @@ private struct TaskBoardCard: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(item.displayTitle)
         .accessibilityHint("Opens the task")
+    }
+
+    private func trackLabel(_ thread: ProjectThread) -> String {
+        let title = thread.title.isEmpty ? "Untitled" : thread.title
+        guard let stop = item.stop, stop.thread?.id == thread.id else { return title }
+        return "\(title) · \(stop.displayTitle)"
     }
 
     @ViewBuilder

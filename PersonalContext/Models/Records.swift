@@ -263,6 +263,13 @@ final class ProjectThread {
     @Relationship(deleteRule: .nullify, inverse: \AgendaTrackLink.thread)
     var agendaTrackLinks: [AgendaTrackLink] = []
 
+    @Relationship(deleteRule: .cascade, inverse: \TrackStop.thread)
+    var stops: [TrackStop] = []
+
+    var orderedStops: [TrackStop] {
+        stops.sorted { ($0.order, $0.createdAt) < ($1.order, $1.createdAt) }
+    }
+
     var kind: ThreadKind {
         get { ThreadKind(rawValue: kindRaw) ?? .topic }
         set { kindRaw = newValue.rawValue }
@@ -304,6 +311,38 @@ final class ProjectThread {
             guardrail += 1
         }
         return false
+    }
+}
+
+/// One idea inside a track. A track's stops are in the order they are to be worked on.
+@Model
+final class TrackStop {
+    var id: UUID
+    var title: String
+    var body: String
+    var order: Int
+    var isDone: Bool
+    var createdAt: Date
+    var updatedAt: Date
+    var thread: ProjectThread?
+
+    @Relationship(deleteRule: .nullify, inverse: \AgendaItem.stop)
+    var tasks: [AgendaItem] = []
+
+    var displayTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled" : trimmed
+    }
+
+    init(title: String, body: String = "", order: Int, thread: ProjectThread) {
+        self.id = UUID()
+        self.title = title
+        self.body = body
+        self.order = order
+        self.isDone = false
+        self.createdAt = .now
+        self.updatedAt = .now
+        self.thread = thread
     }
 }
 
@@ -927,6 +966,8 @@ final class AgendaItem {
     var blockedReason: String = ""
     var project: Project?
     var spaceIDString: String = ""
+    /// The stop this task sits on, on one of its tracks.
+    var stop: TrackStop?
 
     @Relationship(inverse: \Tag.agendaItems)
     var tags: [Tag] = []

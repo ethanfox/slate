@@ -66,6 +66,42 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertNil(TaskStore.nextTask(in: harbor))
     }
 
+    func testNextFollowsTheOrderOfStops() throws {
+        let harbor = Project(name: "Harbor", symbol: "folder", summary: "")
+        context.insert(harbor)
+        let sync = ProjectThread(title: "Sync", kind: .feature, project: harbor)
+        context.insert(sync)
+        let early = task("Made first, on the second stop", in: harbor)
+        let late = task("Made second, on the first stop", in: harbor)
+        late.createdAt = early.createdAt.addingTimeInterval(1)
+        let loose = task("On no stop", in: harbor)
+        _ = AssociationService.link(thread: sync, onto: loose)
+        let log = StopStore.add("Change log", to: sync, in: context)
+        let database = StopStore.add("Database", to: sync, in: context)
+        StopStore.assign(late, to: log, in: context)
+        StopStore.assign(early, to: database, in: context)
+        TaskStore.setActiveTrack(sync, on: harbor, in: context)
+
+        XCTAssertEqual(early.liveTracks.map(\.id), [sync.id])
+        XCTAssertEqual(TaskStore.nextTask(in: harbor)?.id, late.id)
+
+        StopStore.move(database, by: -1, in: context)
+        XCTAssertEqual(sync.orderedStops.map(\.title), ["Database", "Change log"])
+        XCTAssertEqual(TaskStore.nextTask(in: harbor)?.id, early.id)
+
+        StopStore.setDone(true, on: database, in: context)
+        XCTAssertEqual(TaskStore.nextTask(in: harbor)?.id, late.id)
+
+        try StopStore.replace(on: sync, with: [
+            StopEntry(id: nil, title: "Controls", body: nil, isDone: nil),
+            StopEntry(id: log.id, title: "", body: "Every write and delete.", isDone: nil)
+        ], in: context)
+        XCTAssertEqual(sync.orderedStops.map(\.title), ["Controls", "Change log"])
+        XCTAssertEqual(log.body, "Every write and delete.")
+        XCTAssertNil(early.stop)
+        XCTAssertEqual(late.stop?.id, log.id)
+    }
+
     func testNextRequiresActiveProject() throws {
         let inbox = AgendaItem(kind: .task, eventKitID: "", title: "Inbox")
         context.insert(inbox)
