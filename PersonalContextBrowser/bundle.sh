@@ -63,9 +63,9 @@ cat > "$HELPER_APP/Contents/Info.plist" <<'EOF'
 </plist>
 EOF
 IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:--}"
-TEAM="${DEVELOPMENT_TEAM:-NUF99UVUKB}"
+TEAM="${DEVELOPMENT_TEAM:-Z85NB2ZYMN}"
 ENTITLEMENTS="$CACHE/helper.entitlements"
-sed "s/NUF99UVUKB/${TEAM}/g" \
+sed "s/Z85NB2ZYMN/${TEAM}/g" \
   "$SRCROOT/PersonalContextBrowser/PersonalContextBrowser.entitlements" > "$ENTITLEMENTS"
 codesign --force --sign "$IDENTITY" --options runtime --timestamp=none \
   --entitlements "$ENTITLEMENTS" \

@@ -4,7 +4,7 @@
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>NUF99UVUKB.com.ethanfox.PersonalContext</string>
+		<string>Z85NB2ZYMN.com.ethanfox.PersonalContext</string>
 	</array>
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>

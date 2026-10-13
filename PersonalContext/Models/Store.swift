@@ -96,7 +96,7 @@ enum Store {
     }
 
     /// Same identifier the app and membrae-mcp declare in their entitlements.
-    static let applicationGroupIdentifier = "NUF99UVUKB.com.ethanfox.PersonalContext"
+    static let applicationGroupIdentifier = "Z85NB2ZYMN.com.ethanfox.PersonalContext"
 
     static var applicationGroupStoreURL: URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: applicationGroupIdentifier)?

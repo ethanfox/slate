@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 enum BrowserSupport {
-    static let applicationGroup = "NUF99UVUKB.com.ethanfox.PersonalContext"
+    static let applicationGroup = "Z85NB2ZYMN.com.ethanfox.PersonalContext"
     static let playwrightMCP = "0.0.41"
 
     static var root: URL {
