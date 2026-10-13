@@ -734,22 +734,29 @@ struct RootView: View {
             YouView()
         case .aboutYou:
             AboutYouView()
+                .captureBar()
         case .context:
             ContextView()
+                .captureBar()
         case .space(let id):
             SpaceView(id: id)
         case .spaceRecord(let spaceID, let recordID):
             SpaceRecordView(spaceID: spaceID, recordID: recordID)
         case .projects:
             ProjectsView()
+                .captureBar()
         case .tasks:
             TasksView()
+                .captureBar()
         case .calendar:
             CalendarView()
+                .captureBar()
         case .chats:
             ChatsView()
+                .captureBar()
         case .runs:
             RunsView()
+                .captureBar()
         case .run(let id):
             RunHost(id: id)
         case .settings:
