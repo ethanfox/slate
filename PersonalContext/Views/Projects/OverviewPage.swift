@@ -23,6 +23,13 @@ struct OverviewPage: View {
     }
 }
 
+/// What is in the one input before it is sent. Held by the app, not the view, so it outlives a remount.
+struct CaptureDraft {
+    var text = ""
+    var attachments: [ComposerAttachment] = []
+    var composerID = UUID()
+}
+
 /// The one input. Whatever is typed, pasted, or dropped here is handed to the agent without leaving
 /// the page. The exchange shows as bubbles above the bar; a long reply moves to the chat view.
 struct CaptureBar: View {
@@ -35,20 +42,37 @@ struct CaptureBar: View {
 
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @State private var draft = ""
-    @State private var draftAttachments: [ComposerAttachment] = []
-    @State private var composerID = UUID()
     @State private var savedLink: String?
+
+    /// One draft per page the bar sits on.
+    private var draftKey: String {
+        project?.id.uuidString ?? spaceID?.uuidString ?? "capture"
+    }
+
+    private var draft: String {
+        get { app.captureDrafts[draftKey]?.text ?? "" }
+        nonmutating set { app.captureDrafts[draftKey, default: CaptureDraft()].text = newValue }
+    }
+
+    private var draftAttachments: [ComposerAttachment] {
+        get { app.captureDrafts[draftKey]?.attachments ?? [] }
+        nonmutating set { app.captureDrafts[draftKey, default: CaptureDraft()].attachments = newValue }
+    }
+
+    private var composerID: UUID {
+        get { app.captureDrafts[draftKey]?.composerID ?? UUID() }
+        nonmutating set { app.captureDrafts[draftKey, default: CaptureDraft()].composerID = newValue }
+    }
 
     private var input: some View {
         ChatInput(
-            text: $draft,
+            text: Binding(get: { draft }, set: { draft = $0 }),
             modelID: Bindable(app).talkModelID,
             providerID: Bindable(app).talkProviderID,
             placeholder: placeholder,
             onSend: send,
             composerOwnerID: composerID,
-            attachments: $draftAttachments,
+            attachments: Binding(get: { draftAttachments }, set: { draftAttachments = $0 }),
             draftKind: project == nil ? "capture" : "overview",
             draftObjectID: project?.id.uuidString ?? "capture"
         )
@@ -56,6 +80,10 @@ struct CaptureBar: View {
         .padding(.horizontal, 32)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity)
+        .onAppear {
+            // Gives the draft a fixed owner id before anything is attached to it.
+            if app.captureDrafts[draftKey] == nil { app.captureDrafts[draftKey] = CaptureDraft() }
+        }
     }
 
     var body: some View {

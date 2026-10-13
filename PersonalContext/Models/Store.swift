@@ -21,6 +21,9 @@ enum Store {
     static let retireDelay: Duration = .milliseconds(400)
 
     static func announceChange() {
+        // A test run writes to its own store. Telling the real app to reload would remount its
+        // window and lose whatever the user was typing.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
             CFNotificationName(changedNotification as CFString),

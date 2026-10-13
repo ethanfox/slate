@@ -57,6 +57,8 @@ final class AppModel {
     var modal: AppModal?
     var modalHost = ModalHost.main
     var toast: String?
+    /// What is typed in the one input on each page, kept here so a store reload does not clear it.
+    var captureDrafts: [String: CaptureDraft] = [:]
     /// Cards at the top right saying a Run ended. Not persisted.
     var runNotices: [RunNotice] = []
     var pendingSend: PendingSend?
