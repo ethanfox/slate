@@ -81,9 +81,10 @@ final class MembraneModel {
         }
     }
 
-    func add() {
+    /// Squeezes a new cell in from the edge. Without a color it takes the next one in the list.
+    func add(hue: SIMD3<Double>? = nil) {
         let angle = Double.random(in: 0..<(2 * .pi))
-        append(at: SIMD2(cos(angle), sin(angle)) * 0.82, share: 0.8, startShare: 0.02, isLogo: false)
+        append(at: SIMD2(cos(angle), sin(angle)) * 0.82, share: 0.8, startShare: 0.02, isLogo: false, hue: hue)
         applyLook()
     }
 
@@ -105,8 +106,8 @@ final class MembraneModel {
         applyLook()
     }
 
-    private func append(at position: SIMD2<Double>, share: Double, startShare: Double, isLogo: Bool) {
-        let hue = Self.hues[nextID % Self.hues.count]
+    private func append(at position: SIMD2<Double>, share: Double, startShare: Double, isLogo: Bool, hue: SIMD3<Double>? = nil) {
+        let hue = hue ?? Self.hues[nextID % Self.hues.count]
         let rest = isLogo ? Self.graphite : hue
         cells.append(MembraneCell(
             id: nextID, position: position, share: startShare, targetShare: share, color: rest, targetColor: rest,
