@@ -14,6 +14,7 @@ struct MembraeApp: App {
                 .preferredColorScheme(app.appearance.colorScheme)
                 .modelContainer(app.container)
                 .textSelection(.enabled)
+                .background(MembraneLabLauncher())
                 .onAppear {
                     FocusDismissal.install()
                     CloseTabShortcut.install(app)
@@ -159,6 +160,20 @@ private struct MembraneLabButton: View {
     var body: some View {
         Button("Membrane Prototype") {
             openWindow(id: Self.windowID)
+        }
+        .keyboardShortcut("m", modifiers: [.option, .command])
+    }
+}
+
+/// Opens the prototype at launch when the app is started with `-openMembraneLab YES`.
+private struct MembraneLabLauncher: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Color.clear.onAppear {
+            if UserDefaults.standard.bool(forKey: "openMembraneLab") {
+                openWindow(id: MembraneLabButton.windowID)
+            }
         }
     }
 }
