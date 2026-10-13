@@ -9,7 +9,6 @@ final class MembraeToolGateway: AgentToolGateway {
     private let prepareRoots: (() async throws -> [ProjectCodeRoot])?
     private let consult: ((String) async throws -> String)?
     private let mcp: MembraeMCPClient?
-    private let indexingRunID: UUID?
     private let storeURL: URL?
     private let projectID: UUID?
     private let includeExternalMCP: Bool
@@ -29,7 +28,6 @@ final class MembraeToolGateway: AgentToolGateway {
         prepareRoots: (() async throws -> [ProjectCodeRoot])? = nil,
         consult: ((String) async throws -> String)? = nil,
         mcp: MembraeMCPClient? = nil,
-        indexingRunID: UUID? = nil,
         storeURL: URL? = nil,
         store: ModelContainer? = nil,
         projectID: UUID? = nil,
@@ -48,7 +46,6 @@ final class MembraeToolGateway: AgentToolGateway {
         self.prepareRoots = prepareRoots
         self.consult = consult
         self.mcp = mcp ?? (includeMembraeTools ? .shared : nil)
-        self.indexingRunID = indexingRunID
         self.storeURL = storeURL
         self.projectID = projectID
         self.includeExternalMCP = includeExternalMCP
@@ -264,9 +261,6 @@ final class MembraeToolGateway: AgentToolGateway {
         }
         let data = try Data(contentsOf: file)
         let hash = CodeContentHash.sha256(of: data)
-        if let indexingRunID {
-            CodeReadProvenance.record(runID: indexingRunID, path: path, hash: hash, storeURL: storeURL)
-        }
         let lines = (String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self))
             .components(separatedBy: .newlines)
         let first = max(1, start ?? 1)

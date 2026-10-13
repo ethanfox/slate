@@ -21,7 +21,6 @@ struct RunnerRequest: Encodable, Sendable {
     var runtime: String
     var cloudRepos: [RunnerCloudRepo]
     var codeSnapshots: [RunnerCodeSnapshot] = []
-    var readProvenancePath: String = ""
     var images: [RunnerImage] = []
     var externalTools: [RunnerExternalTool] = []
     var includeMCPImport = false

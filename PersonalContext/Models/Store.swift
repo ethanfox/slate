@@ -210,8 +210,6 @@ enum Store {
             NavTrace.event("store.open mode=reopen \(NavTrace.elapsed(start))")
             return container
         }
-        legacyBackfillIndexingMetadata(in: context)
-        try backfillCodeReferenceOwnership(in: context)
         migrateProductNames(in: context)
         TagStore.mergeDuplicates(in: context)
         TitleIndexStore.backfillIfNeeded(in: context)
@@ -288,23 +286,6 @@ enum Store {
         }
     }
 
-    /// One-time repair for runs saved before the purpose columns existed.
-    /// New launches persist purpose and attachment id in `RunStore.enqueue`.
-    static func legacyBackfillIndexingMetadata(in context: ModelContext) {
-        var changed = false
-        for run in RunStore.runs(in: context) where run.purpose == .general && CodeReferenceStore.isIndexingBrief(run.brief) {
-            run.purpose = .indexRepository
-            if run.indexedAttachmentID == nil,
-               let attachment = CodeReferenceStore.attachment(matching: run, in: context) {
-                run.indexedAttachmentID = attachment.id
-            }
-            changed = true
-        }
-        if changed {
-            try? context.save()
-        }
-    }
-
     /// Ownership lives on string ID columns, not SwiftData relationships.
     /// Add the columns and copy IDs from leftover relationship foreign keys.
     static func migrateCodeReferenceOwnership(at url: URL) throws {
@@ -345,37 +326,6 @@ enum Store {
         }
     }
 
-    static func backfillCodeReferenceOwnership(in context: ModelContext) throws {
-        var changed = false
-        for reference in ((try? context.fetch(FetchDescriptor<CodeReference>())) ?? []) {
-            if reference.attachmentIDString.isEmpty, let id = reference.attachmentID {
-                reference.attachmentIDString = id.uuidString.lowercased()
-                changed = true
-            } else if !reference.attachmentIDString.isEmpty {
-                let lowered = reference.attachmentIDString.lowercased()
-                if reference.attachmentIDString != lowered {
-                    reference.attachmentIDString = lowered
-                    changed = true
-                }
-            }
-        }
-        for entry in ((try? context.fetch(FetchDescriptor<CodeReferenceEntry>())) ?? []) {
-            if entry.referenceIDString.isEmpty, let id = entry.referenceID {
-                entry.referenceIDString = id.uuidString.lowercased()
-                changed = true
-            } else if !entry.referenceIDString.isEmpty {
-                let lowered = entry.referenceIDString.lowercased()
-                if entry.referenceIDString != lowered {
-                    entry.referenceIDString = lowered
-                    changed = true
-                }
-            }
-        }
-        if changed {
-            try context.save()
-        }
-    }
-
     private static func copyRelationshipUUIDs(
         _ db: OpaquePointer,
         update table: String,
@@ -401,32 +351,6 @@ enum Store {
             bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
             bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
         )).uuidString.lowercased()
-    }
-
-    static func persistedAgentRunIdentity(runID: UUID, at url: URL) -> (purpose: String, attachmentID: String)? {
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
-            return nil
-        }
-        defer { sqlite3_close(db) }
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, "SELECT ZID, ZPURPOSERAW, ZINDEXEDATTACHMENTIDSTRING FROM ZAGENTRUN", -1, &statement, nil) == SQLITE_OK, let statement else {
-            return nil
-        }
-        defer { sqlite3_finalize(statement) }
-        while sqlite3_step(statement) == SQLITE_ROW {
-            guard sqlite3_column_bytes(statement, 0) == 16, let raw = sqlite3_column_blob(statement, 0) else { continue }
-            let bytes = raw.bindMemory(to: UInt8.self, capacity: 16)
-            let stored = UUID(uuid: (
-                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-                bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
-            ))
-            guard stored == runID else { continue }
-            let purpose = sqlite3_column_text(statement, 1).map { String(cString: $0) } ?? ""
-            let attachment = sqlite3_column_text(statement, 2).map { String(cString: $0) } ?? ""
-            return (purpose, attachment)
-        }
-        return nil
     }
 
     private static func tableColumns(_ db: OpaquePointer, table: String) -> Set<String> {

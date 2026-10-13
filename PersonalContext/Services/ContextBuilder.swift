@@ -40,17 +40,10 @@ enum ContextBuilder {
             lines.append("Attached code:")
             for attachment in code {
                 let root = attachment.locator.isEmpty ? attachment.title : attachment.locator
-                let published = attachment.modelContext.flatMap { CodeReferenceStore.published(on: attachment, in: $0) }
-                var line = "- \(attachment.kind.title): \(root)\(attachment.defaultBranch.isEmpty ? "" : " (\(attachment.defaultBranch))") (attachment id \(attachment.id.uuidString)). Use root \"\(root)\"."
-                if let published {
-                    let count = attachment.modelContext.map { CodeReferenceStore.entries(on: published, in: $0).count } ?? 0
-                    line += " Published architecture reference: \(count) entries, \(published.coverage.label.lowercased())."
-                } else {
-                    line += " No published architecture reference yet."
-                }
+                let line = "- \(attachment.kind.title): \(root)\(attachment.defaultBranch.isEmpty ? "" : " (\(attachment.defaultBranch))") (attachment id \(attachment.id.uuidString)). Use root \"\(root)\"."
                 lines.append(line)
             }
-            lines.append("Call list_code_references with this project_id to discover published reference entries, then get_code_reference_entry. Do not ask the user to paste the reference. For source files, call project_list_files, project_search_code, project_read_file, or project_git_log. Do not use a shell or invent missing attachments.")
+            lines.append("For source files, call project_list_files, project_search_code, project_read_file, or project_git_log. Do not use a shell or invent missing attachments.")
         }
         return lines.joined(separator: "\n")
     }
@@ -200,7 +193,7 @@ enum ContextBuilder {
 
             \(deletionRules) Archive is only for chats the user hides, not a substitute for delete.
 
-            Look up decisions, tracks, notes, chats, tasks, and published code references with the tools. Treat those records as the source of truth and weight active decisions above tracks and notes. get_project is lean and includes attachment ids; open a track with get_track and list tasks with track_id. Call list_chats then get_chat to read a past conversation. Call list_code_references with the project_id to read a published architecture reference, then get_code_reference_entry. Do not ask the user to paste the reference. Do not invent project facts. Do not create or edit files unless the user explicitly asks. If the project lists attached code, inspect files with the project_* tools instead of claiming you cannot see the repository. Tags are sparse cross-cutting labels. Use list_tags, create_tag, assign_tag, and remove_tag on notes, tracks, decisions, conversations, and tasks. Do not tag projects. Do not use tags for status, priority, ownership, or relationships that have their own fields. Do not write before you start the reply. Look up only if you cannot answer without it. Fetch only what this message needs. Batch those calls. Do not walk the whole project.
+            Look up decisions, tracks, notes, chats, and tasks with the tools. Treat those records as the source of truth and weight active decisions above tracks and notes. get_project is lean and includes attachment ids; open a track with get_track and list tasks with track_id. Call list_chats then get_chat to read a past conversation. Do not ask the user to paste the reference. Do not invent project facts. Do not create or edit files unless the user explicitly asks. If the project lists attached code, inspect files with the project_* tools instead of claiming you cannot see the repository. Tags are sparse cross-cutting labels. Use list_tags, create_tag, assign_tag, and remove_tag on notes, tracks, decisions, conversations, and tasks. Do not tag projects. Do not use tags for status, priority, ownership, or relationships that have their own fields. Do not write before you start the reply. Look up only if you cannot answer without it. Fetch only what this message needs. Batch those calls. Do not walk the whole project.
 
             \(spaceRules)
 

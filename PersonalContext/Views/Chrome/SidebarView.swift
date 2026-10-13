@@ -191,7 +191,6 @@ struct SidebarView: View {
                     guard let project = TitleIndexStore.project(row.id, in: context) else { return }
                     RunStore.cancelActive(in: project, context: context)
                     app.closeTabs(forProject: project.id)
-                    CodeReferenceStore.deleteOwnedReferences(in: project, context: context)
                     context.delete(project)
                     try? context.persist()
                 },

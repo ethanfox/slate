@@ -853,53 +853,6 @@ final class AppModel {
         }
     }
 
-    func startIndexing(attachment: CodeAttachment) {
-        guard let project = attachment.project else {
-            flash("That repository is not attached to a project.")
-            return
-        }
-        if let active = CodeReferenceStore.activeIndexingRun(for: attachment, in: container.mainContext) {
-            open(active)
-            return
-        }
-        let defaults = runDefaults(for: project)
-        guard providerConnected(defaults.provider) else {
-            flash("Connect the project worker in Settings before indexing.")
-            return
-        }
-        do {
-            let run = try RunStore.enqueue(
-                RepositoryIndex.draft(
-                    for: attachment,
-                    project: project,
-                    providerID: defaults.provider,
-                    modelID: defaults.model
-                ),
-                in: container.mainContext
-            )
-            let tools = RunToolPolicy.catalogNames(for: run)
-            guard run.purpose == .indexRepository,
-                  run.indexedAttachmentID == attachment.id,
-                  tools.contains("upsert_code_reference_entry"),
-                  tools.contains("set_code_reference_meta")
-            else {
-                try RunStore.failUnpublishedIndex(
-                    run,
-                    workerSummary: "",
-                    detail: "Indexing tools were not granted. The run was not started.",
-                    in: container.mainContext
-                )
-                flash("Indexing was not started. The run is missing its attachment identity or write tools.")
-                open(run)
-                return
-            }
-            open(run)
-            runCoordinator.start(run, in: container.mainContext)
-        } catch {
-            flash(error.localizedDescription)
-        }
-    }
-
     func retryRun(_ run: AgentRun) {
         presentNewRun(
             origin: run.origin,

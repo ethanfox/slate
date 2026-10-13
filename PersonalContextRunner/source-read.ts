@@ -21,37 +21,16 @@ export async function readAttachedFile(
   return { hash, text: `content_hash ${hash}\n${body}` };
 }
 
-export async function recordReadProvenance(dest: string | undefined, path: unknown, hash: string) {
-  if (!dest || typeof path !== "string" || !path.trim()) return;
-  const key = path.replace(/^\/+|\/+$/g, "").trim();
-  let records: Record<string, { contentHash: string; readAt: string }> = {};
-  try {
-    records = JSON.parse(await readFile(dest, "utf8")) as typeof records;
-  } catch {
-    records = {};
-  }
-  records[key] = { contentHash: hash, readAt: new Date().toISOString() };
-  await mkdir(dirname(dest), { recursive: true });
-  await writeFile(dest, JSON.stringify(records), "utf8");
-}
-
 if (process.argv.includes("--read-file-once")) {
   const readOnce = process.argv.indexOf("--read-file-once");
   const file = process.argv[readOnce + 1];
   if (!file) throw new Error("path is required");
-  const provenanceIndex = process.argv.indexOf("--provenance");
-  const relativeIndex = process.argv.indexOf("--path");
   const startIndex = process.argv.indexOf("--start");
   const endIndex = process.argv.indexOf("--end");
-  const { hash, text } = await readAttachedFile(
+  const { text } = await readAttachedFile(
     file,
     startIndex >= 0 ? process.argv[startIndex + 1] : undefined,
     endIndex >= 0 ? process.argv[endIndex + 1] : undefined,
-  );
-  await recordReadProvenance(
-    provenanceIndex >= 0 ? process.argv[provenanceIndex + 1] : undefined,
-    relativeIndex >= 0 ? process.argv[relativeIndex + 1] : "",
-    hash,
   );
   process.stdout.write(text);
 }

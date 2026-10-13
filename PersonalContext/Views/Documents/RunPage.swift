@@ -228,11 +228,6 @@ struct RunPage: View {
             if let chat = run.originChat {
                 RunActionButton(title: "Open Chat", symbol: "bubble.left") { app.open(chat) }
             }
-            if run.purpose == .indexRepository, let attachmentID = run.indexedAttachmentID {
-                RunActionButton(title: "View Reference", symbol: "doc.text.magnifyingglass") {
-                    app.present(.inspectCodeReference(attachmentID))
-                }
-            }
             if !run.status.isActive {
                 RunActionButton(title: "Delete", symbol: "trash", isDestructive: true) { confirmDelete = true }
             }
@@ -264,11 +259,6 @@ struct RunPage: View {
         guard let url = URL(string: link.url) else { return }
         if link.kind == .file {
             guard RunLinkSafety.fileAllowed(link.url, roots: ProjectCodeWorkspace.localRoots(for: run.project)) else { return }
-        }
-        if ChatObjectLink.isAppScheme(url.scheme), url.host == "code-reference",
-           let attachmentID = run.indexedAttachmentID {
-            app.present(.inspectCodeReference(attachmentID))
-            return
         }
         if ChatObjectLink.isAppScheme(url.scheme), let source = ChatObjectLink.parse(url, title: link.label) {
             source.open(app: app, context: context)

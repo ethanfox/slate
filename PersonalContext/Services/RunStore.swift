@@ -9,7 +9,6 @@ enum RunStoreError: LocalizedError, Equatable {
     case notTerminal
     case stillActive
     case invalidTransition
-    case indexingIdentityLost
 
     var errorDescription: String? {
         switch self {
@@ -20,8 +19,6 @@ enum RunStoreError: LocalizedError, Equatable {
         case .notTerminal: "Only a finished run can be deleted."
         case .stillActive: "Cancel the run on this task first."
         case .invalidTransition: "That run cannot move to that state."
-        case .indexingIdentityLost:
-            "The indexing run did not persist its purpose and attachment. It was not started."
         }
     }
 }
@@ -86,9 +83,7 @@ enum RunStore {
             project: project,
             task: task,
             originChat: try draft.originChatID.map { try lookupConversation($0, in: context) },
-            retryOf: try draft.retryOfID.map { try lookupRun($0, in: context) },
-            purpose: draft.purpose,
-            indexedAttachmentID: draft.indexedAttachmentID
+            retryOf: try draft.retryOfID.map { try lookupRun($0, in: context) }
         )
         run.repositoryLocators = draft.repositoryLocators
         if draft.allowEdits { run.allowEdits = true }
@@ -96,7 +91,6 @@ enum RunStore {
         context.insert(run)
         project?.touch()
         try save(context)
-        try confirmPersistedIndexingIdentity(run, draft: draft, in: context)
         return run
     }
 
@@ -111,8 +105,6 @@ enum RunStore {
             modelID: run.modelID,
             pathRaw: run.pathRaw,
             repositoryLocators: run.repositoryLocators,
-            purpose: run.purpose,
-            indexedAttachmentID: run.indexedAttachmentID,
             retryOfID: run.id,
             allowEdits: run.allowEdits
         )
@@ -152,33 +144,12 @@ enum RunStore {
     static func fail(_ run: AgentRun, detail: String, event: RunEventKind = .failed, in context: ModelContext) throws {
         guard !run.status.isTerminal else { throw RunStoreError.invalidTransition }
         apply(.failed, on: run, detail: detail, event: event)
-        CodeReferenceStore.discardStaged(for: run, in: context)
-        try save(context)
-    }
-
-    /// Worker may have finished; indexing did not publish. Keep the worker text, fail the run.
-    static func failUnpublishedIndex(
-        _ run: AgentRun,
-        workerSummary: String,
-        detail: String,
-        in context: ModelContext
-    ) throws {
-        guard !run.status.isTerminal else { throw RunStoreError.invalidTransition }
-        let worker = workerSummary.trimmingCharacters(in: .whitespacesAndNewlines)
-        let reason = detail.trimmingCharacters(in: .whitespacesAndNewlines)
-        let headline = reason.hasPrefix("Indexing did not publish")
-            ? reason
-            : "Indexing did not publish. \(reason.isEmpty ? "No validated reference was stored." : reason)"
-        run.resultSummary = worker.isEmpty ? headline : "\(headline)\n\nWorker summary:\n\(worker)"
-        apply(.failed, on: run, detail: headline, event: .failed)
-        CodeReferenceStore.discardStaged(for: run, in: context)
         try save(context)
     }
 
     static func cancel(_ run: AgentRun, in context: ModelContext) throws {
         guard run.status.isActive else { throw RunStoreError.invalidTransition }
         apply(.cancelled, on: run, detail: "Cancelled.", event: .cancelled)
-        CodeReferenceStore.discardStaged(for: run, in: context)
         try save(context)
     }
 
@@ -199,16 +170,14 @@ enum RunStore {
         guard !abandoned.isEmpty else { return }
         for run in abandoned {
             apply(.failed, on: run, detail: quitDetail, event: .quit)
-            CodeReferenceStore.discardStaged(for: run, in: context)
-        }
+            }
         try? save(context)
     }
 
     static func cancelActive(in project: Project, context: ModelContext) {
         for run in activeRuns(in: context) where run.project?.id == project.id {
             apply(.cancelled, on: run, detail: "Cancelled because the project was deleted.", event: .cancelled)
-            CodeReferenceStore.discardStaged(for: run, in: context)
-        }
+            }
         try? save(context)
     }
 
@@ -277,30 +246,6 @@ enum RunStore {
     private static func lookupRun(_ id: UUID, in context: ModelContext) throws -> AgentRun {
         guard let run = run(id, in: context) else { throw RunStoreError.invalidTransition }
         return run
-    }
-
-    private static func confirmPersistedIndexingIdentity(
-        _ run: AgentRun,
-        draft: NewRunDraft,
-        in context: ModelContext
-    ) throws {
-        guard draft.purpose == .indexRepository else { return }
-        guard let expected = draft.indexedAttachmentID else {
-            throw RunStoreError.indexingIdentityLost
-        }
-        guard run.purpose == .indexRepository, run.indexedAttachmentID == expected else {
-            throw RunStoreError.indexingIdentityLost
-        }
-        guard let url = context.container.configurations.first?.url,
-              context.container.configurations.contains(where: { !$0.isStoredInMemoryOnly }),
-              FileManager.default.fileExists(atPath: url.path)
-        else { return }
-        guard let disk = Store.persistedAgentRunIdentity(runID: run.id, at: url),
-              disk.purpose == RunPurpose.indexRepository.rawValue,
-              disk.attachmentID.compare(expected.uuidString, options: .caseInsensitive) == .orderedSame
-        else {
-            throw RunStoreError.indexingIdentityLost
-        }
     }
 
     private static func save(_ context: ModelContext) throws {

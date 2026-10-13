@@ -138,7 +138,6 @@ struct ProjectCodeSection: View {
     }
 
     private func remove(_ attachment: CodeAttachment) {
-        CodeReferenceStore.deleteOwnedReferences(for: attachment, in: context)
         context.delete(attachment)
         project.touch()
         try? context.persist()

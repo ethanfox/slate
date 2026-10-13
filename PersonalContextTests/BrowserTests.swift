@@ -99,11 +99,4 @@ final class BrowserTests: XCTestCase {
         XCTAssertEqual(BrowserSupport.mcpURL(port: 8931).absoluteString, "http://127.0.0.1:8931/mcp")
         XCTAssertEqual(BrowserSupport.logFile.lastPathComponent, "browser.log")
     }
-
-    func testIndexingRunsCannotBrowse() {
-        let policy = RunToolPolicy.indexing(runID: UUID(), projectID: UUID(), attachmentID: UUID())
-        XCTAssertFalse(policy.allows("browser_search"))
-        XCTAssertFalse(policy.allows("browser_navigate"))
-        XCTAssertTrue(RunToolPolicy.chat(projectID: UUID()).allows("browser_search"))
-    }
 }

@@ -173,6 +173,19 @@ enum CodeAttachmentKind: String, CaseIterable, Identifiable {
     }
 }
 
+extension CodeAttachment {
+    /// Fetched, not walked from the project, so a just-added attachment is seen.
+    static func all(on project: Project, in context: ModelContext) -> [CodeAttachment] {
+        let id = project.id
+        let found = ((try? context.fetch(FetchDescriptor<CodeAttachment>())) ?? []).filter { $0.project?.id == id }
+        return found.isEmpty ? project.codeAttachments : found
+    }
+
+    static func find(_ id: UUID, in context: ModelContext) -> CodeAttachment? {
+        try? context.fetch(FetchDescriptor<CodeAttachment>(predicate: #Predicate { $0.id == id })).first
+    }
+}
+
 @Model
 final class CodeAttachment {
     var id: UUID

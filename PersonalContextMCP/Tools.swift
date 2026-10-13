@@ -206,7 +206,6 @@ enum Tools {
         "create_tag": (.added, "tag"), "update_tag": (.changed, "tag"),
         "assign_tag": (.tagged, ""), "remove_tag": (.untagged, ""),
         "mark_for_deletion": (.flagged, ""), "delete_record": (.removed, ""),
-        "upsert_code_reference_entry": (.changed, "code"), "set_code_reference_meta": (.changed, "code"),
         "create_space": (.added, "space"), "update_space": (.changed, "space"),
         "set_space_type": (.changed, "space"), "set_space_screen": (.changed, "space"),
         "create_space_record": (.added, "record"), "update_space_record": (.changed, "record"),
@@ -1253,111 +1252,6 @@ enum Tools {
             JSONShape.run(try Lookup.run(try args.uuid("run_id"), in: context), full: true)
         },
         Tool(
-            name: "list_code_references",
-            description: "List a project’s repository attachments and their architecture references. Pass project_id only. Returns published entries when available; otherwise the latest staged or discarded attempt, why it is unpublished, and the last indexing run. Each result includes attachment_id for get_code_reference_entry. Does not return entry bodies.",
-            properties: [
-                "project_id": text("Project id. Prefer this. Do not pass a folder path."),
-                "attachment_id": text("Optional attachment UUID from a previous list or from get_project. Omit to list every attachment on the project. Never pass a file path.")
-            ],
-            required: [],
-            readOnly: true
-        ) { args, context in
-            let projectID = try args.optionalUUID("project_id")?.flatMap { $0 }
-            let attachmentID = try args.optionalUUID("attachment_id")?.flatMap { $0 }
-            let project = try projectID.map { try Lookup.project($0, in: context) }
-            return CodeReferenceStore.summaries(project: project, attachmentID: attachmentID, in: context)
-        },
-        Tool(
-            name: "get_code_reference_entry",
-            description: "Retrieve one code-reference entry: explanation, source locations, and relationships. Prefers the published reference; if none, returns the latest staged or discarded entry so you can inspect a failed index. Use list_code_references with project_id first.",
-            properties: [
-                "attachment_id": text("Attachment UUID from list_code_references or get_project. Not a folder path."),
-                "key": text("Entry key or id from list_code_references.")
-            ],
-            required: ["attachment_id", "key"],
-            readOnly: true
-        ) { args, context in
-            try CodeReferenceStore.publishedEntry(
-                attachmentID: try args.uuid("attachment_id"),
-                key: try args.required("key"),
-                in: context
-            )
-        },
-        Tool(
-            name: "upsert_code_reference_entry",
-            description: "Create or update one staged architecture-reference entry for the attachment this indexing run owns. Each entry must include at least one supporting source location from source you actually inspected. Publication is not this tool.",
-            properties: [
-                "attachment_id": text("Attachment id this indexing run is scoped to."),
-                "key": text("Stable key, lowercase letters, numbers, and hyphens."),
-                "title": text("Component title."),
-                "body": text("Markdown explanation of the current implementation."),
-                "source_locations": [
-                    "type": "array",
-                    "items": [
-                        "type": "object",
-                        "properties": [
-                            "path": text("Path relative to the attachment root that you inspected."),
-                            "declaration": text("Optional declaration name in that file.")
-                        ],
-                        "required": ["path"]
-                    ],
-                    "description": "Supporting source locations you inspected. At least one is required. Membrae attaches the content hash from the project_read_file result; do not supply hashes."
-                ],
-                "related_keys": [
-                    "type": "array",
-                    "items": ["type": "string"],
-                    "description": "Keys of other entries this component interacts with."
-                ]
-            ],
-            required: ["attachment_id", "key", "title", "body", "source_locations"],
-            readOnly: false
-        ) { args, context in
-            let attachment = try Lookup.attachment(try args.uuid("attachment_id"), in: context)
-            let locations = try args.objects("source_locations")?.compactMap { item -> CodeSourceLocation? in
-                guard let path = item["path"] as? String else { return nil }
-                return CodeSourceLocation(path: path, declaration: item["declaration"] as? String, contentHash: nil)
-            } ?? []
-            let entry = try CodeReferenceStore.upsertEntry(
-                attachment: attachment,
-                key: try args.required("key"),
-                title: try args.required("title"),
-                body: try args.required("body"),
-                sourceLocations: locations,
-                relatedKeys: try args.strings("related_keys") ?? [],
-                rootPath: CodeReferenceStore.rootPath(
-                    for: attachment,
-                    storeURL: context.container.configurations.first?.url
-                ),
-                in: context
-            )
-            return JSONShape.codeReferenceEntry(entry)
-        },
-        Tool(
-            name: "set_code_reference_meta",
-            description: "Record coverage, provenance, and uncertainties on the staged code reference. Does not publish.",
-            properties: [
-                "attachment_id": text("Attachment id this indexing run is scoped to."),
-                "coverage": options(CodeReferenceCoverage.self, "inventory, partial, or complete."),
-                "coverage_notes": text("Uncertainties and uninvestigated areas."),
-                "source_revision": text("Commit SHA examined, when available."),
-                "local_changes_examined": text("What local or dirty-tree changes were examined.")
-            ],
-            required: ["attachment_id"],
-            readOnly: false
-        ) { args, context in
-            let attachment = try Lookup.attachment(try args.uuid("attachment_id"), in: context)
-            let reference = try CodeReferenceStore.updateMeta(
-                attachment: attachment,
-                coverage: try args.choice("coverage", as: CodeReferenceCoverage.self),
-                coverageNotes: args.string("coverage_notes"),
-                sourceRevision: args.string("source_revision"),
-                localChangesExamined: args.string("local_changes_examined"),
-                in: context
-            )
-            return JSONShape.codeReference(reference, full: false, in: context)
-        },
-
-        Tool(
             name: "list_spaces",
             description: "List every Space with its id, name, and types. A Space holds an ongoing part of the user's life, such as recipes or habits.",
             properties: [:], required: [], readOnly: true
@@ -2083,7 +1977,7 @@ enum Lookup {
     }
 
     static func attachment(_ id: UUID, in context: ModelContext) throws -> CodeAttachment {
-        guard let found = CodeReferenceStore.attachment(id, in: context) else {
+        guard let found = CodeAttachment.find(id, in: context) else {
             throw ToolError("No code attachment with id \(id.uuidString).")
         }
         return found
@@ -2211,20 +2105,14 @@ enum JSONShape {
     }
 
     static func attachments(on project: Project, in context: ModelContext) -> [[String: Any]] {
-        CodeReferenceStore.attachmentsOn(project, in: context)
+        CodeAttachment.all(on: project, in: context)
             .sorted { $0.createdAt < $1.createdAt }
             .map { attachment in
-                let shown = CodeReferenceStore.inspectable(on: attachment, in: context)
-                let published = shown?.publication == .published ? shown : CodeReferenceStore.published(on: attachment, in: context)
-                return [
+                [
                     "id": attachment.id.uuidString,
                     "title": attachment.title.isEmpty ? attachment.locator : attachment.title,
                     "kind": attachment.kind.rawValue,
-                    "locator": attachment.locator,
-                    "has_published_reference": published != nil,
-                    "publication": shown?.publication.rawValue ?? "",
-                    "coverage": shown?.coverage.rawValue ?? "",
-                    "entry_count": shown.map { CodeReferenceStore.entries(on: $0, in: context).count } ?? 0
+                    "locator": attachment.locator
                 ] as [String: Any]
             }
     }
@@ -2398,9 +2286,7 @@ enum JSONShape {
             "model": run.modelID,
             "created_at": iso.string(from: run.createdAt),
             "updated_at": iso.string(from: run.updatedAt),
-            "purpose": run.purpose.rawValue,
-            "status_detail": run.statusDetail,
-            "indexed_attachment_id": run.indexedAttachmentID?.uuidString ?? ""
+            "status_detail": run.statusDetail
         ]
         if full {
             shape["brief"] = run.brief
@@ -2419,8 +2305,6 @@ enum JSONShape {
                 ]
             }
             shape["repository_locators"] = run.repositoryLocators
-            shape["purpose"] = run.purpose.rawValue
-            shape["indexed_attachment_id"] = run.indexedAttachmentID?.uuidString ?? ""
             shape["retry_of"] = run.retryOf?.id.uuidString ?? ""
         } else {
             shape["preview"] = clip(run.brief, 240)
@@ -2441,50 +2325,6 @@ enum JSONShape {
             shape["replacement_id"] = id.uuidString
         }
         return shape
-    }
-
-    static func codeReference(_ reference: CodeReference, full: Bool, in context: ModelContext) -> [String: Any] {
-        let entries = CodeReferenceStore.sortedEntries(on: reference, in: context)
-        var shape: [String: Any] = [
-            "id": reference.id.uuidString,
-            "attachment_id": reference.attachmentID?.uuidString ?? "",
-            "revision": reference.revision,
-            "publication": reference.publication.rawValue,
-            "coverage": reference.coverage.rawValue,
-            "coverage_label": CodeReferenceStore.coverageLabel(reference),
-            "source_revision": reference.sourceRevision,
-            "local_changes_examined": reference.localChangesExamined,
-            "source_changed_during_index": reference.sourceChangedDuringIndex,
-            "originating_run_id": reference.originatingRunID.uuidString,
-            "last_updated_at": iso.string(from: reference.lastUpdatedAt),
-            "entry_count": entries.count
-        ]
-        if full {
-            shape["coverage_notes"] = reference.coverageNotes
-            shape["entries"] = entries.map { codeReferenceEntry($0) }
-        }
-        return shape
-    }
-
-    static func codeReferenceEntry(_ entry: CodeReferenceEntry) -> [String: Any] {
-        [
-            "id": entry.id.uuidString,
-            "key": entry.key,
-            "title": entry.title,
-            "body": entry.body,
-            "source_locations": entry.sourceLocations.map { location in
-                var shape: [String: Any] = ["path": location.path]
-                if let declaration = location.declaration, !declaration.isEmpty {
-                    shape["declaration"] = declaration
-                }
-                if let hash = location.contentHash, !hash.isEmpty {
-                    shape["content_hash"] = hash
-                }
-                return shape
-            },
-            "related_keys": entry.relatedKeys,
-            "source_revision": entry.sourceRevision
-        ]
     }
 
     private static func chatText(_ raw: String) -> String {

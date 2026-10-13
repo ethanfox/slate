@@ -27,14 +27,6 @@ final class RunCoordinator {
         RunStore.recoverAbandoned(in: context)
         running = []
         jobs = [:]
-        startQueuedIndexing(in: context)
-    }
-
-    private func startQueuedIndexing(in context: ModelContext) {
-        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
-        for run in RunStore.runs(in: context) where run.status == .queued && run.purpose == .indexRepository {
-            start(run, in: context)
-        }
     }
 
     func start(_ run: AgentRun, in context: ModelContext) {
@@ -112,8 +104,7 @@ final class RunCoordinator {
         let policy = policy(for: run)
         let roots = try await selectedRoots(for: run)
         guard let run = resolvedRun(id), let context = liveContext() else { return }
-        try prepareIndex(run, roots: roots, in: context)
-        let includeMembrae = policy.allowsMembraeWrites || policy.allowCodeReferenceWrite
+        let includeMembrae = policy.allowsMembraeWrites
         let gateway = RunGateway(
             policy: policy,
             inner: MembraeToolGateway(
@@ -122,7 +113,6 @@ final class RunCoordinator {
                 includeProjectTools: policy.allowCode,
                 consult: nil,
                 mcp: includeMembrae ? .shared : nil,
-                indexingRunID: run.purpose == .indexRepository ? run.id : nil,
                 storeURL: context.container.configurations.first?.url,
                 store: context.container,
                 includeBrowser: policy.allowBrowser,
@@ -163,25 +153,19 @@ final class RunCoordinator {
         let policy = policy(for: run)
         let roots = try await selectedRoots(for: run)
         guard let run = resolvedRun(id), let context = liveContext() else { return }
-        try prepareIndex(run, roots: roots, in: context)
         let store = context.container.configurations.first?.url
         let folder = store?.deletingLastPathComponent().appendingPathComponent("Agent", isDirectory: true)
         if let folder {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
         let workspace: String
-        if run.purpose == .indexRepository {
-            workspace = folder?.path ?? NSTemporaryDirectory()
-        } else if roots.count == 1 {
+        if roots.count == 1 {
             workspace = roots[0].path
         } else {
             workspace = roots.first.map { URL(fileURLWithPath: $0.path).deletingLastPathComponent().path } ?? folder?.path ?? NSTemporaryDirectory()
         }
-        let includeMembrae = policy.allowsMembraeWrites || policy.allowCodeReferenceWrite
-        let catalog = run.purpose == .indexRepository
-            ? RunToolPolicy.indexingCatalog
-            : RunToolPolicy.generalCatalog(for: run)
-        let listed = includeMembrae ? policy.allowedNames(from: catalog) : []
+        let includeMembrae = policy.allowsMembraeWrites
+        let listed = includeMembrae ? policy.allowedNames(from: RunToolPolicy.generalCatalog(for: run)) : []
         let request = RunnerRequest(
             apiKey: apiKey,
             env: ProcessInfo.processInfo.environment,
@@ -197,14 +181,11 @@ final class RunCoordinator {
             includeWorkerTool: false,
             includeFinishRun: true,
             allowedTools: listed,
-            runtime: run.purpose == .indexRepository ? WorkerPath.local.rawValue : run.pathRaw,
-            cloudRepos: run.purpose == .indexRepository ? [] : cloudRepos(for: run.project),
-            codeSnapshots: policy.allowCode && (run.purpose == .indexRepository || run.pathRaw == WorkerPath.local.rawValue)
+            runtime: run.pathRaw,
+            cloudRepos: cloudRepos(for: run.project),
+            codeSnapshots: policy.allowCode && run.pathRaw == WorkerPath.local.rawValue
                 ? ProjectCodeWorkspace.remoteSnapshots(for: run.project, storeURL: store)
                 : [],
-            readProvenancePath: run.purpose == .indexRepository
-                ? CodeReadProvenance.fileURL(runID: run.id, storeURL: store).path
-                : "",
             externalTools: policy.allowBrowser ? BrowserTools.providerTools() : []
         )
         let process = RunCursorProcess()
@@ -403,34 +384,11 @@ final class RunCoordinator {
         in context: ModelContext
     ) throws {
         guard run.status.isActive else { return }
-        var extra = extra
         let workerSummary: String
         if let finish = gateway.finishSummary, !finish.isEmpty {
             workerSummary = finish
         } else {
             workerSummary = lastText.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if run.purpose == .indexRepository {
-            do {
-                let published = try publishIndex(run, roots: roots, in: context)
-                extra.append(
-                    RunResultLink(
-                        label: "Code reference",
-                        url: "membrae://code-reference/\(published.id.uuidString)",
-                        kind: .document
-                    )
-                )
-            } catch {
-                try RunStore.failUnpublishedIndex(
-                    run,
-                    workerSummary: workerSummary,
-                    detail: error.localizedDescription,
-                    in: context
-                )
-                clear(run.id)
-                announce(run.id)
-                return
-            }
         }
         let summary = workerSummary.isEmpty ? "Finished with no summary." : workerSummary
         var links = gateway.journal
@@ -456,44 +414,6 @@ final class RunCoordinator {
 
     private func policy(for run: AgentRun) -> RunToolPolicy {
         RunToolPolicy.effective(for: run)
-    }
-
-    private func prepareIndex(_ run: AgentRun, roots: [ProjectCodeRoot], in context: ModelContext) throws {
-        guard run.purpose == .indexRepository else { return }
-        guard let attachmentID = run.indexedAttachmentID,
-              let attachment = CodeReferenceStore.attachment(attachmentID, in: context)
-        else {
-            throw CodeReferenceError.attachmentNotFound
-        }
-        let path = roots.first?.path ?? CodeReferenceStore.rootPath(
-            for: attachment,
-            storeURL: context.container.configurations.first?.url
-        ) ?? attachment.locator
-        _ = try CodeReferenceStore.beginStaging(
-            for: attachment,
-            run: run,
-            fingerprint: RepositoryIndex.fingerprint(at: path),
-            in: context
-        )
-    }
-
-    private func publishIndex(_ run: AgentRun, roots: [ProjectCodeRoot], in context: ModelContext) throws -> CodeReference {
-        guard let attachmentID = run.indexedAttachmentID,
-              let attachment = CodeReferenceStore.attachment(attachmentID, in: context)
-        else {
-            throw CodeReferenceError.attachmentNotFound
-        }
-        let path = roots.first?.path ?? CodeReferenceStore.rootPath(
-            for: attachment,
-            storeURL: context.container.configurations.first?.url
-        )
-        guard let path else { throw CodeReferenceError.pathMissing(attachment.locator) }
-        return try CodeReferenceStore.publishIfValid(
-            run: run,
-            rootPath: path,
-            currentFingerprint: RepositoryIndex.fingerprint(at: path),
-            in: context
-        )
     }
 
     private func selectedRoots(for run: AgentRun) async throws -> [ProjectCodeRoot] {
@@ -588,13 +508,6 @@ extension RunToolPolicy {
         "list_sources", "get_source", "create_source", "update_source",
         "list_chats", "get_chat",
         "list_tags", "create_tag", "update_tag", "assign_tag", "remove_tag",
-        "list_runs", "get_run",
-        "list_code_references", "get_code_reference_entry"
-    ]
-
-    static let indexingCatalog = [
-        "list_projects", "get_project",
-        "list_code_references", "get_code_reference_entry",
-        "upsert_code_reference_entry", "set_code_reference_meta"
+        "list_runs", "get_run"
     ]
 }

@@ -55,7 +55,6 @@ struct ProjectsView: View {
         ) {
             Button("Delete", role: .destructive) {
                 if let row = pendingDelete, let project = TitleIndexStore.project(row.id, in: context) {
-                    CodeReferenceStore.deleteOwnedReferences(in: project, context: context)
                     context.delete(project)
                     try? context.persist()
                 }

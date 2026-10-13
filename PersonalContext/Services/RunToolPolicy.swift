@@ -6,8 +6,6 @@ struct RunToolPolicy: Equatable, Sendable {
     var assignedTaskID: UUID?
     var allowCode: Bool
     var allowMembraeKnowledgeWrite: Bool
-    var allowCodeReferenceWrite: Bool
-    var scopedAttachmentID: UUID?
     var denied: Set<String>
     var requireProject: Bool
     var attachesRunSource: Bool
@@ -46,8 +44,6 @@ struct RunToolPolicy: Equatable, Sendable {
         assignedTaskID: UUID?,
         allowCode: Bool,
         allowMembraeKnowledgeWrite: Bool = true,
-        allowCodeReferenceWrite: Bool = false,
-        scopedAttachmentID: UUID? = nil,
         denied: Set<String> = RunToolPolicy.denied,
         requireProject: Bool = true,
         attachesRunSource: Bool = true,
@@ -60,8 +56,6 @@ struct RunToolPolicy: Equatable, Sendable {
         self.assignedTaskID = assignedTaskID
         self.allowCode = allowCode
         self.allowMembraeKnowledgeWrite = allowMembraeKnowledgeWrite
-        self.allowCodeReferenceWrite = allowCodeReferenceWrite
-        self.scopedAttachmentID = scopedAttachmentID
         self.denied = denied
         self.requireProject = requireProject
         self.attachesRunSource = attachesRunSource
@@ -77,29 +71,12 @@ struct RunToolPolicy: Equatable, Sendable {
             assignedTaskID: nil,
             allowCode: true,
             allowMembraeKnowledgeWrite: true,
-            allowCodeReferenceWrite: false,
             denied: [],
             requireProject: false,
             attachesRunSource: false,
             allowExternalMCP: true,
             allowBrowser: true,
             allowUnscopedWrites: projectID == nil
-        )
-    }
-
-    static func indexing(runID: UUID, projectID: UUID?, attachmentID: UUID) -> RunToolPolicy {
-        RunToolPolicy(
-            runID: runID,
-            projectID: projectID,
-            assignedTaskID: nil,
-            allowCode: true,
-            allowMembraeKnowledgeWrite: false,
-            allowCodeReferenceWrite: true,
-            scopedAttachmentID: attachmentID,
-            denied: RunToolPolicy.denied.union(projectWrites).union(["complete_task"]),
-            requireProject: false,
-            attachesRunSource: false,
-            allowBrowser: false
         )
     }
 
@@ -112,13 +89,8 @@ struct RunToolPolicy: Equatable, Sendable {
         // A Run may complete the task it was started from, and no other.
         if name == "complete_task", attachesRunSource { return assignedTaskID != nil }
         if Self.projectWrites.contains(name) { return false }
-        if RepositoryIndex.toolWrites.contains(name) { return allowCodeReferenceWrite }
-        if RepositoryIndex.toolReads.contains(name) { return true }
         if name.hasPrefix("project_") { return allowCode }
         if isMembraeWrite(name) { return allowsMembraeWrites }
-        if allowCodeReferenceWrite {
-            return name == "list_projects" || name == "get_project"
-        }
         if requireProject && projectID == nil && isMembraeTool(name) {
             return false
         }
@@ -132,10 +104,10 @@ struct RunToolPolicy: Equatable, Sendable {
     func permitsCall(_ name: String, arguments: [String: Any]) -> Result<Void, RunToolDenied> {
         guard allows(name) else {
             if Self.projectWrites.contains(name) {
-                return .failure(RunToolDenied(CodeReferenceError.sourceEditDenied.localizedDescription ?? "This run cannot edit source."))
+                return .failure(RunToolDenied("This run cannot edit source."))
             }
             if isMembraeWrite(name) && !allowsMembraeWrites {
-                return .failure(RunToolDenied(CodeReferenceError.unrelatedWriteDenied.localizedDescription ?? "This run cannot change unrelated Membrae records."))
+                return .failure(RunToolDenied("This run cannot change Membrae records."))
             }
             return .failure(RunToolDenied("This run cannot use \(name)."))
         }
@@ -152,13 +124,6 @@ struct RunToolPolicy: Equatable, Sendable {
            incoming != expected {
             return .failure(RunToolDenied("This run can only write in its own project."))
         }
-        if RepositoryIndex.toolWrites.contains(name), let scoped = scopedAttachmentID {
-            if let raw = arguments["attachment_id"] as? String,
-               let incoming = UUID(uuidString: raw),
-               incoming != scoped {
-                return .failure(RunToolDenied(CodeReferenceError.attachmentMismatch.localizedDescription ?? "Wrong attachment."))
-            }
-        }
         return .success(())
     }
 
@@ -172,16 +137,10 @@ struct RunToolPolicy: Equatable, Sendable {
            arguments["source"] == nil || (arguments["source"] as? String)?.isEmpty == true {
             arguments["source"] = "membrae://run/\(runID.uuidString)"
         }
-        if RepositoryIndex.toolWrites.contains(name), let scopedAttachmentID {
-            arguments["attachment_id"] = scopedAttachmentID.uuidString
-        }
         return arguments
     }
 
     static func effective(for run: AgentRun) -> RunToolPolicy {
-        if run.purpose == .indexRepository, let attachmentID = run.indexedAttachmentID {
-            return .indexing(runID: run.id, projectID: run.project?.id, attachmentID: attachmentID)
-        }
         var policy = RunToolPolicy(
             runID: run.id,
             projectID: run.project?.id,
@@ -192,14 +151,6 @@ struct RunToolPolicy: Equatable, Sendable {
         )
         policy.allowOtherProjects = true
         return policy
-    }
-
-    static func catalogNames(for run: AgentRun) -> [String] {
-        let policy = effective(for: run)
-        let catalog = run.purpose == .indexRepository && run.indexedAttachmentID != nil
-            ? indexingCatalog
-            : membraeCatalog
-        return policy.allowedNames(from: catalog)
     }
 
     /// The Membrae tools a general Run may be offered. Completing is only there when it has a task.

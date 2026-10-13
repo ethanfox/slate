@@ -90,7 +90,7 @@ enum ProjectCodeWorkspace {
     }
 
     /// Currently readable attachments for this project: local folders plus remote snapshots already on disk.
-    /// Uses the same persisted attachment fetch as `list_code_references`. Does not download remotes.
+    /// Uses the persisted attachment fetch. Does not download remotes.
     static func authorizedRoots(for project: Project?, storeURL: URL?) -> [ProjectCodeRoot] {
         guard let project else { return [] }
         var roots: [ProjectCodeRoot] = []
@@ -166,7 +166,7 @@ enum ProjectCodeWorkspace {
 
     static func attachments(on project: Project) -> [CodeAttachment] {
         if let context = project.modelContext {
-            return CodeReferenceStore.attachmentsOn(project, in: context)
+            return CodeAttachment.all(on: project, in: context)
         }
         return project.codeAttachments
     }

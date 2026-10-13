@@ -347,7 +347,7 @@ final class ProviderNeutralTests: XCTestCase {
         let text = ContextBuilder.identity(for: project)
         XCTAssertTrue(text.contains("owner/repo"))
         XCTAssertTrue(text.contains(attachment.id.uuidString))
-        XCTAssertTrue(text.contains("list_code_references"))
+        XCTAssertFalse(text.contains("code_reference"))
         XCTAssertTrue(text.contains("project_git_log"))
     }
 

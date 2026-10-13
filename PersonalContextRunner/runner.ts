@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readAttachedFile, recordReadProvenance } from "./source-read";
+import { readAttachedFile } from "./source-read";
 import { writeSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -38,7 +38,6 @@ type Request = {
     archiveURL?: string;
     commitsURL?: string;
   }[];
-  readProvenancePath?: string;
   images?: { data: string; mimeType: string }[];
   externalTools?: { name: string; description: string; parametersJSON: string }[];
   includeMCPImport?: boolean;
@@ -720,7 +719,6 @@ function projectCodeTools(session: { request: Request }): Record<string, SDKCust
         if (!root) throw new Error(roots.length ? "Specify root because this project has several code attachments." : "No code is attached to this Membrae project.");
         const file = safeFile(root, fields?.path);
         const { hash, text } = await readAttachedFile(file, fields?.start_line, fields?.end_line);
-        await recordReadProvenance(session.request.readProvenancePath, fields?.path, hash);
         emit(toolEvent("project_read_file", "completed", args, { root: root.title, path: fields?.path, content_hash: hash }));
         return toolText(text);
       },
