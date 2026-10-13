@@ -660,7 +660,7 @@ enum SpaceScreenCatalog {
                 }
             case .event:
                 guard let key = component.text(prop.name), eventKeys.contains(key) else {
-                    problems.append("\(spec.name).\(prop.name) must name an event type in this Space.")
+                    problems.append("\(spec.name).\(prop.name) must name an event type in this Area.")
                     continue
                 }
             case .calc:

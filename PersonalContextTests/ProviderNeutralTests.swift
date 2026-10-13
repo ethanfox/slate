@@ -83,11 +83,11 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertTrue(prompt.contains("- Harbor (id \(project.id.uuidString)): A marina app."))
         XCTAssertFalse(prompt.contains("Old site"))
         XCTAssertTrue(prompt.contains("- Kitchen (id \(space.id.uuidString)): Recipes and what got cooked. Holds: Recipe (recipe). Logs: Cooked (cooked)."))
-        XCTAssertFalse(prompt.contains("The user is looking at the Space"))
+        XCTAssertFalse(prompt.contains("The user is looking at the Area"))
 
         let spacePrompt = ChatWorkspace(conversation: inSpace, project: nil, debugLog: ChatDebugLog())
             .prepareTurn(userText: "made this tonight").prompt
-        XCTAssertTrue(spacePrompt.contains("The user is looking at the Space Kitchen (id \(space.id.uuidString))"))
+        XCTAssertTrue(spacePrompt.contains("The user is looking at the Area Kitchen (id \(space.id.uuidString))"))
 
         let projectPrompt = ChatWorkspace(conversation: inProject, project: project, debugLog: ChatDebugLog())
             .prepareTurn(userText: "hi").prompt
@@ -279,8 +279,8 @@ final class ProviderNeutralTests: XCTestCase {
 
     func testOpeningPromptIncludesPriorTurns() {
         let history = [
-            TalkMessage(role: .user, text: "What is a Space?"),
-            TalkMessage(role: .assistant, text: "A Space is a home for one life area."),
+            TalkMessage(role: .user, text: "What is an Area?"),
+            TalkMessage(role: .assistant, text: "An Area is a home for one life area."),
             TalkMessage(role: .user, text: "Lock that.")
         ]
         let transcript = TalkMessage.conversationTranscript(history)
@@ -291,8 +291,8 @@ final class ProviderNeutralTests: XCTestCase {
             transcript: transcript
         )
         XCTAssertTrue(opening.contains("<conversation>"))
-        XCTAssertTrue(opening.contains("User: What is a Space?"))
-        XCTAssertTrue(opening.contains("Assistant: A Space is a home for one life area."))
+        XCTAssertTrue(opening.contains("User: What is an Area?"))
+        XCTAssertTrue(opening.contains("Assistant: An Area is a home for one life area."))
         XCTAssertTrue(opening.contains("Lock that."))
 
         let resumed = ContextBuilder.prompt(

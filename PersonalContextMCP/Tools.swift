@@ -465,7 +465,7 @@ enum Tools {
         ["type": "object", "additionalProperties": true, "description": description]
     }
 
-    private static let spaceID = text("Space id from list_spaces or create_space.")
+    private static let spaceID = text("Area id from list_spaces or create_space.")
     private static let typeKey = text("The type's key, as given to set_space_type.")
 
     private static func options<T: RawRepresentable & CaseIterable>(_ type: T.Type, _ description: String) -> [String: Any] where T.RawValue == String {
@@ -1253,14 +1253,14 @@ enum Tools {
         },
         Tool(
             name: "list_spaces",
-            description: "List every Space with its id, name, and types. A Space holds an ongoing part of the user's life, such as recipes or habits.",
+            description: "List every Area with its id, name, and types. An Area holds an ongoing part of the user's life, such as recipes or habits.",
             properties: [:], required: [], readOnly: true
         ) { _, context in
             SpaceStore.all(in: context).map { SpaceTools.space($0, full: false, in: context) }
         },
         Tool(
             name: "get_space",
-            description: "Get one Space: each type with its fields and its collection and detail screens.",
+            description: "Get one Area: each type with its fields and its collection and detail screens.",
             properties: ["space_id": spaceID], required: ["space_id"], readOnly: true
         ) { args, context in
             SpaceTools.space(try SpaceTools.space(args, in: context), full: true, in: context)
@@ -1274,7 +1274,7 @@ enum Tools {
         },
         Tool(
             name: "create_space",
-            description: "Create an empty Space. Follow with set_space_type and set_space_screen.",
+            description: "Create an empty Area. Follow with set_space_type and set_space_screen.",
             properties: [
                 "name": text("Short name, such as Kitchen."),
                 "summary": text("One line on what it is for."),
@@ -1296,7 +1296,7 @@ enum Tools {
         },
         Tool(
             name: "update_space",
-            description: "Rename a Space, or change its summary, icon, or card color. Only what you pass changes.",
+            description: "Rename an Area, or change its summary, icon, or card color. Only what you pass changes.",
             properties: [
                 "space_id": spaceID,
                 "name": text("New name."),
@@ -1322,7 +1322,7 @@ enum Tools {
         },
         Tool(
             name: "set_space_type",
-            description: "Create a type in a Space, or change the fields of the type with this key. role object is a lasting thing (a recipe, a habit); role event is something logged about objects (cooked, check-in); role settings holds one record for the whole Space (daily targets). A field cannot change kind; a field you leave out is hidden and its values are kept.",
+            description: "Create a type in an Area, or change the fields of the type with this key. role object is a lasting thing (a recipe, a habit); role event is something logged about objects (cooked, check-in); role settings holds one record for the whole Area (daily targets). A field cannot change kind; a field you leave out is hidden and its values are kept.",
             properties: [
                 "space_id": spaceID,
                 "key": text("Stable lowercase key, such as recipe or check-in."),
@@ -1384,7 +1384,7 @@ enum Tools {
         },
         Tool(
             name: "list_space_records",
-            description: "List the records of one type in a Space, with their values. Archived records are left out unless asked for.",
+            description: "List the records of one type in an Area, with their values. Archived records are left out unless asked for.",
             properties: [
                 "space_id": spaceID,
                 "type_key": typeKey,
@@ -1402,7 +1402,7 @@ enum Tools {
         },
         Tool(
             name: "create_space_record",
-            description: "Add a record to a Space, such as one recipe. values is keyed by field id.",
+            description: "Add a record to an Area, such as one recipe. values is keyed by field id.",
             properties: [
                 "space_id": spaceID,
                 "type_key": typeKey,
@@ -1451,10 +1451,10 @@ enum Tools {
         },
         Tool(
             name: "list_space_events",
-            description: "List what has been logged in a Space for one event type, newest first. Pass record_id for one record's history.",
+            description: "List what has been logged in an Area for one event type, newest first. Pass record_id for one record's history.",
             properties: [
                 "space_id": spaceID,
-                "type_key": text("Key of an event type in this Space."),
+                "type_key": text("Key of an event type in this Area."),
                 "record_id": text("Only events about this record.")
             ],
             required: ["space_id", "type_key"], readOnly: true
@@ -1497,7 +1497,7 @@ enum Tools {
             description: "Log that something happened to one or more records, such as a recipe being cooked or a habit checked in.",
             properties: [
                 "space_id": spaceID,
-                "type_key": text("Key of an event type in this Space."),
+                "type_key": text("Key of an event type in this Area."),
                 "record_ids": ["type": "array", "items": ["type": "string"], "description": "Records this is about."],
                 "occurred_at": text("ISO-8601 time it happened. Defaults to now."),
                 "values": object("Event field id to value.")
@@ -2345,7 +2345,7 @@ enum SpaceTools {
     static func space(_ args: Args, in context: ModelContext) throws -> Space {
         let id = try args.uuid("space_id")
         guard let space = SpaceStore.space(id, in: context) else {
-            throw ToolError("No Space with id \(id.uuidString).")
+            throw ToolError("No Area with id \(id.uuidString).")
         }
         return space
     }
@@ -2660,7 +2660,7 @@ enum SpaceTools {
         switch kind {
         case .field(let kinds): "one field id of kind: " + kinds.map(\.rawValue).joined(separator: ", ")
         case .fields(let kinds): "a list of field ids of kind: " + kinds.map(\.rawValue).joined(separator: ", ")
-        case .event: "the key of an event type in the Space"
+        case .event: "the key of an event type in the Area"
         case .calc: "a calculation"
         case .formula: "a formula: " + SpaceFormula.grammar
         case .text: "text"
@@ -2692,7 +2692,7 @@ enum SpaceTools {
                 ["kind": "rating", "value": "0 to 5"],
                 ["kind": "file", "value": "set by the user in the app"],
                 ["kind": "schedule", "value": "daily, weekly:3 (three times a week), or days:mon,wed,fri", "needs": "nothing. Give a habit or routine one schedule field; streaks, pace and done-today then follow it instead of assuming every day."],
-                ["kind": "link", "value": "the id of one record of the target type", "needs": "target: the key of an object type in the same Space, created first. Use a link whenever one thing refers to another, such as a meal made from recipes, so it can be opened from there. For several, put the link in a group with any per-row fields, such as servings. A number the row needs from the linked record, such as its calories, is a number field of the row that you fill in from the linked record when you add the row; it is a snapshot and does not change when the linked record does."]
+                ["kind": "link", "value": "the id of one record of the target type", "needs": "target: the key of an object type in the same Area, created first. Use a link whenever one thing refers to another, such as a meal made from recipes, so it can be opened from there. For several, put the link in a group with any per-row fields, such as servings. A number the row needs from the linked record, such as its calories, is a number field of the row that you fill in from the linked record when you add the row; it is a snapshot and does not change when the linked record does."]
             ],
             "components": SpaceScreenCatalog.components.map { spec -> [String: Any] in
                 [
@@ -2709,7 +2709,7 @@ enum SpaceTools {
             "roles": [
                 "object": "a lasting thing with many records, such as recipes",
                 "event": "something logged about records, such as cooked",
-                "settings": "exactly one record for the whole Space, such as daily targets. It gets a detail screen only. Other types read it in formulas as key.field."
+                "settings": "exactly one record for the whole Area, such as daily targets. It gets a detail screen only. Other types read it in formulas as key.field."
             ],
             "calculations": [
                 "count:eventKey": "how many events",

@@ -16,13 +16,13 @@ enum SpaceStoreError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .emptyKey: "A type needs a key."
-        case .duplicateKey(let key): "This Space already has a type with the key \(key)."
+        case .duplicateKey(let key): "This Area already has a type with the key \(key)."
         case .notAnObjectType: "Records can only be made from an object type."
         case .notAnEventType: "Events can only be logged with an event type."
-        case .recordOutsideSpace: "An event can only be about records in its own Space."
+        case .recordOutsideSpace: "An event can only be about records in its own Area."
         case .invalidScreen(let problems): problems.joined(separator: " ")
         case .unknownLinkTarget(let field, let target):
-            "\(field) links to \(target), which is not an object type in this Space. Create that type first."
+            "\(field) links to \(target), which is not an object type in this Area. Create that type first."
         case .brokenLink(let field, let target):
             "\(field) must hold the id of a record in \(target). Use list_space_records to find it."
         case .oneRecordOnly(let type):
@@ -499,7 +499,7 @@ enum SpaceStore {
                 } else {
                     throw SpaceStoreError.badFormulaPath(
                         field: entry.field.name,
-                        reason: "\(head) is not a settings type in this Space."
+                        reason: "\(head) is not a settings type in this Area."
                     )
                 }
                 guard let found = targetSchema?.liveFields.first(where: { $0.id == fieldID }), found.kind.isNumeric else {

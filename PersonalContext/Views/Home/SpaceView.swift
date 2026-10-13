@@ -32,7 +32,7 @@ struct SpaceView: View {
             PageBody {
                 VStack(alignment: .leading, spacing: 20) {
                     if space == nil {
-                        EmptyLine(text: "This Space no longer exists.")
+                        EmptyLine(text: "This Area no longer exists.")
                     } else if let type = selectedType, type.role == .settings {
                         if let record = records.first(where: { $0.typeIDString == SpaceJSON.key(type.id) }) {
                             SpaceRecordContent(spaceID: id, recordID: record.id)
@@ -45,7 +45,7 @@ struct SpaceView: View {
                             AreaRecordsView(context: screenContext(type, space: space)) { pendingDelete = $0 }
                         }
                     } else {
-                        EmptyLine(text: "This Space has no types yet. An agent will be able to set one up.")
+                        EmptyLine(text: "This Area has no types yet. An agent will be able to set one up.")
                     }
                 }
                 .padding(.horizontal, 48)
@@ -227,7 +227,7 @@ struct NewSpaceSheet: View {
     /// the Space created, so an abandoned chat leaves nothing behind.
     static func setupMessage(name: String, symbol: String, color: String, brief: String) -> String {
         """
-        I want a new Space called “\(name)”.
+        I want a new Area called “\(name)”.
 
         What it is for: \(brief.trimmingCharacters(in: .whitespacesAndNewlines))
 
@@ -253,7 +253,7 @@ struct NewSpaceSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(space == nil ? "New Space" : "Edit Space")
+            Text(space == nil ? "New Area" : "Edit Area")
                 .font(CraftFont.title)
 
             ModalField("Name") {

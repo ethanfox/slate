@@ -354,14 +354,14 @@ struct RootView: View {
             Button {
                 app.present(.newSpace)
             } label: {
-                Label("New Space", systemImage: "plus")
+                Label("New Area", systemImage: "plus")
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .contentShape(Capsule())
             }
             .buttonStyle(.plain)
             .glassEffect(.regular, in: Capsule())
-            .help("New Space")
+            .help("New Area")
         } else if case .space(let id) = app.destination {
             SpaceToolbar(spaceID: id)
         } else if case .spaceRecord(_, let recordID) = app.destination {

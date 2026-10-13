@@ -99,7 +99,7 @@ struct SidebarView: View {
                     }
 
                     if !spaces.isEmpty {
-                        section("Spaces")
+                        section("Areas")
                         ForEach(spaces) { space in
                             Button {
                                 app.navigate(to: .space(space.id))

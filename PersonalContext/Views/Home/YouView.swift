@@ -156,7 +156,7 @@ enum ComingUp {
 
         for record in records {
             guard let spaceID = record.spaceID else { continue }
-            let spaceName = spaces.first { $0.id == spaceID }?.displayName ?? "Space"
+            let spaceName = spaces.first { $0.id == spaceID }?.displayName ?? "Area"
             for (field, value) in record.values {
                 guard case .date(let date) = value, date >= start, date < end else { continue }
                 items.append(ComingUpItem(
@@ -224,7 +224,7 @@ struct YouView: View {
             }
             Button("Cancel", role: .cancel) { pendingDelete = nil }
         } message: {
-            Text("Everything in this Space will be deleted. This can’t be undone.")
+            Text("Everything in this Area will be deleted. This can’t be undone.")
         }
     }
 
@@ -273,7 +273,7 @@ struct YouView: View {
 
     private var shelf: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Spaces")
+            Text("Areas")
                 .font(CraftFont.section)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, gutter)
@@ -542,7 +542,7 @@ private struct NewSpaceCard: View {
         VStack(spacing: 8) {
             Image(systemName: "plus")
                 .font(.system(size: 18))
-            Text("New Space")
+            Text("New Area")
                 .font(CraftFont.body)
         }
         .foregroundStyle(.secondary)

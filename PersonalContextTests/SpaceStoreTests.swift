@@ -558,7 +558,7 @@ final class SpaceScreenTests: XCTestCase {
                 "cards cannot be used on a detail screen.",
                 "checklist.rows cannot show Servings, which is a number field.",
                 "steps.rows names a field that does not exist: missing.",
-                "timeline.events must name an event type in this Space.",
+                "timeline.events must name an event type in this Area.",
                 "today only works on a collection screen.",
                 "metric.value is not a calculation.",
                 "metric needs label.",
