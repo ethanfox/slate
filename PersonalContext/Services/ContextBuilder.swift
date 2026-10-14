@@ -73,7 +73,7 @@ enum ContextBuilder {
         guard let context else { return "" }
         let projects = ((try? context.fetch(FetchDescriptor<Project>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]))) ?? [])
             .filter { $0.status != .done && !$0.collects }
-        let spaces = SpaceStore.all(in: context)
+        let spaces = SpaceStore.collecting(in: context)
         var lines = [routingRules]
         if let spaceID, let space = spaces.first(where: { $0.id == spaceID }) {
             lines.append("The user is looking at the Area \(space.displayName) (id \(space.id.uuidString)). Unless the message plainly belongs somewhere else, it is about this Area.")

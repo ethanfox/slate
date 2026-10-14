@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 enum TitleIndexKind: String, CaseIterable, Identifiable, Hashable {
-    case project
+    case space
     case track
     case note
     case decision
@@ -14,7 +14,7 @@ enum TitleIndexKind: String, CaseIterable, Identifiable, Hashable {
 
     var symbol: String {
         switch self {
-        case .project: "square.stack"
+        case .space: "square.grid.2x2"
         case .track: "arrow.triangle.branch"
         case .note: "note.text"
         case .decision: "checkmark.seal"
@@ -39,7 +39,6 @@ final class TitleIndex {
     var detailRaw: String
     var symbol: String
     var isArchived: Bool
-    var isPinned: Bool
     var isBusy: Bool
     var isMarked: Bool
 
@@ -48,6 +47,7 @@ final class TitleIndex {
         set { kindRaw = newValue.rawValue }
     }
 
+    /// The Space this row belongs to. A Space's own row names itself.
     var projectID: UUID? {
         get { UUID(uuidString: projectIDString) }
         set { projectIDString = newValue?.uuidString.lowercased() ?? "" }
@@ -68,7 +68,7 @@ final class TitleIndex {
         }
     }
 
-    var projectStatus: ProjectStatus {
+    var spaceStatus: ProjectStatus {
         ProjectStatus(rawValue: statusRaw) ?? .active
     }
 
@@ -105,7 +105,6 @@ final class TitleIndex {
         detailRaw: String = "",
         symbol: String = "",
         isArchived: Bool = false,
-        isPinned: Bool = false,
         isBusy: Bool = false,
         isMarked: Bool = false
     ) {
@@ -121,7 +120,6 @@ final class TitleIndex {
         self.detailRaw = detailRaw
         self.symbol = symbol
         self.isArchived = isArchived
-        self.isPinned = isPinned
         self.isBusy = isBusy
         self.isMarked = isMarked
     }
@@ -155,13 +153,14 @@ final class AgentAction {
     var createdAt: Date
     var tool: String
     var verbRaw: String
-    /// A `TitleIndexKind` raw value, or space, record, tag, code, completion.
+    /// A `TitleIndexKind` raw value, or record, tag, code, completion. Rows written before Spaces
+    /// were one thing may say project.
     var kindRaw: String
     var targetIDString: String
     var title: String
     /// What the verb needs beyond the title: a tag's name, an event type, a reason.
     var detail: String
-    var projectIDString: String
+    /// The Space the write landed in, if any.
     var spaceIDString: String
     var client: String
     var conversationIDString: String
@@ -176,7 +175,6 @@ final class AgentAction {
         targetID: String,
         title: String,
         detail: String = "",
-        projectID: String = "",
         spaceID: String = "",
         origin: ActionOrigin = ActionOrigin(),
         beforeJSON: String = ""
@@ -189,7 +187,6 @@ final class AgentAction {
         targetIDString = targetID.lowercased()
         self.title = title
         self.detail = detail
-        projectIDString = projectID.lowercased()
         spaceIDString = spaceID.lowercased()
         client = origin.client
         conversationIDString = origin.conversationID.lowercased()
@@ -198,9 +195,8 @@ final class AgentAction {
 
     var verb: AgentActionVerb { AgentActionVerb(rawValue: verbRaw) ?? .changed }
     var targetID: UUID? { UUID(uuidString: targetIDString) }
-    var projectID: UUID? { UUID(uuidString: projectIDString) }
     var spaceID: UUID? { UUID(uuidString: spaceIDString) }
-    var indexKind: TitleIndexKind? { TitleIndexKind(rawValue: kindRaw) }
+    var indexKind: TitleIndexKind? { kindRaw == "project" ? .space : TitleIndexKind(rawValue: kindRaw) }
 
     /// Whether the app can take this write back. A later change to the same record can still block it.
     var canUndo: Bool {
@@ -216,7 +212,6 @@ final class AgentAction {
     var symbol: String {
         if let indexKind { return indexKind.symbol }
         switch kindRaw {
-        case "space": return "square.grid.2x2"
         case "record": return "doc"
         case "source": return "books.vertical"
         case "tag": return "tag"
@@ -227,7 +222,7 @@ final class AgentAction {
 
     /// The write in plain words, such as: Added task “Buy flour”.
     var sentence: String {
-        let noun = kindRaw == "chat" ? "chat" : kindRaw
+        let noun = indexKind == .space ? "Space" : kindRaw
         let name = title.isEmpty ? noun : "\(noun) “\(title)”"
         switch verb {
         case .added:
@@ -235,7 +230,7 @@ final class AgentAction {
             return "Added \(name)"
         case .changed:
             if tool == "merge_tracks", !detail.isEmpty { return "Merged track “\(detail)” into “\(title)”" }
-            if kindRaw == "space", !detail.isEmpty { return "Set up \(detail) in \(title.isEmpty ? "a Space" : title)" }
+            if indexKind == .space, !detail.isEmpty { return "Set up \(detail) in \(title.isEmpty ? "a Space" : title)" }
             return "Changed \(name)"
         case .completed: return "Completed \(name)"
         case .logged: return "Logged \(detail.isEmpty ? "an entry" : detail) on “\(title)”"
@@ -247,12 +242,11 @@ final class AgentAction {
     }
 }
 
-/// What a pin can point at. A project keeps its own pinned flag.
+/// What a pin can point at.
 enum PinKind: String, CaseIterable {
     case track, note, decision, chat, task, run, space, record
 
     init?(_ kind: TitleIndexKind) {
-        guard kind != .project else { return nil }
         self.init(rawValue: kind.rawValue)
     }
 }
@@ -281,12 +275,21 @@ enum PinStore {
         (try? context.fetch(FetchDescriptor<Pin>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
     }
 
+    static func isPinned(_ id: UUID, in context: ModelContext) -> Bool {
+        let key = id.uuidString.lowercased()
+        return ((try? context.fetchCount(FetchDescriptor<Pin>(predicate: #Predicate { $0.targetIDString == key }))) ?? 0) > 0
+    }
+
     static func toggle(_ kind: PinKind, _ id: UUID, in context: ModelContext) {
+        set(kind, id, pinned: !isPinned(id, in: context), in: context)
+    }
+
+    static func set(_ kind: PinKind, _ id: UUID, pinned: Bool, in context: ModelContext) {
         let key = id.uuidString.lowercased()
         let existing = (try? context.fetch(FetchDescriptor<Pin>(predicate: #Predicate { $0.targetIDString == key }))) ?? []
-        if existing.isEmpty {
+        if pinned, existing.isEmpty {
             context.insert(Pin(kind: kind, targetID: id))
-        } else {
+        } else if !pinned {
             existing.forEach(context.delete)
         }
     }
@@ -310,10 +313,10 @@ enum PinStore {
 enum AgentActionStore {
     static let limit = 2000
 
-    static func recent(in context: ModelContext, projectID: UUID? = nil, count: Int = 10) -> [AgentAction] {
+    static func recent(in context: ModelContext, spaceID: UUID? = nil, count: Int = 10) -> [AgentAction] {
         var descriptor = FetchDescriptor<AgentAction>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
-        if let key = projectID?.uuidString.lowercased() {
-            descriptor.predicate = #Predicate { $0.projectIDString == key }
+        if let key = spaceID?.uuidString.lowercased() {
+            descriptor.predicate = #Predicate { $0.spaceIDString == key }
         }
         descriptor.fetchLimit = count
         return (try? context.fetch(descriptor)) ?? []

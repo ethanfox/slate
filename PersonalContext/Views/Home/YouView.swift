@@ -207,9 +207,6 @@ struct YouView: View {
     }
     @Query(filter: #Predicate<AgendaItem> { $0.kindRaw == "task" && $0.isCompleted == false })
     private var openTasks: [AgendaItem]
-    @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "project" }, sort: \TitleIndex.updatedAt, order: .reverse)
-    private var projects: [TitleIndex]
-
     private var contextItems = ContextItems()
 
     private let gutter: CGFloat = 48
@@ -622,45 +619,6 @@ struct YouView: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-    }
-
-    private var recentProjects: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Recent projects")
-                .font(CraftFont.section)
-                .foregroundStyle(.secondary)
-            let recent = Array(projects.prefix(4))
-            if recent.isEmpty {
-                EmptyLine(text: "Projects you open will appear here.")
-            } else {
-                ForEach(recent) { project in
-                    Button {
-                        app.open(project)
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: project.symbol.isEmpty ? "folder" : project.symbol)
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 18)
-                            Text(project.displayTitle)
-                                .font(CraftFont.body)
-                                .lineLimit(1)
-                            Spacer(minLength: 8)
-                            Text(project.updatedAt.relativeLabel)
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        .frame(height: 40)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    if project.id != recent.last?.id {
-                        Hairline()
-                    }
-                }
-            }
-        }
     }
 }
 

@@ -235,10 +235,11 @@ final class SpaceStoreTests: XCTestCase {
         XCTAssertEqual(chat.project?.id, areaID)
         XCTAssertEqual(chat.spaceIDString, "")
         XCTAssertEqual(SpaceStore.types(in: space, context: context).map(\.id), [recipe.id])
-        XCTAssertEqual(SpaceStore.all(in: context).map(\.id), [areaID])
+        XCTAssertEqual(SpaceStore.collecting(in: context).map(\.id), [areaID])
+        XCTAssertEqual(Set(SpaceStore.all(in: context).map(\.id)), [project.id, areaID])
     }
 
-    func testDeletingASpaceDeletesEverythingInItAndNothingElse() throws {
+    func testDeletingASpaceDeletesEverythingInItButItsTasksAndNothingElse() throws {
         let project = Project(name: "Harbor", symbol: "folder", summary: "")
         context.insert(project)
         let kept = Note(content: "Stays", project: project, title: "Project note")
@@ -270,7 +271,7 @@ final class SpaceStoreTests: XCTestCase {
 
         try SpaceStore.delete(health, in: context)
 
-        XCTAssertEqual(SpaceStore.all(in: context).map(\.name), ["Kitchen"])
+        XCTAssertEqual(SpaceStore.collecting(in: context).map(\.name), ["Kitchen"])
         XCTAssertEqual(try context.fetch(FetchDescriptor<SpaceType>()).map(\.key), ["recipe"])
         XCTAssertEqual(try context.fetch(FetchDescriptor<SpaceRecord>()).map(\.title), ["Focaccia"])
         XCTAssertTrue(try context.fetch(FetchDescriptor<SpaceEvent>()).isEmpty)
@@ -278,7 +279,9 @@ final class SpaceStoreTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<ProjectThread>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<Decision>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<Conversation>()).isEmpty)
-        XCTAssertTrue(try context.fetch(FetchDescriptor<AgendaItem>()).isEmpty)
+        // Tasks live outside Spaces: the task stays, unfiled.
+        XCTAssertEqual(try context.fetch(FetchDescriptor<AgendaItem>()).map(\.title), ["Book physio"])
+        XCTAssertNil(task.project)
         XCTAssertEqual(try context.fetch(FetchDescriptor<Project>()).map(\.name).sorted(), ["Harbor", "Kitchen"])
     }
 
@@ -809,13 +812,13 @@ final class SpaceToolsTests: XCTestCase {
             "Added record “Dune”",
             "Logged Finished on “Dune”"
         ])
-        XCTAssertEqual(log[1].projectIDString, projectID.lowercased())
+        XCTAssertEqual(log[1].spaceIDString, projectID.lowercased())
         XCTAssertEqual(log[1].client, "claude-code")
         XCTAssertEqual(log[1].conversationIDString, "c0ffee00-0000-0000-0000-000000000001")
         XCTAssertEqual(log[6].targetIDString, bookID.lowercased())
         XCTAssertEqual(log[7].spaceIDString, spaceID.lowercased())
         XCTAssertEqual(
-            AgentActionStore.recent(in: ModelContext(container), projectID: UUID(uuidString: projectID)).count, 3
+            AgentActionStore.recent(in: ModelContext(container), spaceID: UUID(uuidString: projectID)).count, 3
         )
     }
 

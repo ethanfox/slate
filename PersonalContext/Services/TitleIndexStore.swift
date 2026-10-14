@@ -8,7 +8,7 @@ enum TitleIndexStore {
         let changedCount = context.changedModelsArray.count
         let deletedCount = context.deletedModelsArray.count
         var deleted: [UUID] = []
-        var removedProjects: [UUID] = []
+        var removedSpaces: [UUID] = []
         var marked: [UUID: Bool] = [:]
         var sources: [any PersistentModel] = []
 
@@ -18,8 +18,8 @@ enum TitleIndexStore {
                 continue
             case let mark as DeletionMark:
                 marked[mark.targetID] = false
-            case let project as Project:
-                removedProjects.append(project.id)
+            case let space as Project:
+                removedSpaces.append(space.id)
             default:
                 if let id = recordID(model) {
                     deleted.append(id)
@@ -38,8 +38,8 @@ enum TitleIndexStore {
             }
         }
 
-        for id in removedProjects {
-            removeProject(id, in: context)
+        for id in removedSpaces {
+            removeSpace(id, in: context)
         }
         for id in deleted {
             remove(id, in: context)
@@ -229,31 +229,25 @@ private extension TitleIndexStore {
         }
     }
 
-    static func upsert(_ project: Project, in context: ModelContext, fresh: FreshRows? = nil) {
-        // A Space that collects records is listed with the Areas, not the projects.
-        guard !project.collects else {
-            remove(project.id, in: context)
-            return
-        }
-        let previous = existing(project.id, in: context, fresh: fresh)
-        let name = project.displayName
+    static func upsert(_ space: Space, in context: ModelContext, fresh: FreshRows? = nil) {
+        let previous = existing(space.id, in: context, fresh: fresh)
+        let name = space.displayName
         write(
-            id: project.id,
-            kind: .project,
-            title: project.name,
-            owner: "Workspace",
-            projectID: project.id,
+            id: space.id,
+            kind: .space,
+            title: space.name,
+            owner: "",
+            projectID: space.id,
             parentID: nil,
-            updatedAt: project.updatedAt,
-            createdAt: project.createdAt,
-            statusRaw: project.status.rawValue,
-            symbol: project.symbol,
-            isPinned: project.isPinned,
+            updatedAt: space.updatedAt,
+            createdAt: space.createdAt,
+            statusRaw: space.status.rawValue,
+            symbol: space.symbol,
             in: context,
             fresh: fresh
         )
-        if fresh == nil, previous?.title != project.name {
-            renameOwner(projectID: project.id, name: name, in: context)
+        if fresh == nil, previous?.title != space.name {
+            renameOwner(projectID: space.id, name: name, in: context)
         }
     }
 
@@ -352,7 +346,7 @@ private extension TitleIndexStore {
             id: run.id,
             kind: .run,
             title: run.title,
-            owner: run.project?.displayName ?? "No project",
+            owner: run.project?.displayName ?? "No Space",
             projectID: run.project?.id,
             updatedAt: run.updatedAt,
             createdAt: run.createdAt,
@@ -378,7 +372,6 @@ private extension TitleIndexStore {
         detailRaw: String = "",
         symbol: String,
         isArchived: Bool = false,
-        isPinned: Bool = false,
         isBusy: Bool = false,
         in context: ModelContext,
         fresh: FreshRows?
@@ -395,7 +388,6 @@ private extension TitleIndexStore {
             existing.detailRaw = detailRaw
             existing.symbol = symbol
             existing.isArchived = isArchived
-            existing.isPinned = isPinned
             existing.isBusy = isBusy
             return
         }
@@ -412,7 +404,6 @@ private extension TitleIndexStore {
             detailRaw: detailRaw,
             symbol: symbol,
             isArchived: isArchived,
-            isPinned: isPinned,
             isBusy: isBusy
         )
         context.insert(row)
@@ -425,7 +416,7 @@ private extension TitleIndexStore {
     }
 
     static func renameOwner(projectID: UUID, name: String, in context: ModelContext) {
-        for row in titles(projectID: projectID, in: context) where row.kind != .project {
+        for row in titles(projectID: projectID, in: context) where row.kind != .space {
             row.owner = name
         }
     }
@@ -436,7 +427,7 @@ private extension TitleIndexStore {
         }
     }
 
-    static func removeProject(_ id: UUID, in context: ModelContext) {
+    static func removeSpace(_ id: UUID, in context: ModelContext) {
         for row in titles(projectID: id, in: context) {
             context.delete(row)
         }

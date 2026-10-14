@@ -57,7 +57,7 @@ struct ThreadBranch: View {
                     CompletedTracksHeader(
                         count: completedChildren.count,
                         isExpanded: completedVisible,
-                        indent: CGFloat(depth + 1) * ProjectColumnMetrics.subtrackIndent + 2,
+                        indent: CGFloat(depth + 1) * TrackTreeMetrics.subtrackIndent + 2,
                         onToggle: toggleCompleted
                     )
                     if completedVisible {
@@ -170,7 +170,7 @@ struct ThreadBranch: View {
                 }
             }
         }
-        .padding(.leading, CGFloat(depth) * ProjectColumnMetrics.subtrackIndent + 2)
+        .padding(.leading, CGFloat(depth) * TrackTreeMetrics.subtrackIndent + 2)
         .padding(.trailing, 8)
     }
 
@@ -240,4 +240,8 @@ private struct CompletedTracksHeader: View {
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         .accessibilityHint("Shows completed subtracks")
     }
+}
+
+enum TrackTreeMetrics {
+    static let subtrackIndent: CGFloat = 28
 }

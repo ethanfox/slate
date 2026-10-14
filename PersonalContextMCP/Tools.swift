@@ -292,8 +292,7 @@ enum Tools {
             targetID: target,
             title: title,
             detail: detail,
-            projectID: project,
-            spaceID: space,
+            spaceID: space.isEmpty ? project : space,
             origin: origin,
             beforeJSON: before.isEmpty ? "" : (try? JSONSerialization.data(withJSONObject: before)).map { String(decoding: $0, as: UTF8.self) } ?? ""
         ))
@@ -601,7 +600,7 @@ enum Tools {
                 project.status = status
                 TaskStore.syncProjectStatus(project, in: context)
             }
-            if let pinned = args.bool("is_pinned") { project.isPinned = pinned }
+            if let pinned = args.bool("is_pinned") { PinStore.set(.space, project.id, pinned: pinned, in: context) }
             if let symbol = args.string("symbol"), !symbol.isEmpty { project.symbol = symbol }
             if let link = try args.optionalUUID("active_track_id") {
                 TaskStore.setActiveTrack(try Lookup.thread(link, in: project), on: project, in: context)
@@ -1511,7 +1510,7 @@ enum Tools {
             description: "List every Area with its id, name, and types. An Area holds an ongoing part of the user's life, such as recipes or habits.",
             properties: [:], required: [], readOnly: true
         ) { _, context in
-            SpaceStore.all(in: context).map { SpaceTools.space($0, full: false, in: context) }
+            SpaceStore.collecting(in: context).map { SpaceTools.space($0, full: false, in: context) }
         },
         Tool(
             name: "get_space",
@@ -1545,6 +1544,7 @@ enum Tools {
                 symbol: args.string("symbol").flatMap { $0.isEmpty ? nil : $0 } ?? "square.grid.2x2",
                 summary: args.string("summary") ?? "",
                 gradient: color ?? SpaceGradientName.next(after: used),
+                collects: true,
                 in: context
             )
             return SpaceTools.space(space, full: true, in: context)
@@ -2698,7 +2698,7 @@ enum JSONShape {
             "summary": project.summary,
             "current_direction": project.currentDirection,
             "brief": project.brief,
-            "is_pinned": project.isPinned,
+            "is_pinned": project.modelContext.map { PinStore.isPinned(project.id, in: $0) } ?? false,
             "last_activity": iso.string(from: project.lastActivity),
             "counts": [
                 "decisions": project.decisions.count,

@@ -64,8 +64,9 @@ enum MessageRole: String, Codable, Hashable {
     case assistant
 }
 
-/// Every Space is one of these. What a Space can hold is its capabilities: one that collects
-/// records is what used to be an Area, and the code still calls it `Space`.
+/// A Space is one container for a part of the user's life or work. What it shows is read from what
+/// it holds: direction (tracks, decisions, tasks, a brief) and records of its own types. The stored
+/// entity keeps its original name, `Project`; code says `Space`.
 typealias Space = Project
 
 @Model
@@ -75,18 +76,17 @@ final class Project: Identifiable {
     var symbol: String
     var summary: String
     var currentDirection: String
-    /// One sentence Membrae writes on what the user is doing in this project now. It leads the project's page.
+    /// One sentence Membrae writes on what the user is doing in this Space now. It leads the Space's page.
     var brief: String = ""
     var statusRaw: String
-    var isPinned: Bool
     var createdAt: Date
     var updatedAt: Date
-    /// Capabilities, as `SpaceBuiltInKind` raw values. `records` makes this a Space that collects.
+    /// Capabilities, as `SpaceBuiltInKind` raw values. `records` is set once the Space has a type.
     var enabledKindsRaw: String = ""
     /// A `SpaceGradient` name. Empty falls back to one picked from the id.
     var gradientRaw: String = ""
     /// What the agent has learned about how the user talks about this Space: their names for things,
-    /// units, standing preferences. The agent writes it; the user can read and fix it in Edit Area.
+    /// units, standing preferences. The agent writes it; the user can read and fix it in the Space's settings.
     var agentNotes: String = ""
     /// The shape of the picture on this Space's cards. Empty is landscape; "portrait" suits covers and posters.
     var cardShapeRaw: String = ""
@@ -170,7 +170,7 @@ final class Project: Identifiable {
     /// The most a Space's notes may hold, so they stay cheap to send with every message.
     static let agentNotesLimit = 1500
 
-    /// Spaces that collect records: what the sidebar and the tools call Areas.
+    /// Spaces that collect records of their own types.
     static let collecting = #Predicate<Project> { $0.enabledKindsRaw.contains("records") }
 
     var enabledKinds: Set<SpaceBuiltInKind> {
@@ -185,7 +185,15 @@ final class Project: Identifiable {
         }
     }
 
+    /// Holds records of its own types: recipes, habits, applications.
     var collects: Bool { enabledKinds.contains(.records) }
+
+    /// Has direction: lines of work, decisions, tasks, or a brief Membrae wrote. A Space with none
+    /// of these that collects records shows only its records.
+    var works: Bool {
+        !threads.isEmpty || !decisions.isEmpty || !brief.isEmpty || !currentDirection.isEmpty
+            || agendaItems.contains { $0.kind == .task }
+    }
 
     var hasPortraitCards: Bool {
         get { cardShapeRaw == "portrait" }
@@ -199,7 +207,6 @@ final class Project: Identifiable {
         self.summary = summary
         self.currentDirection = ""
         self.statusRaw = ProjectStatus.active.rawValue
-        self.isPinned = false
         self.createdAt = .now
         self.updatedAt = .now
         self.overviewWidthRaw = "twoThirds"
@@ -567,7 +574,7 @@ enum CleanupPlanStatus: String {
     case proposed, applied, dismissed
 }
 
-/// What Membrae proposes to tidy in one project. Nothing changes until the user applies it.
+/// What Membrae proposes to tidy in one Space. Nothing changes until the user applies it.
 @Model
 final class CleanupPlan: Identifiable {
     var id: UUID

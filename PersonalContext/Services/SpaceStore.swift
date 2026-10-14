@@ -16,13 +16,13 @@ enum SpaceStoreError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .emptyKey: "A type needs a key."
-        case .duplicateKey(let key): "This Area already has a type with the key \(key)."
+        case .duplicateKey(let key): "This Space already has a type with the key \(key)."
         case .notAnObjectType: "Records can only be made from an object type."
         case .notAnEventType: "Events can only be logged with an event type."
-        case .recordOutsideSpace: "An event can only be about records in its own Area."
+        case .recordOutsideSpace: "An event can only be about records in its own Space."
         case .invalidScreen(let problems): problems.joined(separator: " ")
         case .unknownLinkTarget(let field, let target):
-            "\(field) links to \(target), which is not an object type in this Area. Create that type first."
+            "\(field) links to \(target), which is not an object type in this Space. Create that type first."
         case .brokenLink(let field, let target):
             "\(field) must hold the id of a record in \(target). Use list_space_records to find it."
         case .oneRecordOnly(let type):
@@ -36,8 +36,14 @@ enum SpaceStoreError: LocalizedError, Equatable {
 enum SpaceStore {
     // MARK: Spaces
 
-    /// Spaces that collect records, oldest first: what the sidebar and the tools call Areas.
+    /// Every Space, oldest first.
     static func all(in context: ModelContext) -> [Space] {
+        let descriptor = FetchDescriptor<Space>(sortBy: [SortDescriptor(\.createdAt)])
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    /// The Spaces that hold records of their own types, oldest first.
+    static func collecting(in context: ModelContext) -> [Space] {
         let descriptor = FetchDescriptor<Space>(predicate: Space.collecting, sortBy: [SortDescriptor(\.createdAt)])
         return (try? context.fetch(descriptor)) ?? []
     }
@@ -47,19 +53,22 @@ enum SpaceStore {
         return try? context.fetch(descriptor).first
     }
 
+    /// A new Space. It gains the records capability with its first type; pass `collects` to give it
+    /// up front, for one being set up to hold records.
     @discardableResult
     static func create(
         named name: String,
         symbol: String = "square.grid.2x2",
         summary: String = "",
         gradient: String = "",
+        collects: Bool = false,
         in context: ModelContext
     ) throws -> Space {
         let space = Space(name: name, symbol: symbol, summary: summary)
         space.gradientRaw = gradient
-        space.enabledKinds = [.records]
+        if collects { space.enabledKinds = [.records] }
         context.insert(space)
-        try context.save()
+        try context.persist()
         return space
     }
 
@@ -84,18 +93,19 @@ enum SpaceStore {
         try context.save()
     }
 
-    /// Delete means delete: the Space, its types, records, events, and every built-in record it owns.
+    /// The one way a Space goes. Its types, records, events, widgets, tracks, notes, decisions, chats,
+    /// and runs go with it; a run still working is cancelled first. Tasks live outside Spaces and stay,
+    /// unfiled.
     static func delete(_ space: Space, in context: ModelContext) throws {
         let key = SpaceJSON.key(space.id)
+        RunStore.cancelActive(in: space, context: context)
         events(in: space, context: context).forEach(context.delete)
         fetch(#Predicate<AreaWidget> { $0.spaceIDString == key }, in: context).forEach(context.delete)
         releaseImages(of: records(in: space, context: context), in: context)
         records(in: space, context: context).forEach(context.delete)
         types(in: space, context: context).forEach(context.delete)
-        // Tasks outlive a deleted project, but not a deleted Space.
-        space.agendaItems.forEach(context.delete)
         context.delete(space)
-        try context.save()
+        try context.persist()
     }
 
     // MARK: Built-in records
@@ -156,6 +166,7 @@ enum SpaceStore {
         try checkFormulaPaths(of: schema, ownKey: trimmed, spaceKey: SpaceJSON.key(space.id), in: context)
         let type = SpaceType(spaceID: space.id, key: trimmed, name: name, role: role, schema: schema, origin: origin)
         context.insert(type)
+        space.enabledKinds.insert(.records)
         space.touch()
         try context.save()
         return type
@@ -528,7 +539,7 @@ enum SpaceStore {
                 } else {
                     throw SpaceStoreError.badFormulaPath(
                         field: entry.field.name,
-                        reason: "\(head) is not a settings type in this Area."
+                        reason: "\(head) is not a settings type in this Space."
                     )
                 }
                 guard let found = targetSchema?.liveFields.first(where: { $0.id == fieldID }), found.kind.isNumeric else {

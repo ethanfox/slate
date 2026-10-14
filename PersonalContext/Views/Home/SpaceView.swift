@@ -388,7 +388,7 @@ struct NewSpaceSheet: View {
                 conversationID: conversation.id,
                 text: NewSpaceSheet.setupMessage(name: trimmed, symbol: symbol, color: chosen.rawValue, brief: brief)
             )
-        } else if let space = try? SpaceStore.create(named: trimmed, symbol: symbol, gradient: chosen.rawValue, in: context) {
+        } else if let space = try? SpaceStore.create(named: trimmed, symbol: symbol, gradient: chosen.rawValue, collects: true, in: context) {
             try? SpaceStore.apply(template, to: space, in: context)
             app.navigate(to: .space(space.id), newTab: false)
         }

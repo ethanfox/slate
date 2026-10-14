@@ -579,7 +579,7 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(read("get_note", "note_id", noteID)["isError"] as? Bool, true)
         let removed = try XCTUnwrap(try log().last)
         XCTAssertEqual(removed.sentence, "Deleted note “\(note["title"] as? String ?? "")”")
-        XCTAssertEqual(removed.projectIDString.lowercased(), seed.project.id.uuidString.lowercased())
+        XCTAssertEqual(removed.spaceIDString.lowercased(), seed.project.id.uuidString.lowercased())
         XCTAssertTrue(removed.canUndo)
         try Tools.undo(removed.id, container: container)
         let noteBack = try object(read("get_note", "note_id", noteID))

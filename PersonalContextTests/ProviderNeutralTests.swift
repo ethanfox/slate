@@ -65,12 +65,12 @@ final class ProviderNeutralTests: XCTestCase {
         finished.status = .done
         context.insert(project)
         context.insert(finished)
-        let space = try SpaceStore.create(named: "Kitchen", summary: "Recipes and what got cooked.", in: context)
+        let space = try SpaceStore.create(named: "Kitchen", summary: "Recipes and what got cooked.", collects: true, in: context)
         context.insert(SpaceType(spaceID: space.id, key: "recipe", name: "Recipe", role: .object, schema: SpaceSchema(), origin: .agent))
         context.insert(SpaceType(spaceID: space.id, key: "cooked", name: "Cooked", role: .event, schema: SpaceSchema(), origin: .agent))
         let loose = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
         let inSpace = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
-        inSpace.spaceIDString = SpaceJSON.key(space.id)
+        inSpace.project = space
         let inProject = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test", project: project)
         context.insert(loose)
         context.insert(inSpace)
@@ -134,7 +134,7 @@ final class ProviderNeutralTests: XCTestCase {
         ])
         let action = try XCTUnwrap(try container.mainContext.fetch(FetchDescriptor<AgentAction>()).first)
         XCTAssertEqual(UUID(uuidString: action.conversationIDString), conversationID)
-        XCTAssertEqual(UUID(uuidString: action.projectIDString), project.id)
+        XCTAssertEqual(UUID(uuidString: action.spaceIDString), project.id)
     }
 
     @MainActor

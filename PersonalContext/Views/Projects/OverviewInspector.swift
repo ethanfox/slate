@@ -61,15 +61,15 @@ struct OverviewInspector: View {
 }
 
 extension AppModel {
-    /// Project settings live in the sidebar beside the overview. There is no modal for them.
-    func showProjectSettings(_ project: Project) {
-        open(project, tab: .overview, newTab: false)
+    /// A Space's settings live in the pane beside its page. There is no modal for them.
+    func showSpaceSettings(_ space: Space) {
+        open(space, tab: .overview, newTab: false)
         selectedOverviewPlate = nil
         if !inspectorOpen { toggleInspector() }
     }
 
-    /// The gear on the overview: shows the settings, or hides them when they are already showing.
-    func toggleProjectSettings() {
+    /// The gear on the page: shows the settings, or hides them when they are already showing.
+    func toggleSpaceSettings() {
         if inspectorOpen, selectedOverviewPlate == nil {
             toggleInspector()
         } else {

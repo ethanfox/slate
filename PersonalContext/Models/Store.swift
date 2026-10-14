@@ -67,7 +67,7 @@ enum Store {
 
     /// Bump whenever a model or a stored property is added. A build that opens a store written by a
     /// newer schema drops the tables and columns it does not know, so older builds must refuse.
-    static let schemaVersion = 23
+    static let schemaVersion = 24
 
     /// Sits beside the store and holds the highest schema version that has opened it.
     static func schemaMarkerURL(for store: URL) -> URL {
@@ -194,12 +194,14 @@ enum Store {
         mode: StoreOpenMode,
         schemaVersion: Int = Store.schemaVersion
     ) throws -> ModelContainer {
+        var upgrade: SpaceUpgrade?
         if !configuration.isStoredInMemoryOnly {
             // Before the container exists: creating it is what migrates the file.
             try refuseIfOutdated(at: configuration.url, running: schemaVersion)
             try migrateTagColumns(at: configuration.url)
             try migrateSpaceOwnerColumns(at: configuration.url)
             try stashAreas(at: configuration.url)
+            upgrade = readSpaceUpgrade(at: configuration.url, running: schemaVersion)
         }
         let start = ContinuousClock.now
         let container = try ModelContainer(for: schema, configurations: configuration)
@@ -210,6 +212,9 @@ enum Store {
         context.autosaveEnabled = false
         if !configuration.isStoredInMemoryOnly {
             try foldStashedAreas(at: configuration.url, into: context)
+        }
+        if let upgrade {
+            try apply(upgrade, in: context)
         }
         guard mode == .prepare else {
             // A helper built before the title index existed drops its table when it saves.
@@ -320,10 +325,7 @@ enum Store {
         }
         var areas: [StashedArea] = []
         while sqlite3_step(statement) == SQLITE_ROW {
-            guard sqlite3_column_bytes(statement, 0) == 16, let bytes = sqlite3_column_blob(statement, 0) else { continue }
-            let raw = bytes.assumingMemoryBound(to: UInt8.self)
-            let id = UUID(uuid: (raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7],
-                                 raw[8], raw[9], raw[10], raw[11], raw[12], raw[13], raw[14], raw[15]))
+            guard let id = uuid(statement, 0) else { continue }
             areas.append(StashedArea(
                 id: id,
                 name: text(1),
@@ -381,6 +383,66 @@ enum Store {
 
     private static func owned<Item: PersistentModel & SpaceOwnable>(_: Item.Type, _ key: String, _ context: ModelContext) -> [Item] {
         ((try? context.fetch(FetchDescriptor<Item>())) ?? []).filter { $0.spaceIDString == key }
+    }
+
+    /// What a store written before schema 24 keeps where the models no longer look: which Spaces
+    /// were pinned by a flag of their own, and the Space an agent's write landed in under its old
+    /// column. Pins move into the pin store and the action log's Space id is filled in.
+    struct SpaceUpgrade: Equatable {
+        var pinnedSpaceIDs: [UUID] = []
+        /// Action id to the Space id it was filed under.
+        var actionSpaces: [UUID: String] = [:]
+    }
+
+    static func readSpaceUpgrade(at url: URL, running version: Int) -> SpaceUpgrade? {
+        guard version >= 24, FileManager.default.fileExists(atPath: url.path), recordedSchemaVersion(for: url) < 24 else { return nil }
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else { return nil }
+        defer { sqlite3_close(db) }
+        var upgrade = SpaceUpgrade()
+        if tableColumns(db, table: "ZPROJECT").contains("ZISPINNED") {
+            query(db, "SELECT ZID FROM ZPROJECT WHERE ZISPINNED = 1") { statement in
+                if let id = uuid(statement, 0) { upgrade.pinnedSpaceIDs.append(id) }
+            }
+        }
+        if tableColumns(db, table: "ZAGENTACTION").contains("ZPROJECTIDSTRING") {
+            query(db, "SELECT ZID, ZPROJECTIDSTRING FROM ZAGENTACTION WHERE ZPROJECTIDSTRING != '' AND (ZSPACEIDSTRING IS NULL OR ZSPACEIDSTRING = '')") { statement in
+                guard let id = uuid(statement, 0), let space = sqlite3_column_text(statement, 1) else { return }
+                upgrade.actionSpaces[id] = String(cString: space)
+            }
+        }
+        return upgrade
+    }
+
+    static func apply(_ upgrade: SpaceUpgrade, in context: ModelContext) throws {
+        for id in upgrade.pinnedSpaceIDs {
+            PinStore.set(.space, id, pinned: true, in: context)
+        }
+        if !upgrade.actionSpaces.isEmpty {
+            for action in (try? context.fetch(FetchDescriptor<AgentAction>())) ?? [] where action.spaceIDString.isEmpty {
+                if let space = upgrade.actionSpaces[action.id] { action.spaceIDString = space }
+            }
+        }
+        // Every Space is indexed under one kind now, so the index is written again from the records.
+        TitleIndexStore.rebuild(in: context)
+        try context.save()
+    }
+
+    private static func query(_ db: OpaquePointer, _ sql: String, _ row: (OpaquePointer) -> Void) {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { return }
+        defer { sqlite3_finalize(statement) }
+        while sqlite3_step(statement) == SQLITE_ROW {
+            row(statement)
+        }
+    }
+
+    /// A UUID column, stored by SwiftData as 16 raw bytes.
+    private static func uuid(_ statement: OpaquePointer?, _ index: Int32) -> UUID? {
+        guard sqlite3_column_bytes(statement, index) == 16, let bytes = sqlite3_column_blob(statement, index) else { return nil }
+        let raw = bytes.assumingMemoryBound(to: UInt8.self)
+        return UUID(uuid: (raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7],
+                           raw[8], raw[9], raw[10], raw[11], raw[12], raw[13], raw[14], raw[15]))
     }
 
     private static func tableColumns(_ db: OpaquePointer, table: String) -> Set<String> {

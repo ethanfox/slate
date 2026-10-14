@@ -177,7 +177,7 @@ enum RunStore {
 
     static func cancelActive(in project: Project, context: ModelContext) {
         for run in activeRuns(in: context) where run.project?.id == project.id {
-            apply(.cancelled, on: run, detail: "Cancelled because the project was deleted.", event: .cancelled)
+            apply(.cancelled, on: run, detail: "Cancelled because the Space was deleted.", event: .cancelled)
             }
         try? save(context)
     }

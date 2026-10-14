@@ -47,8 +47,9 @@ final class TitleIndexStoreTests: XCTestCase {
         PinStore.adopt(old, in: context)
         try context.persist()
         let pins = PinStore.all(in: context)
-        XCTAssertEqual(Set(pins.compactMap(\.targetID)), [note.id, thread.id], "a pin already there is kept once; a project or a missing record is left out")
+        XCTAssertEqual(Set(pins.compactMap(\.targetID)), [note.id, thread.id, project.id], "a pin already there is kept once; a missing record is left out")
         XCTAssertEqual(pins.first { $0.targetID == thread.id }?.kind, .track)
+        XCTAssertEqual(pins.first { $0.targetID == project.id }?.kind, .space)
     }
 
     func testRenameUpdatesTheTitleRow() throws {

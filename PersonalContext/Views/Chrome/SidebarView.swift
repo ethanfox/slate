@@ -4,12 +4,10 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "project" }, sort: \TitleIndex.title)
-    private var projects: [TitleIndex]
-    @Query(filter: Space.collecting, sort: \Space.createdAt) private var spaces: [Space]
+    @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "space" }, sort: \TitleIndex.title)
+    private var spaces: [TitleIndex]
     @Query(sort: \Pin.createdAt) private var pins: [Pin]
     @State private var pendingDelete: TitleIndex?
-    @State private var pendingAreaDelete: Space?
 
     private struct PinnedItem: Identifiable {
         var id: UUID
@@ -27,9 +25,9 @@ struct SidebarView: View {
             switch kind {
             case .space:
                 guard let space = spaces.first(where: { $0.id == id }) else { return nil }
-                return PinnedItem(id: id, kind: kind, title: space.displayName, symbol: space.symbol, open: { newTab in
-                    app.navigate(to: .space(id), newTab: newTab)
-                }, shows: .space(id))
+                return PinnedItem(id: id, kind: kind, title: space.displayTitle, symbol: symbol(space), open: { newTab in
+                    app.openSpace(id, newTab: newTab)
+                }, shows: nil)
             case .record:
                 guard let record = SpaceStore.record(id, in: context), let space = record.spaceID else { return nil }
                 return PinnedItem(id: id, kind: kind, title: record.displayTitle, symbol: "doc.text", open: { newTab in
@@ -56,9 +54,12 @@ struct SidebarView: View {
         app.windowTabs.first { $0.id == app.selectedTabID }?.viewKey
     }
 
-    private var orderedProjects: [TitleIndex] {
-        projects.sorted { lhs, rhs in
-            if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
+    /// Every Space in one list, pinned first, then by name.
+    private var ordered: [TitleIndex] {
+        spaces.sorted { lhs, rhs in
+            let left = app.isPinned(lhs.id)
+            let right = app.isPinned(rhs.id)
+            if left != right { return left && !right }
             return lhs.displayTitle.localizedCaseInsensitiveCompare(rhs.displayTitle) == .orderedAscending
         }
     }
@@ -81,7 +82,11 @@ struct SidebarView: View {
                             Button {
                                 item.open(false)
                             } label: {
-                                SidebarRow(title: item.title, systemImage: item.symbol, isSelected: item.shows != nil && item.shows == showing)
+                                SidebarRow(
+                                    title: item.title,
+                                    systemImage: item.symbol,
+                                    isSelected: item.kind == .space ? isOn(item.id) : item.shows != nil && item.shows == showing
+                                )
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
@@ -99,23 +104,30 @@ struct SidebarView: View {
                         }
                     }
 
-                    if !spaces.isEmpty {
-                        section("Areas")
-                        ForEach(spaces) { space in
+                    if !ordered.isEmpty {
+                        section("Spaces")
+                        ForEach(ordered) { space in
                             Button {
-                                app.navigate(to: .space(space.id))
+                                app.openSpace(space.id)
                             } label: {
-                                SidebarRow(title: space.displayName, systemImage: space.symbol, isSelected: isOn(space))
+                                SidebarRow(
+                                    title: space.displayTitle,
+                                    systemImage: symbol(space),
+                                    isSelected: isOn(space.id),
+                                    showsPin: app.isPinned(space.id)
+                                )
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button {
-                                    app.present(.editSpace(space))
+                                    if let record = TitleIndexStore.project(space.id, in: context) {
+                                        app.showSpaceSettings(record)
+                                    }
                                 } label: {
-                                    Label("Edit…", systemImage: "pencil")
+                                    Label("Settings", systemImage: "gearshape")
                                 }
                                 Button {
-                                    app.navigate(to: .space(space.id), newTab: true)
+                                    app.openSpace(space.id, newTab: true)
                                 } label: {
                                     Label("Open in New Tab", systemImage: "plus.square.on.square")
                                 }
@@ -126,53 +138,7 @@ struct SidebarView: View {
                                 }
                                 Divider()
                                 Button(role: .destructive) {
-                                    pendingAreaDelete = space
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        }
-                    }
-
-                    if !orderedProjects.isEmpty {
-                        section("Projects")
-                        ForEach(orderedProjects) { project in
-                            Button {
-                                app.open(project)
-                            } label: {
-                                SidebarRow(
-                                    title: project.displayTitle,
-                                    systemImage: project.symbol.isEmpty ? "folder" : project.symbol,
-                                    isSelected: app.destination == .project(project.id),
-                                    showsPin: project.isPinned
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button {
-                                    if let record = TitleIndexStore.project(project.id, in: context) {
-                                        app.showProjectSettings(record)
-                                    }
-                                } label: {
-                                    Label("Project Settings", systemImage: "gearshape")
-                                }
-                                Button {
-                                    app.open(project, newTab: true)
-                                } label: {
-                                    Label("Open in New Tab", systemImage: "plus.square.on.square")
-                                }
-                                Button {
-                                    if let record = TitleIndexStore.project(project.id, in: context) {
-                                        record.isPinned.toggle()
-                                        record.touch()
-                                        try? context.persist()
-                                    }
-                                } label: {
-                                    Label(project.isPinned ? "Unpin" : "Pin", systemImage: project.isPinned ? "pin.slash" : "pin")
-                                }
-                                Divider()
-                                Button(role: .destructive) {
-                                    pendingDelete = project
+                                    pendingDelete = space
                                 } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
@@ -185,20 +151,6 @@ struct SidebarView: View {
                 .padding(.bottom, 12)
             }
             .scrollContentBackground(.hidden)
-            .alert(
-                "Delete \(pendingAreaDelete?.displayName ?? "this Area")?",
-                isPresented: Binding(get: { pendingAreaDelete != nil }, set: { if !$0 { pendingAreaDelete = nil } })
-            ) {
-                Button("Delete", role: .destructive) {
-                    if let space = pendingAreaDelete {
-                        try? SpaceStore.delete(space, in: context)
-                    }
-                    pendingAreaDelete = nil
-                }
-                Button("Cancel", role: .cancel) { pendingAreaDelete = nil }
-            } message: {
-                Text("Everything in this Area will be deleted. This can’t be undone.")
-            }
 
             row("Settings", "gearshape", destination: .settings)
                 .padding(.horizontal, 8)
@@ -207,18 +159,18 @@ struct SidebarView: View {
         .alert(item: $pendingDelete) { row in
             Alert(
                 title: Text("Delete \(row.displayTitle)?"),
-                message: Text("Tracks, notes, decisions, and conversations in this project will be removed from this Mac."),
+                message: Text(SpaceDeletion.message),
                 primaryButton: .destructive(Text("Delete")) {
-                    guard let project = TitleIndexStore.project(row.id, in: context) else { return }
-                    RunStore.cancelActive(in: project, context: context)
-                    app.closeTabs(forProject: project.id)
-                    context.delete(project)
-                    try? context.persist()
+                    app.deleteSpace(row.id)
                 },
                 secondaryButton: .cancel()
             )
         }
         .task { await app.eventKit.prepareReminders() }
+    }
+
+    private func symbol(_ space: TitleIndex) -> String {
+        space.symbol.isEmpty ? TitleIndexKind.space.symbol : space.symbol
     }
 
     private func section(_ title: String) -> some View {
@@ -269,10 +221,14 @@ struct SidebarView: View {
         }
     }
 
-    private func isOn(_ space: Space) -> Bool {
+    private func isOn(_ id: UUID) -> Bool {
         switch app.destination {
-        case .space(let id), .spaceRecord(let id, _): id == space.id
+        case .space(let shown), .spaceRecord(let shown, _), .project(let shown): shown == id
         default: false
         }
     }
+}
+
+enum SpaceDeletion {
+    static let message = "Its tracks, notes, decisions, chats, records, and runs are removed from this Mac. Its tasks stay in Tasks."
 }

@@ -494,7 +494,7 @@ private struct CaptureBarHost: ViewModifier {
 extension TitleIndexKind {
     var label: String {
         switch self {
-        case .project: "Project"
+        case .space: "Space"
         case .track: "Track"
         case .note: "Note"
         case .decision: "Decision"
@@ -506,7 +506,7 @@ extension TitleIndexKind {
 
     var plural: String {
         switch self {
-        case .project: "Projects"
+        case .space: "Spaces"
         case .track: "Tracks"
         case .note: "Notes"
         case .decision: "Decisions"
@@ -576,7 +576,7 @@ struct IndexRow: View {
     }
 }
 
-/// What agents wrote lately, newest first, for one project or for everything.
+/// What agents wrote lately, newest first, for one Space or for everything.
 struct ActionFeed: View {
     var empty: String
     private var showsPlace: Bool
@@ -584,16 +584,15 @@ struct ActionFeed: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @Query private var actions: [AgentAction]
-    @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "project" }) private var projects: [TitleIndex]
-    @Query private var spaces: [Space]
+    @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "space" }) private var spaces: [TitleIndex]
     @State private var problem: String?
 
-    init(projectID: UUID? = nil, empty: String) {
+    init(spaceID: UUID? = nil, empty: String) {
         self.empty = empty
-        showsPlace = projectID == nil
+        showsPlace = spaceID == nil
         var descriptor = FetchDescriptor<AgentAction>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
-        if let key = projectID?.uuidString.lowercased() {
-            descriptor.predicate = #Predicate { $0.projectIDString == key }
+        if let key = spaceID?.uuidString.lowercased() {
+            descriptor.predicate = #Predicate { $0.spaceIDString == key }
         }
         descriptor.fetchLimit = 40
         _actions = Query(descriptor)
@@ -685,8 +684,7 @@ struct ActionFeed: View {
     }
 
     private func place(of action: AgentAction) -> String? {
-        if let space = spaces.first(where: { $0.id == action.spaceID }) { return space.displayName }
-        return projects.first { $0.id == action.projectID }?.displayTitle
+        spaces.first { $0.id == action.spaceID }?.displayTitle
     }
 
     private func row(_ id: String) -> TitleIndex? {
@@ -764,7 +762,7 @@ struct ProjectOverview: View {
                             iconButton("wand.and.stars", help: "Tidy Up: Membrae proposes what to merge, retire, and delete") {
                                 app.presentNewRun(origin: .project, project: project, brief: ContextBuilder.cleanupBrief(for: project))
                             }
-                            iconButton("gearshape", help: "Project Settings") { app.toggleProjectSettings() }
+                            iconButton("gearshape", help: "Settings") { app.toggleSpaceSettings() }
                         }
                         Text(headline)
                             .font(.system(size: 34, weight: .semibold))

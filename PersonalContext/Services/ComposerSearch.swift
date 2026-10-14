@@ -550,7 +550,7 @@ enum ComposerSearch {
 
     private static func titleHit(_ row: TitleIndex) -> ComposerHit {
         let kind: ComposerHitKind = switch row.kind {
-        case .project: .project
+        case .space: .project
         case .track: .track
         case .note: .note
         case .decision: .decision
@@ -565,7 +565,7 @@ enum ComposerSearch {
             excerpt: "",
             symbol: row.symbol.isEmpty ? kind.symbol : row.symbol,
             recordID: row.id,
-            projectID: row.kind == .project ? row.id : row.projectID
+            projectID: row.kind == .space ? row.id : row.projectID
         )
     }
 

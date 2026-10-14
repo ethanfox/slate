@@ -246,11 +246,8 @@ extension AppModel {
         NavTrace.keep()
         let context = container.mainContext
         switch row.kind {
-        case .project:
-            if let project = NavTrace.measure("fetch.project") { TitleIndexStore.project(row.id, in: context) } {
-                // A project opens on its overview, the one page that stands for it.
-                open(project, tab: .overview, newTab: newTab)
-            }
+        case .space:
+            openSpace(row.id, newTab: newTab)
         case .track:
             if let thread = NavTrace.measure("fetch.track") { TitleIndexStore.thread(row.id, in: context) } {
                 open(thread, newTab: newTab)
@@ -276,6 +273,27 @@ extension AppModel {
                 open(run, newTab: newTab)
             }
         }
+    }
+
+    /// Opens a Space on the page that stands for it.
+    func openSpace(_ id: UUID, newTab: Bool = TabActivation.commandClick) {
+        let context = container.mainContext
+        let found = NavTrace.measure("fetch.space") { TitleIndexStore.project(id, in: context) }
+        guard let space = found else { return }
+        if space.collects {
+            navigate(to: .space(id), newTab: newTab)
+        } else {
+            open(space, tab: .overview, newTab: newTab)
+        }
+    }
+
+    /// The one way a Space is deleted from the app: its runs stop, its tabs close, and the store removes it.
+    func deleteSpace(_ id: UUID) {
+        let context = container.mainContext
+        guard let space = TitleIndexStore.project(id, in: context) else { return }
+        closeTabs(forSpace: id)
+        try? SpaceStore.delete(space, in: context)
+        loadPins()
     }
 
     private func windowTab(for destination: Destination) -> WindowTab {
@@ -540,11 +558,13 @@ extension AppModel {
         closeTab(selectedTabID)
     }
 
-    func closeTabs(forProject id: UUID) {
+    func closeTabs(forSpace id: UUID) {
         persistCurrentIntoSelectedTab()
         let remaining = windowTabs.filter { tab in
-            if case .project(let projectID) = tab.destination { return projectID != id }
-            return true
+            switch tab.destination {
+            case .project(let shown), .space(let shown), .spaceRecord(let shown, _): shown != id
+            default: true
+            }
         }
         if remaining.count == windowTabs.count { return }
         let removed = windowTabs.filter { tab in !remaining.contains(where: { $0.id == tab.id }) }
