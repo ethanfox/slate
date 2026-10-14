@@ -721,6 +721,8 @@ struct ProjectOverview: View {
     @Query private var rows: [TitleIndex]
     @Query private var plans: [CleanupPlan]
     @State private var showsMore = false
+    @State private var showsDirection = false
+    @Environment(\.modelContext) private var context
 
     init(project: Project, list: @escaping (TitleIndexKind) -> Void) {
         self.project = project
@@ -745,12 +747,15 @@ struct ProjectOverview: View {
 
     var body: some View {
         let pinned = rows.filter { app.isPinned($0.id) }
-        let nextID = TaskStore.nextTask(in: project)?.id
-        let tasks = upNext(of(.task).filter { $0.statusRaw != "done" }, nextID: nextID)
-        let decisions = of(.decision).filter { $0.statusRaw != DecisionStatus.superseded.rawValue }
+        let nextItem = TaskStore.nextTask(in: project)
+        let open = upNext(of(.task).filter { $0.statusRaw != "done" }, nextID: nextItem?.id)
+        let focus = nextItem ?? open.first.flatMap { TitleIndexStore.task($0.id, in: context) }
+        let after = open.filter { $0.id != focus?.id }
+        let decided = project.decisions.filter { $0.status == .active }.sorted { $0.createdAt > $1.createdAt }
+        let lines = project.threads.count { $0.status == .active || $0.status == .exploring }
         ScrollView {
             PageBody {
-                VStack(alignment: .leading, spacing: 30) {
+                VStack(alignment: .leading, spacing: 28) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 10) {
                             Image(systemName: project.symbol.isEmpty ? "folder" : project.symbol)
@@ -784,27 +789,40 @@ struct ProjectOverview: View {
                             .help("Project Settings")
                             .accessibilityLabel("Project Settings")
                         }
-                        if !project.currentDirection.isEmpty {
-                            Text(project.currentDirection)
-                                .font(CraftFont.body)
-                                .lineSpacing(3)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: 640, alignment: .leading)
-                                .fixedSize(horizontal: false, vertical: true)
-                        } else if !project.summary.isEmpty {
-                            Text(project.summary)
-                                .font(CraftFont.body)
-                                .lineSpacing(3)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(4)
-                                .frame(maxWidth: 640, alignment: .leading)
+                        let about = project.currentDirection.isEmpty ? project.summary : project.currentDirection
+                        if !about.isEmpty {
+                            // Two lines say what this is. The rest is there on a click.
+                            Button {
+                                showsDirection.toggle()
+                            } label: {
+                                Text(about)
+                                    .font(CraftFont.body)
+                                    .lineSpacing(3)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(showsDirection ? nil : 2)
+                                    .multilineTextAlignment(.leading)
+                                    .frame(maxWidth: 640, alignment: .leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .help(showsDirection ? "Show less" : "Show the whole direction")
                         }
                     }
 
                     if let plan = plans.first {
                         CleanupPlanCard(plan: plan)
                     }
+
+                    focusCard(focus)
+
+                    HStack(spacing: 12) {
+                        stat("Open tasks", open.count) { app.open(project, tab: .tasks, newTab: false) }
+                        stat("Decisions", decided.count) { list(.decision) }
+                        stat("Lines of work", lines) { list(.track) }
+                    }
+
+                    LatelyLine(projectID: project.id)
 
                     if !pinned.isEmpty {
                         block("Pinned") {
@@ -817,28 +835,27 @@ struct ProjectOverview: View {
                     }
 
                     HStack(alignment: .top, spacing: 48) {
-                        block("Lately") {
-                            ActionFeed(projectID: project.id, empty: "Nothing filed here yet. Tell Membrae something below.")
+                        block("After that") {
+                            if after.isEmpty { EmptyLine(text: "Nothing else open.") }
+                            ForEach(after.prefix(4)) { row in
+                                IndexRow(row: row)
+                                Hairline()
+                            }
+                            if after.count > 4 {
+                                moreButton("All \(open.count) open tasks") { app.open(project, tab: .tasks, newTab: false) }
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                        VStack(alignment: .leading, spacing: 26) {
-                            block("What’s next") {
-                                if tasks.isEmpty { EmptyLine(text: "Nothing open.") }
-                                ForEach(tasks.prefix(5)) { row in
-                                    IndexRow(row: row, caption: row.id == nextID ? "Next" : "")
-                                    Hairline()
-                                }
-                                if tasks.count > 5 {
-                                    moreButton("All \(tasks.count) open tasks") { app.open(project, tab: .tasks, newTab: false) }
+                        block("Decided lately") {
+                            if decided.isEmpty { EmptyLine(text: "No decisions yet.") }
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(decided.prefix(3)) { decision in
+                                    decisionCard(decision)
                                 }
                             }
-                            block("Recent decisions", more: decisions.count > 5 ? .decision : nil) {
-                                if decisions.isEmpty { EmptyLine(text: "No decisions yet.") }
-                                ForEach(decisions.prefix(5)) { row in
-                                    IndexRow(row: row)
-                                    Hairline()
-                                }
+                            if decided.count > 3 {
+                                moreButton("All decisions") { list(.decision) }
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -872,6 +889,86 @@ struct ProjectOverview: View {
             }
         }
         .scrollContentBackground(.hidden)
+    }
+
+    /// The one task in focus, large, with the two things to do about it.
+    private func focusCard(_ task: AgendaItem?) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("NEXT")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(.secondary)
+            if let task {
+                Text(task.displayTitle)
+                    .font(.system(size: 22, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                if let place = task.stop?.displayTitle ?? task.liveTracks.first?.title, !place.isEmpty {
+                    Text(place)
+                        .font(CraftFont.body)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                HStack(spacing: 10) {
+                    Button("Open") { app.present(.editTask(task)) }
+                        .buttonStyle(.borderedProminent)
+                    Button("Hand to an Agent") { app.presentNewRun(origin: .task, project: project, task: task) }
+                }
+                .padding(.top, 4)
+            } else {
+                Text("Nothing open. Tell Membrae what you want to do next.")
+                    .font(CraftFont.body)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: 720, alignment: .leading)
+        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(CraftColor.hairline))
+    }
+
+    private func stat(_ label: String, _ count: Int, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(count)")
+                    .font(.system(size: 24, weight: .semibold).monospacedDigit())
+                Text(label)
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(width: 150, alignment: .leading)
+            .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(CraftColor.hairline))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(count) \(label.lowercased())")
+    }
+
+    /// A decision as what was decided, not as a title and a date.
+    private func decisionCard(_ decision: Decision) -> some View {
+        Button {
+            app.open(decision)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(decision.title.isEmpty ? "Untitled" : decision.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                Text(decision.decision)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(3)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(CraftColor.hairline))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// Open tasks in the order to pick them up: the Next task, then what is under way, then the rest,
@@ -968,6 +1065,66 @@ struct ProjectOverview: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Today's changes in one line. The full log opens under it on request.
+private struct LatelyLine: View {
+    var projectID: UUID
+    @Query private var actions: [AgentAction]
+    @State private var open = false
+
+    init(projectID: UUID) {
+        self.projectID = projectID
+        let key = projectID.uuidString.lowercased()
+        let since = Calendar.current.startOfDay(for: .now)
+        _actions = Query(filter: #Predicate<AgentAction> {
+            $0.projectIDString == key && $0.createdAt >= since && $0.undoneAt == nil
+        })
+    }
+
+    private var summary: String {
+        var merged = 0, added = 0, changed = 0, completed = 0, deleted = 0
+        for action in actions {
+            switch action.verb {
+            case .added: added += 1
+            case .completed: completed += 1
+            case .removed: deleted += 1
+            case .changed: if action.tool == "merge_tracks" { merged += 1 } else { changed += 1 }
+            default: break
+            }
+        }
+        let parts = [(merged, "merged"), (added, "added"), (completed, "completed"), (changed, "changed"), (deleted, "deleted")]
+            .filter { $0.0 > 0 }
+            .map { "\($0.0) \($0.1)" }
+        return parts.isEmpty ? "Nothing changed today." : "Today: " + parts.joined(separator: ", ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                open.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 12))
+                    Text(summary)
+                        .font(CraftFont.body)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                }
+                .foregroundStyle(.secondary)
+                .frame(height: 28)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(open ? "Hide what changed" : "Show what changed, and take any of it back")
+            if open {
+                ActionFeed(projectID: projectID, empty: "Nothing filed here yet. Tell Membrae something below.")
+                    .frame(maxWidth: 560, alignment: .leading)
+            }
+        }
     }
 }
 
