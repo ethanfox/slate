@@ -442,7 +442,6 @@ struct RootView: View {
                     .buttonStyle(.plain)
                     .glassEffect(.regular, in: Capsule())
                     .help("New Task")
-                    TaskTrackFilterMenu(project: project)
                     ChromeChoiceControl(
                         title: "View",
                         subtitle: "Choose how you browse tasks.",

@@ -711,8 +711,8 @@ struct ActionFeed: View {
     }
 }
 
-/// The page that stands for a project: where it is going, what changed, what is active, and what was
-/// decided, with the full lists one click away.
+/// The page that stands for a project: where it is going, what is next, what changed, and what was decided.
+/// How the work is filed (tracks, stops, themes) is the AI's business and stays under More.
 struct ProjectOverview: View {
     var project: Project
     var list: (TitleIndexKind) -> Void
@@ -720,6 +720,7 @@ struct ProjectOverview: View {
     @Environment(AppModel.self) private var app
     @Query private var rows: [TitleIndex]
     @Query private var plans: [CleanupPlan]
+    @State private var showsMore = false
 
     init(project: Project, list: @escaping (TitleIndexKind) -> Void) {
         self.project = project
@@ -744,8 +745,8 @@ struct ProjectOverview: View {
 
     var body: some View {
         let pinned = rows.filter { app.isPinned($0.id) }
-        let tracks = of(.track).filter { $0.statusRaw == ThreadStatus.active.rawValue }
-        let tasks = of(.task).filter { $0.statusRaw != "done" }
+        let nextID = TaskStore.nextTask(in: project)?.id
+        let tasks = upNext(of(.task).filter { $0.statusRaw != "done" }, nextID: nextID)
         let decisions = of(.decision).filter { $0.statusRaw != DecisionStatus.superseded.rawValue }
         ScrollView {
             PageBody {
@@ -805,8 +806,6 @@ struct ProjectOverview: View {
                         CleanupPlanCard(plan: plan)
                     }
 
-                    everything
-
                     if !pinned.isEmpty {
                         block("Pinned") {
                             ForEach(pinned) { row in
@@ -824,26 +823,10 @@ struct ProjectOverview: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                         VStack(alignment: .leading, spacing: 26) {
-                            block("Active track") {
-                                if let active = project.activeTrack, let row = of(.track).first(where: { $0.id == active.id }) {
-                                    IndexRow(row: row, caption: activeCaption(active))
-                                    Hairline()
-                                } else {
-                                    EmptyLine(text: "No active track. Open a track and make it the active one.")
-                                }
-                            }
-                            block("In progress", more: tracks.count > 5 ? .track : nil) {
-                                let others = tracks.filter { $0.id != project.activeTrackID }
-                                if others.isEmpty { EmptyLine(text: "No other track is in progress.") }
-                                ForEach(others.prefix(5)) { row in
-                                    IndexRow(row: row)
-                                    Hairline()
-                                }
-                            }
-                            block("Open tasks") {
+                            block("What’s next") {
                                 if tasks.isEmpty { EmptyLine(text: "Nothing open.") }
                                 ForEach(tasks.prefix(5)) { row in
-                                    IndexRow(row: row)
+                                    IndexRow(row: row, caption: row.id == nextID ? "Next" : "")
                                     Hairline()
                                 }
                                 if tasks.count > 5 {
@@ -860,6 +843,28 @@ struct ProjectOverview: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Button {
+                            showsMore.toggle()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text("More")
+                                    .font(CraftFont.section)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .rotationEffect(.degrees(showsMore ? 90 : 0))
+                            }
+                            .foregroundStyle(.secondary)
+                            .frame(height: 28)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(showsMore ? "Hide the full lists" : "Everything filed in this project")
+                        if showsMore {
+                            everything
+                        }
+                    }
                 }
                 .padding(.horizontal, 48)
                 .padding(.vertical, 36)
@@ -869,16 +874,20 @@ struct ProjectOverview: View {
         .scrollContentBackground(.hidden)
     }
 
-    /// The stop the active track is on, and the task that is next.
-    private func activeCaption(_ track: ProjectThread) -> String {
-        var parts: [String] = []
-        if let stop = track.orderedStops.first(where: { !$0.isDone }) {
-            parts.append("Stop: \(stop.displayTitle)")
+    /// Open tasks in the order to pick them up: the Next task, then what is under way, then the rest,
+    /// with blocked ones last.
+    private func upNext(_ rows: [TitleIndex], nextID: UUID?) -> [TitleIndex] {
+        func rank(_ row: TitleIndex) -> Int {
+            if row.id == nextID { return 0 }
+            switch row.statusRaw {
+            case TaskWorkflowStatus.inProgress.rawValue: return 1
+            case TaskWorkflowStatus.blocked.rawValue: return 3
+            default: return 2
+            }
         }
-        if let next = TaskStore.nextTask(in: project) {
-            parts.append("Next: \(next.displayTitle)")
-        }
-        return parts.joined(separator: " · ")
+        return rows.enumerated()
+            .sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }
+            .map(\.element)
     }
 
     /// The full lists, each with how many it holds.

@@ -12,7 +12,7 @@ struct ProjectTasksBoard: View {
 
     /// The track the board is limited to, or nil when it shows every task.
     private var shownTrack: ProjectThread? {
-        TaskTrackFilterMenu.track(for: project, filter: app.taskTrackFilters[project.id] ?? .active)
+        TaskTrackFilterMenu.track(for: project, filter: app.taskTrackFilters[project.id] ?? .all)
     }
 
     /// Ids of the tasks on the shown track, or nil when the board is not limited.
@@ -598,7 +598,7 @@ struct TaskTrackFilterMenu: View {
         }
     }
 
-    private var filter: TaskTrackFilter { app.taskTrackFilters[project.id] ?? .active }
+    private var filter: TaskTrackFilter { app.taskTrackFilters[project.id] ?? .all }
 
     private var title: String {
         guard let track = Self.track(for: project, filter: filter) else { return "All Tasks" }
