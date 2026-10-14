@@ -44,13 +44,15 @@ enum TaskStore {
             .sorted(by: boardSort)
     }
 
-    /// With an active track, the first open task on it that nothing blocks. Without one, the task marked by hand.
+    /// With an active track, the first open task on it that nothing blocks and no junction holds.
+    /// Without one, the task marked by hand.
     static func nextTask(in project: Project) -> AgendaItem? {
         guard let track = project.activeTrack else {
             return project.agendaItems.first { $0.kind == .task && $0.isNext }
         }
         return AgendaStore.items(on: track, includingChildren: true)
             .filter { $0.project?.id == project.id && $0.canBeNext && $0.unresolvedBlockers.isEmpty }
+            .filter { JunctionStore.holding($0, on: track) == nil }
             .min { lhs, rhs in
                 let stops = (stopRank(lhs, on: track), stopRank(rhs, on: track))
                 if stops.0 != stops.1 { return stops.0 < stops.1 }
@@ -535,6 +537,303 @@ enum ThemeStore {
         theme.name = trimmed
         theme.project?.touch()
         try? context.persist()
+    }
+}
+
+struct RequirementEntry {
+    var id: UUID?
+    var text: String
+    var stopID: UUID?
+    var taskID: UUID?
+    var isChecked: Bool?
+}
+
+enum JunctionStore {
+    @discardableResult
+    static func add(
+        _ kind: JunctionKind,
+        first: ProjectThread,
+        second: ProjectThread,
+        heldStop: TrackStop? = nil,
+        in context: ModelContext
+    ) throws -> TrackJunction {
+        try check(kind, first: first, second: second, heldStop: heldStop, ignoring: nil)
+        let junction = TrackJunction(kind: kind, first: first, second: second, heldStop: kind == .wait ? heldStop : nil)
+        context.insert(junction)
+        touch(junction)
+        try? context.persist()
+        return junction
+    }
+
+    static func update(
+        _ junction: TrackJunction,
+        kind: JunctionKind,
+        heldStop: TrackStop?,
+        in context: ModelContext
+    ) throws {
+        guard let first = junction.first, let second = junction.second else { return }
+        try check(kind, first: first, second: second, heldStop: heldStop, ignoring: junction)
+        junction.kind = kind
+        junction.heldStop = kind == .wait ? heldStop : nil
+        touch(junction)
+        try? context.persist()
+    }
+
+    @discardableResult
+    static func addRequirement(
+        _ text: String,
+        stop: TrackStop? = nil,
+        task: AgendaItem? = nil,
+        to junction: TrackJunction,
+        in context: ModelContext
+    ) throws -> JunctionRequirement {
+        try check(stop: stop, task: task, text: text, on: junction)
+        let requirement = JunctionRequirement(
+            text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+            order: (junction.requirements.map(\.order).max() ?? -1) + 1,
+            junction: junction,
+            stop: stop,
+            task: task
+        )
+        context.insert(requirement)
+        touch(junction)
+        try? context.persist()
+        return requirement
+    }
+
+    /// Only a requirement tied to no stop or task is ticked by hand.
+    static func setChecked(_ checked: Bool, on requirement: JunctionRequirement, in context: ModelContext) {
+        guard requirement.stop == nil, requirement.task == nil else { return }
+        requirement.isChecked = checked
+        if let junction = requirement.junction { touch(junction) }
+        try? context.persist()
+    }
+
+    static func delete(_ requirement: JunctionRequirement, in context: ModelContext) {
+        let junction = requirement.junction
+        context.delete(requirement)
+        if let junction { touch(junction) }
+        try? context.persist()
+    }
+
+    static func delete(_ junction: TrackJunction, in context: ModelContext) {
+        touch(junction)
+        context.delete(junction)
+        try? context.persist()
+    }
+
+    /// Rewrites a junction's requirements in the order given, the way StopStore.replace does for stops.
+    static func replaceRequirements(
+        on junction: TrackJunction,
+        with entries: [RequirementEntry],
+        in context: ModelContext
+    ) throws {
+        let existing = Dictionary(uniqueKeysWithValues: junction.requirements.map { ($0.id, $0) })
+        var kept: [JunctionRequirement] = []
+        for entry in entries {
+            let stop = try entry.stopID.map { id in
+                guard let found = try context.fetch(FetchDescriptor<TrackStop>(predicate: #Predicate { $0.id == id })).first else {
+                    throw JunctionStoreError.unknownStop(id)
+                }
+                return found
+            }
+            let task = try entry.taskID.map { id in
+                guard let found = try context.fetch(FetchDescriptor<AgendaItem>(predicate: #Predicate { $0.id == id })).first,
+                      found.kind == .task else {
+                    throw JunctionStoreError.unknownTask(id)
+                }
+                return found
+            }
+            try check(stop: stop, task: task, text: entry.text, on: junction, existing: entry.id.flatMap { existing[$0] })
+            let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let requirement: JunctionRequirement
+            if let id = entry.id {
+                guard let found = existing[id] else { throw JunctionStoreError.notOnJunction(id) }
+                guard !kept.contains(where: { $0.id == id }) else { throw JunctionStoreError.listedTwice(id) }
+                requirement = found
+                if !text.isEmpty { requirement.text = text }
+                if entry.stopID != nil || entry.taskID != nil {
+                    requirement.stop = stop
+                    requirement.task = task
+                }
+            } else {
+                requirement = JunctionRequirement(text: text, order: kept.count, junction: junction, stop: stop, task: task)
+                context.insert(requirement)
+            }
+            if let checked = entry.isChecked, requirement.stop == nil, requirement.task == nil {
+                requirement.isChecked = checked
+            }
+            kept.append(requirement)
+        }
+        let keptIDs = Set(kept.map(\.id))
+        for requirement in junction.requirements where !keptIDs.contains(requirement.id) {
+            context.delete(requirement)
+        }
+        for (index, requirement) in kept.enumerated() where requirement.order != index {
+            requirement.order = index
+        }
+        touch(junction)
+        try? context.persist()
+    }
+
+    /// The unmet wait that keeps this task from being worked on yet, if there is one. A wait holds its stop and
+    /// every stop after it; tasks on no stop come after every stop, so they are held too.
+    static func holding(_ item: AgendaItem, on track: ProjectThread) -> TrackJunction? {
+        track.junctionsAsSecond.first { junction in
+            guard junction.kind == .wait, !junction.isMet else { return false }
+            guard let held = junction.heldStop, held.thread?.id == track.id, !held.isDone else { return true }
+            guard let stop = item.stop, stop.thread?.id == track.id else { return true }
+            return stop.order >= held.order
+        }
+    }
+
+    /// Makes the two tracks one, once everything the junction lists has been reconciled. The second track's stops
+    /// follow the first's; its tasks, decisions, notes, and chats move to the first. What the second track said, and
+    /// what was reconciled, is kept as a note on the first. The second track is then removed.
+    @discardableResult
+    static func merge(_ junction: TrackJunction, in context: ModelContext) throws -> ProjectThread {
+        guard junction.kind == .merge else { throw JunctionStoreError.notAMerge }
+        guard let first = junction.first, let second = junction.second, let project = first.project else {
+            throw JunctionStoreError.missingTrack
+        }
+        guard !junction.requirements.isEmpty else { throw JunctionStoreError.nothingToReconcile }
+        let unmet = junction.orderedRequirements.filter { !$0.isMet }
+        guard unmet.isEmpty else { throw JunctionStoreError.unmet(unmet.map(\.displayText)) }
+
+        var record = [second.summary, second.body]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        record.append("Reconciled before merging:\n" + junction.orderedRequirements.map { "- \($0.displayText)" }.joined(separator: "\n"))
+        let title = second.title.isEmpty ? "Untitled" : second.title
+        context.insert(Note(
+            content: record.joined(separator: "\n\n"),
+            project: project,
+            title: "\(title) (merged into this track)",
+            thread: first
+        ))
+
+        let base = (first.stops.map(\.order).max() ?? -1) + 1
+        for (offset, stop) in second.orderedStops.enumerated() {
+            stop.thread = first
+            stop.order = base + offset
+        }
+        for item in AgendaStore.items(on: second, includingChildren: false) {
+            // Link the first track before unlinking, so the task never sits on no track and loses its project.
+            if !item.liveTracks.contains(where: { $0.id == first.id }) {
+                AssociationService.applyLink(thread: first, onto: item)
+            }
+            AssociationService.unlink(threadID: second.id, from: item, in: context)
+            item.touch()
+        }
+        for decision in second.decisions { decision.thread = first }
+        for note in second.notes { note.thread = first }
+        for conversation in second.conversations { conversation.thread = first }
+        for child in second.children { child.parent = nil }
+        for tag in second.tags where !first.tags.contains(where: { $0.id == tag.id }) {
+            first.tags.append(tag)
+        }
+        // Other junctions on the second track now belong to the merged one.
+        for other in second.junctions where other.id != junction.id {
+            if other.first?.id == second.id { other.first = first }
+            if other.second?.id == second.id { other.second = first }
+            if other.first?.id == other.second?.id { context.delete(other) }
+        }
+        if project.activeTrackID == second.id { project.activeTrackID = first.id }
+        DeletionMarks.remove(targetingIDs: [second.id], in: context)
+        context.delete(junction)
+        context.delete(second)
+        first.updatedAt = .now
+        project.touch()
+        try? context.persist()
+        return first
+    }
+
+    private static func check(
+        _ kind: JunctionKind,
+        first: ProjectThread,
+        second: ProjectThread,
+        heldStop: TrackStop?,
+        ignoring: TrackJunction?
+    ) throws {
+        guard first.id != second.id else { throw JunctionStoreError.sameTrack }
+        guard let project = first.project, project.id == second.project?.id else { throw JunctionStoreError.differentProjects }
+        if let heldStop, kind == .wait, heldStop.thread?.id != second.id { throw JunctionStoreError.heldStopElsewhere }
+        guard kind == .wait else { return }
+        // A waits on B while B waits on A would hold both forever.
+        var stack = [first]
+        var seen: Set<UUID> = []
+        while let current = stack.popLast() {
+            if current.id == second.id { throw JunctionStoreError.cycle }
+            guard seen.insert(current.id).inserted else { continue }
+            stack.append(contentsOf: current.junctionsAsSecond
+                .filter { $0.kind == .wait && $0.id != ignoring?.id }
+                .compactMap(\.first))
+        }
+    }
+
+    private static func check(
+        stop: TrackStop?,
+        task: AgendaItem?,
+        text: String,
+        on junction: TrackJunction,
+        existing: JunctionRequirement? = nil
+    ) throws {
+        if stop != nil, task != nil { throw JunctionStoreError.stopAndTask }
+        if stop == nil, task == nil, existing == nil, text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw JunctionStoreError.emptyRequirement
+        }
+        guard let stop else { return }
+        let allowed = junction.kind == .wait ? [junction.first?.id] : [junction.first?.id, junction.second?.id]
+        guard allowed.contains(stop.thread?.id) else {
+            throw junction.kind == .wait ? JunctionStoreError.stopNotOnFirst : JunctionStoreError.stopNotOnEither
+        }
+    }
+
+    private static func touch(_ junction: TrackJunction) {
+        junction.updatedAt = .now
+        junction.first?.updatedAt = .now
+        junction.second?.updatedAt = .now
+        junction.first?.project?.touch()
+    }
+}
+
+enum JunctionStoreError: LocalizedError {
+    case sameTrack
+    case differentProjects
+    case heldStopElsewhere
+    case cycle
+    case stopAndTask
+    case emptyRequirement
+    case stopNotOnFirst
+    case stopNotOnEither
+    case unknownStop(UUID)
+    case unknownTask(UUID)
+    case notOnJunction(UUID)
+    case listedTwice(UUID)
+    case notAMerge
+    case missingTrack
+    case nothingToReconcile
+    case unmet([String])
+
+    var errorDescription: String? {
+        switch self {
+        case .sameTrack: "A junction sits between two different tracks."
+        case .differentProjects: "Both tracks have to be in the same project."
+        case .heldStopElsewhere: "The stop that waits has to be on the track that waits."
+        case .cycle: "These tracks would each be waiting on the other."
+        case .stopAndTask: "A requirement can point at a stop or a task, not both."
+        case .emptyRequirement: "A requirement needs some text, a stop, or a task."
+        case .stopNotOnFirst: "On a wait, a requirement's stop has to be on the track being waited on."
+        case .stopNotOnEither: "A requirement's stop has to be on one of the junction's two tracks."
+        case .unknownStop(let id): "No stop with id \(id.uuidString)."
+        case .unknownTask(let id): "No task with id \(id.uuidString)."
+        case .notOnJunction(let id): "Requirement \(id.uuidString) is not on this junction. Leave id out to add a new one."
+        case .listedTwice(let id): "Requirement \(id.uuidString) is listed twice."
+        case .notAMerge: "This junction is a wait. Only a merge junction joins two tracks into one."
+        case .missingTrack: "One of this junction's tracks is gone."
+        case .nothingToReconcile: "List what has to be reconciled between the two tracks before merging them."
+        case .unmet(let texts): "Not reconciled yet: \(texts.joined(separator: "; "))."
+        }
     }
 }
 

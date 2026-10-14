@@ -9,6 +9,8 @@ tracks (directions, features, problems, experiments, topics), notes, and tasks. 
 A track is a line of work, broken into ordered stops: each stop is one idea inside it, most important first. \
 get_track lists the stops, set_stops rewrites them, and stop_id puts a task on one. Break a track down with stops, not with child tracks: tracks do not nest. \
 A theme is a named group of tracks, set with theme on create_track or update_track; it holds no work of its own. \
+A junction sits between two tracks, in any themes, and is shown on get_track. A wait, the usual kind, holds the second track until the first has done what the junction requires. \
+A merge is for two tracks that turn out to be the same work: its requirements are the gaps and conflicts to reconcile first, and merge_tracks then makes them one. Use set_junction for both. \
 Active decisions are the source of truth. A project can have one active track, shown as active_track on the project: \
 it is the work in hand. When asked what to work on or what is open, start from the active track and its tasks, \
 and check the newest decisions before trusting an older task. Answer the user first. When they state a fact, choice, or plan, persist it \

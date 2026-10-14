@@ -102,6 +102,80 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(late.stop?.id, log.id)
     }
 
+    func testAWaitHoldsTheSecondTrackUntilTheFirstHasDoneWhatItRequires() throws {
+        let harbor = Project(name: "Harbor", symbol: "folder", summary: "")
+        context.insert(harbor)
+        let sync = ProjectThread(title: "Sync", kind: .feature, project: harbor)
+        let email = ProjectThread(title: "Email", kind: .feature, project: harbor)
+        context.insert(sync)
+        context.insert(email)
+        let database = StopStore.add("Database", to: sync, in: context)
+        let design = StopStore.add("Design", to: email, in: context)
+        let connect = StopStore.add("Connect Gmail", to: email, in: context)
+        let sketch = task("Sketch the screen", in: harbor)
+        let wire = task("Wire Gmail", in: harbor)
+        StopStore.assign(sketch, to: design, in: context)
+        StopStore.assign(wire, to: connect, in: context)
+        TaskStore.setActiveTrack(email, on: harbor, in: context)
+
+        let junction = try JunctionStore.add(.wait, first: sync, second: email, heldStop: connect, in: context)
+        try JunctionStore.addRequirement("", stop: database, to: junction, in: context)
+        let agreed = try JunctionStore.addRequirement("Storage format agreed", to: junction, in: context)
+
+        XCTAssertThrowsError(try JunctionStore.add(.wait, first: email, second: sync, in: context))
+        XCTAssertThrowsError(try JunctionStore.addRequirement("", stop: design, to: junction, in: context))
+        XCTAssertEqual(TaskStore.nextTask(in: harbor)?.id, sketch.id)
+
+        TaskStore.setStatus(.done, on: sketch, in: context)
+        XCTAssertNil(TaskStore.nextTask(in: harbor))
+
+        StopStore.setDone(true, on: database, in: context)
+        XCTAssertFalse(junction.isMet)
+        JunctionStore.setChecked(true, on: agreed, in: context)
+        XCTAssertTrue(junction.isMet)
+        XCTAssertEqual(TaskStore.nextTask(in: harbor)?.id, wire.id)
+    }
+
+    func testAMergeReconcilesTwoTracksIntoOne() throws {
+        let harbor = Project(name: "Harbor", symbol: "folder", summary: "")
+        context.insert(harbor)
+        let runs = ProjectThread(title: "Runs", kind: .feature, project: harbor)
+        let jobs = ProjectThread(title: "Cloud jobs", kind: .feature, project: harbor)
+        jobs.body = "Jobs run in the cloud."
+        let billing = ProjectThread(title: "Billing", kind: .feature, project: harbor)
+        context.insert(runs)
+        context.insert(jobs)
+        context.insert(billing)
+        StopStore.add("Local runs", to: runs, in: context)
+        StopStore.add("Schedules", to: jobs, in: context)
+        let work = task("Queue a job", in: harbor)
+        _ = AssociationService.link(thread: jobs, onto: work)
+        let decision = Decision(title: "One queue", decision: "Jobs share a queue.", project: harbor, thread: jobs)
+        context.insert(decision)
+        let later = try JunctionStore.add(.wait, first: jobs, second: billing, in: context)
+        TaskStore.setActiveTrack(jobs, on: harbor, in: context)
+
+        let junction = try JunctionStore.add(.merge, first: runs, second: jobs, in: context)
+        XCTAssertThrowsError(try JunctionStore.merge(junction, in: context))
+        let naming = task("Settle on run or job", in: harbor)
+        try JunctionStore.addRequirement("One name for the same thing", task: naming, to: junction, in: context)
+        XCTAssertThrowsError(try JunctionStore.merge(junction, in: context))
+
+        TaskStore.setStatus(.done, on: naming, in: context)
+        let merged = try JunctionStore.merge(junction, in: context)
+
+        XCTAssertEqual(merged.id, runs.id)
+        XCTAssertEqual(runs.orderedStops.map(\.title), ["Local runs", "Schedules"])
+        XCTAssertEqual(work.liveTracks.map(\.id), [runs.id])
+        XCTAssertEqual(decision.thread?.id, runs.id)
+        XCTAssertEqual(harbor.activeTrackID, runs.id)
+        XCTAssertEqual(later.first?.id, runs.id)
+        XCTAssertEqual(harbor.threads.map(\.title).sorted(), ["Billing", "Runs"])
+        let note = try XCTUnwrap(runs.notes.first)
+        XCTAssertTrue(note.content.contains("Jobs run in the cloud."))
+        XCTAssertTrue(note.content.contains("One name for the same thing"))
+    }
+
     func testNestedTrackBecomesAStopOnItsParent() throws {
         let harbor = Project(name: "Harbor", symbol: "folder", summary: "")
         context.insert(harbor)

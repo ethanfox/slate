@@ -202,6 +202,7 @@ enum Tools {
         "delete_completion": (.removed, "completion"),
         "create_decision": (.added, "decision"), "update_decision": (.changed, "decision"),
         "create_track": (.added, "track"), "update_track": (.changed, "track"), "set_stops": (.changed, "track"), "convert_track_to_stop": (.changed, "track"),
+        "set_junction": (.changed, "track"), "delete_junction": (.changed, "track"), "merge_tracks": (.changed, "track"),
         "create_note": (.added, "note"), "update_note": (.changed, "note"),
         "create_source": (.added, "source"), "update_source": (.changed, "source"),
         "create_tag": (.added, "tag"), "update_tag": (.changed, "tag"),
@@ -975,6 +976,84 @@ enum Tools {
                 throw ToolError(error.localizedDescription)
             }
             return JSONShape.track(thread, full: true)
+        },
+        Tool(
+            name: "set_junction",
+            description: "Make or change a junction between two tracks in one project. kind wait, the default: second_track_id cannot go on until first_track_id has done what the junction requires; both stay separate tracks. Give held_stop_id for the stop on the second track that waits, or leave it out to hold the whole track. A wait with no requirements is met when the first track is completed. kind merge: the two tracks are the same work and will become one, continuing as the first. Its requirements are the gaps and conflicts between the two that have to be reconciled first, which can be real work. Send every requirement each time, in order. A requirement with stop_id or task_id is met when that stop or task is done; one with only text is ticked with is_done. Pass junction_id to change an existing junction. Returns the first track.",
+            properties: [
+                "junction_id": text("An existing junction to change. Leave out to make a new one."),
+                "kind": ["type": "string", "enum": JunctionKind.allCases.map(\.rawValue), "description": "wait or merge. Defaults to wait."],
+                "first_track_id": text("The track waited on, or the track a merge continues as. Needed for a new junction."),
+                "second_track_id": text("The track that waits, or the track a merge folds in. Needed for a new junction."),
+                "held_stop_id": text("On a wait, the stop on the second track that cannot start. Empty string holds the whole track."),
+                "requirements": objectList("Every requirement, in order: {id, text, stop_id, task_id, is_done}. id only for an existing requirement.")
+            ],
+            required: [], readOnly: false
+        ) { args, context in
+            do {
+                let heldLink = try args.optionalUUID("held_stop_id")
+                let junction: TrackJunction
+                if let rawID = args.string("junction_id"), !rawID.isEmpty {
+                    junction = try Lookup.junction(try args.uuid("junction_id"), in: context)
+                    let kind = try args.choice("kind", as: JunctionKind.self) ?? junction.kind
+                    let held = try heldLink.map { try $0.map { try Lookup.stop($0, in: context) } } ?? junction.heldStop
+                    try JunctionStore.update(junction, kind: kind, heldStop: held, in: context)
+                } else {
+                    let first = try Lookup.thread(try args.uuid("first_track_id"), in: context)
+                    let second = try Lookup.thread(try args.uuid("second_track_id"), in: context)
+                    let held = try (heldLink ?? nil).map { try Lookup.stop($0, in: context) }
+                    junction = try JunctionStore.add(
+                        try args.choice("kind", as: JunctionKind.self) ?? .wait,
+                        first: first, second: second, heldStop: held, in: context
+                    )
+                }
+                if let items = try args.objects("requirements") {
+                    func id(_ item: [String: Any], _ key: String) throws -> UUID? {
+                        let raw = (item[key] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !raw.isEmpty else { return nil }
+                        guard let parsed = UUID(uuidString: raw) else { throw ToolError("\(key) is not a valid id: \(raw)") }
+                        return parsed
+                    }
+                    let entries = try items.map { item in
+                        RequirementEntry(
+                            id: try id(item, "id"),
+                            text: item["text"] as? String ?? "",
+                            stopID: try id(item, "stop_id"),
+                            taskID: try id(item, "task_id"),
+                            isChecked: item["is_done"] as? Bool
+                        )
+                    }
+                    try JunctionStore.replaceRequirements(on: junction, with: entries, in: context)
+                }
+                guard let first = junction.first else { throw ToolError(JunctionStoreError.missingTrack.localizedDescription) }
+                return JSONShape.track(first, full: true)
+            } catch let error as JunctionStoreError {
+                throw ToolError(error.localizedDescription)
+            }
+        },
+        Tool(
+            name: "delete_junction",
+            description: "Remove a junction. Both tracks stay as they are, and nothing waits on it any more.",
+            properties: ["junction_id": text("Junction id, from get_track.")],
+            required: ["junction_id"], readOnly: false
+        ) { args, context in
+            let junction = try Lookup.junction(try args.uuid("junction_id"), in: context)
+            let first = junction.first
+            JunctionStore.delete(junction, in: context)
+            return first.map { JSONShape.track($0, full: true) } ?? ["deleted": true]
+        },
+        Tool(
+            name: "merge_tracks",
+            description: "Make the two tracks of a merge junction one track, once every requirement on it is met. The second track's stops follow the first's, and its tasks, decisions, notes, and chats move to the first. What the second track said and what was reconciled is kept as a note on the first. The second track is then removed. Fails and names what is left when a requirement is not met. Returns the merged track.",
+            properties: ["junction_id": text("A merge junction's id, from get_track.")],
+            required: ["junction_id"], readOnly: false
+        ) { args, context in
+            let junction = try Lookup.junction(try args.uuid("junction_id"), in: context)
+            do {
+                return JSONShape.track(try JunctionStore.merge(junction, in: context), full: true)
+            } catch let error as JunctionStoreError {
+                throw ToolError(error.localizedDescription)
+            }
         },
 
         Tool(
@@ -2177,6 +2256,13 @@ enum Lookup {
         return found
     }
 
+    static func junction(_ id: UUID, in context: ModelContext) throws -> TrackJunction {
+        guard let found = try context.fetch(FetchDescriptor<TrackJunction>(predicate: #Predicate { $0.id == id })).first else {
+            throw ToolError("No junction with id \(id.uuidString).")
+        }
+        return found
+    }
+
     static func completion(_ id: UUID, in context: ModelContext) throws -> TaskCompletion {
         guard let found = try context.fetch(FetchDescriptor<TaskCompletion>(predicate: #Predicate { $0.id == id })).first else {
             throw ToolError("No completion with id \(id.uuidString).")
@@ -2408,6 +2494,29 @@ enum JSONShape {
         ]
     }
 
+    static func junction(_ junction: TrackJunction) -> [String: Any] {
+        func track(_ thread: ProjectThread?) -> [String: Any] {
+            ["id": thread?.id.uuidString ?? "", "title": thread?.title ?? ""]
+        }
+        return [
+            "id": junction.id.uuidString,
+            "kind": junction.kind.rawValue,
+            "first_track": track(junction.first),
+            "second_track": track(junction.second),
+            "held_stop_id": junction.heldStop?.id.uuidString ?? "",
+            "is_met": junction.isMet,
+            "requirements": junction.orderedRequirements.map { requirement in
+                [
+                    "id": requirement.id.uuidString,
+                    "text": requirement.displayText,
+                    "stop_id": requirement.stop?.id.uuidString ?? "",
+                    "task_id": requirement.task?.id.uuidString ?? "",
+                    "is_done": requirement.isMet
+                ] as [String: Any]
+            }
+        ]
+    }
+
     static func track(_ thread: ProjectThread, full: Bool) -> [String: Any] {
         var shape: [String: Any] = [
             "id": thread.id.uuidString,
@@ -2425,6 +2534,7 @@ enum JSONShape {
         if full {
             shape["body"] = thread.body
             shape["stops"] = thread.orderedStops.map(stop)
+            shape["junctions"] = thread.junctions.map(junction)
             shape["children"] = thread.orderedChildren.map { child in
                 [
                     "id": child.id.uuidString,

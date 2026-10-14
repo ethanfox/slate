@@ -279,6 +279,18 @@ final class ProjectThread {
         stops.sorted { ($0.order, $0.createdAt) < ($1.order, $1.createdAt) }
     }
 
+    /// Junctions where this track is the first: the one waited on, or the one a merge continues as.
+    @Relationship(deleteRule: .cascade, inverse: \TrackJunction.first)
+    var junctionsAsFirst: [TrackJunction] = []
+
+    /// Junctions where this track is the second: the one that waits, or the one a merge folds in.
+    @Relationship(deleteRule: .cascade, inverse: \TrackJunction.second)
+    var junctionsAsSecond: [TrackJunction] = []
+
+    var junctions: [TrackJunction] {
+        (junctionsAsFirst + junctionsAsSecond).sorted { $0.createdAt < $1.createdAt }
+    }
+
     var kind: ThreadKind {
         get { ThreadKind(rawValue: kindRaw) ?? .topic }
         set { kindRaw = newValue.rawValue }
@@ -364,6 +376,12 @@ final class TrackStop: Identifiable {
     @Relationship(deleteRule: .nullify, inverse: \AgendaItem.stop)
     var tasks: [AgendaItem] = []
 
+    @Relationship(deleteRule: .nullify, inverse: \JunctionRequirement.stop)
+    var requirements: [JunctionRequirement] = []
+
+    @Relationship(deleteRule: .nullify, inverse: \TrackJunction.heldStop)
+    var heldBy: [TrackJunction] = []
+
     var displayTitle: String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Untitled" : trimmed
@@ -378,6 +396,99 @@ final class TrackStop: Identifiable {
         self.createdAt = .now
         self.updatedAt = .now
         self.thread = thread
+    }
+}
+
+enum JunctionKind: String, CaseIterable, Identifiable {
+    case wait
+    case merge
+
+    var id: String { rawValue }
+}
+
+/// Sits between two tracks. A wait holds the second track until the first has done what the junction requires.
+/// A merge lists what has to be reconciled between the two before they become one track.
+@Model
+final class TrackJunction: Identifiable {
+    var id: UUID
+    var kindRaw: String
+    var createdAt: Date
+    var updatedAt: Date
+    /// The track waited on, or the track a merge continues as.
+    var first: ProjectThread?
+    /// The track that waits, or the track a merge folds in.
+    var second: ProjectThread?
+    /// On a wait, the stop on the second track that cannot start. Nil holds the whole track.
+    var heldStop: TrackStop?
+
+    @Relationship(deleteRule: .cascade, inverse: \JunctionRequirement.junction)
+    var requirements: [JunctionRequirement] = []
+
+    var kind: JunctionKind {
+        get { JunctionKind(rawValue: kindRaw) ?? .wait }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    var orderedRequirements: [JunctionRequirement] {
+        requirements.sorted { ($0.order, $0.createdAt) < ($1.order, $1.createdAt) }
+    }
+
+    /// A wait with nothing listed is met when the first track is completed. A merge has to list what it reconciles.
+    var isMet: Bool {
+        if requirements.isEmpty {
+            return kind == .wait && first?.status == .completed
+        }
+        return requirements.allSatisfy(\.isMet)
+    }
+
+    func other(than track: ProjectThread) -> ProjectThread? {
+        first?.id == track.id ? second : first
+    }
+
+    init(kind: JunctionKind, first: ProjectThread, second: ProjectThread, heldStop: TrackStop? = nil) {
+        self.id = UUID()
+        self.kindRaw = kind.rawValue
+        self.createdAt = .now
+        self.updatedAt = .now
+        self.first = first
+        self.second = second
+        self.heldStop = heldStop
+    }
+}
+
+/// One thing a junction needs. Tied to a stop or a task, it is met when that is done; otherwise it is ticked by hand.
+@Model
+final class JunctionRequirement: Identifiable {
+    var id: UUID
+    var text: String
+    var order: Int
+    var isChecked: Bool
+    var createdAt: Date
+    var junction: TrackJunction?
+    var stop: TrackStop?
+    var task: AgendaItem?
+
+    var isMet: Bool {
+        if let stop { return stop.isDone }
+        if let task { return task.isCompleted }
+        return isChecked
+    }
+
+    var displayText: String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        return stop?.displayTitle ?? task?.displayTitle ?? "Untitled"
+    }
+
+    init(text: String, order: Int, junction: TrackJunction, stop: TrackStop? = nil, task: AgendaItem? = nil) {
+        self.id = UUID()
+        self.text = text
+        self.order = order
+        self.isChecked = false
+        self.createdAt = .now
+        self.junction = junction
+        self.stop = stop
+        self.task = task
     }
 }
 
@@ -1003,6 +1114,9 @@ final class AgendaItem {
     var spaceIDString: String = ""
     /// The stop this task sits on, on one of its tracks.
     var stop: TrackStop?
+
+    @Relationship(deleteRule: .nullify, inverse: \JunctionRequirement.task)
+    var junctionRequirements: [JunctionRequirement] = []
 
     @Relationship(inverse: \Tag.agendaItems)
     var tags: [Tag] = []
