@@ -202,10 +202,40 @@ final class SpaceStoreTests: XCTestCase {
 
         try SpaceStore.move(note, to: health, in: context)
 
-        XCTAssertNil(note.project)
-        XCTAssertEqual(note.spaceID, health.id)
+        XCTAssertEqual(note.project?.id, health.id)
         XCTAssertTrue(project.notes.isEmpty)
         XCTAssertEqual(SpaceStore.notes(in: health, context: context).map(\.id), [note.id])
+    }
+
+    func testAreasFoldIntoSpacesThatKeepTheirIDAndWhatWasFiledInThem() throws {
+        let project = Project(name: "Harbor", symbol: "folder", summary: "")
+        context.insert(project)
+        let areaID = UUID()
+        let chat = Conversation(title: "Dinner ideas", providerID: "cursor")
+        chat.spaceIDString = SpaceJSON.key(areaID)
+        context.insert(chat)
+        let recipe = SpaceType(spaceID: areaID, key: "recipe", name: "Recipe", role: .object, schema: SpaceSchema(), origin: .agent)
+        context.insert(recipe)
+        try context.save()
+        let created = Date(timeIntervalSinceReferenceDate: 800_000_000)
+
+        Store.fold([Store.StashedArea(
+            id: areaID, name: "Recipes", symbol: "fork.knife", summary: "What I cook",
+            enabledKindsRaw: "note", gradientRaw: "sand", agentNotes: "Grams, not cups.", cardShapeRaw: "portrait",
+            createdAt: created, updatedAt: created
+        )], into: context)
+        try context.save()
+
+        let space = try XCTUnwrap(SpaceStore.space(areaID, in: context))
+        XCTAssertEqual(space.name, "Recipes")
+        XCTAssertEqual(space.enabledKinds, [.note, .records])
+        XCTAssertTrue(space.hasPortraitCards)
+        XCTAssertEqual(space.agentNotes, "Grams, not cups.")
+        XCTAssertEqual(space.createdAt, created)
+        XCTAssertEqual(chat.project?.id, areaID)
+        XCTAssertEqual(chat.spaceIDString, "")
+        XCTAssertEqual(SpaceStore.types(in: space, context: context).map(\.id), [recipe.id])
+        XCTAssertEqual(SpaceStore.all(in: context).map(\.id), [areaID])
     }
 
     func testDeletingASpaceDeletesEverythingInItAndNothingElse() throws {
@@ -249,7 +279,7 @@ final class SpaceStoreTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<Decision>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<Conversation>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<AgendaItem>()).isEmpty)
-        XCTAssertEqual(try context.fetch(FetchDescriptor<Project>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<Project>()).map(\.name).sorted(), ["Harbor", "Kitchen"])
     }
 
     func testOwnerColumnIsAddedToAStoreCreatedBeforeSpaces() throws {
@@ -277,8 +307,7 @@ final class SpaceStoreTests: XCTestCase {
         try SpaceStore.move(note, to: health, in: migrated.mainContext)
         let reader = try Store.open(url: url, mode: .reopen)
         let reread = try XCTUnwrap(reader.mainContext.fetch(FetchDescriptor<Note>(predicate: #Predicate { $0.id == id })).first)
-        XCTAssertEqual(reread.spaceID, health.id)
-        XCTAssertNil(reread.project)
+        XCTAssertEqual(reread.project?.id, health.id)
     }
 
     func testAreaRecordsPickColumnsLayoutsAndFilters() throws {

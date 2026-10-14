@@ -6,7 +6,7 @@ struct SidebarView: View {
     @Environment(\.modelContext) private var context
     @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "project" }, sort: \TitleIndex.title)
     private var projects: [TitleIndex]
-    @Query(sort: \Space.createdAt) private var spaces: [Space]
+    @Query(filter: Space.collecting, sort: \Space.createdAt) private var spaces: [Space]
     @Query(sort: \Pin.createdAt) private var pins: [Pin]
     @State private var pendingDelete: TitleIndex?
     @State private var pendingAreaDelete: Space?

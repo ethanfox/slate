@@ -166,7 +166,7 @@ struct CaptureBar: View {
         }
         let conversation = continuing ?? app.makeConversation(in: project, context: context, opens: false)
         if continuing == nil, project == nil, let spaceID {
-            conversation.spaceIDString = SpaceJSON.key(spaceID)
+            conversation.project = SpaceStore.space(spaceID, in: context)
         }
         let store = FileStore.default(context: context)
         try? store.retain(

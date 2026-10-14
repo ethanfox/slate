@@ -36,8 +36,9 @@ enum SpaceStoreError: LocalizedError, Equatable {
 enum SpaceStore {
     // MARK: Spaces
 
+    /// Spaces that collect records, oldest first: what the sidebar and the tools call Areas.
     static func all(in context: ModelContext) -> [Space] {
-        let descriptor = FetchDescriptor<Space>(sortBy: [SortDescriptor(\.createdAt)])
+        let descriptor = FetchDescriptor<Space>(predicate: Space.collecting, sortBy: [SortDescriptor(\.createdAt)])
         return (try? context.fetch(descriptor)) ?? []
     }
 
@@ -56,6 +57,7 @@ enum SpaceStore {
     ) throws -> Space {
         let space = Space(name: name, symbol: symbol, summary: summary)
         space.gradientRaw = gradient
+        space.enabledKinds = [.records]
         context.insert(space)
         try context.save()
         return space
@@ -90,55 +92,33 @@ enum SpaceStore {
         releaseImages(of: records(in: space, context: context), in: context)
         records(in: space, context: context).forEach(context.delete)
         types(in: space, context: context).forEach(context.delete)
-        fetch(#Predicate<ProjectThread> { $0.spaceIDString == key }, in: context).forEach(context.delete)
-        fetch(#Predicate<Note> { $0.spaceIDString == key }, in: context).forEach(context.delete)
-        fetch(#Predicate<Decision> { $0.spaceIDString == key }, in: context).forEach(context.delete)
-        fetch(#Predicate<Conversation> { $0.spaceIDString == key }, in: context).forEach(context.delete)
-        fetch(#Predicate<AgendaItem> { $0.spaceIDString == key }, in: context).forEach(context.delete)
-        fetch(#Predicate<AgentRun> { $0.spaceIDString == key }, in: context).forEach(context.delete)
+        // Tasks outlive a deleted project, but not a deleted Space.
+        space.agendaItems.forEach(context.delete)
         context.delete(space)
         try context.save()
     }
 
     // MARK: Built-in records
 
-    /// A record belongs to a Project or to a Space, never both.
+    /// A record belongs to one Space.
     static func move<Item: SpaceOwnable>(_ item: Item, to space: Space, in context: ModelContext) throws {
-        item.project = nil
-        item.spaceIDString = SpaceJSON.key(space.id)
+        item.project = space
+        item.spaceIDString = ""
         space.touch()
         try context.save()
     }
 
-    static func tracks(in space: Space, context: ModelContext) -> [ProjectThread] {
-        let key = SpaceJSON.key(space.id)
-        return fetch(#Predicate<ProjectThread> { $0.spaceIDString == key }, in: context)
-    }
+    static func tracks(in space: Space, context: ModelContext) -> [ProjectThread] { space.threads }
 
-    static func notes(in space: Space, context: ModelContext) -> [Note] {
-        let key = SpaceJSON.key(space.id)
-        return fetch(#Predicate<Note> { $0.spaceIDString == key }, in: context)
-    }
+    static func notes(in space: Space, context: ModelContext) -> [Note] { space.notes }
 
-    static func decisions(in space: Space, context: ModelContext) -> [Decision] {
-        let key = SpaceJSON.key(space.id)
-        return fetch(#Predicate<Decision> { $0.spaceIDString == key }, in: context)
-    }
+    static func decisions(in space: Space, context: ModelContext) -> [Decision] { space.decisions }
 
-    static func conversations(in space: Space, context: ModelContext) -> [Conversation] {
-        let key = SpaceJSON.key(space.id)
-        return fetch(#Predicate<Conversation> { $0.spaceIDString == key }, in: context)
-    }
+    static func conversations(in space: Space, context: ModelContext) -> [Conversation] { space.conversations }
 
-    static func agendaItems(in space: Space, context: ModelContext) -> [AgendaItem] {
-        let key = SpaceJSON.key(space.id)
-        return fetch(#Predicate<AgendaItem> { $0.spaceIDString == key }, in: context)
-    }
+    static func agendaItems(in space: Space, context: ModelContext) -> [AgendaItem] { space.agendaItems }
 
-    static func runs(in space: Space, context: ModelContext) -> [AgentRun] {
-        let key = SpaceJSON.key(space.id)
-        return fetch(#Predicate<AgentRun> { $0.spaceIDString == key }, in: context)
-    }
+    static func runs(in space: Space, context: ModelContext) -> [AgentRun] { space.runs }
 
     // MARK: Types
 

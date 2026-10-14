@@ -60,9 +60,9 @@ struct ContextItem: Identifiable, Equatable {
 /// Reads everything Membrae holds for the user and lists it.
 struct ContextItems: DynamicProperty {
     @Environment(AppModel.self) private var app
-    @Query(sort: \Project.createdAt) private var projects: [Project]
+    @Query(filter: #Predicate<Project> { !$0.enabledKindsRaw.contains("records") }, sort: \Project.createdAt) private var projects: [Project]
     @Query private var titles: [TitleIndex]
-    @Query(sort: \Space.createdAt) private var spaces: [Space]
+    @Query(filter: Space.collecting, sort: \Space.createdAt) private var spaces: [Space]
     @Query private var records: [SpaceRecord]
     @Query private var facts: [PersonalFact]
     @Query private var sources: [SavedSource]

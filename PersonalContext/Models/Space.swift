@@ -389,6 +389,8 @@ enum SpaceBuiltInKind: String, Codable, CaseIterable, Identifiable, Hashable {
     case task
     case chat
     case run
+    /// Types, records, and logged events: what an Area held.
+    case records
 
     var id: String { rawValue }
 }
@@ -420,62 +422,6 @@ enum SpaceTypeOrigin: String, Codable, CaseIterable, Identifiable, Hashable {
     case copy
 
     var id: String { rawValue }
-}
-
-@Model
-final class Space {
-    var id: UUID
-    var name: String
-    var symbol: String
-    var summary: String
-    var enabledKindsRaw: String
-    /// A `SpaceGradient` name. Empty falls back to one picked from the id.
-    var gradientRaw: String = ""
-    /// What the agent has learned about how the user talks about this Area: their names for things,
-    /// units, standing preferences. The agent writes it; the user can read and fix it in Edit Area.
-    var agentNotes: String = ""
-    /// The shape of the picture on this Area's cards. Empty is landscape; "portrait" suits covers and posters.
-    var cardShapeRaw: String = ""
-    var createdAt: Date
-    var updatedAt: Date
-
-    /// The most an Area's notes may hold, so they stay cheap to send with every message.
-    static let agentNotesLimit = 1500
-
-    var enabledKinds: Set<SpaceBuiltInKind> {
-        get {
-            Set(enabledKindsRaw.split(separator: ",").compactMap { SpaceBuiltInKind(rawValue: String($0)) })
-        }
-        set {
-            enabledKindsRaw = SpaceBuiltInKind.allCases
-                .filter(newValue.contains)
-                .map(\.rawValue)
-                .joined(separator: ",")
-        }
-    }
-
-    var displayName: String {
-        name.isEmpty ? "Untitled" : name
-    }
-
-    var hasPortraitCards: Bool {
-        get { cardShapeRaw == "portrait" }
-        set { cardShapeRaw = newValue ? "portrait" : "" }
-    }
-
-    init(name: String, symbol: String = "square.grid.2x2", summary: String = "") {
-        self.id = UUID()
-        self.name = name
-        self.symbol = symbol
-        self.summary = summary
-        self.enabledKindsRaw = ""
-        self.createdAt = .now
-        self.updatedAt = .now
-    }
-
-    func touch() {
-        updatedAt = .now
-    }
 }
 
 /// A Space-local type definition. Ownership lives on string ID columns, not SwiftData relationships.
@@ -655,8 +601,8 @@ final class PersonalFact {
     }
 }
 
-/// A built-in record that belongs to a Project or to a Space, never both.
-/// Move one into a Space with `SpaceStore.move`, which clears the project.
+/// A built-in record belongs to its Space through `project`. `spaceIDString` is left from when
+/// Areas were a separate model; nothing writes it now.
 protocol SpaceOwnable: AnyObject {
     var project: Project? { get set }
     var spaceIDString: String { get set }

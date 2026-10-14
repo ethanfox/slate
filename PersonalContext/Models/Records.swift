@@ -64,6 +64,10 @@ enum MessageRole: String, Codable, Hashable {
     case assistant
 }
 
+/// Every Space is one of these. What a Space can hold is its capabilities: one that collects
+/// records is what used to be an Area, and the code still calls it `Space`.
+typealias Space = Project
+
 @Model
 final class Project: Identifiable {
     var id: UUID
@@ -77,6 +81,15 @@ final class Project: Identifiable {
     var isPinned: Bool
     var createdAt: Date
     var updatedAt: Date
+    /// Capabilities, as `SpaceBuiltInKind` raw values. `records` makes this a Space that collects.
+    var enabledKindsRaw: String = ""
+    /// A `SpaceGradient` name. Empty falls back to one picked from the id.
+    var gradientRaw: String = ""
+    /// What the agent has learned about how the user talks about this Space: their names for things,
+    /// units, standing preferences. The agent writes it; the user can read and fix it in Edit Area.
+    var agentNotes: String = ""
+    /// The shape of the picture on this Space's cards. Empty is landscape; "portrait" suits covers and posters.
+    var cardShapeRaw: String = ""
 
     @Relationship(deleteRule: .cascade, inverse: \ProjectThread.project)
     var threads: [ProjectThread] = []
@@ -154,7 +167,32 @@ final class Project: Identifiable {
         return dates.max() ?? updatedAt
     }
 
-    init(name: String, symbol: String, summary: String) {
+    /// The most a Space's notes may hold, so they stay cheap to send with every message.
+    static let agentNotesLimit = 1500
+
+    /// Spaces that collect records: what the sidebar and the tools call Areas.
+    static let collecting = #Predicate<Project> { $0.enabledKindsRaw.contains("records") }
+
+    var enabledKinds: Set<SpaceBuiltInKind> {
+        get {
+            Set(enabledKindsRaw.split(separator: ",").compactMap { SpaceBuiltInKind(rawValue: String($0)) })
+        }
+        set {
+            enabledKindsRaw = SpaceBuiltInKind.allCases
+                .filter(newValue.contains)
+                .map(\.rawValue)
+                .joined(separator: ",")
+        }
+    }
+
+    var collects: Bool { enabledKinds.contains(.records) }
+
+    var hasPortraitCards: Bool {
+        get { cardShapeRaw == "portrait" }
+        set { cardShapeRaw = newValue ? "portrait" : "" }
+    }
+
+    init(name: String, symbol: String = "square.grid.2x2", summary: String = "") {
         self.id = UUID()
         self.name = name
         self.symbol = symbol

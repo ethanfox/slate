@@ -230,6 +230,11 @@ private extension TitleIndexStore {
     }
 
     static func upsert(_ project: Project, in context: ModelContext, fresh: FreshRows? = nil) {
+        // A Space that collects records is listed with the Areas, not the projects.
+        guard !project.collects else {
+            remove(project.id, in: context)
+            return
+        }
         let previous = existing(project.id, in: context, fresh: fresh)
         let name = project.displayName
         write(

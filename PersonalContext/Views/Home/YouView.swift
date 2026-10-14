@@ -180,7 +180,7 @@ enum ComingUp {
 struct YouView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @Query(sort: \Space.createdAt) private var spaces: [Space]
+    @Query(filter: Space.collecting, sort: \Space.createdAt) private var spaces: [Space]
     @Query private var records: [SpaceRecord]
     @Query(sort: \AreaWidget.createdAt) private var widgets: [AreaWidget]
     @Query private var loggedEvents: [SpaceEvent]

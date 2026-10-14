@@ -72,7 +72,7 @@ enum ContextBuilder {
     static func routing(spaceID: UUID? = nil, in context: ModelContext?) -> String {
         guard let context else { return "" }
         let projects = ((try? context.fetch(FetchDescriptor<Project>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]))) ?? [])
-            .filter { $0.status != .done }
+            .filter { $0.status != .done && !$0.collects }
         let spaces = SpaceStore.all(in: context)
         var lines = [routingRules]
         if let spaceID, let space = spaces.first(where: { $0.id == spaceID }) {

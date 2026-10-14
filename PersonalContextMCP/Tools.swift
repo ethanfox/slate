@@ -505,6 +505,7 @@ enum Tools {
             properties: [:], required: [], readOnly: true
         ) { _, context in
             try context.fetch(FetchDescriptor<Project>())
+                .filter { !$0.collects }
                 .sorted { $0.lastActivity > $1.lastActivity }
                 .map(JSONShape.project)
         },
@@ -2242,7 +2243,6 @@ enum DeletedRecord {
             saved["status"] = item.workflowStatusRaw
             saved["blocked_reason"] = item.blockedReason
             saved["project"] = key(item.project?.id)
-            saved["space"] = item.spaceIDString
             saved["tags"] = item.tags.map(\.id.uuidString)
             saved["track_links"] = item.trackLinks.map { link in
                 ["track": link.threadID.uuidString, "inherited": link.isInherited, "from_note": key(link.inheritedFromNoteID)] as [String: Any]
@@ -2260,7 +2260,6 @@ enum DeletedRecord {
             saved["updated"] = stamp(note.updatedAt)
             saved["project"] = key(note.project?.id)
             saved["track"] = key(note.thread?.id)
-            saved["space"] = note.spaceIDString
             saved["tags"] = note.tags.map(\.id.uuidString)
         case .decision:
             let decision = try Lookup.decision(id, in: context)
@@ -2272,7 +2271,6 @@ enum DeletedRecord {
             saved["created"] = stamp(decision.createdAt)
             saved["project"] = key(decision.project?.id)
             saved["track"] = key(decision.thread?.id)
-            saved["space"] = decision.spaceIDString
             saved["tags"] = decision.tags.map(\.id.uuidString)
         case .track:
             let track = try Lookup.thread(id, in: context)
@@ -2285,7 +2283,6 @@ enum DeletedRecord {
             saved["updated"] = stamp(track.updatedAt)
             saved["project"] = key(track.project?.id)
             saved["parent"] = key(track.parent?.id)
-            saved["space"] = track.spaceIDString
             saved["tags"] = track.tags.map(\.id.uuidString)
             saved["notes"] = track.notes.map(\.id.uuidString)
             saved["decisions"] = track.decisions.map(\.id.uuidString)
@@ -2306,7 +2303,6 @@ enum DeletedRecord {
             saved["updated"] = stamp(chat.updatedAt)
             saved["project"] = key(chat.project?.id)
             saved["track"] = key(chat.thread?.id)
-            saved["space"] = chat.spaceIDString
             saved["tags"] = chat.tags.map(\.id.uuidString)
             saved["draft_files"] = assets(.chatDraft, chat.id)
             saved["messages"] = chat.orderedMessages.map { message in
@@ -2385,7 +2381,8 @@ enum DeletedRecord {
         func back() -> ToolError { ToolError("That \(kind.rawValue) is already back.") }
 
         var project: Project?
-        if let projectID = uuid(saved["project"]) {
+        // Saved before Areas became Spaces, a record filed in an Area named it under "space".
+        if let projectID = uuid(saved["project"]) ?? uuid(saved["space"]) {
             guard let found = try? Lookup.project(projectID, in: context) else { throw gone() }
             project = found
         }
@@ -2406,7 +2403,6 @@ enum DeletedRecord {
             item.updatedAt = date(saved["updated"]) ?? .now
             item.workflowStatusRaw = saved["status"] as? String ?? TaskWorkflowStatus.ready.rawValue
             item.blockedReason = text("blocked_reason")
-            item.spaceIDString = text("space")
             context.insert(item)
             item.project = project
             item.tags = tags
@@ -2441,7 +2437,6 @@ enum DeletedRecord {
             note.id = id
             note.createdAt = date(saved["created"]) ?? .now
             note.updatedAt = date(saved["updated"]) ?? .now
-            note.spaceIDString = text("space")
             context.insert(note)
             note.tags = tags
             let links = (try? context.fetch(FetchDescriptor<AgendaNoteLink>(predicate: #Predicate { $0.noteID == id }))) ?? []
@@ -2456,7 +2451,6 @@ enum DeletedRecord {
             decision.statusRaw = saved["status"] as? String ?? DecisionStatus.active.rawValue
             decision.supersededByID = uuid(saved["superseded_by"])
             decision.createdAt = date(saved["created"]) ?? .now
-            decision.spaceIDString = text("space")
             context.insert(decision)
             decision.tags = tags
         case .track:
@@ -2471,7 +2465,6 @@ enum DeletedRecord {
             restored.statusRaw = saved["status"] as? String ?? restored.statusRaw
             restored.createdAt = date(saved["created"]) ?? .now
             restored.updatedAt = date(saved["updated"]) ?? .now
-            restored.spaceIDString = text("space")
             context.insert(restored)
             restored.tags = tags
             // What was filed under the track lost its link when the track went. Give it back where nothing replaced it.
@@ -2497,7 +2490,6 @@ enum DeletedRecord {
             chat.isArchived = saved["archived"] as? Bool ?? false
             chat.createdAt = date(saved["created"]) ?? .now
             chat.updatedAt = date(saved["updated"]) ?? .now
-            chat.spaceIDString = text("space")
             context.insert(chat)
             chat.thread = track
             chat.tags = tags

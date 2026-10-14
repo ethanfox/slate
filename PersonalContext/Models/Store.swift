@@ -50,7 +50,6 @@ enum Store {
         CodeAttachment.self,
         AgentRun.self,
         TitleIndex.self,
-        Space.self,
         SpaceType.self,
         SpaceRecord.self,
         SpaceEvent.self,
@@ -68,7 +67,7 @@ enum Store {
 
     /// Bump whenever a model or a stored property is added. A build that opens a store written by a
     /// newer schema drops the tables and columns it does not know, so older builds must refuse.
-    static let schemaVersion = 22
+    static let schemaVersion = 23
 
     /// Sits beside the store and holds the highest schema version that has opened it.
     static func schemaMarkerURL(for store: URL) -> URL {
@@ -200,6 +199,7 @@ enum Store {
             try refuseIfOutdated(at: configuration.url, running: schemaVersion)
             try migrateTagColumns(at: configuration.url)
             try migrateSpaceOwnerColumns(at: configuration.url)
+            try stashAreas(at: configuration.url)
         }
         let start = ContinuousClock.now
         let container = try ModelContainer(for: schema, configurations: configuration)
@@ -208,6 +208,9 @@ enum Store {
         }
         let context = ModelContext(container)
         context.autosaveEnabled = false
+        if !configuration.isStoredInMemoryOnly {
+            try foldStashedAreas(at: configuration.url, into: context)
+        }
         guard mode == .prepare else {
             // A helper built before the title index existed drops its table when it saves.
             TitleIndexStore.backfillIfNeeded(in: context)
@@ -271,6 +274,113 @@ enum Store {
         if !factColumns.isEmpty, !factColumns.contains("ZORIGIN") {
             try execIgnoringDuplicateColumn(db, "ALTER TABLE ZPERSONALFACT ADD COLUMN ZORIGIN VARCHAR DEFAULT ''")
         }
+    }
+
+    /// An Area that was its own model before schema 23, read straight from the old table.
+    struct StashedArea: Codable, Equatable {
+        var id: UUID
+        var name: String
+        var symbol: String
+        var summary: String
+        var enabledKindsRaw: String
+        var gradientRaw: String
+        var agentNotes: String
+        var cardShapeRaw: String
+        var createdAt: Date
+        var updatedAt: Date
+    }
+
+    static func areaStashURL(for store: URL) -> URL {
+        store.appendingPathExtension("areas.json")
+    }
+
+    /// Areas became Spaces that collect records, kept in the Project table. Opening the container
+    /// drops the old ZSPACE table, so its rows are written beside the store first and folded in after.
+    static func stashAreas(at url: URL) throws {
+        let stash = areaStashURL(for: url)
+        guard FileManager.default.fileExists(atPath: url.path),
+              !FileManager.default.fileExists(atPath: stash.path) else { return }
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else { return }
+        defer { sqlite3_close(db) }
+        let columns = tableColumns(db, table: "ZSPACE")
+        guard !columns.isEmpty else { return }
+        func column(_ name: String) -> String { columns.contains(name) ? name : "''" }
+        let sql = """
+            SELECT ZID, ZNAME, ZSYMBOL, ZSUMMARY, \(column("ZENABLEDKINDSRAW")), \(column("ZGRADIENTRAW")), \
+            \(column("ZAGENTNOTES")), \(column("ZCARDSHAPERAW")), ZCREATEDAT, ZUPDATEDAT FROM ZSPACE
+            """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw StoreMigrationError("Could not read Areas to move them into Spaces.")
+        }
+        defer { sqlite3_finalize(statement) }
+        func text(_ index: Int32) -> String {
+            sqlite3_column_text(statement, index).map { String(cString: $0) } ?? ""
+        }
+        var areas: [StashedArea] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard sqlite3_column_bytes(statement, 0) == 16, let bytes = sqlite3_column_blob(statement, 0) else { continue }
+            let raw = bytes.assumingMemoryBound(to: UInt8.self)
+            let id = UUID(uuid: (raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7],
+                                 raw[8], raw[9], raw[10], raw[11], raw[12], raw[13], raw[14], raw[15]))
+            areas.append(StashedArea(
+                id: id,
+                name: text(1),
+                symbol: text(2),
+                summary: text(3),
+                enabledKindsRaw: text(4),
+                gradientRaw: text(5),
+                agentNotes: text(6),
+                cardShapeRaw: text(7),
+                createdAt: Date(timeIntervalSinceReferenceDate: sqlite3_column_double(statement, 8)),
+                updatedAt: Date(timeIntervalSinceReferenceDate: sqlite3_column_double(statement, 9))
+            ))
+        }
+        guard !areas.isEmpty else { return }
+        try JSONEncoder().encode(areas).write(to: stash, options: .atomic)
+    }
+
+    /// Each stashed Area becomes a Space with the same id, so its types, records, events, widgets,
+    /// and pins still point at it. Built-in records filed under it move onto the Space.
+    static func foldStashedAreas(at url: URL, into context: ModelContext) throws {
+        let stash = areaStashURL(for: url)
+        guard let data = try? Data(contentsOf: stash) else { return }
+        let areas = try JSONDecoder().decode([StashedArea].self, from: data)
+        fold(areas, into: context)
+        try context.save()
+        try FileManager.default.removeItem(at: stash)
+    }
+
+    static func fold(_ areas: [StashedArea], into context: ModelContext) {
+        for area in areas {
+            let id = area.id
+            let space = (try? context.fetch(FetchDescriptor<Project>(predicate: #Predicate { $0.id == id })).first) ?? {
+                let made = Project(name: area.name, symbol: area.symbol.isEmpty ? "square.grid.2x2" : area.symbol, summary: area.summary)
+                made.id = area.id
+                context.insert(made)
+                return made
+            }()
+            space.enabledKinds = space.enabledKinds
+                .union(Set(area.enabledKindsRaw.split(separator: ",").compactMap { SpaceBuiltInKind(rawValue: String($0)) }))
+                .union([.records])
+            space.gradientRaw = area.gradientRaw
+            space.agentNotes = area.agentNotes
+            space.cardShapeRaw = area.cardShapeRaw
+            space.createdAt = area.createdAt
+            space.updatedAt = area.updatedAt
+            let key = SpaceJSON.key(area.id)
+            for item in owned(ProjectThread.self, key, context) { item.project = space; item.spaceIDString = "" }
+            for item in owned(Note.self, key, context) { item.project = space; item.spaceIDString = "" }
+            for item in owned(Decision.self, key, context) { item.project = space; item.spaceIDString = "" }
+            for item in owned(Conversation.self, key, context) { item.project = space; item.spaceIDString = "" }
+            for item in owned(AgendaItem.self, key, context) { item.project = space; item.spaceIDString = "" }
+            for item in owned(AgentRun.self, key, context) { item.project = space; item.spaceIDString = "" }
+        }
+    }
+
+    private static func owned<Item: PersistentModel & SpaceOwnable>(_: Item.Type, _ key: String, _ context: ModelContext) -> [Item] {
+        ((try? context.fetch(FetchDescriptor<Item>())) ?? []).filter { $0.spaceIDString == key }
     }
 
     private static func tableColumns(_ db: OpaquePointer, table: String) -> Set<String> {
