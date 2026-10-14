@@ -44,7 +44,9 @@ enum TitleIndexStore {
         for id in deleted {
             remove(id, in: context)
         }
-        for source in sources {
+        // A record emptied and deleted in one save is in both lists. Deleted wins, or its row would come back.
+        let gone = Set(deleted)
+        for source in sources where recordID(source).map({ !gone.contains($0) }) ?? true {
             upsert(source, in: context)
         }
         for (id, isMarked) in marked {
@@ -59,11 +61,23 @@ enum TitleIndexStore {
         let start = ContinuousClock.now
         let count = (try? context.fetchCount(FetchDescriptor<TitleIndex>())) ?? 0
         if count > 0 {
+            pruneMissingTracks(in: context)
             NavTrace.event("index.backfill skip rows=\(count) \(NavTrace.elapsed(start))")
             return
         }
         rebuild(in: context)
         NavTrace.event("index.backfill rebuilt \(NavTrace.elapsed(start))")
+    }
+
+    /// Drops rows for tracks that no longer exist. Older builds left one behind when a track was merged or made a stop.
+    static func pruneMissingTracks(in context: ModelContext) {
+        let live = Set(fetch(ProjectThread.self, in: context).map(\.id))
+        let kind = TitleIndexKind.track.rawValue
+        let rows = fetch(TitleIndex.self, predicate: #Predicate { $0.kindRaw == kind }, in: context)
+        let stale = rows.filter { !live.contains($0.id) }
+        guard !stale.isEmpty else { return }
+        stale.forEach(context.delete)
+        try? context.save()
     }
 
     static func rebuild(in context: ModelContext) {

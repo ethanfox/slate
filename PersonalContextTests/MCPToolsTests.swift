@@ -529,6 +529,9 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(retired["track_id"] as? String, runs.id.uuidString)
         XCTAssertNil(Tools.call("get_task", arguments: ["task_id": stale.id.uuidString], container: container)["isError"], "a change turned off is not made")
         XCTAssertNil(CleanupStore.proposed(for: harbor.id, in: ModelContext(container)))
+        let trackKind = TitleIndexKind.track.rawValue
+        let listed = try ModelContext(container).fetch(FetchDescriptor<TitleIndex>(predicate: #Predicate { $0.kindRaw == trackKind }))
+        XCTAssertEqual(listed.map(\.id), [runs.id], "a merged track leaves the track list")
 
         let log = try ModelContext(container).fetch(FetchDescriptor<AgentAction>(sortBy: [SortDescriptor(\.createdAt)]))
         let merge = try XCTUnwrap(log.first { $0.tool == "merge_tracks" })
