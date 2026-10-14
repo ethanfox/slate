@@ -185,9 +185,9 @@ enum RunFormTool {
                     "enum": ["membrae", LocalAgent.claudeCode.rawValue, LocalAgent.codex.rawValue],
                     "description": "Who does the work. membrae is the built-in agent. Use claude-code or codex only when the user names one or the work is changing code."
                 ],
-                "project_id": [
+                "space_id": [
                     "type": "string",
-                    "description": "Project the Run belongs to, when the conversation is not already in one."
+                    "description": "The Space the Run belongs to, when the conversation is not already in one."
                 ]
             ] as [String: Any],
             "required": ["brief"]
@@ -210,7 +210,7 @@ enum RunFormTool {
         let brief = (arguments["brief"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !brief.isEmpty else { throw LocalAgentError("brief is required") }
         let context = app.container.mainContext
-        let named = (arguments["project_id"] as? String).flatMap(UUID.init(uuidString:))
+        let named = ((arguments["space_id"] as? String) ?? (arguments["project_id"] as? String)).flatMap(UUID.init(uuidString:))
         let project = (projectID ?? named).flatMap { TitleIndexStore.project($0, in: context) }
         let defaults = app.runDefaults(for: project)
         var draft = NewRunDraft.blank(
@@ -275,7 +275,7 @@ enum RunPrompt {
         if hasProject {
             return "Do the job with the tools you have. Call finish_run with a short summary when you are done. If you cannot do what was asked, for example because it needs code changed and you cannot change code, call finish_run with outcome could_not and the reason; do not describe work you could not do as done. If you were given an assigned task and you finished it, mark it done with complete_task; if you did not finish it, leave it as it is. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
         }
-        return "Do the job. Call finish_run with a short summary when you are done. If you cannot do what was asked, call finish_run with outcome could_not and the reason. You have no project to write into. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
+        return "Do the job. Call finish_run with a short summary when you are done. If you cannot do what was asked, call finish_run with outcome could_not and the reason. You are in no Space; pass a space_id from list_spaces to file anything. You can browse the public web with the browser_* tools. Prefer snapshots, cite source URLs, and do not bypass CAPTCHAs."
     }
 
     static let stepsInstruction = "For a job with more than two or three parts, call set_run_steps before you start with your plan as short steps, and call it again each time you finish one, sending the whole list with that step marked done. The user watches the list to see how far along you are. Skip it for a job that is one step."
@@ -295,7 +295,7 @@ enum RunPrompt {
         }
         lines.append(assigned(task))
         if hasMembrae {
-            lines.append("The membrae tools read and write this project’s decisions, tracks, notes, and tasks in Membrae. Read what governs the work before you start. If you were given an assigned task and you finished it, mark it done with complete_task; if you did not finish it, leave it as it is.")
+            lines.append("The membrae tools read and write this Space’s decisions, tracks, notes, tasks, and records in Membrae. Read what governs the work before you start. If you were given an assigned task and you finished it, mark it done with complete_task; if you did not finish it, leave it as it is.")
         }
         if allowEdits, let directory {
             lines.append("You are working in \(directory). Make the changes the brief asks for. If it is a git repository, commit what you change with a clear message. Do not push.")
@@ -321,16 +321,16 @@ enum RunPrompt {
         return text
     }
 
-    /// Lets the prompt send the work to another project by naming it.
-    static func otherProjects(besides project: Project?, in context: ModelContext?) -> String {
+    /// Lets the prompt send the work to another Space by naming it.
+    static func otherSpaces(besides space: Space?, in context: ModelContext?) -> String {
         guard let context else { return "" }
-        let all = (try? context.fetch(FetchDescriptor<Project>(sortBy: [SortDescriptor(\.name)]))) ?? []
-        let others = all.filter { $0.id != project?.id && $0.status != .done }.prefix(40)
+        let all = (try? context.fetch(FetchDescriptor<Space>(sortBy: [SortDescriptor(\.name)]))) ?? []
+        let others = all.filter { $0.id != space?.id && $0.status != .done }.prefix(60)
         guard !others.isEmpty else { return "" }
         let list = others.map { "- \($0.name) (id \($0.id.uuidString))" }.joined(separator: "\n")
-        let lead = project == nil
-            ? "File what you make in the project the prompt names, passing that project’s id."
-            : "If the prompt names another project, do the notes and tasks work there, passing that project’s id."
+        let lead = space == nil
+            ? "File what you make in the Space the prompt names, passing that Space’s id as space_id."
+            : "If the prompt names another Space, do the notes and tasks work there, passing that Space’s id as space_id."
         return "\(lead)\n\(list)"
     }
 
@@ -338,7 +338,7 @@ enum RunPrompt {
         let parts = [
             project.map(ContextBuilder.identity(for:)) ?? "",
             assigned(run?.task),
-            otherProjects(besides: project, in: run?.modelContext),
+            otherSpaces(besides: project, in: run?.modelContext),
             closeInstruction(hasProject: project != nil),
             stepsInstruction,
             brief

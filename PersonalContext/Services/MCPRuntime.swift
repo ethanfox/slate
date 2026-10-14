@@ -122,13 +122,13 @@ final class MCPRuntime {
             throw MCPConnectionError("Unknown MCP tool.")
         }
         guard let projectID else {
-            throw MCPConnectionError("External MCP tools are only available in a project chat.")
+            throw MCPConnectionError("External MCP tools are only available in a chat inside a Space.")
         }
         guard let record = store.connection(id: parsed.connectionID), record.enabled else {
             throw MCPConnectionError("That MCP connection is not available.")
         }
         guard store.allows(parsed.connectionID, in: projectID) else {
-            throw MCPConnectionError("\(record.name) is not enabled for this project.")
+            throw MCPConnectionError("\(record.name) is not enabled for this Space.")
         }
         _ = try await clients.ensureConnected(parsed.connectionID)
         let compact = MCPSchema.compact(arguments)

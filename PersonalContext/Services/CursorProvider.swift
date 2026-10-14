@@ -214,7 +214,7 @@ final class CursorConversationBridge {
             codeRoots: codeRoots,
             includeMembraeTools: includeMembraeTools,
             includeProjectTools: includeProjectTools,
-            includeWorkerTool: includeMembraeTools && ProjectWorker.isConfigured(on: project),
+            includeWorkerTool: false,
             runtime: runtime.rawValue,
             cloudRepos: cloudRepositories(),
             codeSnapshots: includeProjectTools && runtime == .local
@@ -567,7 +567,7 @@ struct CursorChatProvider: ChatProvider {
                         case "host_tool":
                             await flushText()
                             let toolID = event.id ?? UUID().uuidString
-                            let toolName = event.name ?? "consult_code"
+                            let toolName = event.name ?? ""
                             let brief = event.text ?? event.detail ?? ""
                             emitTool(name: toolName, status: "running", id: toolID, detail: hostToolDetail(name: toolName, brief: brief))
                             await MainActor.run {
@@ -599,19 +599,7 @@ struct CursorChatProvider: ChatProvider {
                                         projectID: bridge.project?.id
                                     )
                                 } else {
-                                    output = try await ProjectWorker.consult(
-                                        brief: brief,
-                                        reportingTo: bridge.workspace,
-                                        options: options
-                                    ) { name, status, id, detail in
-                                        continuation.yield(.tool(
-                                            name: name,
-                                            status: status,
-                                            id: id,
-                                            detail: detail,
-                                            sources: []
-                                        ))
-                                    }
+                                    throw ProjectWorkspaceError("Unknown host tool \(toolName).")
                                 }
                                 emitTool(name: toolName, status: "completed", id: toolID, detail: hostToolDetail(name: toolName, brief: brief, result: output))
                                 await MainActor.run { bridge.replyToHostTool(id: toolID, text: output) }

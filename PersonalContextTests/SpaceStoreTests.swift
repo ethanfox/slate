@@ -777,17 +777,17 @@ final class SpaceToolsTests: XCTestCase {
     }
 
     func testEveryAgentWriteLandsInTheActionLog() throws {
-        let project = try object(call("create_project", ["name": "Kitchen refit"]))
+        let project = try object(call("create_space", ["name": "Kitchen refit"]))
         let projectID = try XCTUnwrap(project["id"] as? String)
         let task = try object(Tools.call(
             "create_task",
-            arguments: ["project_id": projectID, "title": "Order tiles"],
+            arguments: ["space_id": projectID, "title": "Order tiles"],
             container: container,
             announce: false,
             origin: ActionOrigin(client: "claude-code", conversationID: "C0FFEE00-0000-0000-0000-000000000001")
         ))
         _ = try object(call("complete_task", ["task_id": try XCTUnwrap(task["id"] as? String)]))
-        _ = call("list_projects")
+        _ = call("list_spaces")
 
         let space = try object(call("create_space", ["name": "Reading"]))
         let spaceID = try XCTUnwrap(space["id"] as? String)
@@ -803,10 +803,10 @@ final class SpaceToolsTests: XCTestCase {
 
         let log = try ModelContext(container).fetch(FetchDescriptor<AgentAction>(sortBy: [SortDescriptor(\.createdAt)]))
         XCTAssertEqual(log.map(\.sentence), [
-            "Added project “Kitchen refit”",
+            "Added Space “Kitchen refit”",
             "Added task “Order tiles”",
             "Completed task “Order tiles”",
-            "Added space “Reading”",
+            "Added Space “Reading”",
             "Set up Finished in Reading",
             "Set up Books in Reading",
             "Added record “Dune”",
@@ -826,9 +826,9 @@ final class SpaceToolsTests: XCTestCase {
         func log() throws -> [AgentAction] {
             try ModelContext(container).fetch(FetchDescriptor<AgentAction>(sortBy: [SortDescriptor(\.createdAt)]))
         }
-        let project = try object(call("create_project", ["name": "Kitchen refit"]))
+        let project = try object(call("create_space", ["name": "Kitchen refit"]))
         let projectID = try XCTUnwrap(project["id"] as? String)
-        let task = try object(call("create_task", ["project_id": projectID, "title": "Order tiles", "notes": "Matte"]))
+        let task = try object(call("create_task", ["space_id": projectID, "title": "Order tiles", "notes": "Matte"]))
         let taskID = try XCTUnwrap(task["id"] as? String)
 
         _ = try object(call("update_task", ["task_id": taskID, "title": "Order grout", "notes": "Grey"]))
@@ -846,7 +846,7 @@ final class SpaceToolsTests: XCTestCase {
 
         try Tools.undo(try XCTUnwrap(try log().first { $0.tool == "create_task" }).id, container: container)
         XCTAssertNotNil(call("get_task", ["task_id": taskID])["isError"])
-        XCTAssertFalse(try XCTUnwrap(try log().first { $0.tool == "create_project" }).canUndo)
+        XCTAssertFalse(try XCTUnwrap(try log().first { $0.tool == "create_space" }).canUndo)
 
         let space = try object(call("create_space", ["name": "Reading"]))
         let spaceID = try XCTUnwrap(space["id"] as? String)
@@ -880,7 +880,7 @@ final class SpaceToolsTests: XCTestCase {
             "fields": names.map { ["name": $0, "kind": "text"] } + [["name": "Cover", "kind": "image"]]
         ]))
         func set(_ fields: [String]) -> [String: Any] {
-            call("set_area_card", ["space_id": spaceID, "type_key": "book", "fields": fields])
+            call("set_space_card", ["space_id": spaceID, "type_key": "book", "fields": fields])
         }
         let six = set(names.map { $0.lowercased() })
         XCTAssertEqual(six["isError"] as? Bool, true)
@@ -890,7 +890,7 @@ final class SpaceToolsTests: XCTestCase {
         XCTAssertEqual(try object(set(["year", "author"]))["card_fields"] as? [String], ["year", "author"])
         XCTAssertEqual(try object(set([]))["card_fields"] as? [String], [])
         // Leaving fields out hands the choice back to the app.
-        XCTAssertNil(try object(call("set_area_card", ["space_id": spaceID, "type_key": "book"]))["card_fields"])
+        XCTAssertNil(try object(call("set_space_card", ["space_id": spaceID, "type_key": "book"]))["card_fields"])
 
         let shaped = try object(call("update_space", ["space_id": spaceID, "picture_shape": "portrait"]))
         XCTAssertEqual(shaped["picture_shape"] as? String, "portrait")
@@ -900,10 +900,10 @@ final class SpaceToolsTests: XCTestCase {
     func testAnAgentKeepsNotesOnAnArea() throws {
         let spaceID = try XCTUnwrap(try object(call("create_space", ["name": "Kitchen"]))["id"] as? String)
         let saved = try object(call("update_space", ["space_id": spaceID, "notes": "  \"The usual\" means the Sunday chili.  "]))
-        XCTAssertEqual(saved["notes"] as? String, "\"The usual\" means the Sunday chili.")
+        XCTAssertEqual(saved["agent_notes"] as? String, "\"The usual\" means the Sunday chili.")
         // Changing something else leaves the notes alone.
         _ = try object(call("update_space", ["space_id": spaceID, "summary": "What I cook"]))
-        XCTAssertEqual(try object(call("get_space", ["space_id": spaceID]))["notes"] as? String, "\"The usual\" means the Sunday chili.")
+        XCTAssertEqual(try object(call("get_space", ["space_id": spaceID]))["agent_notes"] as? String, "\"The usual\" means the Sunday chili.")
         let long = String(repeating: "x", count: Space.agentNotesLimit + 1)
         XCTAssertEqual(call("update_space", ["space_id": spaceID, "notes": long])["isError"] as? Bool, true)
         XCTAssertTrue(ContextBuilder.routing(in: context).contains("Your notes: \"The usual\" means the Sunday chili."))
@@ -1134,7 +1134,7 @@ final class SpaceToolsTests: XCTestCase {
             "space_id": spaceID, "key": "measure", "name": "Measures", "fields": [["name": "Unit", "kind": "text"]]
         ]))
         // A calculation has to name a number the event really has.
-        let wrong = call("set_area_widget", [
+        let wrong = call("set_space_widget", [
             "space_id": spaceID, "type_key": "measure", "name": "Wrong", "size": "1x1",
             "rows": [[["component": "metric", "value": "sum:weigh-in.height:week", "label": "x"]]]
         ])

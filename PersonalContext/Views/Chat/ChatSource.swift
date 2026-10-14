@@ -6,8 +6,10 @@ import UniformTypeIdentifiers
 
 struct ChatSource: Identifiable, Equatable, Codable, Hashable, Sendable {
     enum Kind: String, Codable, Sendable {
-        case url, note, thread, decision, project, conversation, task, run
-        /// An Area widget, drawn in place where its link appears.
+        case url, note, thread, decision, conversation, task, run
+        /// A Space. The stored name is from before every Space was one thing.
+        case project
+        /// A Space widget, drawn in place where its link appears.
         case widget
     }
 
@@ -36,7 +38,7 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable, Sendable {
         case .note: return "Note"
         case .thread: return "Track"
         case .decision: return "Decision"
-        case .project: return "Project"
+        case .project: return "Space"
         case .conversation: return "Chat"
         case .task: return "Task"
         case .run: return "Run"
@@ -50,7 +52,7 @@ struct ChatSource: Identifiable, Equatable, Codable, Hashable, Sendable {
         case .note: return "eyeglasses"
         case .thread: return TrackStyle.symbol
         case .decision: return "checkmark.seal"
-        case .project: return "square.stack"
+        case .project: return "square.grid.2x2"
         case .conversation: return "bubble.left"
         case .task: return "checklist"
         case .run: return "play.circle"
@@ -148,7 +150,7 @@ extension ChatSource {
         case .run:
             if let run = run(in: context) { app.open(run, newTab: newTab) }
         case .widget:
-            // A widget opens the Area it belongs to.
+            // A widget opens the Space it belongs to.
             if let widget = UUID(uuidString: id).flatMap({ SpaceStore.widget($0, in: context) }),
                let spaceID = widget.spaceID {
                 app.navigate(to: .space(spaceID), newTab: newTab)

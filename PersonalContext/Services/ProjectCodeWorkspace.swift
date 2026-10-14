@@ -122,7 +122,7 @@ enum ProjectCodeWorkspace {
         guard !selected.isEmpty else {
             throw ProjectWorkspaceError(
                 roots.isEmpty
-                    ? "No code is attached to this Membrae project."
+                    ? "No code is attached to this Space."
                     : "Unknown code root. Use one of: \(roots.map(\.title).joined(separator: ", "))."
             )
         }

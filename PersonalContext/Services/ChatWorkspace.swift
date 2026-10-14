@@ -13,13 +13,13 @@ final class ChatWorkspace {
 
     init(conversation: Conversation, project: Project?, debugLog: ChatDebugLog) {
         self.conversation = conversation
-        self.project = Self.workProject(project ?? conversation.project)
+        self.project = project ?? conversation.project
         self.debugLog = debugLog
     }
 
     func attach(conversation: Conversation, project: Project?) {
         self.conversation = conversation
-        self.project = Self.workProject(project ?? conversation.project)
+        self.project = project ?? conversation.project
     }
 
     func prepareTurn(userText: String, includeMembraeTools: Bool = true) -> (prompt: String, metadata: ChatTurnMetadata) {
@@ -45,18 +45,10 @@ final class ChatWorkspace {
         return (prompt, metadata)
     }
 
-    /// A chat in a Space that collects records talks like an Area chat, not a project chat.
-    static func workProject(_ project: Project?) -> Project? {
-        project.flatMap { $0.collects ? nil : $0 }
-    }
-
-    /// A chat with no project files what it is given wherever it belongs.
+    /// A chat outside every Space files what it is given wherever it belongs.
     func routing(includeMembraeTools: Bool = true) -> String {
         guard includeMembraeTools, project == nil else { return "" }
-        return ContextBuilder.routing(
-            spaceID: conversation.project.flatMap { $0.collects ? $0.id : nil },
-            in: conversation.modelContext
-        )
+        return ContextBuilder.routing(in: conversation.modelContext)
     }
 
     func currentCodeRoots() async throws -> [ProjectCodeRoot] {

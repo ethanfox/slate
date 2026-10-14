@@ -72,14 +72,14 @@ final class StoreSyncTests: XCTestCase {
             store: container
         )
         let tools = try await gateway.definitions()
-        XCTAssertTrue(tools.contains { $0["name"] as? String == "list_projects" })
+        XCTAssertTrue(tools.contains { $0["name"] as? String == "list_spaces" })
 
-        let listed = try await gateway.execute(name: "list_projects", arguments: [:])
+        let listed = try await gateway.execute(name: "list_spaces", arguments: [:])
         XCTAssertTrue(listed.contains("Harbor"), listed)
 
         _ = try await gateway.execute(
             name: "create_note",
-            arguments: ["project_id": project.id.uuidString, "content": "From chat"]
+            arguments: ["space_id": project.id.uuidString, "content": "From chat"]
         )
         let notes = try container.mainContext.fetch(FetchDescriptor<Note>())
         XCTAssertTrue(notes.contains { $0.content == "From chat" })

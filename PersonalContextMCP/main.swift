@@ -4,29 +4,30 @@ import SwiftData
 let supportedVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
 
 let instructions = """
-Membrae is the user's knowledge base of projects. Each project has decisions (what was decided and why), \
-tracks (directions, features, problems, experiments, topics), notes, and tasks. \
-A track is a line of work, broken into ordered stops: each stop is one idea inside it, most important first. \
+Membrae is the user's knowledge base. It is made of Spaces: one container for each part of their life or work, \
+such as a product they are building, a job search, their recipes, or their habits. Every tool that files something takes a space_id from list_spaces. \
+A Space holds lines of work (decisions, tracks, notes, tasks), records of its own types (set with set_space_type), or both. \
+Decisions are what was decided and why. A track is a line of work, broken into ordered stops: each stop is one idea inside it, most important first. \
 get_track lists the stops, set_stops rewrites them, and stop_id puts a task on one. Break a track down with stops, not with child tracks: tracks do not nest. \
 A theme is a named group of tracks, set with theme on create_track or update_track; it holds no work of its own. \
 A junction sits between two tracks, in any themes, and is shown on get_track. A wait, the usual kind, holds the second track until the first has done what the junction requires. \
 A merge is for two tracks that turn out to be the same work: its requirements are the gaps and conflicts to reconcile first, and merge_tracks then makes them one. Use set_junction for both. \
-Active decisions are the source of truth. A project can have one active track, shown as active_track on the project: \
+Active decisions are the source of truth. A Space can have one active track, shown as active_track on the Space: \
 it is the work in hand. When asked what to work on or what is open, start from the active track and its tasks, \
 and check the newest decisions before trusting an older task. Answer the user first. When they state a fact, choice, or plan, persist it \
-    here after you start the reply instead of asking them to save it. Do not mention the save unless they asked. \
-    Read before you write so you update an existing record rather than duplicating it. \
+here after you start the reply instead of asking them to save it. Do not mention the save unless they asked. \
+Read before you write so you update an existing record rather than duplicating it. \
 When a decision replaces an older one, create the new decision with supersedes_id. \
 Use the task tools to list, create, update, and complete Membrae tasks. complete_task records repeat history; \
 do not set status to done on a repeating task. \
 \(ContextBuilder.knowledgeRules) \
 \(ContextBuilder.agendaRules) \
 \(ContextBuilder.spaceRules) \
-get_project is lean. Use get_track for a track body and its linked work, list_tasks with track_id for tasks, \
+get_space is lean. Use get_track for a track body and its linked work, list_tasks with track_id for tasks, \
 get_note for reference material, and list_chats then get_chat to read a past conversation. \
-A project's brief is the one sentence that leads its page; when the direction or the next task changes, update it with update_project. \
-When asked to tidy, clean up, or consolidate a project, call get_cleanup_review and then propose_cleanup; the user applies the proposal in the app. \
-Tags are sparse cross-cutting labels. Use list_tags, create_tag, assign_tag, and remove_tag on notes, tracks, decisions, conversations, and tasks. Do not tag projects. \
+A Space's brief is the one sentence that leads its page; when the direction or the next task changes, update it with update_space. \
+When asked to tidy, clean up, or consolidate a Space, call get_cleanup_review and then propose_cleanup; the user applies the proposal in the app. \
+Tags are sparse cross-cutting labels. Use list_tags, create_tag, assign_tag, and remove_tag on notes, tracks, decisions, conversations, and tasks. Do not tag Spaces. \
 \(ContextBuilder.deletionRules)
 """
 

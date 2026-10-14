@@ -2,12 +2,13 @@ import Foundation
 import SwiftData
 
 enum ImportToolHost {
-    static let allowed = ["list_projects", "create_project", "create_track", "create_note", "create_decision", "save_about_user"]
+    static let allowed = ["list_spaces", "create_space", "create_track", "create_note", "create_decision", "save_about_user"]
 
     static let instructions = """
-    Membrae import is one-way. Use list_projects or create_project, then create a new track \
-    for this conversation and add notes and decisions under that track. Do not invent a \
-    project id. Existing tracks, notes, and decisions are not available. \
+    Membrae import is one-way. A Space is one container for a part of the user's life or work. \
+    Use list_spaces or create_space, then create a new track for this conversation and add notes \
+    and decisions under that track. Do not invent a space id. Existing tracks, notes, and \
+    decisions are not available. \
     When the user asks to save what you know about them, call save_about_user. Never call it \
     unless they asked.
     """
@@ -79,13 +80,13 @@ enum ImportToolHost {
         context.autosaveEnabled = false
         do {
             let value = try invoke(name, arguments: arguments, client: client, context: context, metadata: &metadata)
-            if name != "list_projects" {
+            if name != "list_spaces" {
                 try context.persist()
             }
             let encoded = try JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
             let payload: [String: Any] = ["content": [["type": "text", "text": String(decoding: encoded, as: UTF8.self)]]]
             let response = result(id, payload)
-            if name != "list_projects" {
+            if name != "list_spaces" {
                 ImportKeyStore.storeResult(
                     fingerprint: fingerprint,
                     resultJSON: String(data: try JSONSerialization.data(withJSONObject: response), encoding: .utf8) ?? "",
@@ -109,22 +110,22 @@ enum ImportToolHost {
     ) throws -> Any {
         let args = ImportArgs(arguments)
         switch name {
-        case "list_projects":
-            return try context.fetch(FetchDescriptor<Project>())
+        case "list_spaces":
+            return try context.fetch(FetchDescriptor<Space>())
                 .sorted { $0.lastActivity > $1.lastActivity }
                 .map { ["id": $0.id.uuidString, "name": $0.name, "summary": $0.summary] }
-        case "create_project":
-            let project = Project(
+        case "create_space":
+            let space = Space(
                 name: try args.required("name"),
-                symbol: args.string("symbol") ?? "folder",
+                symbol: args.string("symbol") ?? "square.grid.2x2",
                 summary: args.string("summary") ?? ""
             )
-            project.currentDirection = args.string("current_direction") ?? ""
-            context.insert(project)
-            ImportKeyStore.recordImport(.init(kind: "Project", title: project.name, projectName: project.name, at: .now), in: &metadata)
-            return ["id": project.id.uuidString, "name": project.name, "summary": project.summary]
+            space.currentDirection = args.string("current_direction") ?? ""
+            context.insert(space)
+            ImportKeyStore.recordImport(.init(kind: "Space", title: space.name, projectName: space.name, at: .now), in: &metadata)
+            return ["id": space.id.uuidString, "name": space.name, "summary": space.summary]
         case "create_track":
-            let project = try project(args.uuid("project_id"), in: context)
+            let project = try space(args.uuid("space_id"), in: context)
             let parent = try allowedThread(args.optionalUUID("parent_id"), project: project, metadata: metadata)
             let thread = ProjectThread(
                 title: try args.required("title"),
@@ -141,7 +142,7 @@ enum ImportToolHost {
             ImportKeyStore.recordImport(.init(kind: "Track", title: thread.title, projectName: project.name, at: .now), in: &metadata)
             return threadShape(thread)
         case "create_note":
-            let project = try project(args.uuid("project_id"), in: context)
+            let project = try space(args.uuid("space_id"), in: context)
             let thread = try allowedThread(args.optionalUUID("track_id"), project: project, metadata: metadata)
             let note = Note(
                 content: try args.required("content"),
@@ -155,7 +156,7 @@ enum ImportToolHost {
             ImportKeyStore.recordImport(.init(kind: "Note", title: note.displayTitle, projectName: project.name, at: .now), in: &metadata)
             return noteShape(note)
         case "create_decision":
-            let project = try project(args.uuid("project_id"), in: context)
+            let project = try space(args.uuid("space_id"), in: context)
             let thread = try allowedThread(args.optionalUUID("track_id"), project: project, metadata: metadata)
             let decision = Decision(
                 title: try args.required("title"),
@@ -191,12 +192,11 @@ enum ImportToolHost {
         }
     }
 
-    private static func project(_ id: UUID, in context: ModelContext) throws -> Project {
-        let projects = try context.fetch(FetchDescriptor<Project>())
-        guard let project = projects.first(where: { $0.id == id }) else {
-            throw ImportToolError("That project does not exist.")
+    private static func space(_ id: UUID, in context: ModelContext) throws -> Space {
+        guard let space = SpaceStore.space(id, in: context) else {
+            throw ImportToolError("That Space does not exist.")
         }
-        return project
+        return space
     }
 
     private static func allowedThread(_ id: UUID?, project: Project, metadata: ImportKeyMetadata) throws -> ProjectThread? {
@@ -210,35 +210,35 @@ enum ImportToolHost {
 
     private static var definitions: [[String: Any]] {
         [
-            tool("list_projects", "List projects", "List every project. Each item is id, name, and summary only. Pick a project by name, or create_project. Do not invent a project id.", [:], [], true),
-            tool("create_project", "Create project", "Create a project, then file a new track and notes under it.", [
-                "name": text("Project name."),
-                "summary": text("What the project is."),
-                "current_direction": text("Where the project is heading right now."),
-                "symbol": text("SF Symbol name for the icon. Defaults to folder.")
+            tool("list_spaces", "List Spaces", "List every Space. Each item is id, name, and summary only. Pick a Space by name, or create_space. Do not invent a space id.", [:], [], true),
+            tool("create_space", "Create Space", "Create a Space, then file a new track and notes under it.", [
+                "name": text("Space name."),
+                "summary": text("What the Space is."),
+                "current_direction": text("Where the work is heading right now."),
+                "symbol": text("SF Symbol name for the icon.")
             ], ["name"], false),
             tool("create_track", "Create track", "Start a new track in this import.", [
-                "project_id": text("Project id from list_projects or create_project."),
+                "space_id": text("Space id from list_spaces or create_space."),
                 "title": text("Track title."),
                 "kind": enumText(ThreadKind.self, "Kind of track. Defaults to topic."),
                 "status": enumText(ThreadStatus.self, "Defaults to exploring."),
                 "summary": text("One or two sentences."),
                 "body": text("Markdown spec."),
                 "parent_id": text("Parent track id created in this import.")
-            ], ["project_id", "title"], false),
+            ], ["space_id", "title"], false),
             tool("create_note", "Create note", "Add a note. source is ignored; Membrae sets it.", [
-                "project_id": text("Project id from list_projects or create_project."),
+                "space_id": text("Space id from list_spaces or create_space."),
                 "title": text("Note title."),
                 "content": text("Markdown content."),
-                "track_id": text("Track id created in this import. Omit for a project-level note.")
-            ], ["project_id", "content"], false),
+                "track_id": text("Track id created in this import. Omit for a note on the Space itself.")
+            ], ["space_id", "content"], false),
             tool("create_decision", "Create decision", "Record a new decision. Cannot replace an existing one.", [
-                "project_id": text("Project id from list_projects or create_project."),
+                "space_id": text("Space id from list_spaces or create_space."),
                 "title": text("Short name for the decision."),
                 "decision": text("What was decided."),
                 "rationale": text("Why."),
                 "track_id": text("Track id created in this import.")
-            ], ["project_id", "title", "decision"], false),
+            ], ["space_id", "title", "decision"], false),
             tool("save_about_user", "Save what you know about me", "Only when the user asks for it. Save what you know or have inferred about the user, from this conversation and from your memory of them. One plain sentence per fact, in your own words, including what you would not normally say back to them. Do not soften or leave things out. The user reads these in Membrae under About you.", [
                 "facts": [
                     "type": "array",
@@ -283,7 +283,7 @@ enum ImportToolHost {
     private static func threadShape(_ thread: ProjectThread) -> [String: Any] {
         [
             "id": thread.id.uuidString,
-            "project_id": thread.project?.id.uuidString ?? "",
+            "space_id": thread.project?.id.uuidString ?? "",
             "title": thread.title,
             "kind": thread.kind.rawValue,
             "status": thread.status.rawValue,
@@ -296,7 +296,7 @@ enum ImportToolHost {
     private static func noteShape(_ note: Note) -> [String: Any] {
         [
             "id": note.id.uuidString,
-            "project_id": note.project?.id.uuidString ?? "",
+            "space_id": note.project?.id.uuidString ?? "",
             "title": note.displayTitle,
             "content": note.content,
             "source": note.source,
@@ -307,7 +307,7 @@ enum ImportToolHost {
     private static func decisionShape(_ decision: Decision) -> [String: Any] {
         [
             "id": decision.id.uuidString,
-            "project_id": decision.project?.id.uuidString ?? "",
+            "space_id": decision.project?.id.uuidString ?? "",
             "title": decision.title,
             "decision": decision.decision,
             "rationale": decision.rationale,
@@ -315,14 +315,23 @@ enum ImportToolHost {
         ]
     }
 
+    /// Names a connector may still send from before every Space was one thing.
     private static func canonical(_ name: String) -> String {
-        name == "create_thread" ? "create_track" : name
+        switch name {
+        case "create_thread": "create_track"
+        case "list_projects": "list_spaces"
+        case "create_project": "create_space"
+        default: name
+        }
     }
 
     private static func migrate(_ arguments: [String: Any]) -> [String: Any] {
         var next = arguments
         if next["track_id"] == nil, let old = next["thread_id"] {
             next["track_id"] = old
+        }
+        if next["space_id"] == nil, let old = next["project_id"] {
+            next["space_id"] = old
         }
         return next
     }
@@ -366,7 +375,7 @@ private struct ImportArgs {
 
     func uuid(_ key: String) throws -> UUID {
         let value = try required(key)
-        guard let id = UUID(uuidString: value) else { throw ImportToolError("That project does not exist.") }
+        guard let id = UUID(uuidString: value) else { throw ImportToolError("That Space does not exist.") }
         return id
     }
 

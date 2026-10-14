@@ -181,7 +181,6 @@
 		A5A73498891F3755C5AEFD81 /* RecordRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B480D4B60CF75203CF57B45 /* RecordRow.swift */; };
 		A92F38125025957D0400CA53 /* LiquidOrbMetalB.swift in Sources */ = {isa = PBXBuildFile; fileRef = 375909AB0149768B4CB292E2 /* LiquidOrbMetalB.swift */; };
 		AC10C7614F71D4616792DB13 /* CursorClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC770F3F4A6E9C65A13777F6 /* CursorClient.swift */; };
-		ACDBC2F885E5571377925159 /* ProjectWorkerProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ED0D31A8A2D0F3A0FC48424 /* ProjectWorkerProvider.swift */; };
 		AD8746C5C6F6267B6E861E22 /* NotePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB3545DC169370BDB82CFAEB /* NotePage.swift */; };
 		B06BCB29CD7E4B73D6FA1067 /* ChatSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7120B1061316E3E36F8B684 /* ChatSource.swift */; };
 		B0D7C8F6F5979088E5D54CC8 /* ThreadChatPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6150FF3E36C1B80F324ADC3 /* ThreadChatPane.swift */; };
@@ -400,7 +399,6 @@
 		5BACE0200000000000000041 /* SpaceRecordViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceRecordViews.swift; sourceTree = "<group>"; };
 		5BACE0300000000000000011 /* SpaceComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceComponents.swift; sourceTree = "<group>"; };
 		4ACAF5E092DAC75A07EC0875 /* ConnectAccountSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectAccountSheets.swift; sourceTree = "<group>"; };
-		4ED0D31A8A2D0F3A0FC48424 /* ProjectWorkerProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkerProvider.swift; sourceTree = "<group>"; };
 		5077C7D2C8E53970BDE445D0 /* AssociationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssociationService.swift; sourceTree = "<group>"; };
 		8A1C2E3F4B5D6E708192A3B4 /* TaskStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStore.swift; sourceTree = "<group>"; };
 		BD4F5A6C708192A3B4C5D6E7 /* ProjectTasksBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectTasksBoard.swift; sourceTree = "<group>"; };
@@ -743,7 +741,6 @@
 				F93C81A0E693EB3D6CE616F2 /* LoopbackAuth.swift */,
 				F11E5704A0000020 /* GitHistory.swift */,
 				7EAF9BCF07A6C20AF5CD7FA0 /* ProjectCodeWorkspace.swift */,
-				4ED0D31A8A2D0F3A0FC48424 /* ProjectWorkerProvider.swift */,
 				E2A1B3C405F67D8E9A0B1C2D /* MembraeMCPClient.swift */,
 				A11C0DE100000001 /* MCPConnection.swift */,
 				A11C0DE100000003 /* MCPSecrets.swift */,
@@ -1347,7 +1344,6 @@
 				D15C010000000002 /* DecisionListLayout.swift in Sources */,
 				52EE7F1BE3AD5886F5CF29D2 /* ProjectHost.swift in Sources */,
 				F1ABE449C39ECC8D4E25C090 /* ProjectView.swift in Sources */,
-				ACDBC2F885E5571377925159 /* ProjectWorkerProvider.swift in Sources */,
 				B9E59273CDE8060B252497A2 /* ProjectsView.swift in Sources */,
 				CB6612FA78DDD514EC7DA70C /* PropertyPill.swift in Sources */,
 				3B1D4CE503CCAE5E82A5A16C /* QuickAskHost.swift in Sources */,

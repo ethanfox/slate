@@ -14,9 +14,9 @@ enum TaskStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notATask: "That record is not a Membrae task."
-        case .nextRequiresActiveProject: "Next needs an active project."
+        case .nextRequiresActiveProject: "Next needs an active Space."
         case .nextNotEligible: "Only Ready or In Progress tasks can be Next."
-        case .nextFollowsActiveTrack: "Next comes from the project's active track. Link the task to that track instead."
+        case .nextFollowsActiveTrack: "Next comes from the Space's active track. Link the task to that track instead."
         case .selfLink: "A task cannot block itself."
         case .duplicateBlocker: "That blocker is already linked."
         case .cycle: "That blocker would create a cycle."
@@ -937,7 +937,7 @@ enum JunctionStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .sameTrack: "A junction sits between two different tracks."
-        case .differentProjects: "Both tracks have to be in the same project."
+        case .differentProjects: "Both tracks have to be in the same Space."
         case .heldStopElsewhere: "The stop that waits has to be on the track that waits."
         case .cycle: "These tracks would each be waiting on the other."
         case .stopAndTask: "A requirement can point at a stop or a task, not both."

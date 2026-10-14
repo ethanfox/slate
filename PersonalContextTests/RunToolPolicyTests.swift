@@ -3,10 +3,11 @@ import XCTest
 
 final class RunToolPolicyTests: XCTestCase {
     func testRunToolsOfferedAndWithheld() {
-        let policy = RunToolPolicy(runID: UUID(), projectID: UUID(), assignedTaskID: nil, allowCode: true)
+        let policy = RunToolPolicy(runID: UUID(), spaceID: UUID(), assignedTaskID: nil, allowCode: true)
         XCTAssertFalse(policy.allows("complete_task"))
         XCTAssertFalse(policy.allows("mark_for_deletion"))
-        XCTAssertFalse(policy.allows("update_project"))
+        XCTAssertFalse(policy.allows("create_space"))
+        XCTAssertTrue(policy.allows("update_space"))
         XCTAssertTrue(policy.allows("create_note"))
         XCTAssertTrue(policy.allows("create_task"))
         XCTAssertTrue(policy.allows("finish_run"))
@@ -15,43 +16,44 @@ final class RunToolPolicyTests: XCTestCase {
 
     func testARunWritesStepsOnlyOnItself() {
         let runID = UUID()
-        let policy = RunToolPolicy(runID: runID, projectID: nil, assignedTaskID: nil, allowCode: false)
+        let policy = RunToolPolicy(runID: runID, spaceID: nil, assignedTaskID: nil, allowCode: false)
         XCTAssertTrue(policy.allows("set_run_steps"))
         let prepared = policy.preparedArguments("set_run_steps", ["run_id": UUID().uuidString, "steps": []])
         XCTAssertEqual(prepared["run_id"] as? String, runID.uuidString)
-        XCTAssertFalse(RunToolPolicy.chat(projectID: nil).allows("set_run_steps"))
+        XCTAssertFalse(RunToolPolicy.chat(spaceID: nil).allows("set_run_steps"))
     }
 
-    func testUnprojectedHasNoMembraeWrites() {
-        let policy = RunToolPolicy(runID: UUID(), projectID: nil, assignedTaskID: nil, allowCode: false)
+    func testOutsideASpaceHasNoMembraeWrites() {
+        let policy = RunToolPolicy(runID: UUID(), spaceID: nil, assignedTaskID: nil, allowCode: false)
         XCTAssertFalse(policy.allows("create_note"))
         XCTAssertFalse(policy.allows("project_read_file"))
         XCTAssertTrue(policy.allows("finish_run"))
     }
 
-    func testChatWithNoProjectFilesAnywhere() {
-        let policy = RunToolPolicy.chat(projectID: nil)
+    func testChatWithNoSpaceFilesAnywhere() {
+        let policy = RunToolPolicy.chat(spaceID: nil)
         XCTAssertTrue(policy.allows("create_note"))
         XCTAssertTrue(policy.allows("create_task"))
         XCTAssertTrue(policy.allows("create_space_record"))
         XCTAssertTrue(policy.allows("create_decision"))
         let projectID = UUID().uuidString
-        XCTAssertNoThrow(try policy.permitsCall("create_note", arguments: ["project_id": projectID]).get())
-        XCTAssertEqual(policy.preparedArguments("create_note", ["project_id": projectID])["project_id"] as? String, projectID)
+        XCTAssertNoThrow(try policy.permitsCall("create_note", arguments: ["space_id": projectID]).get())
+        XCTAssertEqual(policy.preparedArguments("create_note", ["space_id": projectID])["space_id"] as? String, projectID)
     }
 
-    func testChatInAProjectStaysInItButReachesSpaces() {
+    func testChatInASpaceStaysInIt() {
         let projectID = UUID()
-        let policy = RunToolPolicy.chat(projectID: projectID)
-        XCTAssertThrowsError(try policy.permitsCall("create_note", arguments: ["project_id": UUID().uuidString]).get())
-        XCTAssertEqual(policy.preparedArguments("create_note", [:])["project_id"] as? String, projectID.uuidString)
-        XCTAssertNil(policy.preparedArguments("create_space_record", ["space_id": "x"])["project_id"])
-        XCTAssertNil(policy.preparedArguments("list_spaces", [:])["project_id"])
+        let policy = RunToolPolicy.chat(spaceID: projectID)
+        XCTAssertThrowsError(try policy.permitsCall("create_note", arguments: ["space_id": UUID().uuidString]).get())
+        XCTAssertEqual(policy.preparedArguments("create_note", [:])["space_id"] as? String, projectID.uuidString)
+        XCTAssertEqual(policy.preparedArguments("create_space_record", ["space_id": "x"])["space_id"] as? String, projectID.uuidString)
+        XCTAssertNil(policy.preparedArguments("list_spaces", [:])["space_id"])
+        XCTAssertNil(policy.preparedArguments("create_space", ["name": "x"])["space_id"])
     }
 
     func testRunCompletesOnlyTheTaskItWasStartedFrom() {
         let taskID = UUID()
-        let policy = RunToolPolicy(runID: UUID(), projectID: UUID(), assignedTaskID: taskID, allowCode: false)
+        let policy = RunToolPolicy(runID: UUID(), spaceID: UUID(), assignedTaskID: taskID, allowCode: false)
         XCTAssertTrue(policy.allows("complete_task"))
         XCTAssertNoThrow(try policy.permitsCall("complete_task", arguments: ["task_id": taskID.uuidString]).get())
         XCTAssertThrowsError(try policy.permitsCall("complete_task", arguments: ["task_id": UUID().uuidString]).get())
@@ -61,40 +63,47 @@ final class RunToolPolicyTests: XCTestCase {
         ]).get())
     }
 
-    func testRejectsOtherProject() {
+    func testRejectsOtherSpace() {
         let projectID = UUID()
-        let policy = RunToolPolicy(runID: UUID(), projectID: projectID, assignedTaskID: nil, allowCode: false)
+        let policy = RunToolPolicy(runID: UUID(), spaceID: projectID, assignedTaskID: nil, allowCode: false)
         let denied = policy.permitsCall("create_note", arguments: [
-            "project_id": UUID().uuidString,
+            "space_id": UUID().uuidString,
             "content": "nope"
         ])
         XCTAssertThrowsError(try denied.get())
     }
 
+    func testAnOldClientsProjectIDIsReadAsTheSpaceID() {
+        let policy = RunToolPolicy.chat(spaceID: nil)
+        let prepared = policy.preparedArguments("create_note", ["project_id": "abc", "content": "x"])
+        XCTAssertEqual(prepared["space_id"] as? String, "abc")
+        XCTAssertNil(prepared["project_id"])
+    }
+
     func testInjectsRunSource() {
         let runID = UUID()
         let projectID = UUID()
-        let policy = RunToolPolicy(runID: runID, projectID: projectID, assignedTaskID: nil, allowCode: false)
+        let policy = RunToolPolicy(runID: runID, spaceID: projectID, assignedTaskID: nil, allowCode: false)
         let prepared = policy.preparedArguments("create_note", ["content": "Hello"])
         XCTAssertEqual(prepared["source"] as? String, "membrae://run/\(runID.uuidString)")
-        XCTAssertEqual(prepared["project_id"] as? String, projectID.uuidString)
+        XCTAssertEqual(prepared["space_id"] as? String, projectID.uuidString)
     }
 
-    func testRunFollowsTheProjectThePromptNames() {
+    func testRunFollowsTheSpaceThePromptNames() {
         let own = UUID()
-        var policy = RunToolPolicy(runID: UUID(), projectID: own, assignedTaskID: nil, allowCode: false)
-        policy.allowOtherProjects = true
+        var policy = RunToolPolicy(runID: UUID(), spaceID: own, assignedTaskID: nil, allowCode: false)
+        policy.allowOtherSpaces = true
         let other = UUID().uuidString
-        XCTAssertNoThrow(try policy.permitsCall("create_note", arguments: ["project_id": other]).get())
-        XCTAssertEqual(policy.preparedArguments("create_note", ["project_id": other])["project_id"] as? String, other)
-        XCTAssertEqual(policy.preparedArguments("create_note", [:])["project_id"] as? String, own.uuidString)
+        XCTAssertNoThrow(try policy.permitsCall("create_note", arguments: ["space_id": other]).get())
+        XCTAssertEqual(policy.preparedArguments("create_note", ["space_id": other])["space_id"] as? String, other)
+        XCTAssertEqual(policy.preparedArguments("create_note", [:])["space_id"] as? String, own.uuidString)
     }
 
     @MainActor
     func testFinishRunCanSayItCouldNot() async throws {
         let gateway = RunGateway(
-            policy: RunToolPolicy(runID: UUID(), projectID: nil, assignedTaskID: nil, allowCode: false),
-            inner: MembraeToolGateway(includeMembraeTools: false, includeProjectTools: false, consult: nil, mcp: nil)
+            policy: RunToolPolicy(runID: UUID(), spaceID: nil, assignedTaskID: nil, allowCode: false),
+            inner: MembraeToolGateway(includeMembraeTools: false, includeProjectTools: false, mcp: nil)
         )
         _ = try await gateway.execute(
             name: "finish_run",

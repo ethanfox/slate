@@ -72,7 +72,7 @@ enum ChatObjectLink {
     }
 
     static func href(kind: ChatSource.Kind, id: String) -> String {
-        "\(scheme)://\(kind.rawValue)/\(id)"
+        "\(scheme)://\(kind == .project ? "space" : kind.rawValue)/\(id)"
     }
 
     private static func appendText(_ raw: String, order: inout Int, into result: inout [ChatContentBlock]) {
@@ -168,7 +168,7 @@ enum ChatObjectLink {
         case "note", "notes": return .note
         case "thread", "threads", "track", "tracks": return .thread
         case "decision", "decisions": return .decision
-        case "project", "projects": return .project
+        case "space", "spaces", "project", "projects": return .project
         case "conversation", "conversations", "chat", "chats": return .conversation
         case "task", "tasks": return .task
         case "run", "runs": return .run

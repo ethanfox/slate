@@ -2,31 +2,31 @@ import Foundation
 
 struct RunToolPolicy: Equatable, Sendable {
     var runID: UUID
-    var projectID: UUID?
+    /// The Space the Run or chat is in. Nil means it is outside every Space.
+    var spaceID: UUID?
     var assignedTaskID: UUID?
     var allowCode: Bool
     var allowMembraeKnowledgeWrite: Bool
     var denied: Set<String>
-    var requireProject: Bool
+    var requireSpace: Bool
     var attachesRunSource: Bool
     var allowExternalMCP: Bool
     var allowBrowser: Bool
-    /// With no project, writes may land in any project or Space. This is how the one input files things.
+    /// With no Space, writes may land in any Space. This is how the one input files things.
     var allowUnscopedWrites: Bool
-    /// The prompt may name another project. The Run's own project is then only the default.
-    var allowOtherProjects = false
+    /// The prompt may name another Space. The Run's own Space is then only the default.
+    var allowOtherSpaces = false
 
     var allowsMembraeWrites: Bool {
-        allowMembraeKnowledgeWrite && (projectID != nil || allowUnscopedWrites)
+        allowMembraeKnowledgeWrite && (spaceID != nil || allowUnscopedWrites)
     }
 
+    /// A Run never deletes, never makes a Space, and never takes a completion back.
     static let denied: Set<String> = [
         "mark_for_deletion",
         "delete_record",
-        "create_project",
-        "update_project",
-        "delete_completion",
-        "consult_code"
+        "create_space",
+        "delete_completion"
     ]
 
     static let projectWrites: Set<String> = [
@@ -42,43 +42,43 @@ struct RunToolPolicy: Equatable, Sendable {
 
     init(
         runID: UUID,
-        projectID: UUID?,
+        spaceID: UUID?,
         assignedTaskID: UUID?,
         allowCode: Bool,
         allowMembraeKnowledgeWrite: Bool = true,
         denied: Set<String> = RunToolPolicy.denied,
-        requireProject: Bool = true,
+        requireSpace: Bool = true,
         attachesRunSource: Bool = true,
         allowExternalMCP: Bool = false,
         allowBrowser: Bool = true,
         allowUnscopedWrites: Bool = false
     ) {
         self.runID = runID
-        self.projectID = projectID
+        self.spaceID = spaceID
         self.assignedTaskID = assignedTaskID
         self.allowCode = allowCode
         self.allowMembraeKnowledgeWrite = allowMembraeKnowledgeWrite
         self.denied = denied
-        self.requireProject = requireProject
+        self.requireSpace = requireSpace
         self.attachesRunSource = attachesRunSource
         self.allowExternalMCP = allowExternalMCP
         self.allowBrowser = allowBrowser
         self.allowUnscopedWrites = allowUnscopedWrites
     }
 
-    static func chat(projectID: UUID?) -> RunToolPolicy {
+    static func chat(spaceID: UUID?) -> RunToolPolicy {
         RunToolPolicy(
             runID: UUID(),
-            projectID: projectID,
+            spaceID: spaceID,
             assignedTaskID: nil,
             allowCode: true,
             allowMembraeKnowledgeWrite: true,
             denied: [],
-            requireProject: false,
+            requireSpace: false,
             attachesRunSource: false,
             allowExternalMCP: true,
             allowBrowser: true,
-            allowUnscopedWrites: projectID == nil
+            allowUnscopedWrites: spaceID == nil
         )
     }
 
@@ -95,7 +95,7 @@ struct RunToolPolicy: Equatable, Sendable {
         if Self.projectWrites.contains(name) { return false }
         if name.hasPrefix("project_") { return allowCode }
         if isMembraeWrite(name) { return allowsMembraeWrites }
-        if requireProject && projectID == nil && isMembraeTool(name) {
+        if requireSpace && spaceID == nil && isMembraeTool(name) {
             return false
         }
         return true
@@ -121,22 +121,27 @@ struct RunToolPolicy: Equatable, Sendable {
                 return .failure(RunToolDenied("This run can only complete the task it was started from."))
             }
         }
-        if !allowOtherProjects,
-           let expected = projectID,
-           let raw = arguments["project_id"] as? String,
+        if !allowOtherSpaces,
+           let expected = spaceID,
+           let raw = Self.namedSpace(arguments),
            let incoming = UUID(uuidString: raw),
            incoming != expected {
-            return .failure(RunToolDenied("This run can only write in its own project."))
+            return .failure(RunToolDenied("This run can only write in its own Space."))
         }
         return .success(())
     }
 
+    /// Fills in the Run's own Space on every tool that takes one, unless the prompt named another.
     func preparedArguments(_ name: String, _ arguments: [String: Any]) -> [String: Any] {
         var arguments = arguments
         if name == Self.setRunSteps { arguments["run_id"] = runID.uuidString }
-        let named = (arguments["project_id"] as? String).flatMap(UUID.init(uuidString:)) != nil
-        if let projectID, writesProject(name), !(allowOtherProjects && named) {
-            arguments["project_id"] = projectID.uuidString
+        if arguments["space_id"] == nil, let old = arguments["project_id"] {
+            arguments["space_id"] = old
+            arguments["project_id"] = nil
+        }
+        let named = Self.namedSpace(arguments).flatMap(UUID.init(uuidString:)) != nil
+        if let spaceID, Self.takesSpaceID(name), !(allowOtherSpaces && named) {
+            arguments["space_id"] = spaceID.uuidString
         }
         if attachesRunSource, name == "create_note",
            arguments["source"] == nil || (arguments["source"] as? String)?.isEmpty == true {
@@ -145,16 +150,33 @@ struct RunToolPolicy: Equatable, Sendable {
         return arguments
     }
 
+    private static func namedSpace(_ arguments: [String: Any]) -> String? {
+        (arguments["space_id"] as? String) ?? (arguments["project_id"] as? String)
+    }
+
+    /// The tools whose schema has a space_id, read once from the tool definitions.
+    static let spaceIDTools: Set<String> = Set(Tools.definitions.compactMap { tool in
+        guard let name = tool["name"] as? String,
+              let schema = tool["inputSchema"] as? [String: Any],
+              let properties = schema["properties"] as? [String: Any],
+              properties["space_id"] != nil else { return nil }
+        return name
+    })
+
+    static func takesSpaceID(_ name: String) -> Bool {
+        spaceIDTools.contains(name)
+    }
+
     static func effective(for run: AgentRun) -> RunToolPolicy {
         var policy = RunToolPolicy(
             runID: run.id,
-            projectID: run.project?.id,
+            spaceID: run.project?.id,
             assignedTaskID: run.task?.id,
             allowCode: run.project != nil && !run.repositoryLocators.isEmpty,
-            requireProject: false,
+            requireSpace: false,
             allowUnscopedWrites: run.project == nil
         )
-        policy.allowOtherProjects = true
+        policy.allowOtherSpaces = true
         return policy
     }
 
@@ -170,29 +192,24 @@ struct RunToolDenied: LocalizedError {
     var errorDescription: String? { message }
 }
 
-/// Space tools take a space id, never a project id.
-private func writesProject(_ name: String) -> Bool {
-    (name.hasPrefix("create_") || name.hasPrefix("list_")) && !name.contains("_space") && !name.contains("_area") && !name.contains("_source")
-}
-
 private func isMembraeWrite(_ name: String) -> Bool {
     name.hasPrefix("create_")
         || name.hasPrefix("update_")
         || name.hasPrefix("delete_")
+        || name.hasPrefix("set_")
+        || name.hasPrefix("log_")
+        || name.hasPrefix("place_")
+        || name.hasPrefix("remove_")
         || name == "complete_task"
         || name == "mark_for_deletion"
         || name == "assign_tag"
-        || name == "remove_tag"
+        || name == "propose_cleanup"
+        || name == "merge_tracks"
+        || name == "convert_track_to_stop"
 }
 
 private func isMembraeTool(_ name: String) -> Bool {
     name.hasPrefix("list_")
         || name.hasPrefix("get_")
-        || name.hasPrefix("create_")
-        || name.hasPrefix("update_")
-        || name.hasPrefix("delete_")
-        || name == "complete_task"
-        || name == "mark_for_deletion"
-        || name == "assign_tag"
-        || name == "remove_tag"
+        || isMembraeWrite(name)
 }

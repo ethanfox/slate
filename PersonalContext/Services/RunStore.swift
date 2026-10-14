@@ -13,8 +13,8 @@ enum RunStoreError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .emptyBrief: "Write a brief before starting."
-        case .taskNeedsProject: "A task run needs a project."
-        case .taskWrongProject: "That task is not in this project."
+        case .taskNeedsProject: "A task run needs a Space."
+        case .taskWrongProject: "That task is not in this Space."
         case .taskHasActiveRun: "This task already has a run in progress."
         case .notTerminal: "Only a finished run can be deleted."
         case .stillActive: "Cancel the run on this task first."

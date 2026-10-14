@@ -38,9 +38,9 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertTrue(first.contains("You are the assistant inside Membrae"))
         XCTAssertTrue(first.contains(ContextBuilder.replyFirst))
         XCTAssertTrue(first.contains(ContextBuilder.responseStyle))
-        XCTAssertTrue(first.contains("Do not walk the whole project"))
+        XCTAssertTrue(first.contains("Do not walk the whole Space"))
         XCTAssertTrue(first.contains("Harbor"))
-        XCTAssertTrue(first.contains("<project-context>"))
+        XCTAssertTrue(first.contains("<space-context>"))
         XCTAssertFalse(first.contains("Active decisions"))
         XCTAssertFalse(first.contains("Ship the Mac app in Swift"))
 
@@ -83,11 +83,14 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertTrue(prompt.contains("- Harbor (id \(project.id.uuidString)): A marina app."))
         XCTAssertFalse(prompt.contains("Old site"))
         XCTAssertTrue(prompt.contains("- Kitchen (id \(space.id.uuidString)): Recipes and what got cooked. Holds: Recipe (recipe). Logs: Cooked (cooked)."))
-        XCTAssertFalse(prompt.contains("The user is looking at the Area"))
+        XCTAssertFalse(prompt.contains("Space: Kitchen"))
 
+        // A chat inside a Space gets that Space, with what it holds, and no map.
         let spacePrompt = ChatWorkspace(conversation: inSpace, project: nil, debugLog: ChatDebugLog())
             .prepareTurn(userText: "made this tonight").prompt
-        XCTAssertTrue(spacePrompt.contains("The user is looking at the Area Kitchen (id \(space.id.uuidString))"))
+        XCTAssertTrue(spacePrompt.contains("Space: Kitchen (id \(space.id.uuidString))"))
+        XCTAssertTrue(spacePrompt.contains("Holds: Recipe (recipe)."))
+        XCTAssertFalse(spacePrompt.contains("<map>"))
 
         let projectPrompt = ChatWorkspace(conversation: inProject, project: project, debugLog: ChatDebugLog())
             .prepareTurn(userText: "hi").prompt
@@ -115,7 +118,7 @@ final class ProviderNeutralTests: XCTestCase {
         try container.mainContext.save()
         let conversationID = UUID()
         let gateway = RunGateway(
-            policy: .chat(projectID: nil),
+            policy: .chat(spaceID: nil),
             inner: MembraeToolGateway(
                 includeProjectTools: false,
                 mcp: MembraeMCPClient(command: nil),
@@ -128,7 +131,7 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertTrue(names.contains("create_note"))
         XCTAssertTrue(names.contains("create_space_record"))
         _ = try await gateway.execute(name: "create_note", arguments: [
-            "project_id": project.id.uuidString,
+            "space_id": project.id.uuidString,
             "title": "Dock fees",
             "content": "Slip fees went up in March."
         ])
@@ -352,15 +355,6 @@ final class ProviderNeutralTests: XCTestCase {
     }
 
     @MainActor
-    func testProjectWorkerDefaultsToChatModel() {
-        let project = Project(name: "Test", symbol: "folder", summary: "")
-        XCTAssertEqual(project.workerProviderID, "")
-        XCTAssertEqual(project.workerModelID, "")
-        XCTAssertEqual(project.workerPath, "")
-        XCTAssertFalse(ProjectWorker.isConfigured(on: project))
-    }
-
-    @MainActor
     func testChatUsesPickedProviderWhenWorkerIsSet() {
         let project = Project(name: "Harbor", symbol: "folder", summary: "")
         project.workerProviderID = TalkProvider.cursor.rawValue
@@ -383,9 +377,9 @@ final class ProviderNeutralTests: XCTestCase {
         XCTAssertFalse(ChatGPTSignIn.isRefusedRefresh(status: 503, body: "invalid_grant"))
     }
 
-    /// Projects no longer choose a worker, so a stored one is ignored.
+    /// A Space does not choose a worker, so a stored one is ignored and no consult tool is offered.
     @MainActor
-    func testStoredProjectWorkerIsIgnored() throws {
+    func testStoredWorkerIsIgnored() async throws {
         let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Store.schema, configurations: configuration)
         let project = Project(name: "Harbor", symbol: "folder", summary: "")
@@ -393,7 +387,8 @@ final class ProviderNeutralTests: XCTestCase {
         container.mainContext.insert(project)
         try container.mainContext.save()
         XCTAssertFalse(ContextBuilder.identity(for: project).contains("consult_code"))
-        XCTAssertFalse(ProjectWorker.isConfigured(on: project))
+        let tools = try await MembraeToolGateway(includeMembraeTools: true, includeProjectTools: true, mcp: nil, store: container).definitions()
+        XCTAssertFalse(tools.contains { $0["name"] as? String == "consult_code" })
     }
 
     func testRunnerReuseKeyIgnoresPromptText() {
@@ -448,25 +443,6 @@ final class ProviderNeutralTests: XCTestCase {
         _ = try await gateway.definitions()
         let calls = await client.listCalls
         XCTAssertEqual(calls, 1)
-    }
-
-    @MainActor
-    func testGatewayConsultCodeIsOnDemand() async throws {
-        var briefs: [String] = []
-        let gateway = MembraeToolGateway(
-            includeMembraeTools: false,
-            includeProjectTools: false,
-            consult: { brief in
-                briefs.append(brief)
-                return "found \(brief)"
-            }
-        )
-        let tools = try await gateway.definitions()
-        XCTAssertTrue(tools.contains { $0["name"] as? String == "consult_code" })
-        XCTAssertTrue(briefs.isEmpty)
-        let result = try await gateway.execute(name: "consult_code", arguments: ["brief": "auth flow"])
-        XCTAssertEqual(result, "found auth flow")
-        XCTAssertEqual(briefs, ["auth flow"])
     }
 
     func testCodeRootMatchesLocatorOrShortName() {

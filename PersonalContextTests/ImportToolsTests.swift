@@ -56,7 +56,7 @@ final class ImportToolsTests: XCTestCase {
         let tools = try XCTUnwrap((response["result"] as? [String: Any])?["tools"] as? [[String: Any]])
         XCTAssertEqual(tools.map { $0["name"] as? String }, ImportToolHost.allowed)
         XCTAssertEqual(tools.compactMap { $0["title"] as? String }, [
-            "List projects", "Create project", "Create track", "Create note", "Create decision", "Save what you know about me"
+            "List Spaces", "Create Space", "Create track", "Create note", "Create decision", "Save what you know about me"
         ])
     }
 
@@ -88,12 +88,12 @@ final class ImportToolsTests: XCTestCase {
         XCTAssertTrue(((empty["result"] as? [String: Any])?["isError"] as? Bool) ?? false)
     }
 
-    func testListProjectsReturnsIdentityOnly() throws {
+    func testListSpacesReturnsIdentityOnly() throws {
         let seed = HarborEvalFixture.seed(in: container.mainContext)
         try container.mainContext.save()
         var metadata = emptyMetadata()
         let response = ImportToolHost.handle(
-            rpc: ["jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": ["name": "list_projects", "arguments": [:]]],
+            rpc: ["jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": ["name": "list_spaces", "arguments": [:]]],
             client: "Claude",
             container: container,
             metadata: &metadata
@@ -107,10 +107,10 @@ final class ImportToolsTests: XCTestCase {
         XCTAssertNil(projects.first?["status"])
     }
 
-    func testCreateProjectThenNote() throws {
+    func testCreateSpaceThenNote() throws {
         var metadata = emptyMetadata()
         let created = try object(ImportToolHost.handle(
-            rpc: call("create_project", ["name": "From ChatGPT", "summary": "Imported"]),
+            rpc: call("create_space", ["name": "From ChatGPT", "summary": "Imported"]),
             client: "ChatGPT",
             container: container,
             metadata: &metadata
@@ -118,12 +118,28 @@ final class ImportToolsTests: XCTestCase {
         XCTAssertEqual(created["name"] as? String, "From ChatGPT")
         let projectID = try XCTUnwrap(created["id"] as? String)
         let note = try object(ImportToolHost.handle(
-            rpc: call("create_note", ["project_id": projectID, "content": "First note"]),
+            rpc: call("create_note", ["space_id": projectID, "content": "First note"]),
             client: "ChatGPT",
             container: container,
             metadata: &metadata
         ))
-        XCTAssertEqual(note["project_id"] as? String, projectID)
+        XCTAssertEqual(note["space_id"] as? String, projectID)
+    }
+
+    func testAConnectorThatCachedTheOldNamesStillWorks() throws {
+        let seed = HarborEvalFixture.seed(in: container.mainContext)
+        try container.mainContext.save()
+        var metadata = emptyMetadata()
+        let listed = try decodeList(ImportToolHost.handle(
+            rpc: ["jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": ["name": "list_projects", "arguments": [:]]],
+            client: "Claude", container: container, metadata: &metadata
+        ))
+        XCTAssertEqual(listed.first?["name"] as? String, "Harbor")
+        let track = try object(ImportToolHost.handle(
+            rpc: call("create_track", ["project_id": seed.project.id.uuidString, "title": "Old client"]),
+            client: "Claude", container: container, metadata: &metadata
+        ))
+        XCTAssertEqual(track["space_id"] as? String, seed.project.id.uuidString)
     }
 
     func testForbiddenToolIsRejected() throws {
@@ -143,7 +159,7 @@ final class ImportToolsTests: XCTestCase {
         var metadata = emptyMetadata()
         let forbidden = ImportToolHost.handle(
             rpc: call("create_note", [
-                "project_id": seed.project.id.uuidString,
+                "space_id": seed.project.id.uuidString,
                 "content": "secret",
                 "track_id": seed.auth.id.uuidString,
                 "source": "the-model"
@@ -156,7 +172,7 @@ final class ImportToolsTests: XCTestCase {
 
         let created = ImportToolHost.handle(
             rpc: call("create_track", [
-                "project_id": seed.project.id.uuidString,
+                "space_id": seed.project.id.uuidString,
                 "title": "From Claude"
             ]),
             client: "Claude",
@@ -166,7 +182,7 @@ final class ImportToolsTests: XCTestCase {
         let thread = try object(created)
         let note = try object(ImportToolHost.handle(
             rpc: call("create_note", [
-                "project_id": seed.project.id.uuidString,
+                "space_id": seed.project.id.uuidString,
                 "content": "Filed from the chat",
                 "track_id": thread["id"] as? String ?? "",
                 "source": "the-model"
@@ -184,7 +200,7 @@ final class ImportToolsTests: XCTestCase {
         try container.mainContext.save()
         var metadata = emptyMetadata()
         let arguments: [String: Any] = [
-            "project_id": seed.project.id.uuidString,
+            "space_id": seed.project.id.uuidString,
             "content": "Same payload"
         ]
         _ = ImportToolHost.handle(rpc: call("create_note", arguments), client: "Imported", container: container, metadata: &metadata)
@@ -216,7 +232,7 @@ final class ImportToolsTests: XCTestCase {
         var metadata = emptyMetadata()
         let response = ImportToolHost.handle(
             rpc: call("create_decision", [
-                "project_id": seed.project.id.uuidString,
+                "space_id": seed.project.id.uuidString,
                 "title": "No",
                 "decision": "Nope",
                 "supersedes_id": seed.decision.id.uuidString

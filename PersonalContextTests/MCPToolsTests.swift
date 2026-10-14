@@ -12,11 +12,11 @@ final class MCPToolsTests: XCTestCase {
         container = try ModelContainer(for: Store.schema, configurations: configuration)
     }
 
-    func testGetProjectIsLeanByDefault() throws {
+    func testGetSpaceIsLeanByDefault() throws {
         let seed = HarborEvalFixture.seed(in: context)
         try context.save()
 
-        let body = try object(Tools.call("get_project", arguments: ["project_id": seed.project.id.uuidString], container: container))
+        let body = try object(Tools.call("get_space", arguments: ["space_id": seed.project.id.uuidString], container: container))
         XCTAssertEqual(body["name"] as? String, "Harbor")
         XCTAssertNil(body["decisions"])
         XCTAssertNil(body["tracks"])
@@ -32,14 +32,14 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertFalse(contextText.contains("Ship sign-in"))
     }
 
-    func testGetProjectIncludeAddsBoundedLists() throws {
+    func testGetSpaceIncludeAddsBoundedLists() throws {
         let seed = HarborEvalFixture.seed(in: context)
         try context.save()
 
         let body = try object(Tools.call(
-            "get_project",
+            "get_space",
             arguments: [
-                "project_id": seed.project.id.uuidString,
+                "space_id": seed.project.id.uuidString,
                 "include": ["decisions", "tracks", "notes", "tasks"]
             ],
             container: container
@@ -61,13 +61,13 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(taskTracks.first?["title"] as? String, "Auth")
     }
 
-    func testGetProjectIncludeThreadsOmitsBodies() throws {
+    func testGetSpaceIncludeThreadsOmitsBodies() throws {
         let seed = HarborEvalFixture.seed(in: context)
         try context.save()
 
         let body = try object(Tools.call(
-            "get_project",
-            arguments: ["project_id": seed.project.id.uuidString, "include": ["tracks"]],
+            "get_space",
+            arguments: ["space_id": seed.project.id.uuidString, "include": ["tracks"]],
             container: container
         ))
         let threads = try XCTUnwrap(body["tracks"] as? [[String: Any]])
@@ -76,13 +76,13 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertFalse(threads.contains { ($0["summary"] as? String)?.contains(HarborEvalFixture.authBody) == true })
     }
 
-    func testGetProjectRejectsUnknownInclude() throws {
+    func testGetSpaceRejectsUnknownInclude() throws {
         let seed = HarborEvalFixture.seed(in: context)
         try context.save()
 
         let result = Tools.call(
-            "get_project",
-            arguments: ["project_id": seed.project.id.uuidString, "include": ["everything"]],
+            "get_space",
+            arguments: ["space_id": seed.project.id.uuidString, "include": ["everything"]],
             container: container
         )
         XCTAssertEqual(result["isError"] as? Bool, true)
@@ -134,7 +134,7 @@ final class MCPToolsTests: XCTestCase {
 
         let listed = try array(Tools.call(
             "list_chats",
-            arguments: ["project_id": seed.project.id.uuidString],
+            arguments: ["space_id": seed.project.id.uuidString],
             container: container
         ))
         XCTAssertEqual(listed.compactMap { $0["title"] as? String }, ["Auth review"])
@@ -143,7 +143,7 @@ final class MCPToolsTests: XCTestCase {
 
         let onAuth = try array(Tools.call(
             "list_chats",
-            arguments: ["project_id": seed.project.id.uuidString, "track_id": seed.auth.id.uuidString],
+            arguments: ["space_id": seed.project.id.uuidString, "track_id": seed.auth.id.uuidString],
             container: container
         ))
         XCTAssertEqual(onAuth.count, 1)
@@ -224,7 +224,7 @@ final class MCPToolsTests: XCTestCase {
             "create_task",
             arguments: [
                 "title": "Offline sign-in",
-                "project_id": seed.project.id.uuidString,
+                "space_id": seed.project.id.uuidString,
                 "track_ids": [seed.auth.id.uuidString]
             ],
             container: container
@@ -382,31 +382,31 @@ final class MCPToolsTests: XCTestCase {
         return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text(in: result).utf8)) as? [[String: Any]])
     }
 
-    func testSourcesLiveInTheLibraryAndLinkToProjects() throws {
+    func testSourcesLiveInTheLibraryAndLinkToSpaces() throws {
         func sources(_ arguments: [String: Any] = [:]) throws -> [[String: Any]] {
             let data = Data(try text(in: Tools.call("list_sources", arguments: arguments, container: container)).utf8)
             return try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [[String: Any]])
         }
-        let harbor = try object(Tools.call("create_project", arguments: ["name": "Harbor"], container: container))
-        let kiln = try object(Tools.call("create_project", arguments: ["name": "Kiln"], container: container))
+        let harbor = try object(Tools.call("create_space", arguments: ["name": "Harbor"], container: container))
+        let kiln = try object(Tools.call("create_space", arguments: ["name": "Kiln"], container: container))
         let harborID = try XCTUnwrap(harbor["id"] as? String)
         let kilnID = try XCTUnwrap(kiln["id"] as? String)
 
         let saved = try object(Tools.call(
             "create_source",
-            arguments: ["url": "https://example.com/tides", "title": "Tide tables", "text": "Spring tides peak at new moon.", "project_ids": [harborID]],
+            arguments: ["url": "https://example.com/tides", "title": "Tide tables", "text": "Spring tides peak at new moon.", "space_ids": [harborID]],
             container: container
         ))
         let sourceID = try XCTUnwrap(saved["id"] as? String)
-        XCTAssertEqual(saved["project_ids"] as? [String], [harborID])
+        XCTAssertEqual(saved["space_ids"] as? [String], [harborID])
 
         let again = try object(Tools.call(
             "create_source",
-            arguments: ["url": "https://example.com/tides", "summary": "When the tide is highest.", "project_ids": [kilnID]],
+            arguments: ["url": "https://example.com/tides", "summary": "When the tide is highest.", "space_ids": [kilnID]],
             container: container
         ))
         XCTAssertEqual(again["id"] as? String, sourceID, "the same address is one source")
-        XCTAssertEqual(Set(again["project_ids"] as? [String] ?? []), [harborID, kilnID])
+        XCTAssertEqual(Set(again["space_ids"] as? [String] ?? []), [harborID, kilnID])
 
         XCTAssertEqual(try sources().count, 1, "the Library is not scoped to a project")
         XCTAssertEqual(try sources(["query": "new moon"]).count, 1, "the saved text is searched")
@@ -445,7 +445,7 @@ final class MCPToolsTests: XCTestCase {
         let id = try XCTUnwrap((source["id"] as? String).flatMap(UUID.init(uuidString:)))
         XCTAssertEqual(source["title"] as? String, "tides.txt")
         XCTAssertEqual(source["kind"] as? String, "file")
-        XCTAssertEqual(source["project_ids"] as? [String], [seed.project.id.uuidString])
+        XCTAssertEqual(source["space_ids"] as? [String], [seed.project.id.uuidString])
         XCTAssertEqual(files.references(ownerKind: .source, ownerID: id).compactMap(\.assetID), [asset.id], "the source keeps the file once the input lets go")
 
         let log = try ModelContext(container).fetch(FetchDescriptor<AgentAction>())
@@ -487,14 +487,14 @@ final class MCPToolsTests: XCTestCase {
         context.insert(old)
         try context.save()
 
-        let review = try object(Tools.call("get_cleanup_review", arguments: ["project_id": harbor.id.uuidString], container: container))
+        let review = try object(Tools.call("get_cleanup_review", arguments: ["space_id": harbor.id.uuidString], container: container))
         XCTAssertEqual((review["tracks"] as? [[String: Any]])?.count, 2)
         XCTAssertEqual((review["open_tasks"] as? [[String: Any]])?.count, 2)
 
         func propose(_ changes: [[String: Any]]) -> [String: Any] {
             Tools.call(
                 "propose_cleanup",
-                arguments: ["project_id": harbor.id.uuidString, "summary": "Runs and cloud jobs are one thing.", "changes": changes],
+                arguments: ["space_id": harbor.id.uuidString, "summary": "Runs and cloud jobs are one thing.", "changes": changes],
                 container: container, announce: false
             )
         }

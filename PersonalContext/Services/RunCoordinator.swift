@@ -132,7 +132,6 @@ final class RunCoordinator {
                 roots: roots,
                 includeMembraeTools: includeMembrae,
                 includeProjectTools: policy.allowCode,
-                consult: nil,
                 mcp: includeMembrae ? .shared : nil,
                 storeURL: context.container.configurations.first?.url,
                 store: context.container,
@@ -220,7 +219,6 @@ final class RunCoordinator {
                 roots: roots,
                 includeMembraeTools: false,
                 includeProjectTools: false,
-                consult: nil,
                 mcp: nil
             )
         )
@@ -373,7 +371,6 @@ final class RunCoordinator {
                 roots: roots,
                 includeMembraeTools: false,
                 includeProjectTools: false,
-                consult: nil,
                 mcp: nil
             )
         )
@@ -560,17 +557,23 @@ final class RunCoordinator {
 }
 
 extension RunToolPolicy {
+    /// Every Membrae tool a Run can be handed: the same set a chat has, less what a Run never does.
     static let membraeCatalog = [
-        "list_projects", "get_project",
+        "list_spaces", "get_space", "update_space", "get_space_catalog",
         "list_tasks", "get_task", "create_task", "update_task",
         "list_completions", "get_completion",
         "list_decisions", "get_decision", "create_decision", "update_decision",
         "list_tracks", "get_track", "create_track", "update_track", "set_stops", "convert_track_to_stop",
+        "set_junction", "delete_junction", "merge_tracks",
         "list_notes", "get_note", "create_note", "update_note",
         "list_sources", "get_source", "create_source", "update_source",
         "list_chats", "get_chat",
         "list_tags", "create_tag", "update_tag", "assign_tag", "remove_tag",
         "list_runs", "get_run",
-        "get_cleanup_review", "propose_cleanup"
+        "get_cleanup_review", "propose_cleanup",
+        "set_space_type", "set_space_widget", "set_space_card", "set_space_layout",
+        "place_space_widget", "list_space_widgets", "remove_space_widget",
+        "list_space_records", "create_space_record", "update_space_record",
+        "list_space_events", "log_space_event", "update_space_event"
     ]
 }

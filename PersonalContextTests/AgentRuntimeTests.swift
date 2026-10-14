@@ -8,7 +8,7 @@ final class AgentRuntimeTests: XCTestCase {
             RunGateway(
                 policy: RunToolPolicy(
                     runID: UUID(),
-                    projectID: UUID(),
+                    spaceID: UUID(),
                     assignedTaskID: nil,
                     allowCode: false
                 ),
@@ -114,7 +114,7 @@ final class AgentRuntimeTests: XCTestCase {
         let projectID = UUID()
         let inner = RecordingGateway()
         let gateway = await MainActor.run {
-            RunGateway(policy: .chat(projectID: projectID), inner: inner, includeFinishRun: false)
+            RunGateway(policy: .chat(spaceID: projectID), inner: inner, includeFinishRun: false)
         }
         let policy = await MainActor.run { gateway.policy }
         XCTAssertTrue(policy.allows("complete_task"))
@@ -122,13 +122,13 @@ final class AgentRuntimeTests: XCTestCase {
         XCTAssertThrowsError(
             try policy.permitsCall(
                 "create_note",
-                arguments: ["project_id": UUID().uuidString, "content": "nope"]
+                arguments: ["space_id": UUID().uuidString, "content": "nope"]
             ).get()
         )
         do {
             _ = try await gateway.execute(
                 name: "create_note",
-                arguments: ["project_id": UUID().uuidString, "content": "nope"]
+                arguments: ["space_id": UUID().uuidString, "content": "nope"]
             )
             XCTFail("Cross-project write should fail")
         } catch {

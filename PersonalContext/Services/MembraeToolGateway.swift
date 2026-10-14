@@ -8,7 +8,6 @@ final class MembraeToolGateway: AgentToolGateway {
     private let includeMembraeTools: Bool
     private let includeProjectTools: Bool
     private let prepareRoots: (() async throws -> [ProjectCodeRoot])?
-    private let consult: ((String) async throws -> String)?
     private let mcp: MembraeMCPClient?
     private let storeURL: URL?
     private let projectID: UUID?
@@ -27,7 +26,6 @@ final class MembraeToolGateway: AgentToolGateway {
         includeMembraeTools: Bool = true,
         includeProjectTools: Bool = true,
         prepareRoots: (() async throws -> [ProjectCodeRoot])? = nil,
-        consult: ((String) async throws -> String)? = nil,
         mcp: MembraeMCPClient? = nil,
         storeURL: URL? = nil,
         store: ModelContainer? = nil,
@@ -45,7 +43,6 @@ final class MembraeToolGateway: AgentToolGateway {
         self.includeMembraeTools = includeMembraeTools
         self.includeProjectTools = includeProjectTools
         self.prepareRoots = prepareRoots
-        self.consult = consult
         self.mcp = mcp ?? (includeMembraeTools ? .shared : nil)
         self.storeURL = storeURL
         self.projectID = projectID
@@ -62,9 +59,6 @@ final class MembraeToolGateway: AgentToolGateway {
 
     func definitions() async throws -> [[String: Any]] {
         var tools: [[String: Any]] = includeProjectTools ? Self.projectDefinitions : []
-        if consult != nil {
-            tools.append(Self.consultDefinition)
-        }
         if includeMembraeTools {
             if store != nil {
                 tools += Self.membraeDefinitions
@@ -119,12 +113,6 @@ final class MembraeToolGateway: AgentToolGateway {
             )
         case "project_git_log":
             return try gitLog(rootTitle: arguments["root"] as? String)
-        case "consult_code":
-            guard let consult else {
-                throw ProjectWorkspaceError("This project has no Worker. Set one in Project Settings.")
-            }
-            let brief = (arguments["brief"] as? String) ?? (arguments["question"] as? String) ?? ""
-            return try await consult(brief)
         case RunFormTool.name:
             guard includeRunForm else {
                 throw ProjectWorkspaceError("The New Run form is not available in this session.")
@@ -251,8 +239,8 @@ final class MembraeToolGateway: AgentToolGateway {
         guard let root else {
             throw ProjectWorkspaceError(
                 roots.isEmpty
-                    ? "No code is attached to this Membrae project."
-                    : "Specify root because this project has several code attachments."
+                    ? "No code is attached to this Space."
+                    : "Specify root because this Space has several code attachments."
             )
         }
         let base = URL(fileURLWithPath: root.path).standardizedFileURL
@@ -309,24 +297,11 @@ final class MembraeToolGateway: AgentToolGateway {
         String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
     }
 
-    private static let consultDefinition: [String: Any] = [
-        "type": "function",
-        "name": "consult_code",
-        "description": "Ask the project's Worker to inspect attached code. Pass a brief. Do not use this for decisions, tracks, or notes — those are Membrae tools.",
-        "parameters": [
-            "type": "object",
-            "properties": [
-                "brief": ["type": "string", "description": "What the Worker should inspect in the attached code."]
-            ],
-            "required": ["brief"]
-        ]
-    ]
-
     private static let projectDefinitions: [[String: Any]] = [
         [
             "type": "function",
             "name": "project_list_files",
-            "description": "List files in the current Membrae project's attached code. Read-only.",
+            "description": "List files in the code attached to the current Space. Read-only.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -337,7 +312,7 @@ final class MembraeToolGateway: AgentToolGateway {
         [
             "type": "function",
             "name": "project_search_code",
-            "description": "Search text in the current Membrae project's attached code. Read-only.",
+            "description": "Search text in the code attached to the current Space. Read-only.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -349,7 +324,7 @@ final class MembraeToolGateway: AgentToolGateway {
         [
             "type": "function",
             "name": "project_read_file",
-            "description": "Read a line range from a file in the current Membrae project's attached code. Read-only.",
+            "description": "Read a line range from a file in the code attached to the current Space. Read-only.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -364,7 +339,7 @@ final class MembraeToolGateway: AgentToolGateway {
         [
             "type": "function",
             "name": "project_git_log",
-            "description": "Read recent commits for the current Membrae project's attached remote repositories. Read-only.",
+            "description": "Read recent commits for the remote repositories attached to the current Space. Read-only.",
             "parameters": [
                 "type": "object",
                 "properties": [

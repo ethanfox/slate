@@ -106,19 +106,19 @@ struct Args {
     }
 }
 
-enum ProjectExpand: String, CaseIterable {
+enum SpaceExpand: String, CaseIterable {
     case decisions
     case tracks
     case notes
     case tasks
     case deletionMarks = "deletion_marks"
 
-    static func parse(_ values: [String]?) throws -> Set<ProjectExpand> {
+    static func parse(_ values: [String]?) throws -> Set<SpaceExpand> {
         guard let values else { return [] }
         return Set(try values.map { value in
             let normalized = value == "threads" ? "tracks" : value
-            guard let parsed = ProjectExpand(rawValue: normalized) else {
-                let allowed = ProjectExpand.allCases.map(\.rawValue).joined(separator: ", ")
+            guard let parsed = SpaceExpand(rawValue: normalized) else {
+                let allowed = SpaceExpand.allCases.map(\.rawValue).joined(separator: ", ")
                 throw ToolError("include must be one of: \(allowed).")
             }
             return parsed
@@ -197,7 +197,7 @@ enum Tools {
     // MARK: - Action log
 
     private static let logged: [String: (verb: AgentActionVerb, kind: String)] = [
-        "create_project": (.added, "project"), "update_project": (.changed, "project"),
+        "create_space": (.added, "space"), "update_space": (.changed, "space"),
         "create_task": (.added, "task"), "update_task": (.changed, "task"), "complete_task": (.completed, "task"),
         "delete_completion": (.removed, "completion"),
         "create_decision": (.added, "decision"), "update_decision": (.changed, "decision"),
@@ -208,10 +208,9 @@ enum Tools {
         "create_tag": (.added, "tag"), "update_tag": (.changed, "tag"),
         "assign_tag": (.tagged, ""), "remove_tag": (.untagged, ""),
         "mark_for_deletion": (.flagged, ""), "delete_record": (.removed, ""),
-        "create_space": (.added, "space"), "update_space": (.changed, "space"),
-        "set_space_type": (.changed, "space"), "set_area_card": (.changed, "space"), "set_area_layout": (.changed, "space"),
-        "set_area_widget": (.changed, "space"), "remove_area_widget": (.changed, "space"),
-        "place_area_widget": (.changed, "space"),
+        "set_space_type": (.changed, "space"), "set_space_card": (.changed, "space"), "set_space_layout": (.changed, "space"),
+        "set_space_widget": (.changed, "space"), "remove_space_widget": (.changed, "space"),
+        "place_space_widget": (.changed, "space"),
         "create_space_record": (.added, "record"), "update_space_record": (.changed, "record"),
         "update_space_event": (.changed, "record"), "log_space_event": (.logged, "record")
     ]
@@ -231,8 +230,7 @@ enum Tools {
         var target = shape["id"] as? String ?? ""
         var title = (shape["title"] as? String) ?? (shape["name"] as? String) ?? ""
         var detail = ""
-        var project = (shape["project_id"] as? String) ?? args.string("project_id") ?? ""
-        var space = args.string("space_id") ?? ""
+        var space = (shape["space_id"] as? String) ?? args.string("space_id") ?? ""
         var before = before
 
         func index(_ id: String) -> TitleIndex? {
@@ -251,12 +249,10 @@ enum Tools {
             target = id
             kind = raw == "conversation" ? "chat" : raw
             title = index(id)?.displayTitle ?? ""
-            project = index(id)?.projectIDString ?? project
+            space = index(id)?.projectIDString ?? space
         }
 
         switch tool {
-        case "create_project", "update_project":
-            project = target
         case "assign_tag", "remove_tag":
             detail = title
             pointAtIndexed(args.string("record_id") ?? "", kind: args.string("record_type") ?? "")
@@ -271,7 +267,7 @@ enum Tools {
             target = ""
         case "create_space", "update_space":
             space = target
-        case "set_space_type", "set_area_card", "set_area_layout", "set_area_widget", "remove_area_widget", "place_area_widget":
+        case "set_space_type", "set_space_card", "set_space_layout", "set_space_widget", "remove_space_widget", "place_space_widget":
             detail = (shape["name"] as? String) ?? args.string("type_key") ?? ""
             target = space
             title = UUID(uuidString: space).flatMap { SpaceStore.space($0, in: context) }?.displayName ?? ""
@@ -292,7 +288,7 @@ enum Tools {
             targetID: target,
             title: title,
             detail: detail,
-            spaceID: space.isEmpty ? project : space,
+            spaceID: space,
             origin: origin,
             beforeJSON: before.isEmpty ? "" : (try? JSONSerialization.data(withJSONObject: before)).map { String(decoding: $0, as: UTF8.self) } ?? ""
         ))
@@ -303,7 +299,7 @@ enum Tools {
 
     /// For each tool that edits a record: the tool that reads it, and the argument that names it.
     private static let readers: [String: (tool: String, id: String)] = [
-        "update_project": ("get_project", "project_id"),
+        "update_space": ("get_space", "space_id"),
         "update_task": ("get_task", "task_id"),
         "complete_task": ("get_task", "task_id"),
         "update_decision": ("get_decision", "decision_id"),
@@ -447,22 +443,40 @@ enum Tools {
         ["content": [["type": "text", "text": message]], "isError": true]
     }
 
+    /// Names clients may still send: the thread_* tools, the project_* tools from before every Space
+    /// was one thing, and the area_* widget tools.
     private static let aliases = [
         "list_threads": "list_tracks",
         "get_thread": "get_track",
         "create_thread": "create_track",
-        "update_thread": "update_track"
+        "update_thread": "update_track",
+        "list_projects": "list_spaces",
+        "get_project": "get_space",
+        "create_project": "create_space",
+        "update_project": "update_space",
+        "set_area_widget": "set_space_widget",
+        "set_area_card": "set_space_card",
+        "set_area_layout": "set_space_layout",
+        "place_area_widget": "place_space_widget",
+        "list_area_widgets": "list_space_widgets",
+        "remove_area_widget": "remove_space_widget"
     ]
 
     private static func canonical(_ name: String) -> String {
         aliases[name] ?? name
     }
 
-    /// Accepts the old thread_* keys so cached clients keep working.
+    /// Accepts the old thread_* and project_* keys so cached clients keep working.
     private static func migrate(_ arguments: [String: Any]) -> [String: Any] {
         var next = arguments
         if next["track_id"] == nil, let old = next["thread_id"] {
             next["track_id"] = old
+        }
+        if next["space_id"] == nil, let old = next["project_id"] {
+            next["space_id"] = old
+        }
+        if next["space_ids"] == nil, let old = next["project_ids"] {
+            next["space_ids"] = old
         }
         return next
     }
@@ -485,143 +499,31 @@ enum Tools {
         ["type": "object", "additionalProperties": true, "description": description]
     }
 
-    private static let spaceID = text("Area id from list_spaces or create_space.")
+    private static let spaceID = text("Space id from list_spaces or create_space.")
     private static let typeKey = text("The type's key, as given to set_space_type.")
 
     private static func options<T: RawRepresentable & CaseIterable>(_ type: T.Type, _ description: String) -> [String: Any] where T.RawValue == String {
         ["type": "string", "enum": T.allCases.map(\.rawValue), "description": description]
     }
 
-    private static let projectID = text("Project id from list_projects.")
     private static let trackLink = text("Track id to file this under. Empty string removes the link.")
 
     // MARK: - Tools
 
     private static let tools: [Tool] = [
         Tool(
-            name: "list_projects",
-            description: "List every project with its id, status, summary, and record counts.",
-            properties: [:], required: [], readOnly: true
-        ) { _, context in
-            try context.fetch(FetchDescriptor<Project>())
-                .filter { !$0.collects }
-                .sorted { $0.lastActivity > $1.lastActivity }
-                .map(JSONShape.project)
-        },
-        Tool(
-            name: "get_project",
-            description: "Get one project: fields, identity context, and counts. Pass include for bounded lists. Use get_track for a track body and get_note for reference material.",
-            properties: [
-                "project_id": projectID,
-                "include": [
-                    "type": "array",
-                    "items": ["type": "string", "enum": ["decisions", "tracks", "notes", "tasks", "deletion_marks"]],
-                    "description": "Record lists to add. Omit for a lean project record. Lists are bounded; use list_* and get_track for the rest."
-                ]
-            ],
-            required: ["project_id"],
-            readOnly: true
-        ) { args, context in
-            let project = try Lookup.project(try args.uuid("project_id"), in: context)
-            let include = try ProjectExpand.parse(args.strings("include"))
-            var shape = JSONShape.project(project)
-            shape["context"] = ContextBuilder.identity(for: project)
-            shape["attachments"] = JSONShape.attachments(on: project, in: context)
-            if include.contains(.decisions) {
-                shape["decisions"] = project.decisions
-                    .sorted { $0.createdAt > $1.createdAt }
-                    .prefix(20)
-                    .map(JSONShape.decision)
-            }
-            if include.contains(.tracks) {
-                shape["tracks"] = project.threads
-                    .sorted { $0.createdAt < $1.createdAt }
-                    .prefix(24)
-                    .map { JSONShape.track($0, full: false) }
-            }
-            if include.contains(.notes) {
-                shape["notes"] = project.notes
-                    .sorted { $0.updatedAt > $1.updatedAt }
-                    .prefix(8)
-                    .map { JSONShape.note($0, full: false) }
-            }
-            if include.contains(.tasks) {
-                shape["tasks"] = TaskStore.tasks(in: context, project: project)
-                    .sorted(by: TaskStore.boardSort)
-                    .prefix(20)
-                    .map { JSONShape.task($0, full: false) }
-            }
-            if include.contains(.deletionMarks) {
-                shape["deletion_marks"] = project.deletionMarks
-                    .sorted { $0.createdAt > $1.createdAt }
-                    .prefix(20)
-                    .map(JSONShape.deletionMark)
-            }
-            return shape
-        },
-        Tool(
-            name: "create_project",
-            description: "Create a project.",
-            properties: [
-                "name": text("Project name."),
-                "summary": text("What the project is."),
-                "current_direction": text("Where the project is heading right now."),
-                "symbol": text("SF Symbol name for the icon. Defaults to folder.")
-            ],
-            required: ["name"], readOnly: false
-        ) { args, context in
-            let project = Project(name: try args.required("name"), symbol: args.string("symbol") ?? "folder", summary: args.string("summary") ?? "")
-            project.currentDirection = args.string("current_direction") ?? ""
-            context.insert(project)
-            return JSONShape.project(project)
-        },
-        Tool(
-            name: "update_project",
-            description: "Change a project's fields. Only the fields you pass are changed.",
-            properties: [
-                "project_id": projectID,
-                "name": text("New name."),
-                "summary": text("New summary."),
-                "current_direction": text("New current direction."),
-                "brief": text("One sentence, to the user, on what they are doing in this project now, such as: You're building sync, so web AIs can reach Membrae when the Mac is off. It leads the project's page. Keep it current when the direction or the next task changes."),
-                "status": options(ProjectStatus.self, "Project status."),
-                "is_pinned": flag("Pin the project to the top of the sidebar."),
-                "symbol": text("SF Symbol name for the icon."),
-                "active_track_id": text("The one track this project is being worked on. Its tasks are what the board shows and where Next comes from. Empty string clears it. Change it only when the user asks.")
-            ],
-            required: ["project_id"], readOnly: false
-        ) { args, context in
-            let project = try Lookup.project(try args.uuid("project_id"), in: context)
-            if let name = args.string("name"), !name.isEmpty { project.name = name }
-            if let summary = args.string("summary") { project.summary = summary }
-            if let direction = args.string("current_direction") { project.currentDirection = direction }
-            if let brief = args.string("brief") { project.brief = brief.trimmingCharacters(in: .whitespacesAndNewlines) }
-            if let status = try args.choice("status", as: ProjectStatus.self) {
-                project.status = status
-                TaskStore.syncProjectStatus(project, in: context)
-            }
-            if let pinned = args.bool("is_pinned") { PinStore.set(.space, project.id, pinned: pinned, in: context) }
-            if let symbol = args.string("symbol"), !symbol.isEmpty { project.symbol = symbol }
-            if let link = try args.optionalUUID("active_track_id") {
-                TaskStore.setActiveTrack(try Lookup.thread(link, in: project), on: project, in: context)
-            }
-            project.touch()
-            return JSONShape.project(project)
-        },
-
-        Tool(
             name: "list_tasks",
-            description: "List Membrae tasks. Completions are not included. Use list_completions for repeat history. Pass track_id to list work on a track. When asked what to work on, read the project's active_track and list that track's tasks; tasks elsewhere are not the current work.",
+            description: "List Membrae tasks. Completions are not included. Use list_completions for repeat history. Pass track_id to list work on a track. When asked what to work on, read the Space's active_track and list that track's tasks; tasks elsewhere are not the current work.",
             properties: [
-                "project_id": text("Optional project id. Omit to list every task."),
+                "space_id": text("Optional Space id. Omit to list every task."),
                 "track_id": text("Only tasks linked to this track."),
                 "include_descendants": flag("When track_id is set, also include tasks on child tracks. Defaults to false."),
                 "status": options(TaskWorkflowStatus.self, "Only tasks with this workflow status."),
-                "next_only": flag("Only the Next task in each project. With an active track that is the first open, unblocked task on it.")
+                "next_only": flag("Only the Next task in each Space. With an active track that is the first open, unblocked task on it.")
             ],
             required: [], readOnly: true
         ) { args, context in
-            let project = try args.string("project_id").map { _ in try Lookup.project(try args.uuid("project_id"), in: context) }
+            let project = try args.string("space_id").map { _ in try Lookup.space(try args.uuid("space_id"), in: context) }
             let track = try args.string("track_id").map { _ in try Lookup.thread(try args.uuid("track_id"), in: context) }
             let includeDescendants = args.bool("include_descendants") ?? false
             let status = try args.choice("status", as: TaskWorkflowStatus.self)
@@ -648,14 +550,14 @@ enum Tools {
         },
         Tool(
             name: "create_task",
-            description: "Create a Membrae task. project_id is optional. is_next requires an active project and is refused when the project has an active track, where Next is worked out from the track. Link governing tracks with track_ids. Reference notes are supplementary via note_ids. Do not put built/not-built in notes.",
+            description: "Create a Membrae task. space_id is optional. is_next requires an active Space and is refused when the Space has an active track, where Next is worked out from the track. Link governing tracks with track_ids. Reference notes are supplementary via note_ids. Do not put built/not-built in notes.",
             properties: [
                 "title": text("Task title."),
-                "project_id": text("Optional project id."),
+                "space_id": text("Optional Space id."),
                 "notes": text("Short working comment. Not status. Do not write built or not-built here."),
                 "due": text("ISO-8601 due date."),
                 "status": options(TaskWorkflowStatus.self, "Workflow status. Defaults to ready."),
-                "is_next": flag("Mark this task Next for its project."),
+                "is_next": flag("Mark this task Next for its Space."),
                 "track_ids": ["type": "array", "items": ["type": "string"], "description": "Governing track ids. Feature and problem work lives on these tracks."],
                 "stop_id": text("The stop this task sits on. It is linked to the stop's track if it is not already."),
                 "note_ids": ["type": "array", "items": ["type": "string"], "description": "Optional reference note ids. Notes are not the spec."],
@@ -680,7 +582,7 @@ enum Tools {
                 "due": text("ISO-8601 due date. Empty string clears it."),
                 "status": options(TaskWorkflowStatus.self, "Workflow status."),
                 "is_next": flag("Set or clear Next."),
-                "project_id": text("Move to this project. Empty string clears it."),
+                "space_id": text("Move to this Space. Empty string clears it."),
                 "track_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement governing track ids."],
                 "stop_id": text("The stop this task sits on. Empty string takes it off its stop."),
                 "note_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement reference note ids. Notes are not the spec."],
@@ -751,12 +653,12 @@ enum Tools {
             name: "list_completions",
             description: "List immutable completion records for repeating tasks.",
             properties: [
-                "project_id": text("Optional project id."),
+                "space_id": text("Optional Space id."),
                 "task_id": text("Optional parent task id.")
             ],
             required: [], readOnly: true
         ) { args, context in
-            let projectID = try args.string("project_id").map { _ in try args.uuid("project_id") }
+            let projectID = try args.string("space_id").map { _ in try args.uuid("space_id") }
             let taskID = try args.string("task_id").map { _ in try args.uuid("task_id") }
             let descriptor = FetchDescriptor<TaskCompletion>(sortBy: [SortDescriptor(\.completedAt, order: .reverse)])
             return try context.fetch(descriptor)
@@ -788,11 +690,11 @@ enum Tools {
 
         Tool(
             name: "list_decisions",
-            description: "List a project's decisions, newest first.",
-            properties: ["project_id": projectID, "status": options(DecisionStatus.self, "Only decisions with this status.")],
-            required: ["project_id"], readOnly: true
+            description: "List a Space's decisions, newest first.",
+            properties: ["space_id": spaceID, "status": options(DecisionStatus.self, "Only decisions with this status.")],
+            required: ["space_id"], readOnly: true
         ) { args, context in
-            let project = try Lookup.project(try args.uuid("project_id"), in: context)
+            let project = try Lookup.space(try args.uuid("space_id"), in: context)
             let status = try args.choice("status", as: DecisionStatus.self)
             return project.decisions
                 .filter { status == nil || $0.status == status }
@@ -810,16 +712,16 @@ enum Tools {
             name: "create_decision",
             description: "Record a decision. Pass supersedes_id when it replaces an earlier decision; that one is marked superseded.",
             properties: [
-                "project_id": projectID,
+                "space_id": spaceID,
                 "title": text("Short name for the decision."),
                 "decision": text("What was decided."),
                 "rationale": text("Why."),
                 "track_id": trackLink,
                 "supersedes_id": text("Id of the decision this one replaces.")
             ],
-            required: ["project_id", "title", "decision"], readOnly: false
+            required: ["space_id", "title", "decision"], readOnly: false
         ) { args, context in
-            let project = try Lookup.project(try args.uuid("project_id"), in: context)
+            let project = try Lookup.space(try args.uuid("space_id"), in: context)
             let decision = Decision(
                 title: try args.required("title"),
                 decision: try args.required("decision"),
@@ -866,10 +768,10 @@ enum Tools {
 
         Tool(
             name: "list_tracks",
-            description: "List a project's tracks with ids, kinds, statuses, summaries, themes, and which one is active. A theme is a named group of tracks and holds no work of its own. parent_id is set only on a track still nested from before; tracks no longer nest.",
-            properties: ["project_id": projectID], required: ["project_id"], readOnly: true
+            description: "List a Space's tracks with ids, kinds, statuses, summaries, themes, and which one is active. A theme is a named group of tracks and holds no work of its own. parent_id is set only on a track still nested from before; tracks no longer nest.",
+            properties: ["space_id": spaceID], required: ["space_id"], readOnly: true
         ) { args, context in
-            let project = try Lookup.project(try args.uuid("project_id"), in: context)
+            let project = try Lookup.space(try args.uuid("space_id"), in: context)
             return project.threads.sorted { $0.createdAt < $1.createdAt }.map { JSONShape.track($0, full: false) }
         },
         Tool(
@@ -889,17 +791,17 @@ enum Tools {
             name: "create_track",
             description: "Start a track: a line of work such as a direction, feature, problem, experiment, or topic. Put the spec in the body. Work to do is a task, not a body edit.",
             properties: [
-                "project_id": projectID,
+                "space_id": spaceID,
                 "title": text("Track title."),
                 "kind": options(ThreadKind.self, "Kind of track. Defaults to topic."),
                 "status": options(ThreadStatus.self, "Defaults to exploring."),
                 "summary": text("One or two sentences."),
                 "body": text("Markdown spec."),
-                "theme": text("Name of the theme to list this track under. A theme with that name is made if the project has none.")
+                "theme": text("Name of the theme to list this track under. A theme with that name is made if the Space has none.")
             ],
-            required: ["project_id", "title"], readOnly: false
+            required: ["space_id", "title"], readOnly: false
         ) { args, context in
-            let project = try Lookup.project(try args.uuid("project_id"), in: context)
+            let project = try Lookup.space(try args.uuid("space_id"), in: context)
             let parent = try Lookup.thread(args.optionalUUID("parent_id"), in: project)
             let thread = ProjectThread(
                 title: try args.required("title"),
@@ -998,7 +900,7 @@ enum Tools {
         },
         Tool(
             name: "set_junction",
-            description: "Make or change a junction between two tracks in one project. kind wait, the default: second_track_id cannot go on until first_track_id has done what the junction requires; both stay separate tracks. Give held_stop_id for the stop on the second track that waits, or leave it out to hold the whole track. A wait with no requirements is met when the first track is completed. kind merge: the two tracks are the same work and will become one, continuing as the first. Its requirements are the gaps and conflicts between the two that have to be reconciled first, which can be real work. Send every requirement each time, in order. A requirement with stop_id or task_id is met when that stop or task is done; one with only text is ticked with is_done. Pass junction_id to change an existing junction. Returns the first track.",
+            description: "Make or change a junction between two tracks in one Space. kind wait, the default: second_track_id cannot go on until first_track_id has done what the junction requires; both stay separate tracks. Give held_stop_id for the stop on the second track that waits, or leave it out to hold the whole track. A wait with no requirements is met when the first track is completed. kind merge: the two tracks are the same work and will become one, continuing as the first. Its requirements are the gaps and conflicts between the two that have to be reconciled first, which can be real work. Send every requirement each time, in order. A requirement with stop_id or task_id is met when that stop or task is done; one with only text is ticked with is_done. Pass junction_id to change an existing junction. Returns the first track.",
             properties: [
                 "junction_id": text("An existing junction to change. Leave out to make a new one."),
                 "kind": ["type": "string", "enum": JunctionKind.allCases.map(\.rawValue), "description": "wait or merge. Defaults to wait."],
@@ -1085,23 +987,23 @@ enum Tools {
         },
         Tool(
             name: "get_cleanup_review",
-            description: "Everything in one project, in brief, for tidying it: every track with what it holds, every decision, every open task, and every note, plus how to do the cleanup. Call this first when asked to tidy, clean up, or consolidate a project, then propose_cleanup.",
-            properties: ["project_id": projectID],
-            required: ["project_id"], readOnly: true
+            description: "Everything in one Space, in brief, for tidying it: every track with what it holds, every decision, every open task, and every note, plus how to do the cleanup. Call this first when asked to tidy, clean up, or consolidate a Space, then propose_cleanup.",
+            properties: ["space_id": spaceID],
+            required: ["space_id"], readOnly: true
         ) { args, context in
-            CleanupStore.review(try Lookup.project(try args.uuid("project_id"), in: context))
+            CleanupStore.review(try Lookup.space(try args.uuid("space_id"), in: context))
         },
         Tool(
             name: "propose_cleanup",
-            description: "Propose a cleanup of one project. Nothing changes: the user sees the list in the app, turns off what they disagree with, and applies it. Each change they apply shows in Lately and can be taken back. A new proposal replaces one still waiting. Send every change in one call. \(ContextBuilder.cleanupRules)",
+            description: "Propose a cleanup of one Space. Nothing changes: the user sees the list in the app, turns off what they disagree with, and applies it. Each change they apply shows in Lately and can be taken back. A new proposal replaces one still waiting. Send every change in one call. \(ContextBuilder.cleanupRules)",
             properties: [
-                "project_id": projectID,
+                "space_id": spaceID,
                 "summary": text("One or two plain sentences on what this cleanup does, for the user."),
                 "changes": objectList("Each change: {action, reason} plus its ids. action merge_tracks takes track_id and into_track_id. action delete takes target_type (track, task, note, or decision) and target_id. action retire_decision takes decision_id. reason is one plain sentence the user can judge without opening the record.")
             ],
-            required: ["project_id", "summary", "changes"], readOnly: false
+            required: ["space_id", "summary", "changes"], readOnly: false
         ) { args, context in
-            let project = try Lookup.project(try args.uuid("project_id"), in: context)
+            let project = try Lookup.space(try args.uuid("space_id"), in: context)
             let plan = try CleanupStore.propose(
                 for: project,
                 summary: args.string("summary") ?? "",
@@ -1113,11 +1015,11 @@ enum Tools {
 
         Tool(
             name: "list_chats",
-            description: "List a project's chats, most recently updated first, with a preview of the last message. Hidden (archived) chats are omitted.",
-            properties: ["project_id": projectID, "track_id": text("Only chats filed under this track.")],
-            required: ["project_id"], readOnly: true
+            description: "List a Space's chats, most recently updated first, with a preview of the last message. Hidden (archived) chats are omitted.",
+            properties: ["space_id": spaceID, "track_id": text("Only chats filed under this track.")],
+            required: ["space_id"], readOnly: true
         ) { args, context in
-            let project = try Lookup.project(try args.uuid("project_id"), in: context)
+            let project = try Lookup.space(try args.uuid("space_id"), in: context)
             let trackID = try args.optionalUUID("track_id") ?? nil
             return project.conversations
                 .filter { !$0.isArchived }
@@ -1134,11 +1036,11 @@ enum Tools {
         },
         Tool(
             name: "list_notes",
-            description: "List a project's notes, most recently changed first, with a preview of each.",
-            properties: ["project_id": projectID, "track_id": text("Only notes filed under this track.")],
-            required: ["project_id"], readOnly: true
+            description: "List a Space's notes, most recently changed first, with a preview of each.",
+            properties: ["space_id": spaceID, "track_id": text("Only notes filed under this track.")],
+            required: ["space_id"], readOnly: true
         ) { args, context in
-            let project = try Lookup.project(try args.uuid("project_id"), in: context)
+            let project = try Lookup.space(try args.uuid("space_id"), in: context)
             let trackID = try args.optionalUUID("track_id") ?? nil
             return project.notes
                 .filter { trackID == nil || $0.thread?.id == trackID }
@@ -1156,15 +1058,15 @@ enum Tools {
             name: "create_note",
             description: "Save a note: reference material, findings, links, or anything worth keeping that isn't a decision.",
             properties: [
-                "project_id": projectID,
+                "space_id": spaceID,
                 "title": text("Note title."),
                 "content": text("Markdown content."),
                 "source": text("Where this came from, such as a URL or conversation."),
                 "track_id": trackLink
             ],
-            required: ["project_id", "content"], readOnly: false
+            required: ["space_id", "content"], readOnly: false
         ) { args, context in
-            let project = try Lookup.project(try args.uuid("project_id"), in: context)
+            let project = try Lookup.space(try args.uuid("space_id"), in: context)
             let note = Note(
                 content: try args.required("content"),
                 project: project,
@@ -1202,10 +1104,10 @@ enum Tools {
 
         Tool(
             name: "list_sources",
-            description: "List saved sources in the Library: links, PDFs, and articles the user kept, newest first, each with a summary. The Library is shared across projects, so search it from any project. Pass query to search titles, summaries, and the saved text.",
+            description: "List saved sources in the Library: links, PDFs, and articles the user kept, newest first, each with a summary. The Library is shared across Spaces, so search it from any Space. Pass query to search titles, summaries, and the saved text.",
             properties: [
                 "query": text("Words to look for in the title, summary, address, or saved text."),
-                "linked_to": text("Only sources linked to this project id."),
+                "linked_to": text("Only sources linked to this Space id."),
                 "unread_only": flag("Only sources not yet marked read."),
                 "include_archived": flag("Also list archived sources. Defaults to false.")
             ],
@@ -1231,14 +1133,14 @@ enum Tools {
         },
         Tool(
             name: "create_source",
-            description: "Save a link, article, or document to the Library. Pass the address; the app fetches the page text itself when you leave text out. Write a two-line summary when you know what the page says. Link it to every project it belongs to with project_ids, or to none. Saving an address that is already in the Library updates that source instead of adding a second one.",
+            description: "Save a link, article, or document to the Library. Pass the address; the app fetches the page text itself when you leave text out. Write a two-line summary when you know what the page says. Link it to every Space it belongs to with space_ids, or to none. Saving an address that is already in the Library updates that source instead of adding a second one.",
             properties: [
                 "url": text("The address of the page or file."),
                 "title": text("Title of the page or document."),
                 "summary": text("Two lines on what it says and why it was kept."),
                 "text": text("The readable text, when you already have it."),
                 "file_id": text("Id of a file already stored in Membrae, to keep with the source. Only the app has these ids."),
-                "project_ids": ["type": "array", "items": ["type": "string"], "description": "Projects this source belongs to. May be empty."]
+                "space_ids": ["type": "array", "items": ["type": "string"], "description": "Spaces this source belongs to. May be empty."]
             ],
             required: [], readOnly: false
         ) { args, context in
@@ -1251,7 +1153,7 @@ enum Tools {
                 file = found
             }
             guard !url.isEmpty || !body.isEmpty || file != nil else { throw ToolError("Pass url, or text for something with no address.") }
-            let projects = try (args.uuids("project_ids") ?? []).map { try Lookup.project($0, in: context) }
+            let projects = try (args.uuids("space_ids") ?? []).map { try Lookup.space($0, in: context) }
             let existing = url.isEmpty ? nil : try context.fetch(FetchDescriptor<SavedSource>(predicate: #Predicate { $0.url == url })).first
             let source = existing ?? SavedSource(url: url, kind: url.lowercased().hasSuffix(".pdf") ? .pdf : .link)
             if existing == nil { context.insert(source) }
@@ -1274,13 +1176,13 @@ enum Tools {
         },
         Tool(
             name: "update_source",
-            description: "Change a saved source. Only the fields you pass are changed. project_ids replaces the whole set of linked projects.",
+            description: "Change a saved source. Only the fields you pass are changed. space_ids replaces the whole set of linked Spaces.",
             properties: [
                 "source_id": text("Source id."),
                 "title": text("New title."),
                 "summary": text("New summary."),
                 "text": text("Replaces the saved text."),
-                "project_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement set of linked projects."],
+                "space_ids": ["type": "array", "items": ["type": "string"], "description": "Replacement set of linked Spaces."],
                 "read": flag("Mark read or unread."),
                 "archived": flag("Archive or bring back.")
             ],
@@ -1290,8 +1192,8 @@ enum Tools {
             if let title = args.string("title") { source.title = title }
             if let summary = args.string("summary") { source.summary = summary }
             if let body = args.string("text") { source.text = body }
-            if let ids = try args.uuids("project_ids") {
-                source.projects = try ids.map { try Lookup.project($0, in: context) }
+            if let ids = try args.uuids("space_ids") {
+                source.projects = try ids.map { try Lookup.space($0, in: context) }
             }
             if let read = args.bool("read") { source.readAt = read ? (source.readAt ?? .now) : nil }
             if let archived = args.bool("archived") { source.isArchived = archived }
@@ -1301,7 +1203,7 @@ enum Tools {
 
         Tool(
             name: "list_tags",
-            description: "List the global tag vocabulary. Tags are sparse cross-cutting labels, not projects, status, or relationships. Projects do not receive tags.",
+            description: "List the global tag vocabulary. Tags are sparse cross-cutting labels, not Spaces, status, or relationships. Spaces do not receive tags.",
             properties: [:],
             required: [],
             readOnly: true
@@ -1356,7 +1258,7 @@ enum Tools {
         },
         Tool(
             name: "assign_tag",
-            description: "Assign a tag to a note, track, decision, conversation, or task. Does not assign a project. Projects cannot be tagged.",
+            description: "Assign a tag to a note, track, decision, conversation, or task. Does not assign a Space. Spaces cannot be tagged.",
             properties: [
                 "tag_id": text("Tag id from list_tags."),
                 "record_type": options(TaggableKind.self, "Kind of record to tag."),
@@ -1393,7 +1295,7 @@ enum Tools {
 
         Tool(
             name: "mark_for_deletion",
-            description: "Propose deleting a note, track, decision, or chat when the user should decide. To delete outright, use delete_record. The user sees the mark and can Keep or Delete. Reason is required. Optionally link a replacement in the same project. Calling again updates the reason and replacement.",
+            description: "Propose deleting a note, track, decision, or chat when the user should decide. To delete outright, use delete_record. The user sees the mark and can Keep or Delete. Reason is required. Optionally link a replacement in the same Space. Calling again updates the reason and replacement.",
             properties: [
                 "target_type": options(DeletionTargetKind.self, "Kind of record to mark."),
                 "target_id": text("Id of the record to mark."),
@@ -1431,7 +1333,7 @@ enum Tools {
         },
         Tool(
             name: "delete_record",
-            description: "Delete a task, note, track, decision, or chat. The delete shows in the user's Lately feed, where they can take it back. Delete what is obsolete, duplicated, or what the user asked to remove. A track with tracks under it cannot be deleted until those are moved or deleted; notes, decisions, and tasks filed under a deleted track stay in the project.",
+            description: "Delete a task, note, track, decision, or chat. The delete shows in the user's Lately feed, where they can take it back. Delete what is obsolete, duplicated, or what the user asked to remove. A track with tracks under it cannot be deleted until those are moved or deleted; notes, decisions, and tasks filed under a deleted track stay in the Space.",
             properties: [
                 "target_type": options(DeletableKind.self, "Kind of record to delete."),
                 "target_id": text("Id of the record to delete.")
@@ -1447,9 +1349,9 @@ enum Tools {
         },
         Tool(
             name: "list_runs",
-            description: "List Membrae agent Runs. Newest first. Filter by project, task, status, or origin.",
+            description: "List Membrae agent Runs. Newest first. Filter by Space, task, status, or origin.",
             properties: [
-                "project_id": text("Optional project id."),
+                "space_id": text("Optional Space id."),
                 "task_id": text("Optional task id."),
                 "status": options(RunStatus.self, "Optional status."),
                 "origin": options(RunOrigin.self, "Optional origin door.")
@@ -1457,7 +1359,7 @@ enum Tools {
             required: [],
             readOnly: true
         ) { args, context in
-            let projectID = try args.string("project_id").map { _ in try args.uuid("project_id") }
+            let projectID = try args.string("space_id").map { _ in try args.uuid("space_id") }
             let taskID = try args.string("task_id").map { _ in try args.uuid("task_id") }
             let status = try args.choice("status", as: RunStatus.self)
             let origin = try args.choice("origin", as: RunOrigin.self)
@@ -1507,31 +1409,78 @@ enum Tools {
         },
         Tool(
             name: "list_spaces",
-            description: "List every Area with its id, name, and types. An Area holds an ongoing part of the user's life, such as recipes or habits.",
+            description: "List every Space with its id, status, summary, brief, what it holds, your notes on it, and counts. A Space is one container for a part of the user's life or work: it can hold lines of work (tracks, decisions, tasks, notes), records of its own types (recipes, habits, applications), or both.",
             properties: [:], required: [], readOnly: true
         ) { _, context in
-            SpaceStore.collecting(in: context).map { SpaceTools.space($0, full: false, in: context) }
+            SpaceStore.all(in: context)
+                .sorted { $0.lastActivity > $1.lastActivity }
+                .map { JSONShape.space($0, in: context) }
         },
         Tool(
             name: "get_space",
-            description: "Get one Area: each type with its fields.",
-            properties: ["space_id": spaceID], required: ["space_id"], readOnly: true
+            description: "Get one Space: fields, identity context, attachment ids, each of its types with their fields, and counts. Pass include for bounded lists. Use get_track for a track body and get_note for reference material.",
+            properties: [
+                "space_id": spaceID,
+                "include": [
+                    "type": "array",
+                    "items": ["type": "string", "enum": ["decisions", "tracks", "notes", "tasks", "deletion_marks"]],
+                    "description": "Record lists to add. Omit for a lean Space record. Lists are bounded; use list_* and get_track for the rest."
+                ]
+            ],
+            required: ["space_id"],
+            readOnly: true
         ) { args, context in
-            SpaceTools.space(try SpaceTools.space(args, in: context), full: true, in: context)
+            let space = try Lookup.space(try args.uuid("space_id"), in: context)
+            let include = try SpaceExpand.parse(args.strings("include"))
+            var shape = JSONShape.space(space, in: context, fullTypes: true)
+            shape["context"] = ContextBuilder.identity(for: space)
+            shape["attachments"] = JSONShape.attachments(on: space, in: context)
+            if include.contains(.decisions) {
+                shape["decisions"] = space.decisions
+                    .sorted { $0.createdAt > $1.createdAt }
+                    .prefix(20)
+                    .map(JSONShape.decision)
+            }
+            if include.contains(.tracks) {
+                shape["tracks"] = space.threads
+                    .sorted { $0.createdAt < $1.createdAt }
+                    .prefix(24)
+                    .map { JSONShape.track($0, full: false) }
+            }
+            if include.contains(.notes) {
+                shape["notes"] = space.notes
+                    .sorted { $0.updatedAt > $1.updatedAt }
+                    .prefix(8)
+                    .map { JSONShape.note($0, full: false) }
+            }
+            if include.contains(.tasks) {
+                shape["tasks"] = TaskStore.tasks(in: context, project: space)
+                    .sorted(by: TaskStore.boardSort)
+                    .prefix(20)
+                    .map { JSONShape.task($0, full: false) }
+            }
+            if include.contains(.deletionMarks) {
+                shape["deletion_marks"] = space.deletionMarks
+                    .sorted { $0.createdAt > $1.createdAt }
+                    .prefix(20)
+                    .map(JSONShape.deletionMark)
+            }
+            return shape
         },
         Tool(
             name: "get_space_catalog",
-            description: "Read this before set_space_type or set_area_widget. Lists the field kinds, the widget blocks with the settings they accept, and the calculations.",
+            description: "Read this before set_space_type or set_space_widget. Lists the field kinds, the widget blocks with the settings they accept, and the calculations.",
             properties: [:], required: [], readOnly: true
         ) { _, _ in
             SpaceTools.catalog
         },
         Tool(
             name: "create_space",
-            description: "Create an empty Area. Follow with set_space_type.",
+            description: "Create a Space. Propose it to the user first and wait for a yes. For work, give it a summary and current_direction, then tracks and tasks. For records, follow with set_space_type.",
             properties: [
-                "name": text("Short name, such as Kitchen."),
-                "summary": text("One line on what it is for."),
+                "name": text("Short name, such as Kitchen or Article One."),
+                "summary": text("One line on what it is."),
+                "current_direction": text("Where the work is heading right now."),
                 "symbol": text("SF Symbol name for its icon."),
                 "color": text("Card color: \(SpaceGradientName.all.joined(separator: ", ")). Leave out to take the next unused one.")
             ],
@@ -1544,26 +1493,31 @@ enum Tools {
                 symbol: args.string("symbol").flatMap { $0.isEmpty ? nil : $0 } ?? "square.grid.2x2",
                 summary: args.string("summary") ?? "",
                 gradient: color ?? SpaceGradientName.next(after: used),
-                collects: true,
                 in: context
             )
-            return SpaceTools.space(space, full: true, in: context)
+            space.currentDirection = args.string("current_direction") ?? ""
+            return JSONShape.space(space, in: context, fullTypes: true)
         },
         Tool(
             name: "update_space",
-            description: "Rename an Area, change its summary, icon, or card color, or rewrite your notes on it. Only what you pass changes.",
+            description: "Change a Space. Only what you pass changes.",
             properties: [
                 "space_id": spaceID,
                 "name": text("New name."),
-                "summary": text("One line on what it is for."),
+                "summary": text("One line on what it is."),
+                "current_direction": text("Where the work is heading right now."),
+                "brief": text("One sentence, to the user, on what they are doing in this Space now, such as: You're building sync, so web AIs can reach Membrae when the Mac is off. It leads the Space's page. Keep it current when the direction or the next task changes."),
+                "status": options(ProjectStatus.self, "active, paused, or done."),
+                "is_pinned": flag("Pin the Space to the top of the sidebar."),
                 "symbol": text("SF Symbol name for its icon."),
                 "color": text("Card color: \(SpaceGradientName.all.joined(separator: ", "))."),
-                "picture_shape": text("The shape of pictures on this Area's cards: landscape, or portrait for covers and posters."),
-                "notes": text("Your own notes on this Area: what the user calls things, the units they use, standing preferences. This replaces the notes, so send the whole text, old lines included. At most \(Space.agentNotesLimit) characters.")
+                "picture_shape": text("The shape of pictures on this Space's cards: landscape, or portrait for covers and posters."),
+                "active_track_id": text("The one track this Space is being worked on. Its tasks are what the board shows and where Next comes from. Empty string clears it. Change it only when the user asks."),
+                "notes": text("Your own notes on this Space: what the user calls things, the units they use, standing preferences. This replaces the notes, so send the whole text, old lines included. At most \(Space.agentNotesLimit) characters.")
             ],
             required: ["space_id"], readOnly: false
         ) { args, context in
-            let space = try SpaceTools.space(args, in: context)
+            let space = try Lookup.space(try args.uuid("space_id"), in: context)
             let shape = args.string("picture_shape")
             if let shape, !["landscape", "portrait"].contains(shape) {
                 throw ToolError("picture_shape must be landscape or portrait.")
@@ -1573,6 +1527,16 @@ enum Tools {
             }
             if let color = args.string("color"), !color.isEmpty, !SpaceGradientName.all.contains(color) {
                 throw ToolError("color must be one of: \(SpaceGradientName.all.joined(separator: ", ")).")
+            }
+            if let direction = args.string("current_direction") { space.currentDirection = direction }
+            if let brief = args.string("brief") { space.brief = brief.trimmingCharacters(in: .whitespacesAndNewlines) }
+            if let status = try args.choice("status", as: ProjectStatus.self) {
+                space.status = status
+                TaskStore.syncProjectStatus(space, in: context)
+            }
+            if let pinned = args.bool("is_pinned") { PinStore.set(.space, space.id, pinned: pinned, in: context) }
+            if let link = try args.optionalUUID("active_track_id") {
+                TaskStore.setActiveTrack(try Lookup.thread(link, in: space), on: space, in: context)
             }
             try SpaceStore.update(
                 space,
@@ -1584,11 +1548,11 @@ enum Tools {
                 portraitCards: shape.map { $0 == "portrait" },
                 in: context
             )
-            return SpaceTools.space(space, full: false, in: context)
+            return JSONShape.space(space, in: context)
         },
         Tool(
             name: "set_space_type",
-            description: "Create a type in an Area, or change the fields of the type with this key. role object is a lasting thing (a recipe, a habit); role event is something logged about objects (cooked, check-in); role settings holds one record for the whole Area (daily targets). A field cannot change kind; a field you leave out is hidden and its values are kept.",
+            description: "Create a type in a Space, or change the fields of the type with this key. role object is a lasting thing (a recipe, a habit); role event is something logged about objects (cooked, check-in); role settings holds one record for the whole Space (daily targets). A field cannot change kind; a field you leave out is hidden and its values are kept.",
             properties: [
                 "space_id": spaceID,
                 "key": text("Stable lowercase key, such as recipe or check-in."),
@@ -1620,8 +1584,8 @@ enum Tools {
             return SpaceTools.type(type, in: context)
         },
         Tool(
-            name: "set_area_widget",
-            description: "Make a widget for an Area, or change one by passing widget_id. A widget is a small card about one object type: rows of blocks from the widget part of get_space_catalog. You choose which blocks go in which row; the app sets the spacing. If anything does not fit, nothing is saved and you are told every reason. Show a widget to the user by writing its link on a line by itself.",
+            name: "set_space_widget",
+            description: "Make a widget for a Space, or change one by passing widget_id. A widget is a small card about one object type: rows of blocks from the widget part of get_space_catalog. You choose which blocks go in which row; the app sets the spacing. If anything does not fit, nothing is saved and you are told every reason. Show a widget to the user by writing its link on a line by itself.",
             properties: [
                 "space_id": spaceID,
                 "type_key": typeKey,
@@ -1643,7 +1607,7 @@ enum Tools {
             var existing: AreaWidget?
             if let id = try args.optionalUUID("widget_id").flatMap({ $0 }) {
                 guard let found = SpaceStore.widget(id, in: context), found.spaceIDString == type.spaceIDString else {
-                    throw ToolError("This Area has no widget with id \(id.uuidString).")
+                    throw ToolError("This Space has no widget with id \(id.uuidString).")
                 }
                 existing = found
             }
@@ -1658,7 +1622,7 @@ enum Tools {
             return SpaceTools.widget(widget, typeKey: type.key)
         },
         Tool(
-            name: "set_area_card",
+            name: "set_space_card",
             description: "Choose which fields show on the cards of an object type, under the name, in the order given. At most \(SpaceType.cardFieldLimit). An empty list shows only the picture and the name. Leave fields out to let the app choose again.",
             properties: [
                 "space_id": spaceID,
@@ -1676,7 +1640,7 @@ enum Tools {
             return SpaceTools.type(type, in: context)
         },
         Tool(
-            name: "set_area_layout",
+            name: "set_space_layout",
             description: "Choose the one layout an object type's records are shown in: table, cards, board (grouped by its first choice field), or calendar (placed on its first date field). The page shows only this layout; the user is not given a switcher, so pick the one that suits what the type is for. An empty string lets the app choose from the data.",
             properties: [
                 "space_id": spaceID,
@@ -1694,11 +1658,11 @@ enum Tools {
             return SpaceTools.type(type, in: context)
         },
         Tool(
-            name: "place_area_widget",
+            name: "place_space_widget",
             description: "Put a widget on the user's You page, or take it off. After you make a widget, ask the user in one line whether they want it on their You page, and call this only if they say yes.",
             properties: [
                 "space_id": spaceID,
-                "widget_id": text("Widget id from set_area_widget or list_area_widgets."),
+                "widget_id": text("Widget id from set_space_widget or list_space_widgets."),
                 "on_you_page": flag("true to put it on the You page, false to take it off.")
             ],
             required: ["space_id", "widget_id", "on_you_page"], readOnly: false
@@ -1706,7 +1670,7 @@ enum Tools {
             let space = try SpaceTools.space(args, in: context)
             let id = try args.uuid("widget_id")
             guard let widget = SpaceStore.widget(id, in: context), widget.spaceIDString == SpaceJSON.key(space.id) else {
-                throw ToolError("This Area has no widget with id \(id.uuidString).")
+                throw ToolError("This Space has no widget with id \(id.uuidString).")
             }
             widget.isOnYou = args.bool("on_you_page") ?? false
             widget.updatedAt = .now
@@ -1715,8 +1679,8 @@ enum Tools {
             return SpaceTools.widget(widget, typeKey: types.first { SpaceJSON.key($0.id) == widget.typeIDString }?.key ?? "")
         },
         Tool(
-            name: "list_area_widgets",
-            description: "List the widgets of an Area, with their rows.",
+            name: "list_space_widgets",
+            description: "List the widgets of a Space, with their rows.",
             properties: ["space_id": spaceID], required: ["space_id"], readOnly: true
         ) { args, context in
             let space = try SpaceTools.space(args, in: context)
@@ -1726,15 +1690,15 @@ enum Tools {
             }
         },
         Tool(
-            name: "remove_area_widget",
-            description: "Remove a widget from an Area. Its data is not touched.",
-            properties: ["space_id": spaceID, "widget_id": text("Widget id from list_area_widgets.")],
+            name: "remove_space_widget",
+            description: "Remove a widget from a Space. Its data is not touched.",
+            properties: ["space_id": spaceID, "widget_id": text("Widget id from list_space_widgets.")],
             required: ["space_id", "widget_id"], readOnly: false, destructive: true
         ) { args, context in
             let space = try SpaceTools.space(args, in: context)
             let id = try args.uuid("widget_id")
             guard let widget = SpaceStore.widget(id, in: context), widget.spaceIDString == SpaceJSON.key(space.id) else {
-                throw ToolError("This Area has no widget with id \(id.uuidString).")
+                throw ToolError("This Space has no widget with id \(id.uuidString).")
             }
             let name = widget.name
             try SpaceStore.delete(widget, in: context)
@@ -1742,7 +1706,7 @@ enum Tools {
         },
         Tool(
             name: "list_space_records",
-            description: "List the records of one type in an Area, with their values. Archived records are left out unless asked for.",
+            description: "List the records of one type in a Space, with their values. Archived records are left out unless asked for.",
             properties: [
                 "space_id": spaceID,
                 "type_key": typeKey,
@@ -1760,7 +1724,7 @@ enum Tools {
         },
         Tool(
             name: "create_space_record",
-            description: "Add a record to an Area, such as one recipe. values is keyed by field id.",
+            description: "Add a record to a Space, such as one recipe. values is keyed by field id.",
             properties: [
                 "space_id": spaceID,
                 "type_key": typeKey,
@@ -1809,10 +1773,10 @@ enum Tools {
         },
         Tool(
             name: "list_space_events",
-            description: "List what has been logged in an Area for one event type, newest first. Pass record_id for one record's history.",
+            description: "List what has been logged in a Space for one event type, newest first. Pass record_id for one record's history.",
             properties: [
                 "space_id": spaceID,
-                "type_key": text("Key of an event type in this Area."),
+                "type_key": text("Key of an event type in this Space."),
                 "record_id": text("Only events about this record.")
             ],
             required: ["space_id", "type_key"], readOnly: true
@@ -1855,7 +1819,7 @@ enum Tools {
             description: "Log that something happened to one or more records, such as a recipe being cooked or a habit checked in.",
             properties: [
                 "space_id": spaceID,
-                "type_key": text("Key of an event type in this Area."),
+                "type_key": text("Key of an event type in this Space."),
                 "record_ids": ["type": "array", "items": ["type": "string"], "description": "Records this is about."],
                 "occurred_at": text("ISO-8601 time it happened. Defaults to now."),
                 "values": object("Event field id to value.")
@@ -1884,9 +1848,9 @@ enum TaskMutations {
         if let title = args.string("title"), !title.isEmpty { item.title = title }
         if let notes = args.string("notes") { item.notes = notes }
         if let due = try args.date("due") { item.due = due }
-        if let projectLink = try args.optionalUUID("project_id") {
+        if let projectLink = try args.optionalUUID("space_id") {
             if let id = projectLink {
-                AssociationService.assignUserProject(try Lookup.project(id, in: context), on: item)
+                AssociationService.assignUserProject(try Lookup.space(id, in: context), on: item)
             } else {
                 AssociationService.clearProject(from: item)
             }
@@ -1956,7 +1920,7 @@ enum TagTools {
 }
 
 /// The kinds of record delete_record removes.
-/// Tidying a project: what an AI is shown, the plan it proposes, and applying the parts the user accepts.
+/// Tidying a Space: what an AI is shown, the plan it proposes, and applying the parts the user accepts.
 enum CleanupStore {
     private static let day: DateFormatter = {
         let formatter = DateFormatter()
@@ -1970,7 +1934,7 @@ enum CleanupStore {
         return flat.count > limit ? String(flat.prefix(limit)) + "…" : flat
     }
 
-    /// The whole project in brief, sized to be read in one go.
+    /// The whole Space in brief, sized to be read in one go.
     static func review(_ project: Project) -> [String: Any] {
         let tasks = project.agendaItems.filter { $0.kind == .task }
         let tracks = project.threads.sorted { $0.updatedAt > $1.updatedAt }.map { track -> [String: Any] in
@@ -2021,7 +1985,7 @@ enum CleanupStore {
             ]
         }
         return [
-            "project_id": project.id.uuidString,
+            "space_id": project.id.uuidString,
             "name": project.name,
             "current_direction": project.currentDirection,
             "brief": project.brief,
@@ -2044,7 +2008,7 @@ enum CleanupStore {
         return try? context.fetch(descriptor).first
     }
 
-    /// Checks every change against the project and stores the plan. Replaces a plan still waiting.
+    /// Checks every change against the Space and stores the plan. Replaces a plan still waiting.
     static func propose(
         for project: Project,
         summary: String,
@@ -2052,7 +2016,7 @@ enum CleanupStore {
         client: String = "",
         in context: ModelContext
     ) throws -> CleanupPlan {
-        guard !items.isEmpty else { throw ToolError("A cleanup needs at least one change. If the project is already tidy, say so and do not call this.") }
+        guard !items.isEmpty else { throw ToolError("A cleanup needs at least one change. If the Space is already tidy, say so and do not call this.") }
         var changes: [CleanupChange] = []
         var problems: [String] = []
         var touched: Set<String> = []
@@ -2079,7 +2043,7 @@ enum CleanupStore {
             switch action {
             case .mergeTracks:
                 guard let second = track(id(item, "track_id")), let first = track(id(item, "into_track_id")) else {
-                    problems.append("\(place): track_id and into_track_id must both be tracks in this project.")
+                    problems.append("\(place): track_id and into_track_id must both be tracks in this Space.")
                     continue
                 }
                 guard first.id != second.id else { problems.append("\(place) merges a track into itself."); continue }
@@ -2101,11 +2065,11 @@ enum CleanupStore {
                     problems.append("\(place): target_type is track, task, note, or decision.")
                     continue
                 }
-                guard let title else { problems.append("\(place): no \(type) with that id in this project."); continue }
+                guard let title else { problems.append("\(place): no \(type) with that id in this Space."); continue }
                 change = CleanupChange(action: action, targetType: type, targetID: target.uuidString, title: title, reason: reason)
             case .retireDecision:
                 guard let target = id(item, "decision_id"), let decision = project.decisions.first(where: { $0.id == target }) else {
-                    problems.append("\(place): decision_id must be a decision in this project.")
+                    problems.append("\(place): decision_id must be a decision in this Space.")
                     continue
                 }
                 guard decision.status == .active else { problems.append("\(place): “\(decision.title)” is already retired."); continue }
@@ -2144,7 +2108,7 @@ enum CleanupStore {
             "status": plan.status.rawValue,
             "summary": plan.summary,
             "changes": plan.changes.map { ["change": $0.sentence, "reason": $0.reason, "outcome": $0.outcome] },
-            "next": "Nothing has changed. The user reviews this on the project's page in the app and applies it there. Tell them it is ready."
+            "next": "Nothing has changed. The user reviews this on the Space's page in the app and applies it there. Tell them it is ready."
         ]
     }
 
@@ -2242,7 +2206,7 @@ enum DeletedRecord {
             saved["updated"] = stamp(item.updatedAt)
             saved["status"] = item.workflowStatusRaw
             saved["blocked_reason"] = item.blockedReason
-            saved["project"] = key(item.project?.id)
+            saved["space"] = key(item.project?.id)
             saved["tags"] = item.tags.map(\.id.uuidString)
             saved["track_links"] = item.trackLinks.map { link in
                 ["track": link.threadID.uuidString, "inherited": link.isInherited, "from_note": key(link.inheritedFromNoteID)] as [String: Any]
@@ -2258,7 +2222,7 @@ enum DeletedRecord {
             saved["source"] = note.source
             saved["created"] = stamp(note.createdAt)
             saved["updated"] = stamp(note.updatedAt)
-            saved["project"] = key(note.project?.id)
+            saved["space"] = key(note.project?.id)
             saved["track"] = key(note.thread?.id)
             saved["tags"] = note.tags.map(\.id.uuidString)
         case .decision:
@@ -2269,7 +2233,7 @@ enum DeletedRecord {
             saved["status"] = decision.statusRaw
             saved["superseded_by"] = key(decision.supersededByID)
             saved["created"] = stamp(decision.createdAt)
-            saved["project"] = key(decision.project?.id)
+            saved["space"] = key(decision.project?.id)
             saved["track"] = key(decision.thread?.id)
             saved["tags"] = decision.tags.map(\.id.uuidString)
         case .track:
@@ -2281,7 +2245,7 @@ enum DeletedRecord {
             saved["status"] = track.statusRaw
             saved["created"] = stamp(track.createdAt)
             saved["updated"] = stamp(track.updatedAt)
-            saved["project"] = key(track.project?.id)
+            saved["space"] = key(track.project?.id)
             saved["parent"] = key(track.parent?.id)
             saved["tags"] = track.tags.map(\.id.uuidString)
             saved["notes"] = track.notes.map(\.id.uuidString)
@@ -2301,7 +2265,7 @@ enum DeletedRecord {
             saved["archived"] = chat.isArchived
             saved["created"] = stamp(chat.createdAt)
             saved["updated"] = stamp(chat.updatedAt)
-            saved["project"] = key(chat.project?.id)
+            saved["space"] = key(chat.project?.id)
             saved["track"] = key(chat.thread?.id)
             saved["tags"] = chat.tags.map(\.id.uuidString)
             saved["draft_files"] = assets(.chatDraft, chat.id)
@@ -2367,7 +2331,7 @@ enum DeletedRecord {
             "type": kind.rawValue,
             "id": id.uuidString,
             "title": title,
-            "project_id": project?.id.uuidString ?? ""
+            "space_id": project?.id.uuidString ?? ""
         ]
     }
 
@@ -2377,13 +2341,13 @@ enum DeletedRecord {
             throw ToolError("This cannot be taken back.")
         }
         func text(_ key: String) -> String { saved[key] as? String ?? "" }
-        func gone() -> ToolError { ToolError("Its project is gone, so it cannot be brought back.") }
+        func gone() -> ToolError { ToolError("Its Space is gone, so it cannot be brought back.") }
         func back() -> ToolError { ToolError("That \(kind.rawValue) is already back.") }
 
         var project: Project?
-        // Saved before Areas became Spaces, a record filed in an Area named it under "space".
-        if let projectID = uuid(saved["project"]) ?? uuid(saved["space"]) {
-            guard let found = try? Lookup.project(projectID, in: context) else { throw gone() }
+        // Rows written before every Space was one thing named it under "project".
+        if let spaceID = uuid(saved["space"]) ?? uuid(saved["Space"]) {
+            guard let found = try? Lookup.space(spaceID, in: context) else { throw gone() }
             project = found
         }
         let track = uuid(saved["track"]).flatMap { try? Lookup.thread($0, in: context) }
@@ -2514,9 +2478,9 @@ enum DeletedRecord {
 }
 
 enum Lookup {
-    static func project(_ id: UUID, in context: ModelContext) throws -> Project {
-        guard let found = try context.fetch(FetchDescriptor<Project>(predicate: #Predicate { $0.id == id })).first else {
-            throw ToolError("No project with id \(id.uuidString).")
+    static func space(_ id: UUID, in context: ModelContext) throws -> Space {
+        guard let found = SpaceStore.space(id, in: context) else {
+            throw ToolError("No Space with id \(id.uuidString).")
         }
         return found
     }
@@ -2610,19 +2574,19 @@ enum Lookup {
         switch kind {
         case .note:
             let note = try Self.note(id, in: context)
-            guard let project = note.project else { throw ToolError("That note has no project.") }
+            guard let project = note.project else { throw ToolError("That note has no Space.") }
             return (project, note.displayTitle)
         case .thread:
             let thread = try Self.thread(id, in: context)
-            guard let project = thread.project else { throw ToolError("That track has no project.") }
+            guard let project = thread.project else { throw ToolError("That track has no Space.") }
             return (project, thread.title.isEmpty ? "Untitled" : thread.title)
         case .decision:
             let decision = try Self.decision(id, in: context)
-            guard let project = decision.project else { throw ToolError("That decision has no project.") }
+            guard let project = decision.project else { throw ToolError("That decision has no Space.") }
             return (project, decision.title.isEmpty ? "Untitled" : decision.title)
         case .conversation:
             let conversation = try Self.conversation(id, in: context)
-            guard let project = conversation.project else { throw ToolError("That chat has no project.") }
+            guard let project = conversation.project else { throw ToolError("That chat has no Space.") }
             return (project, conversation.title.isEmpty ? "Chat" : conversation.title)
         }
     }
@@ -2650,7 +2614,7 @@ enum Lookup {
         }
         let resolved = try markedRecord(type, replacementID, in: context)
         if resolved.project.id != project.id {
-            throw ToolError("The replacement must be in the same project.")
+            throw ToolError("The replacement must be in the same Space.")
         }
         return (type, replacementID)
     }
@@ -2689,29 +2653,38 @@ enum JSONShape {
             .map { ["id": $0.id.uuidString, "name": $0.displayName, "color": $0.swatch.rawValue] }
     }
 
-    static func project(_ project: Project) -> [String: Any] {
+    /// One Space: what it is, what it holds, and where its work stands. `fullTypes` adds each
+    /// type's fields; otherwise types are named only.
+    static func space(_ space: Space, in context: ModelContext, fullTypes: Bool = false) -> [String: Any] {
+        let types = SpaceStore.types(in: space, context: context)
         var shape: [String: Any] = [
-            "id": project.id.uuidString,
-            "name": project.name,
-            "symbol": project.symbol,
-            "status": project.status.rawValue,
-            "summary": project.summary,
-            "current_direction": project.currentDirection,
-            "brief": project.brief,
-            "is_pinned": project.modelContext.map { PinStore.isPinned(project.id, in: $0) } ?? false,
-            "last_activity": iso.string(from: project.lastActivity),
+            "id": space.id.uuidString,
+            "name": space.displayName,
+            "symbol": space.symbol,
+            "status": space.status.rawValue,
+            "summary": space.summary,
+            "current_direction": space.currentDirection,
+            "brief": space.brief,
+            "is_pinned": PinStore.isPinned(space.id, in: context),
+            "picture_shape": space.hasPortraitCards ? "portrait" : "landscape",
+            "agent_notes": space.agentNotes,
+            "last_activity": iso.string(from: space.lastActivity),
             "counts": [
-                "decisions": project.decisions.count,
-                "tracks": project.threads.count,
-                "notes": project.notes.count,
-                "chats": project.conversations.filter { !$0.isArchived }.count,
-                "tasks": project.agendaItems.filter { $0.kind == .task }.count
-            ]
+                "decisions": space.decisions.count,
+                "tracks": space.threads.count,
+                "notes": space.notes.count,
+                "chats": space.conversations.filter { !$0.isArchived }.count,
+                "tasks": space.agendaItems.filter { $0.kind == .task }.count,
+                "records": space.collects ? SpaceStore.records(in: space, context: context).count : 0
+            ],
+            "types": fullTypes
+                ? types.map { SpaceTools.type($0, in: context) }
+                : types.map { ["key": $0.key, "name": $0.name, "role": $0.role.rawValue] }
         ]
-        if let track = project.activeTrack {
+        if let track = space.activeTrack {
             shape["active_track"] = ["id": track.id.uuidString, "title": track.title]
         }
-        if let next = TaskStore.nextTask(in: project) {
+        if let next = TaskStore.nextTask(in: space) {
             shape["next_task"] = ["id": next.id.uuidString, "title": next.displayTitle]
         }
         return shape
@@ -2738,8 +2711,8 @@ enum JSONShape {
             "due": item.due.map { iso.string(from: $0) } ?? "",
             "status": item.workflowStatus.rawValue,
             "is_next": TaskStore.isNext(item),
-            "project_id": item.project?.id.uuidString ?? "",
-            "project_name": item.project?.name ?? "",
+            "space_id": item.project?.id.uuidString ?? "",
+            "space_name": item.project?.name ?? "",
             "repeat": item.repeatRule.rawValue,
             "blocked_reason": item.blockedReason,
             "tracks": item.liveTracks.map { ["id": $0.id.uuidString, "title": $0.title] },
@@ -2749,7 +2722,7 @@ enum JSONShape {
                 [
                     "id": $0.id.uuidString,
                     "title": $0.displayTitle,
-                    "project_name": $0.project?.name ?? ""
+                    "space_name": $0.project?.name ?? ""
                 ]
             },
             "tags": tags(item.tags)
@@ -2768,7 +2741,7 @@ enum JSONShape {
             "title": completion.titleSnapshot,
             "completed_at": iso.string(from: completion.completedAt),
             "occurred_due": completion.occurredDue.map { iso.string(from: $0) } ?? "",
-            "project_id": completion.project?.id.uuidString ?? "",
+            "space_id": completion.project?.id.uuidString ?? "",
             "task_id": completion.parentTask?.id.uuidString ?? ""
         ]
     }
@@ -2776,7 +2749,7 @@ enum JSONShape {
     static func decision(_ decision: Decision) -> [String: Any] {
         var shape: [String: Any] = [
             "id": decision.id.uuidString,
-            "project_id": decision.project?.id.uuidString ?? "",
+            "space_id": decision.project?.id.uuidString ?? "",
             "title": decision.title,
             "decision": decision.decision,
             "rationale": decision.rationale,
@@ -2829,7 +2802,7 @@ enum JSONShape {
     static func track(_ thread: ProjectThread, full: Bool) -> [String: Any] {
         var shape: [String: Any] = [
             "id": thread.id.uuidString,
-            "project_id": thread.project?.id.uuidString ?? "",
+            "space_id": thread.project?.id.uuidString ?? "",
             "title": thread.title,
             "kind": thread.kind.rawValue,
             "status": thread.status.rawValue,
@@ -2863,7 +2836,7 @@ enum JSONShape {
         let lastText = messages.last.map { chatText($0.content) } ?? ""
         var shape: [String: Any] = [
             "id": conversation.id.uuidString,
-            "project_id": conversation.project?.id.uuidString ?? "",
+            "space_id": conversation.project?.id.uuidString ?? "",
             "title": conversation.title.isEmpty ? "Chat" : conversation.title,
             "track_id": conversation.thread?.id.uuidString ?? "",
             "updated_at": iso.string(from: conversation.updatedAt),
@@ -2894,8 +2867,8 @@ enum JSONShape {
             "title": source.displayTitle,
             "summary": source.summary,
             "kind": source.kindRaw,
-            "project_ids": source.projects.map(\.id.uuidString),
-            "project_id": source.projects.first?.id.uuidString ?? "",
+            "space_ids": source.projects.map(\.id.uuidString),
+            "space_id": source.projects.first?.id.uuidString ?? "",
             "read": source.readAt != nil,
             "archived": source.isArchived,
             "saved_at": iso.string(from: source.createdAt)
@@ -2911,7 +2884,7 @@ enum JSONShape {
     static func note(_ note: Note, full: Bool) -> [String: Any] {
         var shape: [String: Any] = [
             "id": note.id.uuidString,
-            "project_id": note.project?.id.uuidString ?? "",
+            "space_id": note.project?.id.uuidString ?? "",
             "title": note.displayTitle,
             "source": note.source,
             "track_id": note.thread?.id.uuidString ?? "",
@@ -2933,7 +2906,7 @@ enum JSONShape {
             "title": run.displayTitle,
             "status": run.status.rawValue,
             "origin": run.origin.rawValue,
-            "project_id": run.project?.id.uuidString ?? "",
+            "space_id": run.project?.id.uuidString ?? "",
             "task_id": run.task?.id.uuidString ?? "",
             "origin_chat_id": run.originChat?.id.uuidString ?? "",
             "provider": run.providerID,
@@ -2998,11 +2971,7 @@ enum JSONShape {
 /// and says what is wrong in words the agent can act on.
 enum SpaceTools {
     static func space(_ args: Args, in context: ModelContext) throws -> Space {
-        let id = try args.uuid("space_id")
-        guard let space = SpaceStore.space(id, in: context) else {
-            throw ToolError("No Area with id \(id.uuidString).")
-        }
-        return space
+        try Lookup.space(try args.uuid("space_id"), in: context)
     }
 
     static func type(_ args: Args, in context: ModelContext) throws -> SpaceType {
@@ -3296,20 +3265,6 @@ enum SpaceTools {
         return shape
     }
 
-    static func space(_ space: Space, full: Bool, in context: ModelContext) -> [String: Any] {
-        let types = SpaceStore.types(in: space, context: context)
-        return [
-            "id": space.id.uuidString,
-            "name": space.displayName,
-            "summary": space.summary,
-            "notes": space.agentNotes,
-            "picture_shape": space.hasPortraitCards ? "portrait" : "landscape",
-            "types": full
-                ? types.map { type($0, in: context) }
-                : types.map { ["key": $0.key, "name": $0.name, "role": $0.role.rawValue] }
-        ]
-    }
-
     /// Calc fields are included, worked out, so an agent reads the same numbers the user sees.
     static func record(_ record: SpaceRecord, schema: SpaceSchema, in context: ModelContext) -> [String: Any] {
         let live = Set(schema.liveFields.map(\.id))
@@ -3336,7 +3291,7 @@ enum SpaceTools {
         switch kind {
         case .field(let kinds): "one field id of kind: " + kinds.map(\.rawValue).joined(separator: ", ")
         case .fields(let kinds): "a list of field ids of kind: " + kinds.map(\.rawValue).joined(separator: ", ")
-        case .event: "the key of an event type in the Area"
+        case .event: "the key of an event type in the Space"
         case .calc: "a calculation"
         case .formula: "a formula: " + SpaceFormula.grammar
         case .text: "text"
@@ -3347,7 +3302,7 @@ enum SpaceTools {
     static var catalog: [String: Any] {
         let recipe = SpaceTemplate.recipes.types[0]
         return [
-            "how_to": "1. create_space, unless you were given a space id. 2. set_space_type for each event type first. 3. set_space_type for each object type. Do not build screens: the app draws every Area itself from the fields. 4. set_area_widget for anything worth a glance. Widgets name fields by id and events by key. Every record already has a name; do not add a name field.",
+            "how_to": "1. create_space, unless you were given a space id. 2. set_space_type for each event type first. 3. set_space_type for each object type. Do not build screens: the app draws every Space itself from the fields. 4. set_space_widget for anything worth a glance. Widgets name fields by id and events by key. Every record already has a name; do not add a name field.",
             "field_kinds": [
                 ["kind": "text", "value": "text"],
                 ["kind": "richText", "value": "long text"],
@@ -3368,7 +3323,7 @@ enum SpaceTools {
                 ["kind": "rating", "value": "0 to 5"],
                 ["kind": "file", "value": "set by the user in the app"],
                 ["kind": "schedule", "value": "daily, weekly:3 (three times a week), or days:mon,wed,fri", "needs": "nothing. Give a habit or routine one schedule field; streaks, pace and done-today then follow it instead of assuming every day."],
-                ["kind": "link", "value": "the id of one record of the target type", "needs": "target: the key of an object type in the same Area, created first. Use a link whenever one thing refers to another, such as a meal made from recipes, so it can be opened from there. For several, put the link in a group with any per-row fields, such as servings. A number the row needs from the linked record, such as its calories, is a number field of the row that you fill in from the linked record when you add the row; it is a snapshot and does not change when the linked record does."]
+                ["kind": "link", "value": "the id of one record of the target type", "needs": "target: the key of an object type in the same Space, created first. Use a link whenever one thing refers to another, such as a meal made from recipes, so it can be opened from there. For several, put the link in a group with any per-row fields, such as servings. A number the row needs from the linked record, such as its calories, is a number field of the row that you fill in from the linked record when you add the row; it is a snapshot and does not change when the linked record does."]
             ],
             "blocks": SpaceScreenCatalog.components.map { spec -> [String: Any] in
                 [
@@ -3381,7 +3336,7 @@ enum SpaceTools {
                 ]
             },
             "widgets": [
-                "what": "A widget is a small card about one object type, made with set_area_widget. It is rows of blocks, listed under blocks.",
+                "what": "A widget is a small card about one object type, made with set_space_widget. It is rows of blocks, listed under blocks.",
                 "sizes": AreaWidgetSize.allCases.map { size -> [String: Any] in
                     ["size": size.rawValue, "rows": size.maxRows, "blocks_per_row": size.maxAcross]
                 },
@@ -3401,7 +3356,7 @@ enum SpaceTools {
             "roles": [
                 "object": "a lasting thing with many records, such as recipes",
                 "event": "something logged about records, such as cooked",
-                "settings": "exactly one record for the whole Area, such as daily targets. Other types read it in formulas as key.field."
+                "settings": "exactly one record for the whole Space, such as daily targets. Other types read it in formulas as key.field."
             ],
             "calculations": [
                 "count:eventKey": "how many events",

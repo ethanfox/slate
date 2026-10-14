@@ -311,10 +311,10 @@ final class MCPConnectionTests: XCTestCase {
     }
 
     func testRunPolicyDeniesExternalMCP() {
-        let run = RunToolPolicy(runID: UUID(), projectID: UUID(), assignedTaskID: nil, allowCode: true)
+        let run = RunToolPolicy(runID: UUID(), spaceID: UUID(), assignedTaskID: nil, allowCode: true)
         XCTAssertFalse(run.allows(MCPToolName.importServers))
         XCTAssertFalse(run.allows(MCPToolName.namespaced(connectionID: UUID(), original: "get_guide")))
-        XCTAssertTrue(RunToolPolicy.chat(projectID: UUID()).allows(MCPToolName.importServers))
+        XCTAssertTrue(RunToolPolicy.chat(spaceID: UUID()).allows(MCPToolName.importServers))
     }
 
     func testNamespacedNamesMatchProviderPattern() throws {

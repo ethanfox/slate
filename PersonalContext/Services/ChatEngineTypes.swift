@@ -681,8 +681,6 @@ struct ChatToolActivity: Identifiable, Equatable, Codable, Sendable {
             return status == .running ? "Listing files" : status == .failed ? "Couldn’t list files" : "Listed files"
         case "project_git_log":
             return status == .running ? "Reading git history" : status == .failed ? "Couldn’t read git history" : "Read git history"
-        case "consult_code":
-            return status == .running ? "Asking the Worker" : status == .failed ? "The Worker failed" : "Asked the Worker"
         case "delete_record":
             return status == .running ? "Deleting" : status == .failed ? "Couldn’t delete" : "Deleted"
         default:
@@ -722,7 +720,7 @@ struct ChatToolActivity: Identifiable, Equatable, Codable, Sendable {
         if name.contains("decision") { return .decision }
         if name.contains("thread") || name.contains("track") { return .thread }
         if name.contains("note") { return .note }
-        if name.contains("project") { return .project }
+        if ["list_spaces", "get_space", "create_space", "update_space"].contains(name) { return .project }
         return nil
     }
 
@@ -794,8 +792,6 @@ struct ChatToolActivity: Identifiable, Equatable, Codable, Sendable {
             return fileListDetail(result)
         case "project_git_log":
             return fields["root"] ?? ""
-        case "consult_code":
-            return clip(fields["brief"] ?? fields["question"] ?? "", 80)
         case "webSearch", "browser_search":
             return clip(fields["query"] ?? fields["search"] ?? fields["q"] ?? "", 80)
         case "webFetch", "WebFetch", "browser_navigate", "browser_open":

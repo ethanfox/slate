@@ -54,29 +54,12 @@ struct ChatGPTProvider: ChatProvider {
                         )
                         let instructions = turn.prompt
                         let gateway = RunGateway(
-                            policy: .chat(projectID: workspace.project?.id),
+                            policy: .chat(spaceID: workspace.project?.id),
                             inner: MembraeToolGateway(
                                 includeMembraeTools: includeMembraeTools,
                                 includeProjectTools: includeProjectTools,
                                 prepareRoots: includeProjectTools
                                     ? { try await workspace.currentCodeRoots() }
-                                    : nil,
-                                consult: includeMembraeTools && ProjectWorker.isConfigured(on: workspace.project)
-                                    ? { brief in
-                                        try await ProjectWorker.consult(
-                                            brief: brief,
-                                            reportingTo: workspace,
-                                            options: options
-                                        ) { name, status, id, detail in
-                                            continuation.yield(.tool(
-                                                name: name,
-                                                status: status,
-                                                id: id,
-                                                detail: detail,
-                                                sources: []
-                                            ))
-                                        }
-                                    }
                                     : nil,
                                 mcp: includeMembraeTools ? workspace.mcp : nil,
                                 store: workspace.conversation.modelContext?.container,
@@ -385,7 +368,7 @@ struct ChatGPTProvider: ChatProvider {
             kind = "thread"
         } else if lower.contains("note") {
             kind = "note"
-        } else if lower.contains("project") && !lower.hasPrefix("project_") {
+        } else if ["list_spaces", "get_space", "create_space", "update_space"].contains(lower) {
             kind = "project"
         } else {
             return nil
