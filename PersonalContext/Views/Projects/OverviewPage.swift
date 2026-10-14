@@ -772,12 +772,6 @@ struct ProjectOverview: View {
                             .lineSpacing(0)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: 640, alignment: .leading)
-                        Text(summaryLine(open: open.count, lines: lines.count))
-                            .font(.system(size: 15))
-                            .lineSpacing(5)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: 640, alignment: .leading)
                     }
                     .padding(.top, 28)
 
@@ -817,36 +811,6 @@ struct ProjectOverview: View {
         let first = fallback.split(separator: ".", maxSplits: 1).first.map(String.init) ?? ""
         let trimmed = first.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? project.name : trimmed + "."
-    }
-
-    private func summaryLine(open: Int, lines: Int) -> String {
-        let tasks = open == 1 ? "1 task is open" : "\(open) tasks are open"
-        let work = lines == 1 ? "1 line of work" : "\(lines) lines of work"
-        var sentence = "\(tasks) across \(work)."
-        if let today = todayLine { sentence += " " + today }
-        return sentence
-    }
-
-    /// What Membrae changed in this project today, in words, or nil when it changed nothing.
-    private var todayLine: String? {
-        let key = project.id.uuidString.lowercased()
-        let since = Calendar.current.startOfDay(for: .now)
-        let descriptor = FetchDescriptor<AgentAction>(predicate: #Predicate {
-            $0.projectIDString == key && $0.createdAt >= since && $0.undoneAt == nil
-        })
-        let actions = (try? context.fetch(descriptor)) ?? []
-        let merged = actions.count { $0.tool == "merge_tracks" }
-        let retired = actions.count { $0.tool == "update_decision" && $0.beforeJSON.contains("\"status\"") }
-        let removed = actions.count { $0.verb == .removed }
-        let added = actions.count { $0.verb == .added }
-        var parts: [String] = []
-        if merged > 0 { parts.append("\(merged) \(merged == 1 ? "track" : "tracks") merged") }
-        if retired > 0 { parts.append("\(retired) \(retired == 1 ? "decision" : "decisions") retired") }
-        if removed > 0 { parts.append("\(removed) out-of-date \(removed == 1 ? "record" : "records") removed") }
-        if parts.isEmpty, added > 0 { parts.append("\(added) \(added == 1 ? "thing" : "things") added") }
-        guard !parts.isEmpty else { return nil }
-        let list = parts.count > 1 ? parts.dropLast().joined(separator: ", ") + ", and " + parts.last! : parts[0]
-        return "Today: \(list)."
     }
 
     /// The one task to do now, between two rules.
