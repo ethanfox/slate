@@ -720,8 +720,6 @@ struct ProjectOverview: View {
     @Environment(AppModel.self) private var app
     @Query private var rows: [TitleIndex]
     @Query private var plans: [CleanupPlan]
-    @State private var showsMore = false
-    @State private var showsDirection = false
     @Environment(\.modelContext) private var context
 
     init(project: Project, list: @escaping (TitleIndexKind) -> Void) {
@@ -746,229 +744,222 @@ struct ProjectOverview: View {
     }
 
     var body: some View {
-        let pinned = rows.filter { app.isPinned($0.id) }
         let nextItem = TaskStore.nextTask(in: project)
         let open = upNext(of(.task).filter { $0.statusRaw != "done" }, nextID: nextItem?.id)
         let focus = nextItem ?? open.first.flatMap { TitleIndexStore.task($0.id, in: context) }
         let after = open.filter { $0.id != focus?.id }
         let decided = project.decisions.filter { $0.status == .active }.sorted { $0.createdAt > $1.createdAt }
-        let lines = project.threads.count { $0.status == .active || $0.status == .exploring }
+        let lines = project.threads
+            .filter { $0.status == .active || $0.status == .exploring }
+            .sorted { $0.updatedAt > $1.updatedAt }
         ScrollView {
             PageBody {
-                VStack(alignment: .leading, spacing: 28) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 10) {
-                            Image(systemName: project.symbol.isEmpty ? "folder" : project.symbol)
-                                .font(.system(size: 20))
-                                .foregroundStyle(.secondary)
-                            Text(project.name)
-                                .font(.system(size: 28, weight: .semibold))
+                VStack(alignment: .leading, spacing: 30) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(spacing: 4) {
+                            Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.tertiary)
                             Spacer(minLength: 8)
-                            Button {
+                            iconButton("wand.and.stars", help: "Tidy Up: Membrae proposes what to merge, retire, and delete") {
                                 app.presentNewRun(origin: .project, project: project, brief: ContextBuilder.cleanupBrief(for: project))
-                            } label: {
-                                Image(systemName: "wand.and.stars")
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 28, height: 28)
-                                    .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            .help("Tidy Up: Membrae proposes what to merge, retire, and delete")
-                            .accessibilityLabel("Tidy Up")
-                            Button {
-                                app.toggleProjectSettings()
-                            } label: {
-                                Image(systemName: "gearshape")
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 28, height: 28)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .help("Project Settings")
-                            .accessibilityLabel("Project Settings")
+                            iconButton("gearshape", help: "Project Settings") { app.toggleProjectSettings() }
                         }
-                        let about = project.currentDirection.isEmpty ? project.summary : project.currentDirection
-                        if !about.isEmpty {
-                            // Two lines say what this is. The rest is there on a click.
-                            Button {
-                                showsDirection.toggle()
-                            } label: {
-                                Text(about)
-                                    .font(CraftFont.body)
-                                    .lineSpacing(3)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(showsDirection ? nil : 2)
-                                    .multilineTextAlignment(.leading)
-                                    .frame(maxWidth: 640, alignment: .leading)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .help(showsDirection ? "Show less" : "Show the whole direction")
-                        }
+                        Text(headline)
+                            .font(.system(size: 34, weight: .semibold))
+                            .tracking(-0.85)
+                            .lineSpacing(0)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: 640, alignment: .leading)
+                        Text(summaryLine(open: open.count, lines: lines.count))
+                            .font(.system(size: 15))
+                            .lineSpacing(5)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: 640, alignment: .leading)
                     }
+                    .padding(.top, 28)
 
                     if let plan = plans.first {
                         CleanupPlanCard(plan: plan)
                     }
 
-                    focusCard(focus)
+                    nextStep(focus)
 
-                    HStack(spacing: 12) {
-                        stat("Open tasks", open.count) { app.open(project, tab: .tasks, newTab: false) }
-                        stat("Decisions", decided.count) { list(.decision) }
-                        stat("Lines of work", lines) { list(.track) }
-                    }
-
-                    LatelyLine(projectID: project.id)
-
-                    if !pinned.isEmpty {
-                        block("Pinned") {
-                            ForEach(pinned) { row in
-                                IndexRow(row: row, caption: row.kind.label)
-                                Hairline()
-                            }
-                        }
-                        .frame(maxWidth: 560, alignment: .leading)
-                    }
-
-                    HStack(alignment: .top, spacing: 48) {
-                        block("After that") {
-                            if after.isEmpty { EmptyLine(text: "Nothing else open.") }
-                            ForEach(after.prefix(4)) { row in
-                                IndexRow(row: row)
-                                Hairline()
-                            }
-                            if after.count > 4 {
-                                moreButton("All \(open.count) open tasks") { app.open(project, tab: .tasks, newTab: false) }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        block("Decided lately") {
-                            if decided.isEmpty { EmptyLine(text: "No decisions yet.") }
-                            VStack(alignment: .leading, spacing: 8) {
-                                ForEach(decided.prefix(3)) { decision in
-                                    decisionCard(decision)
-                                }
-                            }
-                            if decided.count > 3 {
-                                moreButton("All decisions") { list(.decision) }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Button {
-                            showsMore.toggle()
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text("More")
-                                    .font(CraftFont.section)
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .rotationEffect(.degrees(showsMore ? 90 : 0))
-                            }
-                            .foregroundStyle(.secondary)
-                            .frame(height: 28)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(showsMore ? "Hide the full lists" : "Everything filed in this project")
-                        if showsMore {
-                            everything
-                        }
+                    HStack(alignment: .top, spacing: 40) {
+                        column("After that", rows: after.prefix(3).map { row in
+                            (row.displayTitle, { app.open(row) })
+                        }, more: open.isEmpty ? nil : ("All \(open.count) tasks", { app.open(project, tab: .tasks, newTab: false) }))
+                        column("Decided lately", rows: decided.prefix(3).map { decision in
+                            (decision.title.isEmpty ? "Untitled" : decision.title, { app.open(decision) })
+                        }, more: decided.isEmpty ? nil : ("All decisions", { list(.decision) }))
+                        column("Lines of work", rows: lines.prefix(3).map { track in
+                            (track.title.isEmpty ? "Untitled" : track.title, { app.open(track) })
+                        }, more: lines.count > 3 ? ("\(lines.count - 3) more", { list(.track) }) : nil)
                     }
                 }
                 .padding(.horizontal, 48)
-                .padding(.vertical, 36)
-                .frame(maxWidth: 1100, alignment: .leading)
+                .padding(.top, 36)
+                // Room to scroll the last row clear of the composer that floats over the page.
+                .padding(.bottom, 140)
+                .frame(maxWidth: 940, alignment: .leading)
             }
         }
         .scrollContentBackground(.hidden)
     }
 
-    /// The one task in focus, large, with the two things to do about it.
-    private func focusCard(_ task: AgendaItem?) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("NEXT")
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(0.6)
+    /// The sentence Membrae wrote for this project. Until it has, the summary, or the direction's first sentence.
+    private var headline: String {
+        let written = project.brief.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !written.isEmpty { return written }
+        let fallback = project.summary.isEmpty ? project.currentDirection : project.summary
+        let first = fallback.split(separator: ".", maxSplits: 1).first.map(String.init) ?? ""
+        let trimmed = first.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? project.name : trimmed + "."
+    }
+
+    private func summaryLine(open: Int, lines: Int) -> String {
+        let tasks = open == 1 ? "1 task is open" : "\(open) tasks are open"
+        let work = lines == 1 ? "1 line of work" : "\(lines) lines of work"
+        var sentence = "\(tasks) across \(work)."
+        if let today = todayLine { sentence += " " + today }
+        return sentence
+    }
+
+    /// What Membrae changed in this project today, in words, or nil when it changed nothing.
+    private var todayLine: String? {
+        let key = project.id.uuidString.lowercased()
+        let since = Calendar.current.startOfDay(for: .now)
+        let descriptor = FetchDescriptor<AgentAction>(predicate: #Predicate {
+            $0.projectIDString == key && $0.createdAt >= since && $0.undoneAt == nil
+        })
+        let actions = (try? context.fetch(descriptor)) ?? []
+        let merged = actions.count { $0.tool == "merge_tracks" }
+        let retired = actions.count { $0.tool == "update_decision" && $0.beforeJSON.contains("\"status\"") }
+        let removed = actions.count { $0.verb == .removed }
+        let added = actions.count { $0.verb == .added }
+        var parts: [String] = []
+        if merged > 0 { parts.append("\(merged) \(merged == 1 ? "track" : "tracks") merged") }
+        if retired > 0 { parts.append("\(retired) \(retired == 1 ? "decision" : "decisions") retired") }
+        if removed > 0 { parts.append("\(removed) out-of-date \(removed == 1 ? "record" : "records") removed") }
+        if parts.isEmpty, added > 0 { parts.append("\(added) \(added == 1 ? "thing" : "things") added") }
+        guard !parts.isEmpty else { return nil }
+        let list = parts.count > 1 ? parts.dropLast().joined(separator: ", ") + ", and " + parts.last! : parts[0]
+        return "Today: \(list)."
+    }
+
+    /// The one task to do now, between two rules.
+    private func nextStep(_ task: AgendaItem?) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Next")
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
             if let task {
-                Text(task.displayTitle)
-                    .font(.system(size: 22, weight: .semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-                if let place = task.stop?.displayTitle ?? task.liveTracks.first?.title, !place.isEmpty {
-                    Text(place)
-                        .font(CraftFont.body)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                HStack(alignment: .center, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(task.displayTitle)
+                            .font(.system(size: 20, weight: .semibold))
+                            .tracking(-0.2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let place = task.stop?.displayTitle ?? task.liveTracks.first?.title, !place.isEmpty {
+                            Text(place)
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 8) {
+                        Button {
+                            app.presentNewRun(origin: .task, project: project, task: task)
+                        } label: {
+                            Text("Hand to an Agent")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 14)
+                                .frame(height: 30)
+                                .background(Color.accentColor, in: Capsule())
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            app.present(.editTask(task))
+                        } label: {
+                            Text("Open")
+                                .font(.system(size: 13, weight: .medium))
+                                .padding(.horizontal, 14)
+                                .frame(height: 30)
+                                .background(CraftColor.elevated, in: Capsule())
+                                .overlay(Capsule().strokeBorder(CraftColor.hairline))
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .fixedSize()
                 }
-                HStack(spacing: 10) {
-                    Button("Open") { app.present(.editTask(task)) }
-                        .buttonStyle(.borderedProminent)
-                    Button("Hand to an Agent") { app.presentNewRun(origin: .task, project: project, task: task) }
-                }
-                .padding(.top, 4)
             } else {
                 Text("Nothing open. Tell Membrae what you want to do next.")
-                    .font(CraftFont.body)
+                    .font(.system(size: 15))
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(20)
-        .frame(maxWidth: 720, alignment: .leading)
-        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(CraftColor.hairline))
+        .padding(.top, 24)
+        .padding(.bottom, 26)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .top) { Hairline() }
+        .overlay(alignment: .bottom) { Hairline() }
     }
 
-    private func stat(_ label: String, _ count: Int, action: @escaping () -> Void) -> some View {
+    private func column(
+        _ title: String,
+        rows: [(String, () -> Void)],
+        more: (String, () -> Void)?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+            if rows.isEmpty {
+                Text("Nothing yet.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.tertiary)
+            }
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                Button(action: row.1) {
+                    Text(row.0)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            if let more {
+                Button(action: more.1) {
+                    Text(more.0)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.tertiary)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func iconButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(count)")
-                    .font(.system(size: 24, weight: .semibold).monospacedDigit())
-                Text(label)
-                    .font(CraftFont.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(width: 150, alignment: .leading)
-            .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(CraftColor.hairline))
-            .contentShape(Rectangle())
+            Image(systemName: symbol)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(count) \(label.lowercased())")
-    }
-
-    /// A decision as what was decided, not as a title and a date.
-    private func decisionCard(_ decision: Decision) -> some View {
-        Button {
-            app.open(decision)
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(decision.title.isEmpty ? "Untitled" : decision.title)
-                    .font(.system(size: 13, weight: .medium))
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(2)
-                Text(decision.decision)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(3)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(CraftColor.hairline))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(help)
     }
 
     /// Open tasks in the order to pick them up: the Next task, then what is under way, then the rest,
@@ -985,146 +976,6 @@ struct ProjectOverview: View {
         return rows.enumerated()
             .sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }
             .map(\.element)
-    }
-
-    /// The full lists, each with how many it holds.
-    private var everything: some View {
-        HStack(spacing: 6) {
-            ForEach([TitleIndexKind.track, .decision, .note, .chat, .run]) { kind in
-                let count = of(kind).count
-                Button {
-                    list(kind)
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: kind.symbol)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                        Text(kind.plural)
-                            .font(CraftFont.body)
-                        Text("\(count)")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(height: 28)
-                    .background(CraftColor.elevated, in: Capsule())
-                    .overlay(Capsule().strokeBorder(CraftColor.hairline))
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .help("All \(kind.plural.lowercased())")
-            }
-            Button {
-                app.open(project, tab: .tasks, newTab: false)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: TitleIndexKind.task.symbol)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                    Text("Tasks")
-                        .font(CraftFont.body)
-                }
-                .padding(.horizontal, 12)
-                .frame(height: 28)
-                .background(CraftColor.elevated, in: Capsule())
-                .overlay(Capsule().strokeBorder(CraftColor.hairline))
-                .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .help("The task board")
-        }
-    }
-
-    private func block<Content: View>(
-        _ title: String,
-        more: TitleIndexKind? = nil,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(CraftFont.section)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 2)
-            content()
-            if let more {
-                moreButton("All \(more.plural.lowercased())") { list(more) }
-            }
-        }
-    }
-
-    private func moreButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Text(title)
-                    .font(.system(size: 12))
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 8, weight: .semibold))
-            }
-            .foregroundStyle(.secondary)
-            .frame(height: 28)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-/// Today's changes in one line. The full log opens under it on request.
-private struct LatelyLine: View {
-    var projectID: UUID
-    @Query private var actions: [AgentAction]
-    @State private var open = false
-
-    init(projectID: UUID) {
-        self.projectID = projectID
-        let key = projectID.uuidString.lowercased()
-        let since = Calendar.current.startOfDay(for: .now)
-        _actions = Query(filter: #Predicate<AgentAction> {
-            $0.projectIDString == key && $0.createdAt >= since && $0.undoneAt == nil
-        })
-    }
-
-    private var summary: String {
-        var merged = 0, added = 0, changed = 0, completed = 0, deleted = 0
-        for action in actions {
-            switch action.verb {
-            case .added: added += 1
-            case .completed: completed += 1
-            case .removed: deleted += 1
-            case .changed: if action.tool == "merge_tracks" { merged += 1 } else { changed += 1 }
-            default: break
-            }
-        }
-        let parts = [(merged, "merged"), (added, "added"), (completed, "completed"), (changed, "changed"), (deleted, "deleted")]
-            .filter { $0.0 > 0 }
-            .map { "\($0.0) \($0.1)" }
-        return parts.isEmpty ? "Nothing changed today." : "Today: " + parts.joined(separator: ", ")
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Button {
-                open.toggle()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 12))
-                    Text(summary)
-                        .font(CraftFont.body)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .rotationEffect(.degrees(open ? 90 : 0))
-                }
-                .foregroundStyle(.secondary)
-                .frame(height: 28)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(open ? "Hide what changed" : "Show what changed, and take any of it back")
-            if open {
-                ActionFeed(projectID: projectID, empty: "Nothing filed here yet. Tell Membrae something below.")
-                    .frame(maxWidth: 560, alignment: .leading)
-            }
-        }
     }
 }
 

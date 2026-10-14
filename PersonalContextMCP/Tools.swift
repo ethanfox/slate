@@ -583,6 +583,7 @@ enum Tools {
                 "name": text("New name."),
                 "summary": text("New summary."),
                 "current_direction": text("New current direction."),
+                "brief": text("One sentence, to the user, on what they are doing in this project now, such as: You're building sync, so web AIs can reach Membrae when the Mac is off. It leads the project's page. Keep it current when the direction or the next task changes."),
                 "status": options(ProjectStatus.self, "Project status."),
                 "is_pinned": flag("Pin the project to the top of the sidebar."),
                 "symbol": text("SF Symbol name for the icon."),
@@ -594,6 +595,7 @@ enum Tools {
             if let name = args.string("name"), !name.isEmpty { project.name = name }
             if let summary = args.string("summary") { project.summary = summary }
             if let direction = args.string("current_direction") { project.currentDirection = direction }
+            if let brief = args.string("brief") { project.brief = brief.trimmingCharacters(in: .whitespacesAndNewlines) }
             if let status = try args.choice("status", as: ProjectStatus.self) {
                 project.status = status
                 TaskStore.syncProjectStatus(project, in: context)
@@ -2021,6 +2023,7 @@ enum CleanupStore {
             "project_id": project.id.uuidString,
             "name": project.name,
             "current_direction": project.currentDirection,
+            "brief": project.brief,
             "how_to": ContextBuilder.cleanupRules,
             "tracks": tracks,
             "decisions": decisions,
@@ -2702,6 +2705,7 @@ enum JSONShape {
             "status": project.status.rawValue,
             "summary": project.summary,
             "current_direction": project.currentDirection,
+            "brief": project.brief,
             "is_pinned": project.isPinned,
             "last_activity": iso.string(from: project.lastActivity),
             "counts": [

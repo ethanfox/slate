@@ -71,6 +71,8 @@ final class Project: Identifiable {
     var symbol: String
     var summary: String
     var currentDirection: String
+    /// One sentence Membrae writes on what the user is doing in this project now. It leads the project's page.
+    var brief: String = ""
     var statusRaw: String
     var isPinned: Bool
     var createdAt: Date
