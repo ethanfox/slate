@@ -14,14 +14,13 @@ struct ContextItem: Identifiable, Equatable {
     var kind = Kind.you
 
     enum Kind: String, CaseIterable {
-        case you, project, area, library, assistant
+        case you, space, library, assistant
 
         /// The color for everything of this kind when the membrane is too small to show each thing.
         var hex: String {
             switch self {
             case .you: ""
-            case .project: "007AFF"
-            case .area: "E8643A"
+            case .space: "4A55D8"
             case .library: "EDAD38"
             case .assistant: "10A37F"
             }
@@ -60,9 +59,8 @@ struct ContextItem: Identifiable, Equatable {
 /// Reads everything Membrae holds for the user and lists it.
 struct ContextItems: DynamicProperty {
     @Environment(AppModel.self) private var app
-    @Query(filter: #Predicate<Project> { !$0.enabledKindsRaw.contains("records") }, sort: \Project.createdAt) private var projects: [Project]
     @Query private var titles: [TitleIndex]
-    @Query(filter: Space.collecting, sort: \Space.createdAt) private var spaces: [Space]
+    @Query(sort: \Space.createdAt) private var spaces: [Space]
     @Query private var records: [SpaceRecord]
     @Query private var facts: [PersonalFact]
     @Query private var sources: [SavedSource]
@@ -74,28 +72,22 @@ struct ContextItems: DynamicProperty {
         )]
 
         var held: [String: [TitleIndexKind: Int]] = [:]
-        for title in titles where !title.projectIDString.isEmpty {
+        for title in titles where !title.projectIDString.isEmpty && title.kind != .space {
             held[title.projectIDString, default: [:]][title.kind, default: 0] += 1
         }
-        for project in projects {
-            let counts = held[project.id.uuidString.lowercased()] ?? [:]
-            let parts = [(TitleIndexKind.note, "note"), (.decision, "decision"), (.task, "task")]
-                .compactMap { kind, word in counts[kind].map { Self.counted($0, word) } }
-            items.append(ContextItem(
-                id: project.id.uuidString, name: project.name,
-                detail: (["Project"] + [parts.joined(separator: ", ")].filter { !$0.isEmpty }).joined(separator: " · "),
-                hex: ContextItem.color(for: project.id), count: counts.values.reduce(0, +),
-                destination: .project(project.id), kind: .project
-            ))
-        }
-
         let filed = Dictionary(grouping: records, by: \.spaceIDString).mapValues(\.count)
         for space in spaces {
-            let count = filed[space.id.uuidString] ?? filed[space.id.uuidString.lowercased()] ?? 0
+            let key = space.id.uuidString.lowercased()
+            let counts = held[key] ?? [:]
+            let records = filed[space.id.uuidString] ?? filed[key] ?? 0
+            var parts = [(TitleIndexKind.note, "note"), (.decision, "decision"), (.task, "task")]
+                .compactMap { kind, word in counts[kind].map { Self.counted($0, word) } }
+            if records > 0 { parts.append(Self.counted(records, "record")) }
             items.append(ContextItem(
-                id: space.id.uuidString, name: space.displayName, detail: "Area · " + Self.counted(count, "thing"),
-                hex: space.gradient.accent.hexString, count: count, destination: .space(space.id),
-                kind: .area
+                id: space.id.uuidString, name: space.displayName,
+                detail: (["Space"] + [parts.joined(separator: ", ")].filter { !$0.isEmpty }).joined(separator: " · "),
+                hex: space.gradient.accent.hexString, count: counts.values.reduce(0, +) + records,
+                destination: .space(space.id), kind: .space
             ))
         }
 

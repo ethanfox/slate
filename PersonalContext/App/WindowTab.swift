@@ -24,7 +24,8 @@ enum TabRecency {
 struct WindowTab: Identifiable, Hashable, Codable {
     var id: UUID
     var destination: Destination
-    var projectTab: ProjectTab
+    /// Which section of a Space the tab shows. Its page for anything else.
+    var section: SpaceTab
     var selectedThread: UUID?
     var selectedNote: UUID?
     var selectedDecision: UUID?
@@ -35,7 +36,7 @@ struct WindowTab: Identifiable, Hashable, Codable {
         WindowTab(
             id: id,
             destination: .home,
-            projectTab: .chat,
+            section: .chat,
             selectedThread: nil,
             selectedNote: nil,
             selectedDecision: nil,
@@ -47,7 +48,7 @@ struct WindowTab: Identifiable, Hashable, Codable {
     var viewKey: TabViewKey {
         switch destination {
         case .home: .home
-        case .projects: .projects
+        case .spaces: .spaces
         case .tasks: .tasks
         case .calendar: .calendar
         case .chats: .chats
@@ -58,22 +59,21 @@ struct WindowTab: Identifiable, Hashable, Codable {
         case .run(let id): .run(id)
         case .aboutYou: .aboutYou
         case .context: .context
-        case .space(let id): .space(id)
         case .spaceRecord(_, let record): .spaceRecord(record)
-        case .project(let id):
-            switch projectTab {
-            case .overview: .projectOverview(id)
-            case .tasks: .projectTasks(id)
+        case .space(let id):
+            switch section {
+            case .overview: .spaceOverview(id)
+            case .tasks: .spaceTasks(id)
             case .threads:
-                selectedThread.map { .thread($0) } ?? .projectThreads(id)
+                selectedThread.map { .thread($0) } ?? .spaceThreads(id)
             case .notes:
-                selectedNote.map { .note($0) } ?? .projectNotes(id)
+                selectedNote.map { .note($0) } ?? .spaceNotes(id)
             case .decisions:
-                selectedDecision.map { .decision($0) } ?? .projectDecisions(id)
+                selectedDecision.map { .decision($0) } ?? .spaceDecisions(id)
             case .chat:
-                selectedConversation.map { .conversation($0) } ?? .projectChat(id)
+                selectedConversation.map { .conversation($0) } ?? .spaceChat(id)
             case .runs:
-                selectedRun.map { .run($0) } ?? .projectRuns(id)
+                selectedRun.map { .run($0) } ?? .spaceRuns(id)
             }
         }
     }
@@ -86,7 +86,7 @@ struct WindowTab: Identifiable, Hashable, Codable {
         case .decision(let id): (.decision, id)
         case .conversation(let id): (.chat, id)
         case .run(let id): (.run, id)
-        case .space(let id): (.space, id)
+        case .spaceOverview(let id): (.space, id)
         case .spaceRecord(let id): (.record, id)
         default: nil
         }
@@ -101,13 +101,13 @@ struct WindowTab: Identifiable, Hashable, Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, destination, projectTab, selectedThread, selectedNote, selectedDecision, selectedConversation, selectedRun
+        case id, destination, section, selectedThread, selectedNote, selectedDecision, selectedConversation, selectedRun
     }
 
     init(
         id: UUID,
         destination: Destination,
-        projectTab: ProjectTab,
+        section: SpaceTab,
         selectedThread: UUID?,
         selectedNote: UUID?,
         selectedDecision: UUID?,
@@ -116,7 +116,7 @@ struct WindowTab: Identifiable, Hashable, Codable {
     ) {
         self.id = id
         self.destination = destination
-        self.projectTab = projectTab
+        self.section = section
         self.selectedThread = selectedThread
         self.selectedNote = selectedNote
         self.selectedDecision = selectedDecision
@@ -128,7 +128,7 @@ struct WindowTab: Identifiable, Hashable, Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         destination = try container.decode(Destination.self, forKey: .destination)
-        projectTab = try container.decode(ProjectTab.self, forKey: .projectTab)
+        section = try container.decode(SpaceTab.self, forKey: .section)
         selectedThread = try container.decodeIfPresent(UUID.self, forKey: .selectedThread)
         selectedNote = try container.decodeIfPresent(UUID.self, forKey: .selectedNote)
         selectedDecision = try container.decodeIfPresent(UUID.self, forKey: .selectedDecision)
@@ -140,7 +140,7 @@ struct WindowTab: Identifiable, Hashable, Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(destination, forKey: .destination)
-        try container.encode(projectTab, forKey: .projectTab)
+        try container.encode(section, forKey: .section)
         try container.encodeIfPresent(selectedThread, forKey: .selectedThread)
         try container.encodeIfPresent(selectedNote, forKey: .selectedNote)
         try container.encodeIfPresent(selectedDecision, forKey: .selectedDecision)
@@ -150,16 +150,15 @@ struct WindowTab: Identifiable, Hashable, Codable {
 }
 
 enum TabViewKey: Hashable {
-    case home, projects, tasks, calendar, chats, runs, settings, aboutYou, context, library
-    case space(UUID)
+    case home, spaces, tasks, calendar, chats, runs, settings, aboutYou, context, library
+    case spaceOverview(UUID)
     case spaceRecord(UUID)
-    case projectOverview(UUID)
-    case projectTasks(UUID)
-    case projectChat(UUID)
-    case projectRuns(UUID)
-    case projectThreads(UUID)
-    case projectNotes(UUID)
-    case projectDecisions(UUID)
+    case spaceTasks(UUID)
+    case spaceChat(UUID)
+    case spaceRuns(UUID)
+    case spaceThreads(UUID)
+    case spaceNotes(UUID)
+    case spaceDecisions(UUID)
     case thread(UUID)
     case note(UUID)
     case decision(UUID)
@@ -167,20 +166,21 @@ enum TabViewKey: Hashable {
     case run(UUID)
 }
 
-struct ProjectViewMemory: Codable, Equatable {
-    var tab: ProjectTab
+/// Where a Space's tab was last: which section, and which thing in it, so opening the Space again lands there.
+struct SpaceViewMemory: Codable, Equatable {
+    var tab: SpaceTab
     var thread: UUID?
     var note: UUID?
     var decision: UUID?
     var conversation: UUID?
     var run: UUID?
 
-    static func windowTab(projectID: UUID, tab: ProjectTab?, memory: ProjectViewMemory?) -> WindowTab {
+    static func windowTab(spaceID: UUID, tab: SpaceTab?, memory: SpaceViewMemory?) -> WindowTab {
         let section = tab ?? memory?.tab ?? .overview
         return WindowTab(
             id: UUID(),
-            destination: .project(projectID),
-            projectTab: section,
+            destination: .space(spaceID),
+            section: section,
             selectedThread: section == .threads ? memory?.thread : nil,
             selectedNote: section == .notes ? memory?.note : nil,
             selectedDecision: section == .decisions ? memory?.decision : nil,
@@ -189,12 +189,12 @@ struct ProjectViewMemory: Codable, Equatable {
         )
     }
 
-    static func snapshot(from tab: WindowTab) -> (UUID, ProjectViewMemory)? {
-        guard case .project(let id) = tab.destination else { return nil }
+    static func snapshot(from tab: WindowTab) -> (UUID, SpaceViewMemory)? {
+        guard case .space(let id) = tab.destination else { return nil }
         return (
             id,
-            ProjectViewMemory(
-                tab: tab.projectTab,
+            SpaceViewMemory(
+                tab: tab.section,
                 thread: tab.selectedThread,
                 note: tab.selectedNote,
                 decision: tab.selectedDecision,
@@ -224,7 +224,7 @@ private struct StoredWindowTabs: Codable {
     var selectedID: UUID
     var histories: [StoredTabHistory]?
     var recency: [UUID]?
-    var projectViews: [UUID: ProjectViewMemory]?
+    var spaceViews: [UUID: SpaceViewMemory]?
 }
 
 extension AppModel {
@@ -237,8 +237,8 @@ extension AppModel {
         reveal(windowTab(for: destination), newTab: newTab)
     }
 
-    func open(_ project: Project, tab: ProjectTab? = nil, newTab: Bool = TabActivation.commandClick) {
-        reveal(windowTab(for: project, tab: tab), newTab: newTab)
+    func open(_ space: Space, tab: SpaceTab? = nil, newTab: Bool = TabActivation.commandClick) {
+        reveal(windowTab(spaceID: space.id, tab: tab), newTab: newTab)
     }
 
     func open(_ row: TitleIndex, newTab: Bool = TabActivation.commandClick) {
@@ -275,16 +275,9 @@ extension AppModel {
         }
     }
 
-    /// Opens a Space on the page that stands for it.
+    /// Opens a Space where its tab last was, or on its page.
     func openSpace(_ id: UUID, newTab: Bool = TabActivation.commandClick) {
-        let context = container.mainContext
-        let found = NavTrace.measure("fetch.space") { TitleIndexStore.project(id, in: context) }
-        guard let space = found else { return }
-        if space.collects {
-            navigate(to: .space(id), newTab: newTab)
-        } else {
-            open(space, tab: .overview, newTab: newTab)
-        }
+        reveal(windowTab(spaceID: id, tab: nil), newTab: newTab)
     }
 
     /// The one way a Space is deleted from the app: its runs stop, its tabs close, and the store removes it.
@@ -297,13 +290,13 @@ extension AppModel {
     }
 
     private func windowTab(for destination: Destination) -> WindowTab {
-        if case .project(let id) = destination {
-            return windowTab(projectID: id, tab: nil)
+        if case .space(let id) = destination {
+            return windowTab(spaceID: id, tab: nil)
         }
         return WindowTab(
             id: UUID(),
             destination: destination,
-            projectTab: .chat,
+            section: .chat,
             selectedThread: nil,
             selectedNote: nil,
             selectedDecision: nil,
@@ -312,22 +305,17 @@ extension AppModel {
         )
     }
 
-    private func windowTab(for project: Project, tab: ProjectTab?) -> WindowTab {
-        windowTab(projectID: project.id, tab: tab)
-    }
-
-    private func windowTab(projectID: UUID, tab: ProjectTab?) -> WindowTab {
-        ProjectViewMemory.windowTab(projectID: projectID, tab: tab, memory: projectViews[projectID])
+    private func windowTab(spaceID: UUID, tab: SpaceTab?) -> WindowTab {
+        SpaceViewMemory.windowTab(spaceID: spaceID, tab: tab, memory: spaceViews[spaceID])
     }
 
     func open(_ thread: ProjectThread, newTab: Bool = TabActivation.commandClick) {
         guard let project = thread.project else { return }
-        openProjectSection(.tracks)
         reveal(
             WindowTab(
                 id: UUID(),
-                destination: .project(project.id),
-                projectTab: .threads,
+                destination: .space(project.id),
+                section: .threads,
                 selectedThread: thread.id,
                 selectedNote: nil,
                 selectedDecision: nil,
@@ -339,12 +327,11 @@ extension AppModel {
 
     func open(_ note: Note, newTab: Bool = TabActivation.commandClick) {
         guard let project = note.project else { return }
-        openProjectSection(.notes)
         reveal(
             WindowTab(
                 id: UUID(),
-                destination: .project(project.id),
-                projectTab: .notes,
+                destination: .space(project.id),
+                section: .notes,
                 selectedThread: nil,
                 selectedNote: note.id,
                 selectedDecision: nil,
@@ -356,12 +343,11 @@ extension AppModel {
 
     func open(_ decision: Decision, newTab: Bool = TabActivation.commandClick) {
         guard let project = decision.project else { return }
-        openProjectSection(.decisions)
         reveal(
             WindowTab(
                 id: UUID(),
-                destination: .project(project.id),
-                projectTab: .decisions,
+                destination: .space(project.id),
+                section: .decisions,
                 selectedThread: nil,
                 selectedNote: nil,
                 selectedDecision: decision.id,
@@ -373,12 +359,11 @@ extension AppModel {
 
     func open(_ run: AgentRun, newTab: Bool = TabActivation.commandClick) {
         if let project = run.project {
-            openProjectSection(.runs)
             reveal(
                 WindowTab(
                     id: UUID(),
-                    destination: .project(project.id),
-                    projectTab: .runs,
+                    destination: .space(project.id),
+                    section: .runs,
                     selectedThread: nil,
                     selectedNote: nil,
                     selectedDecision: nil,
@@ -392,7 +377,7 @@ extension AppModel {
                 WindowTab(
                     id: UUID(),
                     destination: .run(run.id),
-                    projectTab: .runs,
+                    section: .runs,
                     selectedThread: nil,
                     selectedNote: nil,
                     selectedDecision: nil,
@@ -404,13 +389,12 @@ extension AppModel {
         }
     }
 
-    func showProjectRuns(in project: Project, newTab: Bool = TabActivation.commandClick) {
-        openProjectSection(.runs)
+    func showSpaceRuns(in space: Space, newTab: Bool = TabActivation.commandClick) {
         reveal(
             WindowTab(
                 id: UUID(),
-                destination: .project(project.id),
-                projectTab: .runs,
+                destination: .space(space.id),
+                section: .runs,
                 selectedThread: nil,
                 selectedNote: nil,
                 selectedDecision: nil,
@@ -423,12 +407,11 @@ extension AppModel {
 
     func open(_ conversation: Conversation, newTab: Bool = TabActivation.commandClick) {
         if let project = conversation.project {
-            openProjectSection(.chats)
             reveal(
                 WindowTab(
                     id: UUID(),
-                    destination: .project(project.id),
-                    projectTab: .chat,
+                    destination: .space(project.id),
+                    section: .chat,
                     selectedThread: nil,
                     selectedNote: nil,
                     selectedDecision: nil,
@@ -441,7 +424,7 @@ extension AppModel {
                 WindowTab(
                     id: UUID(),
                     destination: .quickAsk(conversation.id),
-                    projectTab: .chat,
+                    section: .chat,
                     selectedThread: nil,
                     selectedNote: nil,
                     selectedDecision: nil,
@@ -457,8 +440,8 @@ extension AppModel {
             reveal(
                 WindowTab(
                     id: UUID(),
-                    destination: .project(project.id),
-                    projectTab: .tasks,
+                    destination: .space(project.id),
+                    section: .tasks,
                     selectedThread: nil,
                     selectedNote: nil,
                     selectedDecision: nil,
@@ -472,12 +455,12 @@ extension AppModel {
         }
     }
 
-    func showNewChat(in project: Project, newTab: Bool = TabActivation.commandClick) {
+    func showNewChat(in space: Space, newTab: Bool = TabActivation.commandClick) {
         reveal(
             WindowTab(
                 id: UUID(),
-                destination: .project(project.id),
-                projectTab: .chat,
+                destination: .space(space.id),
+                section: .chat,
                 selectedThread: nil,
                 selectedNote: nil,
                 selectedDecision: nil,
@@ -562,7 +545,7 @@ extension AppModel {
         persistCurrentIntoSelectedTab()
         let remaining = windowTabs.filter { tab in
             switch tab.destination {
-            case .project(let shown), .space(let shown), .spaceRecord(let shown, _): shown != id
+            case .space(let shown), .spaceRecord(let shown, _): shown != id
             default: true
             }
         }
@@ -634,7 +617,7 @@ extension AppModel {
     }
 
     func restoreWindowTabs() {
-        if let data = defaults.data(forKey: Keys.windowTabs),
+        if let data = defaults.data(forKey: Keys.windowTabs).map(Self.spaceTabJSON),
            let stored = try? JSONDecoder().decode(StoredWindowTabs.self, from: data),
            !stored.tabs.isEmpty {
             windowTabs = stored.tabs
@@ -652,11 +635,11 @@ extension AppModel {
                 selectedTabID,
                 in: (stored.recency ?? []).filter { live.contains($0) }
             )
-            if let storedViews = stored.projectViews {
-                projectViews = storedViews
+            if let storedViews = stored.spaceViews {
+                spaceViews = storedViews
             } else {
                 for tab in stored.tabs {
-                    rememberProjectView(tab)
+                    rememberSpaceView(tab)
                 }
             }
         } else {
@@ -673,6 +656,16 @@ extension AppModel {
         }
     }
 
+    /// Tabs saved before every Space was one thing name a project and its tab. They are read as a Space.
+    static func spaceTabJSON(_ data: Data) -> Data {
+        var text = String(decoding: data, as: UTF8.self)
+        text = text.replacingOccurrences(of: "\"project\":{\"_0\"", with: "\"space\":{\"_0\"")
+        text = text.replacingOccurrences(of: "\"projects\":{}", with: "\"spaces\":{}")
+        text = text.replacingOccurrences(of: "\"projectTab\":", with: "\"section\":")
+        text = text.replacingOccurrences(of: "\"projectViews\":", with: "\"spaceViews\":")
+        return Data(text.utf8)
+    }
+
     private func persistCurrentIntoSelectedTab() {
         guard let index = windowTabs.firstIndex(where: { $0.id == selectedTabID }) else { return }
         let current = currentWindowTab()
@@ -681,14 +674,14 @@ extension AppModel {
     }
 
     private func currentWindowTab() -> WindowTab {
-        let projectTab: ProjectTab = {
-            if case .project(let id) = chromeDestination { return tabs[id] ?? .overview }
+        let section: SpaceTab = {
+            if case .space(let id) = chromeDestination { return tabs[id] ?? .overview }
             return .chat
         }()
         return WindowTab(
             id: selectedTabID,
             destination: chromeDestination,
-            projectTab: projectTab,
+            section: section,
             selectedThread: selectedThread,
             selectedNote: selectedNote,
             selectedDecision: selectedDecision,
@@ -711,11 +704,11 @@ extension AppModel {
                 conversation: tab.selectedConversation,
                 run: tab.selectedRun
             )
-            if case .project(let id) = tab.destination {
-                tabs[id] = tab.projectTab
+            if case .space(let id) = tab.destination {
+                tabs[id] = tab.section
             }
         }
-        rememberProjectView(tab)
+        rememberSpaceView(tab)
         if !historyLocked, previous.viewKey != tab.viewKey {
             recordNavigation(from: previous, to: tab)
         }
@@ -725,9 +718,9 @@ extension AppModel {
         NavTrace.afterTurn("apply.runloop \(tab.viewKey)")
     }
 
-    private func rememberProjectView(_ tab: WindowTab) {
-        guard let (id, memory) = ProjectViewMemory.snapshot(from: tab) else { return }
-        projectViews[id] = memory
+    private func rememberSpaceView(_ tab: WindowTab) {
+        guard let (id, memory) = SpaceViewMemory.snapshot(from: tab) else { return }
+        spaceViews[id] = memory
     }
 
     func flushWindowTabs() {
@@ -757,7 +750,7 @@ extension AppModel {
                 StoredTabHistory(tabID: id, back: history.back, forward: history.forward)
             },
             recency: tabRecency,
-            projectViews: projectViews
+            spaceViews: spaceViews
         )
         defaults.set(try? JSONEncoder().encode(stored), forKey: Keys.windowTabs)
     }

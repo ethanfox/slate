@@ -57,7 +57,7 @@ enum ComposerHitKind: String, Hashable, Sendable {
 
     var label: String {
         switch self {
-        case .project: "Project"
+        case .project: "Space"
         case .track: "Track"
         case .note: "Note"
         case .decision: "Decision"

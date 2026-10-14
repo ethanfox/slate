@@ -171,7 +171,7 @@ enum MCPToolCatalog {
     static let importDefinition: [String: Any] = [
         "type": "function",
         "name": MCPToolName.importServers,
-        "description": "Add MCP connections from standard mcpServers JSON. Saves configuration only. Does not connect, launch, or grant any project access. If a name already exists with different settings, call again with replace=true.",
+        "description": "Add MCP connections from standard mcpServers JSON. Saves configuration only. Does not connect, launch, or grant any Space access. If a name already exists with different settings, call again with replace=true.",
         "parameters": [
             "type": "object",
             "properties": [

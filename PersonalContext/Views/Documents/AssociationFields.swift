@@ -16,7 +16,7 @@ struct AssociationFields: View {
         VStack(alignment: .leading, spacing: 16) {
             if let project = item.project {
                 AssociationOpenRow(
-                    title: "Project",
+                    title: "Space",
                     name: project.displayName,
                     symbol: projectIcon(project),
                     inherited: item.projectIsInherited,
@@ -24,7 +24,7 @@ struct AssociationFields: View {
                     onClear: clearProject
                 )
             } else {
-                ModalControlRow("Project") { projectMenu }
+                ModalControlRow("Space") { projectMenu }
             }
 
             if item.liveTracks.isEmpty {
@@ -70,7 +70,7 @@ struct AssociationFields: View {
             Button("Cancel", role: .cancel) { newNoteTitle = "" }
         } message: {
             if item.project == nil {
-                Text("Pick a project first.")
+                Text("Pick a Space first.")
             }
         }
     }
@@ -90,7 +90,7 @@ struct AssociationFields: View {
                 .foregroundStyle(.primary)
         }
         .fixedSize()
-        .accessibilityLabel("Choose project")
+        .accessibilityLabel("Choose Space")
     }
 
     private var trackMenu: some View {

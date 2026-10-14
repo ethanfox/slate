@@ -316,8 +316,8 @@ struct WindowTabStrip: View {
         switch tab.destination {
         case .home:
             return TabLabel(title: "You", symbol: "person")
-        case .projects:
-            return TabLabel(title: "Projects", symbol: "square.stack")
+        case .spaces:
+            return TabLabel(title: "Spaces", symbol: "square.grid.2x2")
         case .tasks:
             return TabLabel(title: "Tasks", symbol: "checklist")
         case .calendar:
@@ -336,15 +336,12 @@ struct WindowTabStrip: View {
             return TabLabel(title: "About you", symbol: "person")
         case .context:
             return TabLabel(title: "Your context", symbol: "circle.hexagongrid")
-        case .space(let id):
-            let space = SpaceStore.space(id, in: context)
-            return TabLabel(title: space?.displayName ?? "Area", symbol: space?.symbol ?? "square.grid.2x2")
         case .spaceRecord(let spaceID, let recordID):
             let space = SpaceStore.space(spaceID, in: context)
             return TabLabel(
                 title: SpaceStore.record(recordID, in: context)?.displayTitle ?? "Untitled",
                 symbol: "doc.text",
-                projectName: space?.displayName ?? "Area",
+                projectName: space?.displayName ?? "Space",
                 projectSymbol: space?.symbol ?? "square.grid.2x2"
             )
         case .quickAsk(let id):
@@ -352,10 +349,10 @@ struct WindowTabStrip: View {
                 return TabLabel(title: title, symbol: "bubble.left")
             }
             return TabLabel(title: "Quick Ask", symbol: "bubble.left")
-        case .project(let id):
-            let project = projectRecord(id)
-            let projectName = project?.name.isEmpty == false ? project!.name : "Untitled"
-            let projectSymbol = project?.symbol.isEmpty == false ? project!.symbol : "folder"
+        case .space(let id):
+            let space = SpaceStore.space(id, in: context)
+            let projectName = space?.name.isEmpty == false ? space!.name : "Untitled"
+            let projectSymbol = space?.symbol.isEmpty == false ? space!.symbol : "square.grid.2x2"
             switch tab.viewKey {
             case .thread(let threadID):
                 let title = threadTitle(threadID)
@@ -396,14 +393,14 @@ struct WindowTabStrip: View {
                     projectName: projectName,
                     projectSymbol: projectSymbol
                 )
-            case .projectRuns:
+            case .spaceRuns:
                 return TabLabel(
                     title: "\(projectName): Runs",
                     symbol: "play.circle",
                     projectName: projectName,
                     projectSymbol: projectSymbol
                 )
-            case .projectTasks:
+            case .spaceTasks:
                 return TabLabel(
                     title: "\(projectName): Tasks",
                     symbol: "checklist",
@@ -414,13 +411,6 @@ struct WindowTabStrip: View {
                 return TabLabel(title: projectName, symbol: projectSymbol)
             }
         }
-    }
-
-    private func projectRecord(_ id: UUID) -> Project? {
-        let match = id
-        var descriptor = FetchDescriptor<Project>(predicate: #Predicate { $0.id == match })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
     }
 
     private func threadTitle(_ id: UUID) -> String? {

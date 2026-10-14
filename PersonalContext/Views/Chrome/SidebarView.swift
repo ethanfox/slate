@@ -216,14 +216,14 @@ struct SidebarView: View {
     /// Everything without a row of its own is reached from You, so it keeps that row lit.
     private var isOnYou: Bool {
         switch app.destination {
-        case .home, .aboutYou, .context, .tasks, .calendar, .chats, .runs, .projects, .library: true
+        case .home, .aboutYou, .context, .tasks, .calendar, .chats, .runs, .spaces, .library: true
         default: false
         }
     }
 
     private func isOn(_ id: UUID) -> Bool {
         switch app.destination {
-        case .space(let shown), .spaceRecord(let shown, _), .project(let shown): shown == id
+        case .space(let shown), .spaceRecord(let shown, _): shown == id
         default: false
         }
     }

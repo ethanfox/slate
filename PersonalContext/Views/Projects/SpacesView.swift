@@ -1,17 +1,18 @@
 import SwiftData
 import SwiftUI
 
-struct ProjectsView: View {
+/// Every Space, as a table or as cards.
+struct SpacesView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
     @Query(filter: #Predicate<TitleIndex> { $0.kindRaw == "space" })
-    private var projects: [TitleIndex]
+    private var spaces: [TitleIndex]
     @State private var pendingDelete: TitleIndex?
-    @State private var sort = ProjectSort.updated
+    @State private var sort = SpaceSort.updated
     @State private var sortAscending = false
 
     private var ordered: [TitleIndex] {
-        projects.sorted { lhs, rhs in
+        spaces.sorted { lhs, rhs in
             let left = app.isPinned(lhs.id)
             let right = app.isPinned(rhs.id)
             if left != right { return left && !right }
@@ -24,10 +25,10 @@ struct ProjectsView: View {
             PageBody {
                 VStack(alignment: .leading, spacing: 0) {
                     if ordered.isEmpty {
-                        EmptyLine(text: "Create a project with a name, an icon, and a short description.")
-                    } else if app.projectsLayout == .table {
-                        ProjectsTable(
-                            projects: ordered,
+                        EmptyLine(text: "Make a Space for each part of your life or work.")
+                    } else if app.spacesLayout == .table {
+                        SpacesTable(
+                            spaces: ordered,
                             sort: sort,
                             sortAscending: sortAscending,
                             onSort: sortBy,
@@ -39,7 +40,7 @@ struct ProjectsView: View {
                             onDelete: { pendingDelete = $0 }
                         )
                     } else {
-                        projectCards
+                        cards
                     }
                 }
                 .padding(.horizontal, 32)
@@ -48,9 +49,9 @@ struct ProjectsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .onAppear { NavTrace.event("projects appear count=\(projects.count)") }
+        .onAppear { NavTrace.event("spaces appear count=\(spaces.count)") }
         .alert(
-            "Delete \(pendingDelete?.displayTitle ?? "this project")?",
+            "Delete \(pendingDelete?.displayTitle ?? "this Space")?",
             isPresented: Binding(
                 get: { pendingDelete != nil },
                 set: { if !$0 { pendingDelete = nil } }
@@ -68,48 +69,48 @@ struct ProjectsView: View {
         }
     }
 
-    private var projectCards: some View {
+    private var cards: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 16)], alignment: .leading, spacing: 16) {
-            ForEach(ordered) { project in
+            ForEach(ordered) { space in
                 Button {
-                    app.openSpace(project.id)
+                    app.openSpace(space.id)
                 } label: {
-                    ProjectCard(row: project, isPinned: app.isPinned(project.id))
+                    SpaceListCard(row: space, isPinned: app.isPinned(space.id))
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
-                    projectMenu(project)
+                    menu(space)
                 }
             }
         }
     }
 
     @ViewBuilder
-    private func projectMenu(_ project: TitleIndex) -> some View {
+    private func menu(_ space: TitleIndex) -> some View {
         Button {
-            edit(project)
+            edit(space)
         } label: {
-            Label("Edit…", systemImage: "pencil")
+            Label("Settings", systemImage: "gearshape")
         }
         Button {
-            app.openSpace(project.id, newTab: true)
+            app.openSpace(space.id, newTab: true)
         } label: {
             Label("Open in New Tab", systemImage: "plus.square.on.square")
         }
         Button {
-            pin(project)
+            pin(space)
         } label: {
-            Label(app.isPinned(project.id) ? "Unpin" : "Pin", systemImage: app.isPinned(project.id) ? "pin.slash" : "pin")
+            Label(app.isPinned(space.id) ? "Unpin" : "Pin", systemImage: app.isPinned(space.id) ? "pin.slash" : "pin")
         }
         Divider()
         Button(role: .destructive) {
-            pendingDelete = project
+            pendingDelete = space
         } label: {
             Label("Delete", systemImage: "trash")
         }
     }
 
-    private func sortBy(_ field: ProjectSort) {
+    private func sortBy(_ field: SpaceSort) {
         if sort == field {
             sortAscending.toggle()
         } else {
@@ -119,8 +120,8 @@ struct ProjectsView: View {
     }
 
     private func edit(_ row: TitleIndex) {
-        if let project = TitleIndexStore.project(row.id, in: context) {
-            app.showSpaceSettings(project)
+        if let space = TitleIndexStore.project(row.id, in: context) {
+            app.showSpaceSettings(space)
         }
     }
 
@@ -142,11 +143,11 @@ struct ProjectsView: View {
     }
 }
 
-private struct ProjectsTable: View {
-    var projects: [TitleIndex]
-    var sort: ProjectSort
+private struct SpacesTable: View {
+    var spaces: [TitleIndex]
+    var sort: SpaceSort
     var sortAscending: Bool
-    var onSort: (ProjectSort) -> Void
+    var onSort: (SpaceSort) -> Void
     var onOpen: (TitleIndex) -> Void
     var onOpenNewTab: (TitleIndex) -> Void
     var onEdit: (TitleIndex) -> Void
@@ -170,32 +171,32 @@ private struct ProjectsTable: View {
 
             Hairline()
 
-            ForEach(projects) { project in
+            ForEach(spaces) { space in
                 Button {
-                    onOpen(project)
+                    onOpen(space)
                 } label: {
-                    ProjectTableRow(project: project, isPinned: isPinned(project))
+                    SpaceTableRow(space: space, isPinned: isPinned(space))
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
                     Button {
-                        onEdit(project)
+                        onEdit(space)
                     } label: {
-                        Label("Edit…", systemImage: "pencil")
+                        Label("Settings", systemImage: "gearshape")
                     }
                     Button {
-                        onOpenNewTab(project)
+                        onOpenNewTab(space)
                     } label: {
                         Label("Open in New Tab", systemImage: "plus.square.on.square")
                     }
                     Button {
-                        onPin(project)
+                        onPin(space)
                     } label: {
-                        Label(isPinned(project) ? "Unpin" : "Pin", systemImage: isPinned(project) ? "pin.slash" : "pin")
+                        Label(isPinned(space) ? "Unpin" : "Pin", systemImage: isPinned(space) ? "pin.slash" : "pin")
                     }
                     Divider()
                     Button(role: .destructive) {
-                        onDelete(project)
+                        onDelete(space)
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
@@ -204,7 +205,7 @@ private struct ProjectsTable: View {
         }
     }
 
-    private func header(_ field: ProjectSort) -> some View {
+    private func header(_ field: SpaceSort) -> some View {
         Button {
             onSort(field)
         } label: {
@@ -223,19 +224,19 @@ private struct ProjectsTable: View {
     }
 }
 
-private struct ProjectTableRow: View {
-    var project: TitleIndex
+private struct SpaceTableRow: View {
+    var space: TitleIndex
     var isPinned: Bool
     @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 16) {
             HStack(spacing: 8) {
-                Image(systemName: project.symbol.isEmpty ? "folder" : project.symbol)
+                Image(systemName: space.symbol.isEmpty ? TitleIndexKind.space.symbol : space.symbol)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .frame(width: 18, height: 18)
-                Text(project.displayTitle)
+                Text(space.displayTitle)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
                 if isPinned {
@@ -246,17 +247,17 @@ private struct ProjectTableRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(project.spaceStatus.label)
+            Text(space.spaceStatus.label)
                 .font(CraftFont.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 88, alignment: .leading)
 
-            Text(project.updatedAt.relativeLabel)
+            Text(space.updatedAt.relativeLabel)
                 .font(CraftFont.caption)
                 .foregroundStyle(.tertiary)
                 .frame(width: 110, alignment: .trailing)
 
-            Text(project.createdAt.relativeLabel)
+            Text(space.createdAt.relativeLabel)
                 .font(CraftFont.caption)
                 .foregroundStyle(.tertiary)
                 .frame(width: 110, alignment: .trailing)
@@ -273,7 +274,7 @@ private struct ProjectTableRow: View {
     }
 }
 
-private struct ProjectCard: View {
+private struct SpaceListCard: View {
     var row: TitleIndex
     var isPinned: Bool
     @State private var hovering = false
@@ -281,7 +282,7 @@ private struct ProjectCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: row.symbol.isEmpty ? "folder" : row.symbol)
+                Image(systemName: row.symbol.isEmpty ? TitleIndexKind.space.symbol : row.symbol)
                     .font(.system(size: 18))
                     .foregroundStyle(.secondary)
                     .frame(width: 28, height: 28)

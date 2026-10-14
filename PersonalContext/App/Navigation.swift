@@ -11,22 +11,24 @@ struct NavSelection: Equatable {
 
 enum Destination: Hashable, Codable {
     case home
-    case projects
+    case spaces
     case tasks
     case calendar
     case chats
     case runs
     case settings
-    case project(UUID)
+    /// A Space, on whichever of its sections the tab holds.
+    case space(UUID)
     case quickAsk(UUID)
     case run(UUID)
     case aboutYou
     case context
-    case space(UUID)
     case spaceRecord(space: UUID, record: UUID)
     case library
 }
-enum ProjectTab: String, CaseIterable, Identifiable, Hashable, Codable {
+
+/// What a Space's tab shows: its page, or one kind of thing in it.
+enum SpaceTab: String, CaseIterable, Identifiable, Hashable, Codable {
     case overview
     case tasks
     case threads
@@ -50,45 +52,6 @@ enum ProjectTab: String, CaseIterable, Identifiable, Hashable, Codable {
     }
 }
 
-enum ProjectColumnSection: String, CaseIterable, Identifiable, Hashable {
-    case runs
-    case chats
-    case tracks
-    case notes
-    case decisions
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .runs: "Runs"
-        case .chats: "Chats"
-        case .tracks: "Tracks"
-        case .notes: "Notes"
-        case .decisions: "Decisions"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .runs: "play.circle"
-        case .chats: "bubble.left"
-        case .tracks: TrackStyle.symbol
-        case .notes: "note.text"
-        case .decisions: "checkmark.seal"
-        }
-    }
-
-    var tab: ProjectTab {
-        switch self {
-        case .runs: .runs
-        case .chats: .chat
-        case .tracks: .threads
-        case .notes: .notes
-        case .decisions: .decisions
-        }
-    }
-}
 enum OverviewWidth: String, CaseIterable, Identifiable, Hashable {
     case oneThird
     case twoThirds
@@ -121,15 +84,15 @@ enum OverviewWidth: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-/// Which track's tasks a project's board shows.
+/// Which track's tasks a Space's board shows.
 enum TaskTrackFilter: Hashable {
-    /// The project's active track, or every task when it has none.
+    /// The Space's active track, or every task when it has none.
     case active
     case all
     case track(UUID)
 }
 
-enum ProjectTasksLayout: String, CaseIterable, Identifiable, Hashable {
+enum SpaceTasksLayout: String, CaseIterable, Identifiable, Hashable {
     case kanban
     case list
 
@@ -150,7 +113,7 @@ enum ProjectTasksLayout: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-enum ProjectsLayout: String, CaseIterable, Identifiable, Hashable {
+enum SpacesLayout: String, CaseIterable, Identifiable, Hashable {
     case table
     case card
 
@@ -171,7 +134,7 @@ enum ProjectsLayout: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-enum ProjectSort: String, CaseIterable, Identifiable, Hashable {
+enum SpaceSort: String, CaseIterable, Identifiable, Hashable {
     case name
     case status
     case updated

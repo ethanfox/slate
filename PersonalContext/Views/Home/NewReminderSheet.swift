@@ -96,21 +96,21 @@ struct NewTaskSheet: View {
             Button(deleteActionTitle, role: .destructive) { deleteItem() }
         }
         .confirmationDialog(
-            conflict.map { "Switch to \($0.incoming.displayName)?" } ?? "Switch project?",
+            conflict.map { "Switch to \($0.incoming.displayName)?" } ?? "Switch Space?",
             isPresented: Binding(get: { conflict != nil }, set: { if !$0 { conflict = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Switch Project") {
+            Button("Switch Space") {
                 resolveConflict?()
                 conflict = nil
                 resolveConflict = nil
             }
-            Button("Keep \(conflict?.current.displayName ?? "Project")", role: .cancel) {
+            Button("Keep \(conflict?.current.displayName ?? "Space")", role: .cancel) {
                 conflict = nil
                 resolveConflict = nil
             }
         } message: {
-            Text("This belongs to a different project. Switching moves this item and drops links that don’t belong.")
+            Text("This belongs to a different Space. Switching moves this item and drops links that don’t belong.")
         }
     }
 

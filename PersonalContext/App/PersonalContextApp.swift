@@ -36,8 +36,8 @@ struct MembraeApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Project") {
-                    app.present(.newProject)
+                Button("New Space") {
+                    app.present(.newSpace)
                 }
                 .keyboardShortcut("n")
                 Button("New Chat") {

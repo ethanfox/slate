@@ -168,7 +168,7 @@ struct RunPage: View {
         case .workspace:
             return "Started from Runs, \(date)."
         case .project:
-            let name = run.project?.displayName ?? "a deleted project"
+            let name = run.project?.displayName ?? "a deleted Space"
             return "Started from \(name), \(date)."
         case .task:
             if let task = run.task {
@@ -484,7 +484,7 @@ struct ProjectRunsEmpty: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("No runs yet.")
                 .font(CraftFont.title)
-            Text("Start a run for this project from the toolbar.")
+            Text("Start a run for this Space from the toolbar.")
                 .font(CraftFont.body)
                 .foregroundStyle(.secondary)
         }

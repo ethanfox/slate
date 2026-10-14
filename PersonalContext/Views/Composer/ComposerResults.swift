@@ -225,7 +225,7 @@ struct ComposerScopeControl: View {
         case .workspace:
             return "All workspace"
         case .project(let id):
-            return projects.first { $0.id == id }?.displayName ?? "Project"
+            return projects.first { $0.id == id }?.displayName ?? "Space"
         }
     }
 

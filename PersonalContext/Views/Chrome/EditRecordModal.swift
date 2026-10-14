@@ -115,8 +115,8 @@ struct EditThreadModal: View {
                     .lineLimit(3...6)
             }
 
-            ModalControlRow("Project") {
-                Picker("Project", selection: $projectID) {
+            ModalControlRow("Space") {
+                Picker("Space", selection: $projectID) {
                     ForEach(projects) { project in
                         Text(project.displayName).tag(project.id)
                     }
@@ -280,8 +280,8 @@ struct EditNoteModal: View {
                     .focused($focusTitle)
             }
 
-            ModalControlRow("Project") {
-                Picker("Project", selection: $projectID) {
+            ModalControlRow("Space") {
+                Picker("Space", selection: $projectID) {
                     ForEach(projects) { project in
                         Text(project.displayName).tag(project.id)
                     }

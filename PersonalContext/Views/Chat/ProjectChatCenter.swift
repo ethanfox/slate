@@ -17,7 +17,7 @@ struct ProjectChatCenter: View {
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 ChatTitleBar(title: "New chat")
-                EmptyLine(text: "Start a chat. It gets this project’s summary and direction. Decisions, tracks, and notes are looked up as needed.")
+                EmptyLine(text: "Start a chat. It gets this Space’s summary and direction. Decisions, tracks, notes, and records are looked up as needed.")
                     .frame(maxWidth: 680, alignment: .leading)
                     .padding(.horizontal, 32)
                     .padding(.top, 28)

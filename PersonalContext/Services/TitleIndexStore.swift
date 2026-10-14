@@ -239,7 +239,8 @@ private extension TitleIndexStore {
             owner: "",
             projectID: space.id,
             parentID: nil,
-            updatedAt: space.updatedAt,
+            // A Space's row carries its latest activity, which a child's write may already have set.
+            updatedAt: max(space.updatedAt, previous?.updatedAt ?? .distantPast),
             createdAt: space.createdAt,
             statusRaw: space.status.rawValue,
             symbol: space.symbol,

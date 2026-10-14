@@ -93,7 +93,7 @@ private struct OverviewInspectorWidget: View {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 11, weight: .semibold))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Project")
+                        Text("Space")
                             .font(CraftFont.caption)
                             .foregroundStyle(.secondary)
                         Text(project.displayName)
@@ -156,6 +156,7 @@ private struct OverviewInspectorWidget: View {
     }
 }
 
+/// Everything about a Space the user sets by hand. What it holds is set by filing things in it.
 private struct OverviewInspectorSettings: View {
     @Bindable var project: Project
     @Environment(AppModel.self) private var app
@@ -173,8 +174,29 @@ private struct OverviewInspectorSettings: View {
                 SymbolPicker(selection: $project.symbol, columns: 6)
             }
 
+            inspectorField("Color") {
+                HStack(spacing: 6) {
+                    ForEach(SpaceGradient.allCases) { option in
+                        Button {
+                            project.gradientRaw = option.rawValue
+                        } label: {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(option.fill)
+                                .frame(width: 22, height: 28)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .strokeBorder(Color.primary, lineWidth: project.gradient == option ? 2 : 0)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .help(option.label)
+                        .accessibilityLabel(option.label)
+                    }
+                }
+            }
+
             inspectorField("Description") {
-                TextField("What this project is", text: $project.summary, axis: .vertical)
+                TextField("What this Space is", text: $project.summary, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(CraftFont.body)
                     .lineLimit(2...8)
@@ -190,6 +212,24 @@ private struct OverviewInspectorSettings: View {
                 .labelsHidden()
             }
 
+            if project.collects {
+                inspectorField("Pictures on cards") {
+                    Picker("Pictures on cards", selection: $project.hasPortraitCards) {
+                        Text("Landscape").tag(false)
+                        Text("Portrait").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+            }
+
+            inspectorField("Notes for Membrae") {
+                TextField("What you call things here, units you use, and anything Membrae should remember", text: $project.agentNotes, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(CraftFont.body)
+                    .lineLimit(2...8)
+            }
+
             inspectorField("Code") {
                 ProjectCodeSection(project: project)
             }
@@ -200,7 +240,15 @@ private struct OverviewInspectorSettings: View {
         }
         .onChange(of: project.name) { _, _ in project.touch() }
         .onChange(of: project.symbol) { _, _ in project.touch() }
+        .onChange(of: project.gradientRaw) { _, _ in project.touch() }
         .onChange(of: project.summary) { _, _ in project.touch() }
+        .onChange(of: project.cardShapeRaw) { _, _ in project.touch() }
+        .onChange(of: project.agentNotes) { _, notes in
+            if notes.count > Space.agentNotesLimit {
+                project.agentNotes = String(notes.prefix(Space.agentNotesLimit))
+            }
+            project.touch()
+        }
         .onChange(of: project.statusRaw) { _, _ in
             project.touch()
             TaskStore.syncProjectStatus(project, in: context)
@@ -217,7 +265,7 @@ private struct OverviewInspectorSettings: View {
     }
 }
 
-/// Which connected MCP servers this project's chats may use.
+/// Which connected MCP servers this Space's chats may use.
 struct ProjectMCPToggles: View {
     var project: Project
     @Environment(AppModel.self) private var app

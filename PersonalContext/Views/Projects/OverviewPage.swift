@@ -1,6 +1,7 @@
 import SwiftData
 import SwiftUI
 
+/// The page that stands for a Space, or a full list of one kind of thing in it.
 struct OverviewPage: View {
     @Bindable var project: Project
     /// A full list showing in place of the overview: all tracks, all decisions, and so on.
@@ -11,7 +12,7 @@ struct OverviewPage: View {
             if let listing {
                 ProjectListPage(project: project, kind: listing) { self.listing = nil }
             } else {
-                ProjectOverview(project: project) { listing = $0 }
+                SpaceOverview(project: project) { listing = $0 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -520,7 +521,7 @@ extension TitleIndexKind {
 /// One record in a feed or list: what it is, its name, and when it last changed.
 struct IndexRow: View {
     var row: TitleIndex
-    /// Shown under the name, such as the kind or the project it belongs to.
+    /// Shown under the name, such as the kind or the Space it belongs to.
     var caption = ""
     var trailing: String?
 
@@ -709,9 +710,10 @@ struct ActionFeed: View {
     }
 }
 
-/// The page that stands for a project: where it is going, what is next, what changed, and what was decided.
-/// How the work is filed (tracks, stops, themes) is the AI's business and stays under More.
-struct ProjectOverview: View {
+/// The page that stands for a Space. What it shows is read from what the Space holds: a brief, the next
+/// step, and what was decided when it has direction; its widgets and records when it collects; both when
+/// it has both. How the work is filed (tracks, stops, themes) is the AI's business.
+struct SpaceOverview: View {
     var project: Project
     var list: (TitleIndexKind) -> Void
 
@@ -750,58 +752,71 @@ struct ProjectOverview: View {
         let lines = project.threads
             .filter { $0.status == .active || $0.status == .exploring }
             .sorted { $0.updatedAt > $1.updatedAt }
+        // A Space with direction leads with it. One that only collects leads with its records.
+        let works = project.works || !project.collects
         ScrollView {
             PageBody {
-                VStack(alignment: .leading, spacing: 30) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack(spacing: 4) {
-                            Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                            Spacer(minLength: 8)
-                            iconButton("wand.and.stars", help: "Tidy Up: Membrae proposes what to merge, retire, and delete") {
-                                app.presentNewRun(origin: .project, project: project, brief: ContextBuilder.cleanupBrief(for: project))
+                VStack(alignment: .leading, spacing: 36) {
+                    VStack(alignment: .leading, spacing: 30) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack(spacing: 4) {
+                                Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.tertiary)
+                                Spacer(minLength: 8)
+                                if works {
+                                    iconButton("wand.and.stars", help: "Tidy Up: Membrae proposes what to merge, retire, and delete") {
+                                        app.presentNewRun(origin: .project, project: project, brief: ContextBuilder.cleanupBrief(for: project))
+                                    }
+                                }
+                                iconButton("gearshape", help: "Settings") { app.toggleSpaceSettings() }
                             }
-                            iconButton("gearshape", help: "Settings") { app.toggleSpaceSettings() }
+                            Text(headline)
+                                .font(.system(size: 34, weight: .semibold))
+                                .tracking(-0.85)
+                                .lineSpacing(0)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: 640, alignment: .leading)
                         }
-                        Text(headline)
-                            .font(.system(size: 34, weight: .semibold))
-                            .tracking(-0.85)
-                            .lineSpacing(0)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: 640, alignment: .leading)
+                        .padding(.top, 28)
+
+                        if let plan = plans.first {
+                            CleanupPlanCard(plan: plan)
+                        }
+
+                        if works {
+                            nextStep(focus)
+
+                            HStack(alignment: .top, spacing: 40) {
+                                column("After that", rows: after.prefix(3).map { row in
+                                    (row.displayTitle, { app.open(row) })
+                                }, more: open.isEmpty ? nil : ("All \(open.count) tasks", { app.open(project, tab: .tasks, newTab: false) }))
+                                column("Decided lately", rows: decided.prefix(3).map { decision in
+                                    (decision.title.isEmpty ? "Untitled" : decision.title, { app.open(decision) })
+                                }, more: decided.isEmpty ? nil : ("All decisions", { list(.decision) }))
+                                column("Lines of work", rows: lines.prefix(3).map { track in
+                                    (track.title.isEmpty ? "Untitled" : track.title, { app.open(track) })
+                                }, more: lines.count > 3 ? ("\(lines.count - 3) more", { list(.track) }) : nil)
+                            }
+                        }
                     }
-                    .padding(.top, 28)
+                    .frame(maxWidth: 940, alignment: .leading)
 
-                    if let plan = plans.first {
-                        CleanupPlanCard(plan: plan)
-                    }
-
-                    nextStep(focus)
-
-                    HStack(alignment: .top, spacing: 40) {
-                        column("After that", rows: after.prefix(3).map { row in
-                            (row.displayTitle, { app.open(row) })
-                        }, more: open.isEmpty ? nil : ("All \(open.count) tasks", { app.open(project, tab: .tasks, newTab: false) }))
-                        column("Decided lately", rows: decided.prefix(3).map { decision in
-                            (decision.title.isEmpty ? "Untitled" : decision.title, { app.open(decision) })
-                        }, more: decided.isEmpty ? nil : ("All decisions", { list(.decision) }))
-                        column("Lines of work", rows: lines.prefix(3).map { track in
-                            (track.title.isEmpty ? "Untitled" : track.title, { app.open(track) })
-                        }, more: lines.count > 3 ? ("\(lines.count - 3) more", { list(.track) }) : nil)
+                    if project.collects {
+                        SpaceRecordsSection(space: project)
                     }
                 }
                 .padding(.horizontal, 48)
                 .padding(.top, 36)
                 // Room to scroll the last row clear of the composer that floats over the page.
                 .padding(.bottom, 140)
-                .frame(maxWidth: 940, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .scrollContentBackground(.hidden)
     }
 
-    /// The sentence Membrae wrote for this project. Until it has, the summary, or the direction's first sentence.
+    /// The sentence Membrae wrote for this Space. Until it has, the summary, or the direction's first sentence.
     private var headline: String {
         let written = project.brief.trimmingCharacters(in: .whitespacesAndNewlines)
         if !written.isEmpty { return written }
@@ -941,7 +956,7 @@ struct ProjectOverview: View {
     }
 }
 
-/// A cleanup Membrae proposed for this project: what it would change and why, for the user to apply or dismiss.
+/// A cleanup Membrae proposed for this Space: what it would change and why, for the user to apply or dismiss.
 private struct CleanupPlanCard: View {
     var plan: CleanupPlan
     @Environment(AppModel.self) private var app
@@ -1056,7 +1071,7 @@ private struct CleanupPlanCard: View {
     }
 }
 
-/// Every record of one kind in a project, searchable. Reached from the overview, not from a sidebar.
+/// Every record of one kind in a Space, searchable. Reached from the page, not from a sidebar.
 struct ProjectListPage: View {
     var project: Project
     var kind: TitleIndexKind
@@ -1142,7 +1157,7 @@ struct ProjectListPage: View {
 
                     let items = shown
                     if items.isEmpty {
-                        EmptyLine(text: rows.isEmpty ? "No \(kind.plural.lowercased()) in this project yet." : "Nothing matches.")
+                        EmptyLine(text: rows.isEmpty ? "No \(kind.plural.lowercased()) in this Space yet." : "Nothing matches.")
                     } else if kind == .track, !project.themes.isEmpty {
                         // Tracks are listed under their themes; the ones with no theme come last.
                         let themeOf = Dictionary(uniqueKeysWithValues: project.threads.compactMap { track in

@@ -145,21 +145,21 @@ private struct TaskDocument: View {
             }
         }
         .confirmationDialog(
-            conflict.map { "Switch to \($0.incoming.displayName)?" } ?? "Switch project?",
+            conflict.map { "Switch to \($0.incoming.displayName)?" } ?? "Switch Space?",
             isPresented: Binding(get: { conflict != nil }, set: { if !$0 { conflict = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Switch Project") {
+            Button("Switch Space") {
                 resolveConflict?()
                 conflict = nil
                 resolveConflict = nil
             }
-            Button("Keep \(conflict?.current.displayName ?? "Project")", role: .cancel) {
+            Button("Keep \(conflict?.current.displayName ?? "Space")", role: .cancel) {
                 conflict = nil
                 resolveConflict = nil
             }
         } message: {
-            Text("This belongs to a different project. Switching moves this item and drops links that don’t belong.")
+            Text("This belongs to a different Space. Switching moves this item and drops links that don’t belong.")
         }
     }
 
@@ -240,11 +240,11 @@ private struct TaskDocument: View {
 
     private var projectPill: some View {
         PropertyPill(
-            title: item.project?.displayName ?? "No project",
+            title: item.project?.displayName ?? "No Space",
             systemImage: item.project.map { $0.symbol.isEmpty ? "square.stack" : $0.symbol } ?? "square.stack",
             onOpen: item.project.map { project in { app.open(project) } }
         ) {
-            Button("No project") {
+            Button("No Space") {
                 AssociationService.clearProject(from: item)
                 try? context.persist()
             }

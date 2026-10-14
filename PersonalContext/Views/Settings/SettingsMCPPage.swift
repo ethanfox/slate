@@ -16,7 +16,7 @@ struct SettingsMCPPage: View {
         SettingsPage {
             SettingsGroup("MCP connections") {
                 SettingsRow {
-                    Text("Connect an external MCP server here, then enable it on a project. Chat can use only that project’s servers. Compatible endpoints cannot run these tools.")
+                    Text("Connect an external MCP server here, then enable it on a Space. Chat can use only that Space’s servers. Compatible endpoints cannot run these tools.")
                         .font(CraftFont.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -504,7 +504,7 @@ struct MCPPasteJSONSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Paste mcpServers JSON")
                 .font(CraftFont.title)
-            Text("Saves the connection. It does not launch the server or enable it on a project.")
+            Text("Saves the connection. It does not launch the server or enable it on a Space.")
                 .font(CraftFont.caption)
                 .foregroundStyle(.secondary)
             TextEditor(text: $text)

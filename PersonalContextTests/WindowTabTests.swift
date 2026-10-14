@@ -51,11 +51,11 @@ final class WindowTabTests: XCTestCase {
         XCTAssertEqual(TabRecency.remember(a, in: [a, b, c]), [b, c, a])
     }
 
-    func testFirstProjectVisitLandsOnOverview() {
+    func testFirstSpaceVisitLandsOnOverview() {
         let project = UUID()
-        let tab = ProjectViewMemory.windowTab(projectID: project, tab: nil, memory: nil)
-        XCTAssertEqual(tab.destination, .project(project))
-        XCTAssertEqual(tab.projectTab, .overview)
+        let tab = SpaceViewMemory.windowTab(spaceID: project, tab: nil, memory: nil)
+        XCTAssertEqual(tab.destination, .space(project))
+        XCTAssertEqual(tab.section, .overview)
         XCTAssertNil(tab.selectedThread)
         XCTAssertNil(tab.selectedNote)
         XCTAssertNil(tab.selectedConversation)
@@ -64,24 +64,40 @@ final class WindowTabTests: XCTestCase {
     func testSidebarOpenRestoresLastTabAndSelection() {
         let project = UUID()
         let thread = UUID()
-        let memory = ProjectViewMemory(tab: .threads, thread: thread, note: nil, decision: nil, conversation: nil, run: nil)
-        let tab = ProjectViewMemory.windowTab(projectID: project, tab: nil, memory: memory)
-        XCTAssertEqual(tab.projectTab, .threads)
+        let memory = SpaceViewMemory(tab: .threads, thread: thread, note: nil, decision: nil, conversation: nil, run: nil)
+        let tab = SpaceViewMemory.windowTab(spaceID: project, tab: nil, memory: memory)
+        XCTAssertEqual(tab.section, .threads)
         XCTAssertEqual(tab.selectedThread, thread)
         XCTAssertNil(tab.selectedNote)
     }
 
     func testExplicitTabDoesNotCarryAnotherSectionSelection() {
-        let memory = ProjectViewMemory(tab: .threads, thread: UUID(), note: UUID(), decision: nil, conversation: nil, run: nil)
-        let tab = ProjectViewMemory.windowTab(projectID: UUID(), tab: .overview, memory: memory)
-        XCTAssertEqual(tab.projectTab, .overview)
+        let memory = SpaceViewMemory(tab: .threads, thread: UUID(), note: UUID(), decision: nil, conversation: nil, run: nil)
+        let tab = SpaceViewMemory.windowTab(spaceID: UUID(), tab: .overview, memory: memory)
+        XCTAssertEqual(tab.section, .overview)
         XCTAssertNil(tab.selectedThread)
         XCTAssertNil(tab.selectedNote)
     }
 
-    func testProjectViewMemoryRoundTripsByProjectID() throws {
+    @MainActor
+    func testTabsSavedBeforeSpacesWereOneThingStillOpen() throws {
         let id = UUID()
-        let memory = ProjectViewMemory(
+        let old = Data("""
+        {"tabs":[{"id":"\(UUID().uuidString)","destination":{"project":{"_0":"\(id.uuidString)"}},"projectTab":"tasks"},{"id":"\(UUID().uuidString)","destination":{"projects":{}},"projectTab":"chat"}],"selectedID":"\(UUID().uuidString)","projectViews":{}}
+        """.utf8)
+        let decoded = try JSONDecoder().decode([String: AnyDecodable].self, from: AppModel.spaceTabJSON(old))
+        XCTAssertNotNil(decoded["spaceViews"])
+        let tabs = try JSONDecoder().decode(TabsOnly.self, from: AppModel.spaceTabJSON(old)).tabs
+        XCTAssertEqual(tabs.map(\.destination), [.space(id), .spaces])
+        XCTAssertEqual(tabs.map(\.section), [.tasks, .chat])
+    }
+
+    private struct TabsOnly: Decodable { var tabs: [WindowTab] }
+    private struct AnyDecodable: Decodable {}
+
+    func testSpaceViewMemoryRoundTripsBySpaceID() throws {
+        let id = UUID()
+        let memory = SpaceViewMemory(
             tab: .chat,
             thread: nil,
             note: nil,
@@ -90,7 +106,7 @@ final class WindowTabTests: XCTestCase {
             run: nil
         )
         let data = try JSONEncoder().encode([id: memory])
-        let decoded = try JSONDecoder().decode([UUID: ProjectViewMemory].self, from: data)
+        let decoded = try JSONDecoder().decode([UUID: SpaceViewMemory].self, from: data)
         XCTAssertEqual(decoded[id], memory)
     }
 }

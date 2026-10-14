@@ -27,8 +27,8 @@ struct SaveSheet: View {
                 .font(CraftFont.title)
 
             if project == nil {
-                Picker("Project", selection: $projectID) {
-                    Text("Choose a project").tag(UUID?.none)
+                Picker("Space", selection: $projectID) {
+                    Text("Choose a Space").tag(UUID?.none)
                     ForEach(projects) { item in
                         Text(item.name).tag(Optional(item.id))
                     }

@@ -120,9 +120,9 @@ struct SettingsDeveloperPage: View {
                 if !projects.isEmpty {
                     Hairline().padding(.horizontal, 16)
                     SettingsRow {
-                        Text("Project context")
+                        Text("Space context")
                         Spacer(minLength: 16)
-                        Picker("Project context", selection: $previewProjectID) {
+                        Picker("Space context", selection: $previewProjectID) {
                             Text("None").tag(UUID?.none)
                             ForEach(projects) { project in
                                 Text(project.name).tag(Optional(project.id))

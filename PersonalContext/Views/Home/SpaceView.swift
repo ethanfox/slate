@@ -1,56 +1,127 @@
 import SwiftData
 import SwiftUI
 
-/// The inside of a Space: every kind of thing it holds on one page, each in the layout Membrae picked for it.
-struct SpaceView: View {
+/// Finds the Space a tab shows and hands it to its page.
+struct SpaceHost: View {
     var id: UUID
+    @Query private var spaces: [Space]
+
+    init(id: UUID) {
+        self.id = id
+        let spaceID = id
+        _spaces = Query(filter: #Predicate<Space> { $0.id == spaceID })
+    }
+
+    var body: some View {
+        if let space = spaces.first {
+            SpaceView(space: space)
+                .onAppear {
+                    NavTrace.event("space.host appear id=\(id) name=\(space.name)")
+                }
+                .onAppear {
+                    NavTrace.afterTurn("space.host.runloop id=\(id)")
+                }
+        } else {
+            ScrollView {
+                PageBody {
+                    EmptyLine(text: "This Space is no longer here.")
+                        .padding(28)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .scrollContentBackground(.hidden)
+        }
+    }
+}
+
+/// One Space. Its page stands for it; a track, note, decision, chat, or run opens over it,
+/// and there is no side column of lists.
+struct SpaceView: View {
+    @Bindable var space: Space
+    @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
+
+    var body: some View {
+        center
+            .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .onAppear {
+                NavTrace.event("space.view appear tab=\(tab.rawValue) thread=\(app.selectedThread?.uuidString ?? "-") note=\(app.selectedNote?.uuidString ?? "-")")
+            }
+    }
+
+    @ViewBuilder
+    private var center: some View {
+        switch tab {
+        case .overview:
+            OverviewPage(project: space)
+        case .tasks:
+            ProjectTasksBoard(project: space)
+        case .threads:
+            if let id = app.selectedThread, let thread = TitleIndexStore.thread(id, in: context) {
+                ThreadPage(thread: thread, project: space).id(thread.id)
+            } else {
+                OverviewPage(project: space, listing: .track)
+            }
+        case .notes:
+            if let id = app.selectedNote, let note = TitleIndexStore.note(id, in: context) {
+                NotePage(note: note, project: space).id(note.id)
+            } else {
+                OverviewPage(project: space, listing: .note)
+            }
+        case .decisions:
+            if let id = app.selectedDecision, let decision = TitleIndexStore.decision(id, in: context) {
+                DecisionPage(decision: decision, project: space).id(decision.id)
+            } else {
+                OverviewPage(project: space, listing: .decision)
+            }
+        case .chat:
+            if app.selectedConversation != nil {
+                ProjectChatCenter(project: space)
+            } else {
+                OverviewPage(project: space, listing: .chat)
+            }
+        case .runs:
+            if let id = app.selectedRun, let run = TitleIndexStore.run(id, in: context) {
+                RunPage(run: run).id(run.id)
+            } else {
+                OverviewPage(project: space, listing: .run)
+            }
+        }
+    }
+
+    private var tab: SpaceTab { app.tab(for: space.id) }
+}
+
+/// The records a Space collects: its widgets, then each of its types in the layout Membrae picked for it.
+struct SpaceRecordsSection: View {
+    var space: Space
 
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @Query private var spaces: [Space]
     @Query(sort: \SpaceType.createdAt) private var types: [SpaceType]
     @Query(sort: \SpaceRecord.updatedAt, order: .reverse) private var records: [SpaceRecord]
     @Query private var events: [SpaceEvent]
     @State private var pendingDelete: SpaceRecord?
 
-    private var space: Space? {
-        spaces.first { $0.id == id }
-    }
-
     var body: some View {
-        content
-            .captureBar(spaceID: id, placeholder: "Tell Membrae anything about \(space?.displayName ?? "this Space")")
-    }
-
-    private var content: some View {
-        let shown = SpaceSelection.pageTypes(in: id, types: types, records: records)
-        return ScrollView {
-            PageBody {
-                VStack(alignment: .leading, spacing: 36) {
-                    AreaWidgetShelf(spaceID: id)
-                    if let space {
-                        if shown.isEmpty {
-                            EmptyLine(text: "Nothing here yet. Tell Membrae what this Space is for.")
-                        }
-                        ForEach(shown) { type in
-                            if type.role == .settings {
-                                settings(type)
-                            } else {
-                                AreaTypeSection(space: space, type: type, types: types, records: records, events: events) {
-                                    pendingDelete = $0
-                                }
-                            }
-                        }
-                    } else {
-                        EmptyLine(text: "This Space no longer exists.")
+        let shown = SpaceSelection.pageTypes(in: space.id, types: types, records: records)
+        VStack(alignment: .leading, spacing: 36) {
+            AreaWidgetShelf(spaceID: space.id)
+            if shown.isEmpty {
+                EmptyLine(text: "No records yet. Tell Membrae what this Space should hold.")
+            }
+            ForEach(shown) { type in
+                if type.role == .settings {
+                    settings(type)
+                } else {
+                    SpaceTypeSection(space: space, type: type, types: types, records: records, events: events) {
+                        pendingDelete = $0
                     }
                 }
-                .padding(.horizontal, 48)
-                .padding(.vertical, 36)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .scrollContentBackground(.hidden)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .alert(
             "Delete \(pendingDelete?.displayTitle ?? "this record")?",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })
@@ -81,7 +152,7 @@ struct SpaceView: View {
                 }
             }
             if let record {
-                SpaceRecordContent(spaceID: id, recordID: record.id)
+                SpaceRecordContent(spaceID: space.id, recordID: record.id)
             } else {
                 EmptyLine(text: "Nothing set yet.")
                     .task(id: type.id) { try? SpaceStore.settingsRecord(of: type, in: context) }
@@ -91,7 +162,7 @@ struct SpaceView: View {
 }
 
 /// One kind of thing in a Space, with its own search and filters.
-private struct AreaTypeSection: View {
+private struct SpaceTypeSection: View {
     var space: Space
     var type: SpaceType
     var types: [SpaceType]
@@ -161,7 +232,6 @@ enum SpaceSelection {
         return types.filter { $0.spaceIDString == key && $0.role != .event }
     }
 
-    /// The first two single-value fields that hold something, for a list row.
     /// Record ids to names across one Space, for showing links.
     static func titles(in spaceKey: String, records: [SpaceRecord]) -> [String: String] {
         var titles: [String: String] = [:]
@@ -171,6 +241,7 @@ enum SpaceSelection {
         return titles
     }
 
+    /// The first two single-value fields that hold something, for a list row.
     static func subtitle(for record: SpaceRecord, schema: SpaceSchema, titles: [String: String] = [:]) -> String {
         let values = record.values
         return schema.liveFields
@@ -182,7 +253,8 @@ enum SpaceSelection {
     }
 }
 
-/// Toolbar control for a Space: New, for whichever kind of thing it holds.
+/// Toolbar control for a Space that collects: New, for whichever kind of record it holds.
+/// Nothing shows for a Space with no types.
 struct SpaceToolbar: View {
     var spaceID: UUID
 
@@ -191,35 +263,33 @@ struct SpaceToolbar: View {
 
     var body: some View {
         let addable = SpaceSelection.objectTypes(in: spaceID, types: types).filter { $0.role != .settings }
-        GlassEffectContainer {
-            if addable.count == 1, let only = addable.first {
-                Button {
-                    app.present(.newRecord(only))
-                } label: {
-                    label
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular, in: Capsule())
-                .help("New in \(only.name)")
-            } else if addable.count > 1 {
-                Menu {
-                    ForEach(addable) { type in
-                        Button(type.name) { app.present(.newRecord(type)) }
-                    }
-                } label: {
-                    label
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .glassEffect(.regular, in: Capsule())
-                .help("New")
+        if addable.count == 1, let only = addable.first {
+            Button {
+                app.present(.newRecord(only))
+            } label: {
+                label
             }
+            .buttonStyle(.plain)
+            .glassEffect(.regular, in: Capsule())
+            .help("New in \(only.name)")
+        } else if addable.count > 1 {
+            Menu {
+                ForEach(addable) { type in
+                    Button(type.name) { app.present(.newRecord(type)) }
+                }
+            } label: {
+                label
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .glassEffect(.regular, in: Capsule())
+            .help("New record")
         }
     }
 
     private var label: some View {
-        Label("New", systemImage: "plus")
+        Label("New Record", systemImage: "plus")
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .contentShape(Capsule())
@@ -242,15 +312,14 @@ struct ChoiceCapsule: View {
     }
 }
 
+/// The one way a Space is made by hand. What it holds comes afterwards: from a starting set of
+/// types, from the agent, or from what gets filed in it. Changing a Space is done in its settings.
 struct NewSpaceSheet: View {
-    /// Set to rename, re-icon, or recolor an existing Space.
-    var space: Space?
-
     /// The first message of a setup chat. The agent proposes, the user confirms, and only then is
     /// the Space created, so an abandoned chat leaves nothing behind.
     static func setupMessage(name: String, symbol: String, color: String, brief: String) -> String {
         """
-        I want a new Area called “\(name)”.
+        I want a new Space called “\(name)”.
 
         What it is for: \(brief.trimmingCharacters(in: .whitespacesAndNewlines))
 
@@ -265,12 +334,11 @@ struct NewSpaceSheet: View {
     @FocusState private var focusName: Bool
 
     @State private var name = ""
-    @State private var symbol = "leaf"
+    @State private var symbol = "square.grid.2x2"
     @State private var gradient: SpaceGradient?
+    @State private var summary = ""
     @State private var template = SpaceTemplate.empty
     @State private var brief = ""
-    @State private var notes = ""
-    @State private var portrait = false
 
     private var chosen: SpaceGradient {
         gradient ?? SpaceGradient.next(after: spaces.map(\.gradientRaw))
@@ -278,7 +346,7 @@ struct NewSpaceSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(space == nil ? "New Area" : "Edit Area")
+            Text("New Space")
                 .font(CraftFont.title)
 
             ModalField("Name") {
@@ -312,7 +380,12 @@ struct NewSpaceSheet: View {
                 }
             }
 
-            if space == nil {
+            ModalField("Description") {
+                TextField("What this Space is", text: $summary, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(2...5)
+            }
+
             ModalField("Start with", boxed: false) {
                 HStack(spacing: 6) {
                     ForEach(SpaceTemplate.all) { option in
@@ -326,52 +399,26 @@ struct NewSpaceSheet: View {
                 }
             }
 
-            ModalField("Or describe it") {
+            ModalField("Or describe what it should hold") {
                 TextField("Track the books I read, with notes and a rating", text: $brief, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(2...5)
             }
-            }
-
-            if space != nil {
-                ModalField("Pictures on cards", boxed: false) {
-                    HStack(spacing: 6) {
-                        Button { portrait = false } label: { ChoiceCapsule(title: "Landscape", isSelected: !portrait) }
-                            .buttonStyle(.plain)
-                        Button { portrait = true } label: { ChoiceCapsule(title: "Portrait", isSelected: portrait) }
-                            .buttonStyle(.plain)
-                    }
-                }
-                ModalField("Notes for Membrae") {
-                    TextField("What you call things here, units you use, and anything Membrae should remember", text: $notes, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .lineLimit(2...6)
-                }
-            }
 
             ModalFooter(
-                actionTitle: space != nil ? "Save" : describing ? "Plan it with an agent" : "Create",
+                actionTitle: describing ? "Plan it with Membrae" : "Create",
                 actionEnabled: canCreate,
                 action: create
             )
         }
-        .onAppear {
-            if let space, name.isEmpty {
-                name = space.name
-                symbol = space.symbol
-                gradient = space.gradient
-                notes = space.agentNotes
-                portrait = space.hasPortraitCards
-            }
-            focusName = true
-        }
+        .onAppear { focusName = true }
     }
 
     private var canCreate: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// A description hands the setup to an agent instead of a starting template.
+    /// A description hands the setup to the agent instead of a starting set of types.
     private var describing: Bool {
         !brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -379,18 +426,22 @@ struct NewSpaceSheet: View {
     private func create() {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        if let space {
-            try? SpaceStore.update(space, name: trimmed, symbol: symbol, gradient: chosen.rawValue, notes: notes, portraitCards: portrait, in: context)
-        } else if describing {
+        if describing {
             let conversation = app.makeConversation(in: nil, context: context)
             conversation.title = "Set up \(trimmed)"
             app.pendingSend = PendingSend(
                 conversationID: conversation.id,
                 text: NewSpaceSheet.setupMessage(name: trimmed, symbol: symbol, color: chosen.rawValue, brief: brief)
             )
-        } else if let space = try? SpaceStore.create(named: trimmed, symbol: symbol, gradient: chosen.rawValue, collects: true, in: context) {
+        } else if let space = try? SpaceStore.create(
+            named: trimmed,
+            symbol: symbol,
+            summary: summary.trimmingCharacters(in: .whitespacesAndNewlines),
+            gradient: chosen.rawValue,
+            in: context
+        ) {
             try? SpaceStore.apply(template, to: space, in: context)
-            app.navigate(to: .space(space.id), newTab: false)
+            app.open(space, tab: .overview, newTab: false)
         }
         modalDismiss()
     }

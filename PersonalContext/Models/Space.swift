@@ -162,7 +162,7 @@ enum SpaceValue: Codable, Hashable {
             self = .rows(value)
         } else {
             throw DecodingError.dataCorrupted(
-                .init(codingPath: decoder.codingPath, debugDescription: "Unknown Area value.")
+                .init(codingPath: decoder.codingPath, debugDescription: "Unknown Space value.")
             )
         }
     }

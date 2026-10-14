@@ -39,7 +39,7 @@ struct ProjectTasksBoard: View {
 
     var body: some View {
         Group {
-            switch app.projectTasksLayout {
+            switch app.spaceTasksLayout {
             case .kanban:
                 boardScroll
             case .list:

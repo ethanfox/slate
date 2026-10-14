@@ -141,12 +141,12 @@ struct ComposerSaveForm: View {
             }
             VStack(spacing: 2) {
                 if kind == .chat {
-                    destinationRow(title: "Workspace", detail: "No project", id: nil)
+                    destinationRow(title: "Workspace", detail: "No Space", id: nil)
                 }
                 ForEach(projects) { project in
                     destinationRow(
                         title: project.displayName,
-                        detail: project.id == session.scope.projectID ? "Current project" : "Project",
+                        detail: project.id == session.scope.projectID ? "Current Space" : "Space",
                         id: project.id
                     )
                 }

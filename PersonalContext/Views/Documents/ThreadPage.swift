@@ -11,7 +11,7 @@ struct ThreadPage: View {
         DeletionChrome(
             mark: DeletionMarks.existing(for: thread.id, in: project),
             deleteTitle: "Delete \(thread.title.isEmpty ? "this track" : thread.title)?",
-            deleteMessage: "Child tracks are removed too. Notes and decisions stay in the project.",
+            deleteMessage: "Child tracks are removed too. Notes and decisions stay in the Space.",
             onKeep: keepMark,
             onConfirmDelete: deleteMarked
         ) {

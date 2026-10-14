@@ -128,8 +128,8 @@ struct NewRunSheet: View {
                                 .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
-                        .help("Run without a project")
-                        .accessibilityLabel("Remove project")
+                        .help("Run without a Space")
+                        .accessibilityLabel("Remove Space")
                     }
                 }
                 .font(CraftFont.body)

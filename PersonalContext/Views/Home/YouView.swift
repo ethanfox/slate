@@ -159,7 +159,7 @@ enum ComingUp {
 
         for record in records {
             guard let spaceID = record.spaceID else { continue }
-            let spaceName = spaces.first { $0.id == spaceID }?.displayName ?? "Area"
+            let spaceName = spaces.first { $0.id == spaceID }?.displayName ?? "Space"
             for (field, value) in record.values {
                 guard case .date(let date) = value, date >= start, date < end else { continue }
                 items.append(ComingUpItem(
@@ -180,7 +180,7 @@ enum ComingUp {
 struct YouView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
-    @Query(filter: Space.collecting, sort: \Space.createdAt) private var spaces: [Space]
+    @Query(sort: \Space.updatedAt, order: .reverse) private var spaces: [Space]
     @Query private var records: [SpaceRecord]
     @Query(sort: \AreaWidget.createdAt) private var widgets: [AreaWidget]
     @Query private var loggedEvents: [SpaceEvent]
@@ -190,10 +190,10 @@ struct YouView: View {
     @State private var showsEmptyGallery = false
     /// What the user chose to see on this page.
     @AppStorage("youShowsWidgets") private var showsWidgets = true
-    @AppStorage("youShowsAreas") private var showsAreas = true
+    @AppStorage("youShowsSpaces") private var showsSpaces = true
     @AppStorage("youShowsLately") private var showsLately = true
     @AppStorage("youShowsComingUp") private var showsComingUp = true
-    /// Large draws widgets and Areas a little bigger and drops the section labels.
+    /// Large draws widgets and Space cards a little bigger and drops the section labels.
     @AppStorage("youLarge") private var large = false
 
     private var scale: CGFloat { large ? 1.18 : 1 }
@@ -220,8 +220,8 @@ struct YouView: View {
                     if showsWidgets {
                         shelf
                     }
-                    if showsAreas {
-                        areaShelf
+                    if showsSpaces {
+                        spaceShelf
                     }
                     if showsLately || showsComingUp {
                         HStack(alignment: .top, spacing: 48) {
@@ -245,7 +245,7 @@ struct YouView: View {
         .captureBar()
         .task { await app.eventKit.prepareEvents() }
         .alert(
-            "Delete \(pendingDelete?.displayName ?? "this Area")?",
+            "Delete \(pendingDelete?.displayName ?? "this Space")?",
             isPresented: Binding(
                 get: { pendingDelete != nil },
                 set: { if !$0 { pendingDelete = nil } }
@@ -253,13 +253,13 @@ struct YouView: View {
         ) {
             Button("Delete", role: .destructive) {
                 if let space = pendingDelete {
-                    try? SpaceStore.delete(space, in: context)
+                    app.deleteSpace(space.id)
                 }
                 pendingDelete = nil
             }
             Button("Cancel", role: .cancel) { pendingDelete = nil }
         } message: {
-            Text("Everything in this Area will be deleted. This can’t be undone.")
+            Text(SpaceDeletion.message)
         }
     }
 
@@ -282,7 +282,7 @@ struct YouView: View {
         .popover(isPresented: $showsCustomize, arrowEdge: .bottom) {
             YouCustomizePanel(
                 showsWidgets: $showsWidgets,
-                showsAreas: $showsAreas,
+                showsSpaces: $showsSpaces,
                 showsLately: $showsLately,
                 showsComingUp: $showsComingUp,
                 large: $large,
@@ -362,7 +362,7 @@ struct YouView: View {
         return first.isEmpty ? salutation : "\(salutation), \(first)"
     }
 
-    /// The widgets the user chose to keep here, from any Area.
+    /// The widgets the user chose to keep here, from any Space.
     private var shelf: some View {
         let chosen = widgets.filter(\.isOnYou)
         let others = widgets.filter { !$0.isOnYou }
@@ -416,24 +416,24 @@ struct YouView: View {
             Button {
                 app.captureDrafts["capture", default: CaptureDraft()].text = "Make a widget for "
             } label: {
-                scaled(AddWidgetCard(title: "Add a Widget", detail: "Ask Membrae to make one for an Area."))
+                scaled(AddWidgetCard(title: "Add a Widget", detail: "Ask Membrae to make one for a Space."))
             }
             .buttonStyle(.plain)
         } else {
             Button {
                 showsEmptyGallery = true
             } label: {
-                scaled(AddWidgetCard(title: "Add a Widget", detail: "Choose one from your Areas."))
+                scaled(AddWidgetCard(title: "Add a Widget", detail: "Choose one from your Spaces."))
             }
             .buttonStyle(.plain)
             .popover(isPresented: $showsEmptyGallery, arrowEdge: .bottom) { gallery() }
         }
     }
 
-    private var areaShelf: some View {
+    private var spaceShelf: some View {
         VStack(alignment: .leading, spacing: 12) {
             if !large {
-                Text("Areas")
+                Text("Spaces")
                     .font(CraftFont.section)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, gutter)
@@ -467,9 +467,9 @@ struct YouView: View {
     @ViewBuilder
     private func spaceMenu(_ space: Space) -> some View {
         Button {
-            app.present(.editSpace(space))
+            app.showSpaceSettings(space)
         } label: {
-            Label("Edit…", systemImage: "pencil")
+            Label("Settings", systemImage: "gearshape")
         }
         Button {
             app.togglePin(.space, space.id)
@@ -499,7 +499,13 @@ struct YouView: View {
         }
     }
 
+    /// What the card counts: records and entries for a Space that collects, open tasks for one that works.
     private func summary(for space: Space) -> SpaceCardSummary {
+        guard space.collects else {
+            let open = openTasks.filter { $0.project?.id == space.id }
+            let line = space.brief.isEmpty ? (space.summary.isEmpty ? space.status.label : space.summary) : space.brief
+            return SpaceCardSummary(line: line, count: open.count, caption: open.count == 1 ? "open task" : "open tasks")
+        }
         let key = SpaceJSON.key(space.id)
         let owned = records.filter { $0.spaceIDString == key }
         let latest = owned.max { $0.updatedAt < $1.updatedAt }
@@ -509,7 +515,7 @@ struct YouView: View {
         } else {
             line = space.summary.isEmpty ? "Nothing yet" : space.summary
         }
-        // An Area that is mostly tracking is counted by what was logged, not by the one thing it tracks.
+        // A Space that is mostly tracking is counted by what was logged, not by the one thing it tracks.
         let entries = loggedEvents.filter { $0.spaceIDString == key }
         if entries.count > owned.count, let last = entries.max(by: { $0.occurredAt < $1.occurredAt }) {
             return SpaceCardSummary(
@@ -597,7 +603,7 @@ struct YouView: View {
             shortcut("Library", "books.vertical", .library)
             shortcut("Chats", "bubble.left.and.bubble.right", .chats)
             shortcut("Runs", "play.circle", .runs)
-            shortcut("All projects", "square.stack", .projects)
+            shortcut("All Spaces", "square.grid.2x2", .spaces)
         }
     }
 
@@ -683,7 +689,7 @@ private struct NewSpaceCard: View {
         VStack(spacing: 8 * k) {
             Image(systemName: "plus")
                 .font(.system(size: 18 * k))
-            Text("New Area")
+            Text("New Space")
                 .font(.system(size: 13 * k))
         }
         .foregroundStyle(.secondary)
@@ -758,7 +764,7 @@ private struct AddWidgetCard: View {
 /// What the You page shows and how big, as switches and two pictures to pick from.
 private struct YouCustomizePanel: View {
     @Binding var showsWidgets: Bool
-    @Binding var showsAreas: Bool
+    @Binding var showsSpaces: Bool
     @Binding var showsLately: Bool
     @Binding var showsComingUp: Bool
     @Binding var large: Bool
@@ -809,7 +815,7 @@ private struct YouCustomizePanel: View {
             VStack(alignment: .leading, spacing: 4) {
                 heading("Show")
                 row("Widgets", icon: "square.grid.2x2", isOn: $showsWidgets)
-                row("Areas", icon: "rectangle.stack", isOn: $showsAreas)
+                row("Spaces", icon: "rectangle.stack", isOn: $showsSpaces)
                 row("Lately", icon: "clock", isOn: $showsLately)
                 row("Coming Up", icon: "calendar", isOn: $showsComingUp)
             }
@@ -901,7 +907,7 @@ private struct YouCustomizePanel: View {
     }
 }
 
-/// Every widget, drawn small and grouped by Area. Clicking one puts it on You or takes it off.
+/// Every widget, drawn small and grouped by Space. Clicking one puts it on You or takes it off.
 private struct WidgetGallery: View {
     var widgets: [AreaWidget]
     var spaces: [Space]

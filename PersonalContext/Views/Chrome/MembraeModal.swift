@@ -3,9 +3,7 @@ import SwiftData
 import SwiftUI
 
 enum AppModal: Identifiable {
-    case newProject
     case newSpace
-    case editSpace(Space)
     case logSpaceEvent(SpaceType, SpaceRecord)
     case editSpaceEvent(SpaceEvent)
     case newRecord(SpaceType)
@@ -33,9 +31,7 @@ enum AppModal: Identifiable {
 
     var id: String {
         switch self {
-        case .newProject: "new-project"
         case .newSpace: "new-space"
-        case .editSpace(let space): "edit-space-\(space.id.uuidString)"
         case .logSpaceEvent(let type, let record): "log-event-\(type.id.uuidString)-\(record.id.uuidString)"
         case .editSpaceEvent(let event): "edit-space-event-\(event.id.uuidString)"
         case .newRecord(let type): "new-record-\(type.id.uuidString)"

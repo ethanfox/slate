@@ -104,9 +104,9 @@ private struct HostWindowAccessor: NSViewRepresentable {
     }
 }
 
-/// The chrome asks for the open project and track many times per body pass. Remember the last answer.
+/// The chrome asks for the open Space and track many times per body pass. Remember the last answer.
 private final class OpenRecordCache {
-    var project: Project?
+    var space: Space?
     var thread: ProjectThread?
 }
 
@@ -142,14 +142,14 @@ struct RootView: View {
                     .glassEffect(.regular, in: Circle())
                     .help(sidebarHidden ? "Show Sidebar" : "Hide Sidebar")
                     .accessibilityLabel(sidebarHidden ? "Show Sidebar" : "Hide Sidebar")
-                    if let project = openProject, app.tab(for: project.id) != .overview {
+                    if let space = openSpace, app.tab(for: space.id) != .overview {
                         Button {
-                            app.open(project, tab: .overview, newTab: false)
+                            app.open(space, tab: .overview, newTab: false)
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "chevron.left")
                                     .font(.system(size: 10, weight: .semibold))
-                                Text(project.name)
+                                Text(space.name)
                                     .lineLimit(1)
                             }
                             .padding(.horizontal, 10)
@@ -158,7 +158,7 @@ struct RootView: View {
                         }
                         .buttonStyle(.plain)
                         .glassEffect(.regular, in: Capsule())
-                        .help("Back to \(project.name)")
+                        .help("Back to \(space.name)")
                     }
                     WindowTabStrip()
                     Color.clear
@@ -187,8 +187,8 @@ struct RootView: View {
                             .id(app.storeGeneration)
                             .modifier(PaneChrome())
 
-                        if chatMounted, let project = openProject, let thread = focusedThread {
-                            ThreadChatPane(thread: thread, project: project)
+                        if chatMounted, let space = openSpace, let thread = focusedThread {
+                            ThreadChatPane(thread: thread, project: space)
                                 .id(thread.id)
                                 .modifier(PaneChrome())
                                 .allowsHitTesting(chatSettled)
@@ -197,8 +197,8 @@ struct RootView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     SlideInspector(isOpen: showingInspector, width: trailingPaneWidth) {
-                        if let project = openProject {
-                            inspectorContent(for: project)
+                        if let space = openSpace {
+                            inspectorContent(for: space)
                                 .id(app.storeGeneration)
                         }
                     }
@@ -333,37 +333,32 @@ struct RootView: View {
 
     @ViewBuilder
     private var paneAction: some View {
-        if case .projects = app.destination {
+        if case .spaces = app.destination {
             GlassEffectContainer {
                 HStack(spacing: 10) {
-                    ProjectsLayoutControl(selection: Bindable(app).projectsLayout)
+                    SpacesLayoutControl(selection: Bindable(app).spacesLayout)
+                    newSpaceButton
+                }
+            }
+        } else if case .home = app.destination {
+            newSpaceButton
+        } else if let space = openSpace, app.tab(for: space.id) == .overview {
+            GlassEffectContainer {
+                HStack(spacing: 10) {
+                    SpaceToolbar(spaceID: space.id)
                     Button {
-                        app.present(.newProject)
+                        app.showNewChat(in: space)
                     } label: {
-                        Label("New Project", systemImage: "plus")
+                        Label("New Chat", systemImage: "square.and.pencil")
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     .glassEffect(.regular, in: Capsule())
-                    .help("New Project (⌘N)")
+                    .help("New Chat")
                 }
             }
-        } else if case .home = app.destination {
-            Button {
-                app.present(.newSpace)
-            } label: {
-                Label("New Area", systemImage: "plus")
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .glassEffect(.regular, in: Capsule())
-            .help("New Area")
-        } else if case .space(let id) = app.destination {
-            SpaceToolbar(spaceID: id)
         } else if case .spaceRecord(_, let recordID) = app.destination {
             SpaceRecordToolbar(recordID: recordID)
         } else if app.destination == .aboutYou || app.destination == .context {
@@ -404,9 +399,9 @@ struct RootView: View {
             .help("New Run")
         } else if case .run = app.destination {
             EmptyView()
-        } else if let project = openProject, app.tab(for: project.id) == .runs {
+        } else if let space = openSpace, app.tab(for: space.id) == .runs {
             Button {
-                app.presentNewRun(origin: .project, project: project)
+                app.presentNewRun(origin: .project, project: space)
             } label: {
                 Label("New Run", systemImage: "plus")
                     .padding(.horizontal, 10)
@@ -428,11 +423,11 @@ struct RootView: View {
             .buttonStyle(.plain)
             .glassEffect(.regular, in: Capsule())
             .help("New Task")
-        } else if let project = openProject, app.tab(for: project.id) == .tasks {
+        } else if let space = openSpace, app.tab(for: space.id) == .tasks {
             GlassEffectContainer {
                 HStack(spacing: 10) {
                     Button {
-                        app.present(.newTask(project))
+                        app.present(.newTask(space))
                     } label: {
                         Label("New Task", systemImage: "plus")
                             .padding(.horizontal, 10)
@@ -445,10 +440,10 @@ struct RootView: View {
                     ChromeChoiceControl(
                         title: "View",
                         subtitle: "Choose how you browse tasks.",
-                        options: ProjectTasksLayout.allCases.map {
+                        options: SpaceTasksLayout.allCases.map {
                             ChromeChoiceItem(value: $0, title: $0.label, symbol: $0.symbol)
                         },
-                        selection: Bindable(app).projectTasksLayout
+                        selection: Bindable(app).spaceTasksLayout
                     )
                     Button(action: toggleInspector) {
                         Image(systemName: "sidebar.trailing")
@@ -474,11 +469,9 @@ struct RootView: View {
             .glassEffect(.regular, in: Capsule())
             .help(app.trackChatOpen ? "Hide track chat" : "Ask Membrae")
             .accessibilityLabel(app.trackChatOpen ? "Hide track chat" : "Ask Membrae")
-        } else if openProject != nil {
+        } else if let space = openSpace {
             Button {
-                if let project = openProject {
-                    app.showNewChat(in: project)
-                }
+                app.showNewChat(in: space)
             } label: {
                 Label("New Chat", systemImage: "square.and.pencil")
                     .padding(.horizontal, 10)
@@ -491,14 +484,28 @@ struct RootView: View {
         }
     }
 
-    private var openProject: Project? {
-        guard case .project(let id) = app.destination else { return nil }
-        if let cached = openRecords.project, cached.modelContext === context, !cached.isDeleted, cached.id == id {
+    private var newSpaceButton: some View {
+        Button {
+            app.present(.newSpace)
+        } label: {
+            Label("New Space", systemImage: "plus")
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular, in: Capsule())
+        .help("New Space (⌘N)")
+    }
+
+    private var openSpace: Space? {
+        guard case .space(let id) = app.destination else { return nil }
+        if let cached = openRecords.space, cached.modelContext === context, !cached.isDeleted, cached.id == id {
             return cached
         }
-        let project = TitleIndexStore.project(id, in: context)
-        openRecords.project = project
-        return project
+        let space = TitleIndexStore.project(id, in: context)
+        openRecords.space = space
+        return space
     }
 
     private var showingTrackChat: Bool {
@@ -506,14 +513,14 @@ struct RootView: View {
     }
 
     private var showingInspector: Bool {
-        guard let project = openProject else { return false }
-        let tab = app.tab(for: project.id)
+        guard let space = openSpace else { return false }
+        let tab = app.tab(for: space.id)
         return app.inspectorOpen && (tab == .overview || tab == .tasks)
     }
 
     private var showingTaskPane: Bool {
-        guard let project = openProject else { return false }
-        return app.tab(for: project.id) == .tasks
+        guard let space = openSpace else { return false }
+        return app.tab(for: space.id) == .tasks
     }
 
     private var trailingPaneWidth: CGFloat {
@@ -522,12 +529,12 @@ struct RootView: View {
     }
 
     @ViewBuilder
-    private func inspectorContent(for project: Project) -> some View {
+    private func inspectorContent(for space: Space) -> some View {
         if showingTaskPane {
             TaskInspector()
                 .modifier(PaneChrome())
         } else {
-            OverviewInspector(project: project)
+            OverviewInspector(project: space)
         }
     }
 
@@ -590,7 +597,7 @@ struct RootView: View {
     }
 
     private var focusedThread: ProjectThread? {
-        guard let project = openProject, app.tab(for: project.id) == .threads,
+        guard let space = openSpace, app.tab(for: space.id) == .threads,
               let id = app.selectedThread else { return nil }
         if let cached = openRecords.thread, cached.modelContext === context, !cached.isDeleted, cached.id == id {
             return cached
@@ -641,12 +648,8 @@ struct RootView: View {
     @ViewBuilder
     private func modalContent(_ modal: AppModal) -> some View {
         switch modal {
-        case .newProject:
-            NewProjectSheet()
         case .newSpace:
             NewSpaceSheet()
-        case .editSpace(let space):
-            NewSpaceSheet(space: space)
         case .logSpaceEvent(let type, let record):
             SpaceEventForm(type: type, record: record)
         case .editSpaceEvent(let event):
@@ -676,7 +679,7 @@ struct RootView: View {
                 SaveSheet(
                     kind: kind,
                     text: app.activeReply,
-                    project: conversation.project ?? openProject,
+                    project: conversation.project ?? openSpace,
                     conversation: conversation
                 )
             }
@@ -739,11 +742,11 @@ struct RootView: View {
             ContextView()
                 .captureBar()
         case .space(let id):
-            SpaceView(id: id)
+            SpaceHost(id: id)
         case .spaceRecord(let spaceID, let recordID):
             SpaceRecordView(spaceID: spaceID, recordID: recordID)
-        case .projects:
-            ProjectsView()
+        case .spaces:
+            SpacesView()
                 .captureBar()
         case .tasks:
             TasksView()
@@ -763,20 +766,18 @@ struct RootView: View {
             SettingsView()
         case .library:
             LibraryView()
-        case .project(let id):
-            ProjectHost(id: id)
         case .quickAsk(let id):
             QuickAskHost(id: id)
         }
     }
 }
 
-private struct ProjectsLayoutControl: View {
-    @Binding var selection: ProjectsLayout
+private struct SpacesLayoutControl: View {
+    @Binding var selection: SpacesLayout
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(ProjectsLayout.allCases) { layout in
+            ForEach(SpacesLayout.allCases) { layout in
                 Button {
                     selection = layout
                 } label: {
@@ -793,7 +794,7 @@ private struct ProjectsLayoutControl: View {
         .padding(2)
         .glassEffect(.regular, in: Capsule())
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Project view")
+        .accessibilityLabel("Spaces view")
     }
 }
 

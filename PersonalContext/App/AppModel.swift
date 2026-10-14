@@ -31,8 +31,8 @@ final class AppModel {
     var canGoBack = false
     var canGoForward = false
     @ObservationIgnored var historyLocked = false
-    var tabs: [UUID: ProjectTab] = [:]
-    @ObservationIgnored var projectViews: [UUID: ProjectViewMemory] = [:]
+    var tabs: [UUID: SpaceTab] = [:]
+    @ObservationIgnored var spaceViews: [UUID: SpaceViewMemory] = [:]
     @ObservationIgnored var persistTabsTask: Task<Void, Never>?
     var selectedThread: UUID? {
         get { nav.thread }
@@ -158,23 +158,14 @@ final class AppModel {
         pinnedIDs = Set(PinStore.all(in: context).map(\.targetIDString))
     }
 
-    var projectsLayout: ProjectsLayout {
-        didSet { defaults.set(projectsLayout.rawValue, forKey: Keys.projectsLayout) }
+    var spacesLayout: SpacesLayout {
+        didSet { defaults.set(spacesLayout.rawValue, forKey: Keys.spacesLayout) }
     }
-    var projectTasksLayout: ProjectTasksLayout {
-        didSet { defaults.set(projectTasksLayout.rawValue, forKey: Keys.projectTasksLayout) }
+    var spaceTasksLayout: SpaceTasksLayout {
+        didSet { defaults.set(spaceTasksLayout.rawValue, forKey: Keys.spaceTasksLayout) }
     }
     var sidebarCollapsed: Bool {
         didSet { defaults.set(sidebarCollapsed, forKey: Keys.sidebarCollapsed) }
-    }
-    var projectColumnCollapsed: Bool {
-        didSet { defaults.set(projectColumnCollapsed, forKey: Keys.projectColumnCollapsed) }
-    }
-    var collapsedProjectSections: Set<String> {
-        didSet { defaults.set(Array(collapsedProjectSections), forKey: Keys.collapsedProjectSections) }
-    }
-    var expandedProjectSections: Set<String> {
-        didSet { defaults.set(Array(expandedProjectSections), forKey: Keys.expandedProjectSections) }
     }
     var settingsSection: SettingsSection {
         didSet { defaults.set(settingsSection.rawValue, forKey: Keys.settingsSection) }
@@ -193,7 +184,7 @@ final class AppModel {
     var inspectorOpen = false
     var selectedOverviewPlate: UUID?
     var selectedTaskID: UUID?
-    /// The task board's track filter for each project. A project not listed shows its active track.
+    /// The task board's track filter for each Space. A Space not listed shows its active track.
     var taskTrackFilters: [UUID: TaskTrackFilter] = [:]
     let objectFind = ObjectFindSession()
     let composer = ComposerSession()
@@ -232,35 +223,6 @@ final class AppModel {
     func toggleSidebar() {
         withAnimation(.easeInOut(duration: 0.22)) {
             sidebarCollapsed.toggle()
-        }
-    }
-
-    func toggleProjectColumn() {
-        withAnimation(.easeInOut(duration: 0.22)) {
-            projectColumnCollapsed.toggle()
-        }
-    }
-
-    func isProjectSectionOpen(_ section: ProjectColumnSection, tab: ProjectTab) -> Bool {
-        if collapsedProjectSections.contains(section.rawValue) { return false }
-        if expandedProjectSections.contains(section.rawValue) { return true }
-        return section.tab == tab
-    }
-
-    func toggleProjectSection(_ section: ProjectColumnSection, tab: ProjectTab) {
-        if isProjectSectionOpen(section, tab: tab) {
-            expandedProjectSections.remove(section.rawValue)
-            collapsedProjectSections.insert(section.rawValue)
-        } else {
-            collapsedProjectSections.remove(section.rawValue)
-            expandedProjectSections.insert(section.rawValue)
-        }
-    }
-
-    func openProjectSection(_ section: ProjectColumnSection) {
-        collapsedProjectSections.remove(section.rawValue)
-        if section != .decisions {
-            expandedProjectSections.insert(section.rawValue)
         }
     }
 
@@ -337,22 +299,10 @@ final class AppModel {
             cursorCloudRepositories = .ready(urls: urls, checkedAt: Date(timeIntervalSince1970: checkedAt))
         }
         showAgentIDs = UserDefaults.standard.bool(forKey: Keys.showAgentIDs)
-        let storedLayout = UserDefaults.standard.string(forKey: Keys.projectsLayout) ?? ""
-        projectsLayout = storedLayout == "list" ? .card : (ProjectsLayout(rawValue: storedLayout) ?? .table)
-        projectTasksLayout = ProjectTasksLayout(rawValue: UserDefaults.standard.string(forKey: Keys.projectTasksLayout) ?? "") ?? .kanban
+        let storedLayout = UserDefaults.standard.string(forKey: Keys.spacesLayout) ?? ""
+        spacesLayout = storedLayout == "list" ? .card : (SpacesLayout(rawValue: storedLayout) ?? .table)
+        spaceTasksLayout = SpaceTasksLayout(rawValue: UserDefaults.standard.string(forKey: Keys.spaceTasksLayout) ?? "") ?? .kanban
         sidebarCollapsed = UserDefaults.standard.bool(forKey: Keys.sidebarCollapsed)
-        projectColumnCollapsed = UserDefaults.standard.bool(forKey: Keys.projectColumnCollapsed)
-        if UserDefaults.standard.object(forKey: Keys.expandedProjectSections) == nil {
-            collapsedProjectSections = [ProjectColumnSection.decisions.rawValue]
-            expandedProjectSections = []
-        } else {
-            var collapsed = Set(UserDefaults.standard.stringArray(forKey: Keys.collapsedProjectSections) ?? [])
-            var expanded = Set(UserDefaults.standard.stringArray(forKey: Keys.expandedProjectSections) ?? [])
-            collapsed.insert(ProjectColumnSection.decisions.rawValue)
-            expanded.remove(ProjectColumnSection.decisions.rawValue)
-            collapsedProjectSections = collapsed
-            expandedProjectSections = expanded
-        }
         settingsSection = SettingsSection(rawValue: UserDefaults.standard.string(forKey: Keys.settingsSection) ?? "") ?? .model
         if UserDefaults.standard.object(forKey: Keys.openChatLinksInNewTab) == nil {
             openChatLinksInNewTab = true
@@ -543,8 +493,8 @@ final class AppModel {
         }
     }
 
-    func tab(for project: UUID) -> ProjectTab {
-        tabs[project] ?? .overview
+    func tab(for space: UUID) -> SpaceTab {
+        tabs[space] ?? .overview
     }
 
     /// `opens` false leaves the user where they are; the chat runs behind the current screen.
@@ -943,12 +893,9 @@ enum Keys {
     static let cursorCloudRepoURLs = "cursorCloudRepoURLs"
     static let cursorCloudCheckedAt = "cursorCloudCheckedAt"
     static let showAgentIDs = "showAgentIDs"
-    static let projectsLayout = "projectsLayout"
-    static let projectTasksLayout = "projectTasksLayout"
+    static let spacesLayout = "projectsLayout"
+    static let spaceTasksLayout = "projectTasksLayout"
     static let sidebarCollapsed = "sidebarCollapsed"
-    static let projectColumnCollapsed = "projectColumnCollapsed"
-    static let collapsedProjectSections = "collapsedProjectSections"
-    static let expandedProjectSections = "expandedProjectSections"
     static let settingsSection = "settingsSection"
     static let orbPalette = "orbPalette"
     static let windowTabs = "windowTabs"

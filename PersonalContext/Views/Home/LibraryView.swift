@@ -193,7 +193,7 @@ private struct SourceRow: View {
         Button(source.readAt == nil ? "Mark as Read" : "Mark as Unread") {
             change { $0.readAt = $0.readAt == nil ? .now : nil }
         }
-        Menu("Link to Project") {
+        Menu("Link to Space") {
             ForEach(projects) { project in
                 let linked = source.projects.contains { $0.id == project.id }
                 Button {
