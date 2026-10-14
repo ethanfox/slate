@@ -286,7 +286,8 @@ final class SpaceStoreTests: XCTestCase {
         XCTAssertEqual(AreaRecords.columns(schema).map(\.id), ["servings", "course", "lastCooked"])
         XCTAssertEqual(AreaRecords.filterFields(schema).map(\.id), ["course"])
         XCTAssertEqual(AreaRecords.layouts(for: schema), [.table, .cards, .board, .calendar])
-        XCTAssertEqual(AreaRecords.preferred(for: schema), .table)
+        XCTAssertEqual(AreaRecords.layout(for: schema), .table)
+        XCTAssertEqual(AreaRecords.layout(for: schema, chosen: "calendar"), .calendar)
         XCTAssertEqual(AreaRecords.boardField(schema)?.id, "course")
         XCTAssertEqual(AreaRecords.dateField(schema)?.id, "lastCooked")
 
@@ -298,13 +299,14 @@ final class SpaceStoreTests: XCTestCase {
         XCTAssertEqual(log, AreaLog(eventKey: "weigh", name: "Weigh-in", numberField: "kg"))
         XCTAssertEqual(AreaRecords.log(from: [(key: "check", name: "Check-in", schema: checkIn)])?.numberField, nil)
         XCTAssertNil(AreaRecords.log(from: []))
-        XCTAssertEqual(AreaRecords.layouts(for: plain, log: log), [.table, .cards, .chart, .history])
-        XCTAssertEqual(AreaRecords.preferred(for: plain, log: log, records: 1, entries: 30), .chart)
-        XCTAssertEqual(AreaRecords.preferred(for: plain, log: log, records: 12, entries: 3), .table)
+        // A choice the data no longer suits falls back to what the app picks.
+        XCTAssertEqual(AreaRecords.layout(for: plain, chosen: "board"), .table)
+        let staged = SpaceSchema(fields: [SpaceField(id: "stage", name: "Stage", kind: .choice, options: [SpaceOption(id: "a", name: "Applied")])])
+        XCTAssertEqual(AreaRecords.layout(for: staged), .board)
 
         var pictured = schema
         pictured.fields.append(SpaceField(id: "photo", name: "Photo", kind: .image))
-        XCTAssertEqual(AreaRecords.preferred(for: pictured), .cards)
+        XCTAssertEqual(AreaRecords.layout(for: pictured), .cards)
 
         var wide = schema
         wide.fields.append(SpaceField(id: "source", name: "Source", kind: .text))

@@ -46,7 +46,6 @@ struct AreaWidgetHost: View {
            let type = types.first(where: { SpaceJSON.key($0.id) == widget.typeIDString }),
            let space = spaces.first(where: { SpaceJSON.key($0.id) == widget.spaceIDString }) {
             Button {
-                app.spaceTypeSelection[space.id] = type.id
                 app.navigate(to: .space(space.id))
             } label: {
                 AreaWidgetView(widget: widget, context: screenContext(type, space: space))

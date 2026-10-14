@@ -491,6 +491,8 @@ final class SpaceType {
     var originRaw: String
     /// The field ids the user chose to show on this type's cards, as JSON. Empty means the app picks.
     var cardFieldsJSON: String = ""
+    /// How this type's records are laid out, when Membrae chose: table, cards, board, or calendar. Empty means the app picks from the data.
+    var layoutRaw: String = ""
     var createdAt: Date
     var updatedAt: Date
 

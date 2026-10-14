@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-/// The inside of an Area: one type at a time, in a view the app picks for its records.
+/// The inside of a Space: every kind of thing it holds on one page, each in the layout Membrae picked for it.
 struct SpaceView: View {
     var id: UUID
 
@@ -12,14 +12,9 @@ struct SpaceView: View {
     @Query(sort: \SpaceRecord.updatedAt, order: .reverse) private var records: [SpaceRecord]
     @Query private var events: [SpaceEvent]
     @State private var pendingDelete: SpaceRecord?
-    @State private var screenState = SpaceScreenState()
 
     private var space: Space? {
         spaces.first { $0.id == id }
-    }
-
-    private var selectedType: SpaceType? {
-        SpaceSelection.type(in: id, types: types, chosen: app.spaceTypeSelection[id])
     }
 
     var body: some View {
@@ -28,25 +23,26 @@ struct SpaceView: View {
     }
 
     private var content: some View {
-        ScrollView {
+        let shown = SpaceSelection.pageTypes(in: id, types: types, records: records)
+        return ScrollView {
             PageBody {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 36) {
                     AreaWidgetShelf(spaceID: id)
-                    if space == nil {
-                        EmptyLine(text: "This Area no longer exists.")
-                    } else if let type = selectedType, type.role == .settings {
-                        if let record = records.first(where: { $0.typeIDString == SpaceJSON.key(type.id) }) {
-                            SpaceRecordContent(spaceID: id, recordID: record.id)
-                        } else {
-                            EmptyLine(text: "Nothing set yet.")
-                                .task(id: type.id) { try? SpaceStore.settingsRecord(of: type, in: context) }
+                    if let space {
+                        if shown.isEmpty {
+                            EmptyLine(text: "Nothing here yet. Tell Membrae what this Space is for.")
                         }
-                    } else if let type = selectedType {
-                        if let space {
-                            AreaRecordsView(context: screenContext(type, space: space)) { pendingDelete = $0 }
+                        ForEach(shown) { type in
+                            if type.role == .settings {
+                                settings(type)
+                            } else {
+                                AreaTypeSection(space: space, type: type, types: types, records: records, events: events) {
+                                    pendingDelete = $0
+                                }
+                            }
                         }
                     } else {
-                        EmptyLine(text: "This Area has no types yet. An agent will be able to set one up.")
+                        EmptyLine(text: "This Space no longer exists.")
                     }
                 }
                 .padding(.horizontal, 48)
@@ -69,9 +65,52 @@ struct SpaceView: View {
         }
     }
 
-    private func screenContext(_ type: SpaceType, space: Space) -> SpaceScreenContext {
+    @ViewBuilder
+    private func settings(_ type: SpaceType) -> some View {
+        let record = records.first { $0.typeIDString == SpaceJSON.key(type.id) }
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(type.name)
+                    .font(.system(size: 22, weight: .semibold))
+                if let record {
+                    Button("Edit") { app.present(.editRecord(record)) }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .help("Change \(type.name)")
+                }
+            }
+            if let record {
+                SpaceRecordContent(spaceID: id, recordID: record.id)
+            } else {
+                EmptyLine(text: "Nothing set yet.")
+                    .task(id: type.id) { try? SpaceStore.settingsRecord(of: type, in: context) }
+            }
+        }
+    }
+}
+
+/// One kind of thing in a Space, with its own search and filters.
+private struct AreaTypeSection: View {
+    var space: Space
+    var type: SpaceType
+    var types: [SpaceType]
+    var records: [SpaceRecord]
+    var events: [SpaceEvent]
+    var onDelete: (SpaceRecord) -> Void
+
+    @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
+    @State private var screenState = SpaceScreenState()
+
+    var body: some View {
+        AreaRecordsView(context: screenContext, onDelete: onDelete)
+    }
+
+    private var screenContext: SpaceScreenContext {
         let key = SpaceJSON.key(type.id)
         let spaceKey = type.spaceIDString
+        let spaceID = space.id
         return SpaceScreenContext(
             kind: .collection,
             type: type,
@@ -90,7 +129,7 @@ struct SpaceView: View {
             portraitCards: space.hasPortraitCards,
             state: screenState,
             context: context,
-            open: { app.navigate(to: .spaceRecord(space: id, record: $0.id)) },
+            open: { app.navigate(to: .spaceRecord(space: spaceID, record: $0.id)) },
             present: { app.present($0) }
         )
     }
@@ -101,6 +140,20 @@ enum SpaceSelection {
     static func type(in spaceID: UUID, types: [SpaceType], chosen: UUID?) -> SpaceType? {
         let owned = objectTypes(in: spaceID, types: types)
         return owned.first { $0.id == chosen } ?? owned.first
+    }
+
+    /// The types a Space's page shows, in order: the ones that hold something first, then the empty ones,
+    /// then settings.
+    static func pageTypes(in spaceID: UUID, types: [SpaceType], records: [SpaceRecord]) -> [SpaceType] {
+        let filled = Set(records.map(\.typeIDString))
+        func rank(_ type: SpaceType) -> Int {
+            if type.role == .settings { return 2 }
+            return filled.contains(SpaceJSON.key(type.id)) ? 0 : 1
+        }
+        return objectTypes(in: spaceID, types: types)
+            .enumerated()
+            .sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }
+            .map(\.element)
     }
 
     static func objectTypes(in spaceID: UUID, types: [SpaceType]) -> [SpaceType] {
@@ -129,66 +182,47 @@ enum SpaceSelection {
     }
 }
 
-/// Toolbar controls for a Space: its types, and New.
+/// Toolbar control for a Space: New, for whichever kind of thing it holds.
 struct SpaceToolbar: View {
     var spaceID: UUID
 
     @Environment(AppModel.self) private var app
     @Query(sort: \SpaceType.createdAt) private var types: [SpaceType]
-    @Query private var records: [SpaceRecord]
 
     var body: some View {
-        let owned = SpaceSelection.objectTypes(in: spaceID, types: types)
-        let selected = SpaceSelection.type(in: spaceID, types: types, chosen: app.spaceTypeSelection[spaceID])
+        let addable = SpaceSelection.objectTypes(in: spaceID, types: types).filter { $0.role != .settings }
         GlassEffectContainer {
-            HStack(spacing: 10) {
-                if owned.count > 1 {
-                    HStack(spacing: 2) {
-                        ForEach(owned) { type in
-                            Button {
-                                app.spaceTypeSelection[spaceID] = type.id
-                            } label: {
-                                Text(type.name)
-                                    .padding(.horizontal, 10)
-                                    .frame(height: 28)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(selected?.id == type.id ? .primary : .secondary)
-                        }
-                    }
-                    .padding(2)
-                    .glassEffect(.regular, in: Capsule())
+            if addable.count == 1, let only = addable.first {
+                Button {
+                    app.present(.newRecord(only))
+                } label: {
+                    label
                 }
-                if let selected, selected.role == .settings {
-                    if let record = records.first(where: { $0.typeIDString == SpaceJSON.key(selected.id) }) {
-                        Button {
-                            app.present(.editRecord(record))
-                        } label: {
-                            Text("Edit")
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .contentShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .glassEffect(.regular, in: Capsule())
-                        .help("Change \(selected.name)")
+                .buttonStyle(.plain)
+                .glassEffect(.regular, in: Capsule())
+                .help("New in \(only.name)")
+            } else if addable.count > 1 {
+                Menu {
+                    ForEach(addable) { type in
+                        Button(type.name) { app.present(.newRecord(type)) }
                     }
-                } else if let selected {
-                    Button {
-                        app.present(.newRecord(selected))
-                    } label: {
-                        Label("New", systemImage: "plus")
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular, in: Capsule())
-                    .help("New in \(selected.name)")
+                } label: {
+                    label
                 }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .glassEffect(.regular, in: Capsule())
+                .help("New")
             }
         }
+    }
+
+    private var label: some View {
+        Label("New", systemImage: "plus")
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .contentShape(Capsule())
     }
 }
 

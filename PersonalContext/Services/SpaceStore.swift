@@ -235,6 +235,32 @@ enum SpaceStore {
         try context.save()
     }
 
+    /// The layouts a type's records can take.
+    static let layouts = ["table", "cards", "board", "calendar"]
+
+    /// Sets how a type's records are laid out. An empty string hands the choice back to the app.
+    static func setLayout(_ layout: String, for type: SpaceType, in context: ModelContext) throws {
+        let schema = type.schema
+        var problem: String?
+        switch layout {
+        case "", "table", "cards": break
+        case "board":
+            if !schema.liveFields.contains(where: { $0.kind == .choice && !$0.options.isEmpty }) {
+                problem = "A board groups by a choice field, and \(type.name) has none."
+            }
+        case "calendar":
+            if !schema.liveFields.contains(where: { $0.kind == .date }) {
+                problem = "A calendar needs a date field, and \(type.name) has none."
+            }
+        default:
+            problem = "layout is one of \(layouts.joined(separator: ", ")), or empty to let the app choose."
+        }
+        if let problem { throw SpaceStoreError.invalidScreen([problem]) }
+        type.layoutRaw = layout
+        type.updatedAt = .now
+        try context.save()
+    }
+
     // MARK: Widgets
 
     static func widgets(in space: Space, context: ModelContext) -> [AreaWidget] {

@@ -209,7 +209,7 @@ enum Tools {
         "assign_tag": (.tagged, ""), "remove_tag": (.untagged, ""),
         "mark_for_deletion": (.flagged, ""), "delete_record": (.removed, ""),
         "create_space": (.added, "space"), "update_space": (.changed, "space"),
-        "set_space_type": (.changed, "space"), "set_area_card": (.changed, "space"),
+        "set_space_type": (.changed, "space"), "set_area_card": (.changed, "space"), "set_area_layout": (.changed, "space"),
         "set_area_widget": (.changed, "space"), "remove_area_widget": (.changed, "space"),
         "place_area_widget": (.changed, "space"),
         "create_space_record": (.added, "record"), "update_space_record": (.changed, "record"),
@@ -269,7 +269,7 @@ enum Tools {
             target = ""
         case "create_space", "update_space":
             space = target
-        case "set_space_type", "set_area_card", "set_area_widget", "remove_area_widget", "place_area_widget":
+        case "set_space_type", "set_area_card", "set_area_layout", "set_area_widget", "remove_area_widget", "place_area_widget":
             detail = (shape["name"] as? String) ?? args.string("type_key") ?? ""
             target = space
             title = UUID(uuidString: space).flatMap { SpaceStore.space($0, in: context) }?.displayName ?? ""
@@ -1614,6 +1614,24 @@ enum Tools {
             let type = try SpaceTools.type(args, in: context)
             do {
                 try SpaceStore.setCardFields(try args.strings("fields"), for: type, in: context)
+            } catch SpaceStoreError.invalidScreen(let problems) {
+                throw ToolError(problems.joined(separator: " "))
+            }
+            return SpaceTools.type(type, in: context)
+        },
+        Tool(
+            name: "set_area_layout",
+            description: "Choose the one layout an object type's records are shown in: table, cards, board (grouped by its first choice field), or calendar (placed on its first date field). The page shows only this layout; the user is not given a switcher, so pick the one that suits what the type is for. An empty string lets the app choose from the data.",
+            properties: [
+                "space_id": spaceID,
+                "type_key": typeKey,
+                "layout": ["type": "string", "enum": SpaceStore.layouts + [""], "description": "table, cards, board, or calendar. Empty lets the app choose."]
+            ],
+            required: ["space_id", "type_key", "layout"], readOnly: false
+        ) { args, context in
+            let type = try SpaceTools.type(args, in: context)
+            do {
+                try SpaceStore.setLayout(args.string("layout") ?? "", for: type, in: context)
             } catch SpaceStoreError.invalidScreen(let problems) {
                 throw ToolError(problems.joined(separator: " "))
             }
@@ -2983,6 +3001,7 @@ enum SpaceTools {
             "record_count": type.role == .object ? SpaceStore.records(of: type, in: context).count : 0
         ]
         if let chosen = type.cardFields { shape["card_fields"] = chosen }
+        if !type.layoutRaw.isEmpty { shape["layout"] = type.layoutRaw }
         return shape
     }
 

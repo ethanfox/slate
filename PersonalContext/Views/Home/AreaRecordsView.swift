@@ -1,43 +1,14 @@
 import SwiftData
 import SwiftUI
 
-/// How an Area's records are laid out. The app offers the ones that suit the data; nobody builds them.
+/// How an Area's records are laid out. Membrae picks one for each type; the page does not offer the others.
 enum AreaRecordsLayout: String, CaseIterable, Identifiable {
     case table
     case cards
     case board
     case calendar
-    case chart
-    case history
 
     var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .table: "Table"
-        case .cards: "Cards"
-        case .board: "Board"
-        case .calendar: "Calendar"
-        case .chart: "Chart"
-        case .history: "History"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .table: "tablecells"
-        case .cards: "square.grid.2x2"
-        case .board: "rectangle.split.3x1"
-        case .calendar: "calendar"
-        case .chart: "chart.xyaxis.line"
-        case .history: "clock"
-        }
-    }
-
-    /// The first four show records. The last two show what was logged about them.
-    var showsRecords: Bool {
-        self != .chart && self != .history
-    }
 }
 
 /// What gets logged in an Area, as far as a view needs to know: which entries, and a number to plot if there is one.
@@ -111,26 +82,26 @@ enum AreaRecords {
         return eventTypes.first.map { AreaLog(eventKey: $0.key, name: $0.name, numberField: nil) }
     }
 
-    /// A table always works. The rest are offered only when the data suits them: cards for a picture
-    /// or a few details, a board for a stage, a calendar for a date, a chart and history for what is logged.
-    static func layouts(for schema: SpaceSchema, log: AreaLog? = nil, chosenCard: Bool = false) -> [AreaRecordsLayout] {
+    /// The layouts the data suits. A table always works; cards need a picture or only a few details,
+    /// a board a stage, a calendar a date.
+    static func layouts(for schema: SpaceSchema, chosenCard: Bool = false) -> [AreaRecordsLayout] {
         var layouts: [AreaRecordsLayout] = [.table]
         if chosenCard || imageField(schema) != nil || columns(schema).count <= 4 { layouts.append(.cards) }
         if boardField(schema) != nil { layouts.append(.board) }
         if dateField(schema) != nil { layouts.append(.calendar) }
-        if log != nil { layouts += [.chart, .history] }
         return layouts
     }
 
-    /// An Area that is mostly tracking opens on its chart. Otherwise cards when there is a picture, else a table.
-    static func preferred(
-        for schema: SpaceSchema,
-        log: AreaLog? = nil,
-        records: Int = 0,
-        entries: Int = 0
-    ) -> AreaRecordsLayout {
-        if log != nil, entries > records { return .chart }
-        return imageField(schema) == nil ? .table : .cards
+    /// The one layout the page uses. What Membrae chose for the type wins while the data still suits it.
+    /// Otherwise cards when there is a picture or cards were set up, a board when the type has a stage, else a table.
+    static func layout(for schema: SpaceSchema, chosen: String = "", chosenCard: Bool = false) -> AreaRecordsLayout {
+        if let chosen = AreaRecordsLayout(rawValue: chosen), layouts(for: schema, chosenCard: chosenCard).contains(chosen) {
+            return chosen
+        }
+        if chosenCard || imageField(schema) != nil { return .cards }
+        let stages = ["status", "stage", "state", "progress"]
+        if let field = boardField(schema), stages.contains(field.name.lowercased()) { return .board }
+        return .table
     }
 
     static func row(
@@ -189,7 +160,6 @@ struct AreaRecordsView: View {
 
     @State private var search = ""
     @State private var filters: [String: String] = [:]
-    @State private var chosenLayout: AreaRecordsLayout?
     @State private var period = SpaceCalcRequest.Period.month
     /// How wide the card grid is, so the number of columns is worked out here and its changes can animate.
     @State private var cardsWidth: CGFloat = 0
@@ -200,16 +170,8 @@ struct AreaRecordsView: View {
         AreaRecords.log(from: context.eventTypes.map { (key: $0.key, name: $0.name, schema: $0.schema) })
     }
 
-    private var layouts: [AreaRecordsLayout] { AreaRecords.layouts(for: schema, log: log, chosenCard: context.type.cardFields != nil) }
-
     private var layout: AreaRecordsLayout {
-        if let chosenLayout, layouts.contains(chosenLayout) { return chosenLayout }
-        return AreaRecords.preferred(
-            for: schema,
-            log: log,
-            records: context.records.count,
-            entries: context.events.count
-        )
+        AreaRecords.layout(for: schema, chosen: context.type.layoutRaw, chosenCard: context.type.cardFields != nil)
     }
 
     private var rows: [AreaRecordRow] {
@@ -228,15 +190,14 @@ struct AreaRecordsView: View {
                 Text("\(all.count)")
                     .font(CraftFont.body)
                     .foregroundStyle(.tertiary)
-                Spacer(minLength: 16)
-                if layouts.count > 1 {
-                    layoutSwitch
-                }
             }
 
-            if !layout.showsRecords {
+            // What is logged here is charted above the records, once there is something to chart.
+            if !context.events.isEmpty {
                 logged
-            } else if all.isEmpty {
+            }
+
+            if all.isEmpty {
                 EmptyLine(text: "Nothing here yet. Tell Membrae what to add, or use New.")
             } else {
                 controls
@@ -255,35 +216,7 @@ struct AreaRecordsView: View {
         .onChange(of: context.type.id) { _, _ in
             search = ""
             filters = [:]
-            chosenLayout = nil
         }
-    }
-
-    private var layoutSwitch: some View {
-        HStack(spacing: 2) {
-            ForEach(layouts) { option in
-                Button {
-                    chosenLayout = option
-                } label: {
-                    Image(systemName: option.symbol)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(layout == option ? .primary : .tertiary)
-                        .frame(width: 30, height: 24)
-                        .background(
-                            layout == option ? CraftColor.selection : Color.clear,
-                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        )
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(option.title)
-                .accessibilityLabel(option.title)
-                .accessibilityAddTraits(layout == option ? .isSelected : [])
-            }
-        }
-        .padding(2)
-        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(CraftColor.hairline))
     }
 
     private var controls: some View {
@@ -337,7 +270,7 @@ struct AreaRecordsView: View {
         .accessibilityLabel("Filter by \(field.name)")
     }
 
-    // MARK: Board, calendar, chart, history
+    // MARK: Board, calendar, chart
 
     /// The same context with only the records the search and filters leave.
     private func narrowed(to shown: [AreaRecordRow]) -> SpaceScreenContext {
@@ -392,7 +325,7 @@ struct AreaRecordsView: View {
     @ViewBuilder
     private var logged: some View {
         if let log {
-            if layout == .chart {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Text(log.name)
                         .font(CraftFont.body)
@@ -412,18 +345,6 @@ struct AreaRecordsView: View {
                 var props: [String: SpaceProp] = ["events": .text(log.eventKey), "period": .text(period.rawValue)]
                 let _ = log.numberField.map { props["field"] = .text($0) }
                 SpaceComponentView(component: SpaceComponent("chart", props), context: context)
-            } else {
-                HStack(spacing: 8) {
-                    Text(log.name)
-                        .font(CraftFont.body)
-                        .foregroundStyle(.secondary)
-                    logButton(log)
-                    Spacer(minLength: 0)
-                }
-                SpaceComponentView(
-                    component: SpaceComponent("timeline", ["events": .text(log.eventKey)]),
-                    context: context
-                )
             }
         }
     }

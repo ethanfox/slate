@@ -128,8 +128,6 @@ final class AppModel {
     var showAgentIDs: Bool {
         didSet { defaults.set(showAgentIDs, forKey: Keys.showAgentIDs) }
     }
-    /// The type showing in each open Space. Not persisted.
-    var spaceTypeSelection: [UUID: UUID] = [:]
     /// Ids of everything pinned, kept beside the store's pins so a row can ask without a fetch.
     private(set) var pinnedIDs: Set<String> = []
 
