@@ -47,6 +47,27 @@ final class RunCoordinator {
         jobs[id] = Job(task: task, process: nil)
     }
 
+    /// Answers a Run that stopped to ask the user something. The same worker session carries on with the reply.
+    func reply(_ text: String, to run: AgentRun, in context: ModelContext) {
+        let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty, run.status == .waiting, jobs[run.id] == nil, !run.externalID.isEmpty else { return }
+        let id = run.id
+        let session = run.externalID
+        setWait(id, ChatWaitState.starting.label)
+        run.append(.reply, detail: message)
+        do {
+            try RunStore.transition(run, to: .running, in: context)
+        } catch {
+            clear(id)
+            return
+        }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.perform(id, resume: (session, message))
+        }
+        jobs[id] = Job(task: task, process: nil)
+    }
+
     func cancel(_ run: AgentRun, in context: ModelContext) {
         let id = run.id
         jobs[id]?.task.cancel()
@@ -73,13 +94,13 @@ final class RunCoordinator {
         return RunStore.run(id, in: context)
     }
 
-    private func perform(_ id: UUID) async {
+    private func perform(_ id: UUID, resume: (session: String, message: String)? = nil) async {
         guard let run = resolvedRun(id), let app else { return }
         do {
             try Task.checkCancellation()
             try validateProvider(run, app: app)
             if let agent = LocalAgent(rawValue: run.providerID) {
-                try await runLocalAgent(id, agent: agent)
+                try await runLocalAgent(id, agent: agent, resume: resume)
             } else if run.providerID == TalkProvider.chatgpt.rawValue {
                 try await runChatGPT(id, app: app)
             } else {
@@ -257,7 +278,7 @@ final class RunCoordinator {
 
     /// Hands the brief to a coding tool on this Mac. The tool does the work under its own rules;
     /// Membrae records what was asked and what came back.
-    private func runLocalAgent(_ id: UUID, agent: LocalAgent) async throws {
+    private func runLocalAgent(_ id: UUID, agent: LocalAgent, resume: (session: String, message: String)? = nil) async throws {
         guard let executable = agent.locate() else {
             throw LocalAgentError("\(agent.title) is not installed on this Mac.")
         }
@@ -275,7 +296,7 @@ final class RunCoordinator {
         let allowEdits = run.allowEdits
         let tools = policy.allowedNames(from: RunToolPolicy.generalCatalog(for: run))
         let request = LocalAgentRequest(
-            prompt: RunPrompt.localAgent(
+            prompt: resume?.message ?? RunPrompt.localAgent(
                 brief: run.brief,
                 project: run.project,
                 directory: repository,
@@ -287,7 +308,8 @@ final class RunCoordinator {
             allowEdits: allowEdits,
             mcpCommand: Bundle.main.url(forAuxiliaryExecutable: "membrae-mcp")?.path,
             membraeTools: tools,
-            runID: run.id.uuidString
+            runID: run.id.uuidString,
+            resumeSessionID: resume?.session
         )
         let before = repository.flatMap { try? GitHistory.commits(in: $0, limit: 1) }
         let process = LocalAgentProcess()
@@ -298,14 +320,27 @@ final class RunCoordinator {
         var lastText = ""
         var summary = ""
         var refused: [String] = []
+        var lastStep = ""
         for try await event in try process.start(agent, executable: executable, request: request) {
             try Task.checkCancellation()
             switch event {
             case .activity(let label):
                 setWait(id, label)
+                // The same step again in a row is one line of the transcript.
+                if label != lastStep {
+                    lastStep = label
+                    record(id, .step, label)
+                }
             case .text(let text):
                 lastText = text
+                lastStep = ""
                 setWait(id, ChatWaitState.writing.label)
+                record(id, .said, text)
+            case .session(let session):
+                if let context = liveContext(), let live = resolvedRun(id) {
+                    live.externalID = session
+                    try? context.save()
+                }
             case .finished(let text, let names):
                 summary = text
                 refused = names
@@ -314,6 +349,16 @@ final class RunCoordinator {
             }
         }
         process.stop()
+        // A worker that ends on a question is waiting for the user, not done. Its session carries on with the reply.
+        let closing = summary.isEmpty ? lastText : summary
+        if refused.isEmpty, Self.asksTheUser(closing),
+           let context = liveContext(), let live = resolvedRun(id), !live.externalID.isEmpty {
+            live.resultSummary = closing
+            try RunStore.transition(live, to: .waiting, detail: "Asked you a question", in: context)
+            clear(id)
+            announce(id)
+            return
+        }
         var parts = [summary.isEmpty ? lastText : summary]
         let refusal = agent.refusalNote(refused, allowEdits: allowEdits)
         if let repository, let before {
@@ -343,6 +388,22 @@ final class RunCoordinator {
     }
 
     /// Commits made since `sha`, newest first. A nil `sha` means the repository had none.
+    /// Whether a worker's last message ends by asking the user something.
+    nonisolated static func asksTheUser(_ text: String) -> Bool {
+        let last = text
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .last { !$0.isEmpty } ?? ""
+        return last.hasSuffix("?")
+    }
+
+    /// Adds one line to a Run's transcript, so the Run page shows the work as it happens.
+    private func record(_ id: UUID, _ kind: RunEventKind, _ detail: String) {
+        guard let context = liveContext(), let run = resolvedRun(id) else { return }
+        run.append(kind, detail: detail)
+        try? context.save()
+    }
+
     private static func commitLines(in path: String, since sha: String?) -> [String] {
         guard let commits = try? GitHistory.commits(in: path, limit: 30) else { return [] }
         var lines: [String] = []

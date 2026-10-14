@@ -84,6 +84,8 @@ struct LocalAgentRequest: Equatable, Sendable {
     var mcpCommand: String?
     var membraeTools: [String] = []
     var runID: String = ""
+    /// Carries on an earlier session with `prompt` as the user's reply, so the worker keeps what it knew.
+    var resumeSessionID: String?
 }
 
 struct LocalAgentError: LocalizedError, Sendable {
@@ -99,6 +101,9 @@ extension LocalAgent {
         switch self {
         case .claudeCode:
             var arguments = ["-p", request.prompt, "--output-format", "stream-json", "--verbose", "--strict-mcp-config"]
+            if let session = request.resumeSessionID, !session.isEmpty {
+                arguments += ["--resume", session]
+            }
             var allowed: [String] = []
             if request.allowEdits {
                 arguments += ["--permission-mode", "acceptEdits"]
@@ -158,6 +163,8 @@ enum LocalAgentEvent: Equatable, Sendable {
     /// `refused` names the tools the worker asked for and was not allowed to use.
     case finished(summary: String, refused: [String])
     case failed(String)
+    /// The id the worker gave this conversation, for carrying it on later.
+    case session(String)
 }
 
 extension LocalAgent {
@@ -173,6 +180,11 @@ extension LocalAgent {
 
     private func claudeEvents(type: String, object: [String: Any]) -> [LocalAgentEvent] {
         switch type {
+        case "system":
+            guard object["subtype"] as? String == "init", let session = object["session_id"] as? String, !session.isEmpty else {
+                return []
+            }
+            return [.session(session)]
         case "assistant":
             let content = (object["message"] as? [String: Any])?["content"] as? [[String: Any]] ?? []
             return content.compactMap { block in
@@ -309,7 +321,7 @@ extension LocalAgent {
             case .text(let text): reply = text
             case .finished(let summary, _): if !summary.isEmpty { reply = summary }
             case .failed(let message): throw LocalAgentError(message)
-            case .activity: break
+            case .activity, .session: break
             }
         }
         guard !reply.isEmpty else { throw LocalAgentError("\(title) did not answer.") }
@@ -414,7 +426,7 @@ final class LocalAgentProcess {
                     for event in agent.events(fromLine: line) {
                         switch event {
                         case .finished, .failed: ended = true
-                        case .activity, .text: break
+                        case .activity, .text, .session: break
                         }
                         continuation.yield(event)
                     }

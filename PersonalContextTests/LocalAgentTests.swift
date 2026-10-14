@@ -60,6 +60,23 @@ final class LocalAgentTests: XCTestCase {
         XCTAssertEqual(agent.events(fromLine: "not json"), [])
     }
 
+    func testClaudeCodeSessionCarriesOnWithAReply() throws {
+        let agent = LocalAgent.claudeCode
+        let started = #"{"type":"system","subtype":"init","session_id":"abc-123","tools":[]}"#
+        XCTAssertEqual(agent.events(fromLine: started), [.session("abc-123")])
+
+        var resumed = request(allowEdits: false)
+        resumed.prompt = "Use the staging bucket."
+        resumed.resumeSessionID = "abc-123"
+        let arguments = agent.arguments(for: resumed)
+        XCTAssertEqual(Array(arguments.prefix(2)), ["-p", "Use the staging bucket."])
+        XCTAssertEqual(arguments[try XCTUnwrap(arguments.firstIndex(of: "--resume")) + 1], "abc-123")
+        XCTAssertFalse(agent.arguments(for: request(allowEdits: false)).contains("--resume"))
+
+        XCTAssertTrue(RunCoordinator.asksTheUser("I found two buckets.\n\nWhich one should I use?\n"))
+        XCTAssertFalse(RunCoordinator.asksTheUser("Should it be faster? It is now. Done."))
+    }
+
     func testCodexStream() {
         let agent = LocalAgent.codex
         let command = #"{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'echo hi'","status":"in_progress"}}"#

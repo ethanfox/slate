@@ -8,6 +8,7 @@ struct RunPage: View {
     @Environment(\.modelContext) private var context
     @Environment(\.openURL) private var openURL
     @State private var confirmDelete = false
+    @State private var replyText = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,8 +33,17 @@ struct RunPage: View {
                             .padding(.top, 20)
                     }
 
+                    if run.status == .waiting, !run.externalID.isEmpty {
+                        replyBox
+                            .padding(.top, 20)
+                    }
+
                     if showsResult {
                         section("Result") { result }
+                    }
+
+                    if run.history.contains(where: \.kind.isTranscript) {
+                        section(run.status.isActive ? "Working" : "What it did") { transcript }
                     }
 
                     if !run.steps.isEmpty {
@@ -177,7 +187,7 @@ struct RunPage: View {
 
     private var history: some View {
         VStack(alignment: .leading, spacing: 5) {
-            ForEach(run.history) { event in
+            ForEach(run.history.filter { !$0.kind.isTranscript }) { event in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(event.at.formatted(date: .omitted, time: .shortened))
                         .foregroundStyle(.tertiary)
@@ -194,6 +204,78 @@ struct RunPage: View {
                 .font(.system(size: 12))
             }
         }
+    }
+
+    /// What the worker said and did, in order, with the user's replies between.
+    private var transcript: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(run.history.filter(\.kind.isTranscript)) { event in
+                switch event.kind {
+                case .said:
+                    AssistantMarkdown(text: event.detail)
+                        .textSelection(.enabled)
+                case .reply:
+                    Text(event.detail)
+                        .font(CraftFont.body)
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                default:
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.turn.down.right")
+                            .font(.system(size: 10))
+                        Text(event.detail)
+                            .font(.system(size: 12))
+                    }
+                    .foregroundStyle(.tertiary)
+                }
+            }
+            if run.status == .running, let label = app.runCoordinator.waitLabel(for: run.id) {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(label)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// The worker stopped to ask something. The reply carries on the same session.
+    private var replyBox: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("\(workerName) is waiting for your answer")
+                .font(.system(size: 13, weight: .semibold))
+            if !run.resultSummary.isEmpty {
+                AssistantMarkdown(text: run.resultSummary)
+                    .textSelection(.enabled)
+            }
+            TextField("Your answer", text: $replyText, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(CraftFont.body)
+                .lineLimit(2...8)
+                .padding(10)
+                .background(CraftColor.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(CraftColor.hairline))
+            HStack(spacing: 8) {
+                Button("Send Answer") {
+                    app.runCoordinator.reply(replyText, to: run, in: context)
+                    replyText = ""
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Text("⌘↩")
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(16)
+        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(CraftColor.hairline))
     }
 
     /// The worker's own plan, ticked off as it goes.

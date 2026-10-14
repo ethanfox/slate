@@ -45,6 +45,17 @@ enum RunEventKind: String, Codable, Hashable {
     case cancelled
     case quit
     case browser
+    /// One message the worker wrote while it worked.
+    case said
+    /// What the worker was doing, in a few words.
+    case step
+    /// What the user wrote back to the worker.
+    case reply
+
+    /// The worker's messages, its steps, and the user's replies: the conversation, not the status changes.
+    var isTranscript: Bool {
+        self == .said || self == .step || self == .reply
+    }
 
     var label: String {
         self == .couldNot ? RunStatus.couldNot.label : rawValue.capitalized

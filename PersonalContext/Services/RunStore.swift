@@ -166,7 +166,8 @@ enum RunStore {
     }
 
     static func recoverAbandoned(in context: ModelContext) {
-        let abandoned = activeRuns(in: context).filter { $0.status == .running || $0.status == .waiting }
+        // A Run waiting on the user is not abandoned: its worker's session is kept and a reply carries it on.
+        let abandoned = activeRuns(in: context).filter { $0.status == .running }
         guard !abandoned.isEmpty else { return }
         for run in abandoned {
             apply(.failed, on: run, detail: quitDetail, event: .quit)
