@@ -24,6 +24,7 @@ do not set status to done on a repeating task. \
 \(ContextBuilder.spaceRules) \
 get_project is lean. Use get_track for a track body and its linked work, list_tasks with track_id for tasks, \
 get_note for reference material, and list_chats then get_chat to read a past conversation. \
+When asked to tidy, clean up, or consolidate a project, call get_cleanup_review and then propose_cleanup; the user applies the proposal in the app. \
 Tags are sparse cross-cutting labels. Use list_tags, create_tag, assign_tag, and remove_tag on notes, tracks, decisions, conversations, and tasks. Do not tag projects. \
 \(ContextBuilder.deletionRules)
 """

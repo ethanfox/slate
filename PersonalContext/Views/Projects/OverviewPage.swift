@@ -719,11 +719,18 @@ struct ProjectOverview: View {
 
     @Environment(AppModel.self) private var app
     @Query private var rows: [TitleIndex]
+    @Query private var plans: [CleanupPlan]
 
     init(project: Project, list: @escaping (TitleIndexKind) -> Void) {
         self.project = project
         self.list = list
         let key = project.id.uuidString.lowercased()
+        let waiting = CleanupPlanStatus.proposed.rawValue
+        _plans = Query(
+            filter: #Predicate<CleanupPlan> { $0.projectIDString == key && $0.statusRaw == waiting },
+            sort: \CleanupPlan.createdAt,
+            order: .reverse
+        )
         _rows = Query(
             filter: #Predicate<TitleIndex> { $0.projectIDString == key && $0.isArchived == false },
             sort: \TitleIndex.updatedAt,
@@ -751,6 +758,18 @@ struct ProjectOverview: View {
                             Text(project.name)
                                 .font(.system(size: 28, weight: .semibold))
                             Spacer(minLength: 8)
+                            Button {
+                                app.presentNewRun(origin: .project, project: project, brief: ContextBuilder.cleanupBrief(for: project))
+                            } label: {
+                                Image(systemName: "wand.and.stars")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 28, height: 28)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .help("Tidy Up: Membrae proposes what to merge, retire, and delete")
+                            .accessibilityLabel("Tidy Up")
                             Button {
                                 app.toggleProjectSettings()
                             } label: {
@@ -780,6 +799,10 @@ struct ProjectOverview: View {
                                 .lineLimit(4)
                                 .frame(maxWidth: 640, alignment: .leading)
                         }
+                    }
+
+                    if let plan = plans.first {
+                        CleanupPlanCard(plan: plan)
                     }
 
                     everything
@@ -936,6 +959,121 @@ struct ProjectOverview: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// A cleanup Membrae proposed for this project: what it would change and why, for the user to apply or dismiss.
+private struct CleanupPlanCard: View {
+    var plan: CleanupPlan
+    @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
+    @State private var expanded = false
+
+    private static let groups: [(action: CleanupChange.Action, title: String)] = [
+        (.mergeTracks, "Merge"), (.retireDecision, "Retire"), (.delete, "Delete")
+    ]
+
+    var body: some View {
+        let changes = plan.changes
+        let accepted = changes.count { $0.isAccepted }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                Text("Membrae has a cleanup ready")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer(minLength: 8)
+                Text(counts(changes))
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            if !plan.summary.isEmpty {
+                Text(plan.summary)
+                    .font(CraftFont.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if expanded {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(Self.groups, id: \.title) { group in
+                        let rows = changes.filter { $0.action == group.action }
+                        if !rows.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("\(group.title) (\(rows.count))")
+                                    .font(CraftFont.section)
+                                    .foregroundStyle(.secondary)
+                                ForEach(rows) { change in
+                                    row(change)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            HStack(spacing: 10) {
+                Button(accepted == changes.count ? "Apply All \(accepted)" : "Apply \(accepted) of \(changes.count)") { apply() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(accepted == 0)
+                Button(expanded ? "Hide the List" : "Review the List") { expanded.toggle() }
+                Button("Dismiss") { CleanupStore.dismiss(plan, in: context) }
+                Spacer(minLength: 0)
+            }
+            Text("Nothing changes until you apply. Each change then shows in Lately, where you can take it back.")
+                .font(CraftFont.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(16)
+        .frame(maxWidth: 720, alignment: .leading)
+        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(CraftColor.hairline))
+    }
+
+    private func counts(_ changes: [CleanupChange]) -> String {
+        Self.groups.compactMap { group in
+            let count = changes.count { $0.action == group.action }
+            return count == 0 ? nil : "\(count) to \(group.title.lowercased())"
+        }
+        .joined(separator: " · ")
+    }
+
+    private func row(_ change: CleanupChange) -> some View {
+        Button {
+            CleanupStore.setAccepted(!change.isAccepted, change: change.id, on: plan)
+            try? context.persist()
+        } label: {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: change.isAccepted ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 13))
+                    .foregroundStyle(change.isAccepted ? .secondary : .tertiary)
+                    .frame(width: 18, height: 18)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(change.sentence)
+                        .font(.system(size: 13))
+                        .foregroundStyle(change.isAccepted ? .primary : .secondary)
+                        .multilineTextAlignment(.leading)
+                    Text(change.reason)
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(change.sentence). \(change.reason)")
+        .accessibilityAddTraits(change.isAccepted ? .isSelected : [])
+    }
+
+    private func apply() {
+        try? context.persist()
+        let result = CleanupStore.apply(plan.id, container: context.container)
+        if result.failed == 0 {
+            app.flash("Made \(result.done) changes. Take any of them back from Lately.")
+        } else {
+            app.flash("Made \(result.done) changes; \(result.failed) could not be made.")
+        }
     }
 }
 

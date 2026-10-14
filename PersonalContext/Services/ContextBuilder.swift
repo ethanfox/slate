@@ -8,6 +8,12 @@ enum ContextBuilder {
 
     static let deletionRules = "You can delete a task, note, track, decision, or chat with delete_record. Delete what a newer record made obsolete, what duplicates another record, and what the user asked you to remove. Every delete shows in the user's Lately feed, where they can take it back. When you are not sure something should go, call mark_for_deletion with a reason instead, optionally with replacement_type and replacement_id, and the user decides Keep or Delete."
 
+    static let cleanupRules = "How to tidy a project. Read it with get_cleanup_review, and open a track with get_track or a decision with get_decision only when the brief is not enough to judge. The project's current direction and its newest decisions are what is true now; judge everything else against them. Look for four things. Tracks that are the same line of work under different names: merge the smaller or older into the one that should continue, and aim for a handful of tracks a person could hold in their head, not dozens. Decisions that a newer decision contradicts or replaces: retire the older one. Open tasks for work the direction has dropped, or that duplicate another task: delete them. Tracks and notes that are empty, test data, or wholly replaced: delete them. Leave alone anything you are unsure about, anything still referred to by current work, and the active track. Do not rewrite, rename, or add records as part of a cleanup. Put every change in one propose_cleanup call, each with one plain sentence of reason that names what replaces it where something does. Then tell the user it is ready to review in the app, in a sentence or two."
+
+    static func cleanupBrief(for project: Project) -> String {
+        "Tidy the project “\(project.name)” (project id \(project.id.uuidString)). Call get_cleanup_review with that project id, work out what should be merged, retired, or deleted, and call propose_cleanup once with every change. Do not change any record yourself: the user reviews the proposal in the app and applies it. \(cleanupRules)"
+    }
+
     static let agendaRules = "The user's calendar and Apple Reminders are separate from Membrae tasks. When they ask for a calendar event, call create_event. When they ask to be reminded of something, call create_reminder. Call list_calendars first for the current time and the calendar and list names."
 
     static let replyFirst = "Answer the user first. Persist lasting facts with the tools after you start the reply. Never ask the user to save. Do not mention what you saved unless they asked."

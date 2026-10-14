@@ -234,6 +234,7 @@ final class AgentAction {
             if kindRaw == "source" { return "Saved \(title.isEmpty ? "a source" : "“\(title)”") to the Library" }
             return "Added \(name)"
         case .changed:
+            if tool == "merge_tracks", !detail.isEmpty { return "Merged track “\(detail)” into “\(title)”" }
             if kindRaw == "space", !detail.isEmpty { return "Set up \(detail) in \(title.isEmpty ? "a Space" : title)" }
             return "Changed \(name)"
         case .completed: return "Completed \(name)"

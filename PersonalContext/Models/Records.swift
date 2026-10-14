@@ -492,6 +492,73 @@ final class JunctionRequirement: Identifiable {
     }
 }
 
+/// One change a cleanup would make, in words the user can judge.
+struct CleanupChange: Codable, Identifiable, Hashable {
+    enum Action: String, Codable {
+        case mergeTracks = "merge_tracks"
+        case delete
+        case retireDecision = "retire_decision"
+    }
+
+    var id = UUID()
+    var action: Action
+    /// track, task, note, or decision.
+    var targetType: String
+    var targetID: String
+    /// For a merge, the track that continues.
+    var intoID = ""
+    var title: String
+    var intoTitle = ""
+    var reason: String
+    var isAccepted = true
+    /// Empty until applied, then "done" or why it could not be done.
+    var outcome = ""
+
+    var sentence: String {
+        switch action {
+        case .mergeTracks: "Merge “\(title)” into “\(intoTitle)”"
+        case .delete: "Delete \(targetType) “\(title)”"
+        case .retireDecision: "Retire decision “\(title)”"
+        }
+    }
+}
+
+enum CleanupPlanStatus: String {
+    case proposed, applied, dismissed
+}
+
+/// What Membrae proposes to tidy in one project. Nothing changes until the user applies it.
+@Model
+final class CleanupPlan: Identifiable {
+    var id: UUID
+    var projectIDString: String
+    var createdAt: Date
+    var statusRaw: String
+    var summary: String
+    var changesJSON: String
+    var client: String
+
+    var status: CleanupPlanStatus {
+        get { CleanupPlanStatus(rawValue: statusRaw) ?? .proposed }
+        set { statusRaw = newValue.rawValue }
+    }
+
+    var changes: [CleanupChange] {
+        get { SpaceJSON.decode(changesJSON, as: [CleanupChange].self) ?? [] }
+        set { changesJSON = SpaceJSON.encode(newValue) }
+    }
+
+    init(project: Project, summary: String, changes: [CleanupChange], client: String) {
+        self.id = UUID()
+        self.projectIDString = project.id.uuidString.lowercased()
+        self.createdAt = .now
+        self.statusRaw = CleanupPlanStatus.proposed.rawValue
+        self.summary = summary
+        self.changesJSON = SpaceJSON.encode(changes)
+        self.client = client
+    }
+}
+
 enum SavedSourceKind: String, CaseIterable {
     case link, pdf, file, image
 

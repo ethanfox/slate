@@ -509,6 +509,7 @@ extension RunToolPolicy {
         "list_sources", "get_source", "create_source", "update_source",
         "list_chats", "get_chat",
         "list_tags", "create_tag", "update_tag", "assign_tag", "remove_tag",
-        "list_runs", "get_run"
+        "list_runs", "get_run",
+        "get_cleanup_review", "propose_cleanup"
     ]
 }

@@ -468,6 +468,84 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertNil(SourceFetcher.link(in: "example"))
     }
 
+    func testACleanupIsProposedThenAppliedAndAMergeCanBeTakenBack() throws {
+        let harbor = Project(name: "Harbor", symbol: "folder", summary: "")
+        context.insert(harbor)
+        let runs = ProjectThread(title: "Runs", kind: .feature, project: harbor)
+        let jobs = ProjectThread(title: "Cloud jobs", kind: .feature, project: harbor)
+        jobs.body = "Jobs run in the cloud."
+        context.insert(runs)
+        context.insert(jobs)
+        let stop = StopStore.add("Schedules", to: jobs, in: context)
+        let work = AgendaItem(kind: .task, eventKitID: "", title: "Queue a job")
+        context.insert(work)
+        StopStore.assign(work, to: stop, in: context)
+        let stale = AgendaItem(kind: .task, eventKitID: "", title: "Old idea")
+        stale.project = harbor
+        context.insert(stale)
+        let old = Decision(title: "Two queues", decision: "Each job has its own queue.", project: harbor, thread: jobs)
+        context.insert(old)
+        try context.save()
+
+        let review = try object(Tools.call("get_cleanup_review", arguments: ["project_id": harbor.id.uuidString], container: container))
+        XCTAssertEqual((review["tracks"] as? [[String: Any]])?.count, 2)
+        XCTAssertEqual((review["open_tasks"] as? [[String: Any]])?.count, 2)
+
+        func propose(_ changes: [[String: Any]]) -> [String: Any] {
+            Tools.call(
+                "propose_cleanup",
+                arguments: ["project_id": harbor.id.uuidString, "summary": "Runs and cloud jobs are one thing.", "changes": changes],
+                container: container, announce: false
+            )
+        }
+        XCTAssertEqual(propose([["action": "delete", "target_type": "task", "target_id": stale.id.uuidString]])["isError"] as? Bool, true, "a change needs a reason")
+        _ = try object(propose([
+            ["action": "merge_tracks", "track_id": jobs.id.uuidString, "into_track_id": runs.id.uuidString, "reason": "Same work."],
+            ["action": "retire_decision", "decision_id": old.id.uuidString, "reason": "Replaced by one queue."],
+            ["action": "delete", "target_type": "task", "target_id": stale.id.uuidString, "reason": "Dropped."]
+        ]))
+
+        let reader = ModelContext(container)
+        let plan = try XCTUnwrap(CleanupStore.proposed(for: harbor.id, in: reader))
+        XCTAssertEqual(plan.changes.map(\.sentence), [
+            "Merge “Cloud jobs” into “Runs”", "Retire decision “Two queues”", "Delete task “Old idea”"
+        ])
+        XCTAssertEqual(try reader.fetchCount(FetchDescriptor<ProjectThread>()), 2, "proposing changes nothing")
+        CleanupStore.setAccepted(false, change: plan.changes[2].id, on: plan)
+        try reader.save()
+
+        let result = CleanupStore.apply(plan.id, container: container)
+        XCTAssertEqual(result.done, 2)
+        XCTAssertEqual(result.failed, 0)
+
+        func track(_ id: UUID) -> [String: Any] {
+            Tools.call("get_track", arguments: ["track_id": id.uuidString], container: container)
+        }
+        XCTAssertEqual(track(jobs.id)["isError"] as? Bool, true)
+        let merged = try object(track(runs.id))
+        XCTAssertEqual((merged["stops"] as? [[String: Any]])?.map { $0["title"] as? String }, ["Schedules"])
+        let retired = try object(Tools.call("get_decision", arguments: ["decision_id": old.id.uuidString], container: container))
+        XCTAssertEqual(retired["status"] as? String, "superseded")
+        XCTAssertEqual(retired["track_id"] as? String, runs.id.uuidString)
+        XCTAssertNil(Tools.call("get_task", arguments: ["task_id": stale.id.uuidString], container: container)["isError"], "a change turned off is not made")
+        XCTAssertNil(CleanupStore.proposed(for: harbor.id, in: ModelContext(container)))
+
+        let log = try ModelContext(container).fetch(FetchDescriptor<AgentAction>(sortBy: [SortDescriptor(\.createdAt)]))
+        let merge = try XCTUnwrap(log.first { $0.tool == "merge_tracks" })
+        XCTAssertEqual(merge.sentence, "Merged track “Cloud jobs” into “Runs”")
+        try Tools.undo(merge.id, container: container)
+
+        let back = try object(track(jobs.id))
+        XCTAssertEqual(back["body"] as? String, "Jobs run in the cloud.")
+        XCTAssertEqual((back["stops"] as? [[String: Any]])?.map { $0["title"] as? String }, ["Schedules"])
+        XCTAssertEqual(((try object(track(runs.id)))["stops"] as? [[String: Any]])?.count, 0)
+        let task = try object(Tools.call("get_task", arguments: ["task_id": work.id.uuidString], container: container))
+        XCTAssertEqual((task["tracks"] as? [[String: Any]])?.compactMap { $0["id"] as? String }, [jobs.id.uuidString])
+        let decision = try object(Tools.call("get_decision", arguments: ["decision_id": old.id.uuidString], container: container))
+        XCTAssertEqual(decision["track_id"] as? String, jobs.id.uuidString)
+        XCTAssertEqual(try ModelContext(container).fetchCount(FetchDescriptor<Note>()), 0, "the note that kept the merged track's text goes too")
+    }
+
     func testAnAgentDeleteIsLoggedAndCanBeTakenBack() throws {
         let seed = HarborEvalFixture.seed(in: context)
         let child = ProjectThread(title: "Passkeys", kind: .topic, project: seed.project, parent: seed.auth)

@@ -265,6 +265,8 @@ enum Tools {
             pointAtIndexed(args.string("target_id") ?? "", kind: args.string("target_type") ?? "")
         case "delete_record":
             kind = args.string("target_type") ?? ""
+        case "merge_tracks":
+            detail = (before["track"] as? [String: Any])?["title"] as? String ?? ""
         case "delete_completion":
             target = ""
         case "create_space", "update_space":
@@ -317,6 +319,15 @@ enum Tools {
             guard let kind = try? args.choice("target_type", as: DeletableKind.self),
                   let id = try? args.uuid("target_id") else { return [:] }
             return (try? DeletedRecord.snapshot(kind, id, in: context)) ?? [:]
+        }
+        if tool == "merge_tracks" {
+            if let junction = (try? args.uuid("junction_id")).flatMap({ try? Lookup.junction($0, in: context) }),
+               let first = junction.first, let second = junction.second {
+                return TrackMerge.snapshot(of: second, into: first)
+            }
+            guard let second = (try? args.uuid("track_id")).flatMap({ try? Lookup.thread($0, in: context) }),
+                  let first = (try? args.uuid("into_track_id")).flatMap({ try? Lookup.thread($0, in: context) }) else { return [:] }
+            return TrackMerge.snapshot(of: second, into: first)
         }
         if tool == "update_space_record" {
             guard let id = args.string("record_id"),
@@ -408,6 +419,12 @@ enum Tools {
             try SpaceStore.delete(event, in: context)
         case .removed:
             try DeletedRecord.restore(before, in: context)
+        case .changed where action.tool == "merge_tracks":
+            do {
+                try TrackMerge.restore(before, in: context)
+            } catch {
+                throw ToolError(error.localizedDescription)
+            }
         default:
             let target = action.targetIDString
             let made = action.createdAt
@@ -1044,16 +1061,52 @@ enum Tools {
         },
         Tool(
             name: "merge_tracks",
-            description: "Make the two tracks of a merge junction one track, once every requirement on it is met. The second track's stops follow the first's, and its tasks, decisions, notes, and chats move to the first. What the second track said and what was reconciled is kept as a note on the first. The second track is then removed. Fails and names what is left when a requirement is not met. Returns the merged track.",
-            properties: ["junction_id": text("A merge junction's id, from get_track.")],
-            required: ["junction_id"], readOnly: false
+            description: "Make two tracks one. With junction_id: a merge junction's two tracks, once every requirement on it is met; fails and names what is left otherwise. With track_id and into_track_id: fold track_id into into_track_id directly, for two tracks that are plainly the same thing with nothing to reconcile. Either way the folded track's stops follow the other's, and its tasks, decisions, notes, and chats move across. What it said is kept as a note on the track that continues, and it is then removed. The user can take a merge back from Lately. Returns the merged track.",
+            properties: [
+                "junction_id": text("A merge junction's id, from get_track."),
+                "track_id": text("The track to fold in. Use with into_track_id when there is no junction."),
+                "into_track_id": text("The track that continues.")
+            ],
+            required: [], readOnly: false
         ) { args, context in
-            let junction = try Lookup.junction(try args.uuid("junction_id"), in: context)
             do {
-                return JSONShape.track(try JunctionStore.merge(junction, in: context), full: true)
+                if let raw = args.string("junction_id"), !raw.isEmpty {
+                    let junction = try Lookup.junction(try args.uuid("junction_id"), in: context)
+                    return JSONShape.track(try JunctionStore.merge(junction, in: context), full: true)
+                }
+                let second = try Lookup.thread(try args.uuid("track_id"), in: context)
+                let first = try Lookup.thread(try args.uuid("into_track_id"), in: context)
+                return JSONShape.track(try TrackMerge.fold(second, into: first, in: context), full: true)
             } catch let error as JunctionStoreError {
                 throw ToolError(error.localizedDescription)
             }
+        },
+        Tool(
+            name: "get_cleanup_review",
+            description: "Everything in one project, in brief, for tidying it: every track with what it holds, every decision, every open task, and every note, plus how to do the cleanup. Call this first when asked to tidy, clean up, or consolidate a project, then propose_cleanup.",
+            properties: ["project_id": projectID],
+            required: ["project_id"], readOnly: true
+        ) { args, context in
+            CleanupStore.review(try Lookup.project(try args.uuid("project_id"), in: context))
+        },
+        Tool(
+            name: "propose_cleanup",
+            description: "Propose a cleanup of one project. Nothing changes: the user sees the list in the app, turns off what they disagree with, and applies it. Each change they apply shows in Lately and can be taken back. A new proposal replaces one still waiting. Send every change in one call. \(ContextBuilder.cleanupRules)",
+            properties: [
+                "project_id": projectID,
+                "summary": text("One or two plain sentences on what this cleanup does, for the user."),
+                "changes": objectList("Each change: {action, reason} plus its ids. action merge_tracks takes track_id and into_track_id. action delete takes target_type (track, task, note, or decision) and target_id. action retire_decision takes decision_id. reason is one plain sentence the user can judge without opening the record.")
+            ],
+            required: ["project_id", "summary", "changes"], readOnly: false
+        ) { args, context in
+            let project = try Lookup.project(try args.uuid("project_id"), in: context)
+            let plan = try CleanupStore.propose(
+                for: project,
+                summary: args.string("summary") ?? "",
+                items: try args.objects("changes") ?? [],
+                in: context
+            )
+            return CleanupStore.shape(plan)
         },
 
         Tool(
@@ -1900,6 +1953,248 @@ enum TagTools {
 }
 
 /// The kinds of record delete_record removes.
+/// Tidying a project: what an AI is shown, the plan it proposes, and applying the parts the user accepts.
+enum CleanupStore {
+    private static let day: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter
+    }()
+
+    private static func clipped(_ text: String, to limit: Int) -> String {
+        let flat = text.split(whereSeparator: \.isNewline).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        return flat.count > limit ? String(flat.prefix(limit)) + "…" : flat
+    }
+
+    /// The whole project in brief, sized to be read in one go.
+    static func review(_ project: Project) -> [String: Any] {
+        let tasks = project.agendaItems.filter { $0.kind == .task }
+        let tracks = project.threads.sorted { $0.updatedAt > $1.updatedAt }.map { track -> [String: Any] in
+            let own = tasks.filter { item in item.liveTracks.contains { $0.id == track.id } }
+            return [
+                "id": track.id.uuidString,
+                "title": track.title,
+                "theme": track.theme?.displayName ?? "",
+                "status": track.status.rawValue,
+                "is_active": project.activeTrackID == track.id,
+                "summary": clipped(track.summary.isEmpty ? track.body : track.summary, to: 240),
+                "body_characters": track.body.count,
+                "stops": track.stops.count,
+                "open_tasks": own.count { !$0.isCompleted },
+                "done_tasks": own.count { $0.isCompleted },
+                "decisions": track.decisions.count,
+                "notes": track.notes.count,
+                "chats": track.conversations.count,
+                "updated": day.string(from: track.updatedAt)
+            ]
+        }
+        let decisions = project.decisions.sorted { $0.createdAt > $1.createdAt }.map { decision -> [String: Any] in
+            [
+                "id": decision.id.uuidString,
+                "title": decision.title,
+                "status": decision.status.rawValue,
+                "track_id": decision.thread?.id.uuidString ?? "",
+                "decision": clipped(decision.decision, to: 200),
+                "created": day.string(from: decision.createdAt)
+            ]
+        }
+        let open = tasks.filter { !$0.isCompleted }.sorted { $0.updatedAt > $1.updatedAt }.map { item -> [String: Any] in
+            [
+                "id": item.id.uuidString,
+                "title": item.displayTitle,
+                "status": item.workflowStatus.rawValue,
+                "track_ids": item.liveTracks.map(\.id.uuidString),
+                "updated": day.string(from: item.updatedAt)
+            ]
+        }
+        let notes = project.notes.sorted { $0.updatedAt > $1.updatedAt }.map { note -> [String: Any] in
+            [
+                "id": note.id.uuidString,
+                "title": note.displayTitle,
+                "track_id": note.thread?.id.uuidString ?? "",
+                "characters": note.content.count,
+                "updated": day.string(from: note.updatedAt)
+            ]
+        }
+        return [
+            "project_id": project.id.uuidString,
+            "name": project.name,
+            "current_direction": project.currentDirection,
+            "how_to": ContextBuilder.cleanupRules,
+            "tracks": tracks,
+            "decisions": decisions,
+            "open_tasks": open,
+            "notes": notes
+        ]
+    }
+
+    static func proposed(for projectID: UUID, in context: ModelContext) -> CleanupPlan? {
+        let key = projectID.uuidString.lowercased()
+        let status = CleanupPlanStatus.proposed.rawValue
+        var descriptor = FetchDescriptor<CleanupPlan>(
+            predicate: #Predicate { $0.projectIDString == key && $0.statusRaw == status },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    /// Checks every change against the project and stores the plan. Replaces a plan still waiting.
+    static func propose(
+        for project: Project,
+        summary: String,
+        items: [[String: Any]],
+        client: String = "",
+        in context: ModelContext
+    ) throws -> CleanupPlan {
+        guard !items.isEmpty else { throw ToolError("A cleanup needs at least one change. If the project is already tidy, say so and do not call this.") }
+        var changes: [CleanupChange] = []
+        var problems: [String] = []
+        var touched: Set<String> = []
+        var kept: Set<String> = []
+
+        func id(_ item: [String: Any], _ key: String) -> UUID? {
+            (item[key] as? String).flatMap { UUID(uuidString: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        }
+        func track(_ id: UUID?) -> ProjectThread? {
+            guard let id else { return nil }
+            return project.threads.first { $0.id == id }
+        }
+        func name(_ title: String) -> String { title.isEmpty ? "Untitled" : title }
+
+        for (index, item) in items.enumerated() {
+            let place = "Change \(index + 1)"
+            let reason = (item["reason"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !reason.isEmpty else { problems.append("\(place) needs a reason."); continue }
+            guard let action = CleanupChange.Action(rawValue: item["action"] as? String ?? "") else {
+                problems.append("\(place): action is merge_tracks, delete, or retire_decision.")
+                continue
+            }
+            var change: CleanupChange?
+            switch action {
+            case .mergeTracks:
+                guard let second = track(id(item, "track_id")), let first = track(id(item, "into_track_id")) else {
+                    problems.append("\(place): track_id and into_track_id must both be tracks in this project.")
+                    continue
+                }
+                guard first.id != second.id else { problems.append("\(place) merges a track into itself."); continue }
+                kept.insert(first.id.uuidString)
+                change = CleanupChange(
+                    action: action, targetType: "track", targetID: second.id.uuidString, intoID: first.id.uuidString,
+                    title: name(second.title), intoTitle: name(first.title), reason: reason
+                )
+            case .delete:
+                let type = item["target_type"] as? String ?? ""
+                guard let target = id(item, "target_id") else { problems.append("\(place) needs target_id."); continue }
+                var title: String?
+                switch type {
+                case "track": title = track(target).map { name($0.title) }
+                case "task": title = project.agendaItems.first { $0.id == target && $0.kind == .task }?.displayTitle
+                case "note": title = project.notes.first { $0.id == target }?.displayTitle
+                case "decision": title = project.decisions.first { $0.id == target }.map { name($0.title) }
+                default:
+                    problems.append("\(place): target_type is track, task, note, or decision.")
+                    continue
+                }
+                guard let title else { problems.append("\(place): no \(type) with that id in this project."); continue }
+                change = CleanupChange(action: action, targetType: type, targetID: target.uuidString, title: title, reason: reason)
+            case .retireDecision:
+                guard let target = id(item, "decision_id"), let decision = project.decisions.first(where: { $0.id == target }) else {
+                    problems.append("\(place): decision_id must be a decision in this project.")
+                    continue
+                }
+                guard decision.status == .active else { problems.append("\(place): “\(decision.title)” is already retired."); continue }
+                change = CleanupChange(action: action, targetType: "decision", targetID: target.uuidString, title: name(decision.title), reason: reason)
+            }
+            guard let change else { continue }
+            guard touched.insert(change.targetID).inserted else {
+                problems.append("\(place): “\(change.title)” is already in an earlier change.")
+                continue
+            }
+            changes.append(change)
+        }
+        for change in changes where change.targetType == "track" && kept.contains(change.targetID) {
+            problems.append("“\(change.title)” is merged away or deleted, and is also the track another merge continues as. Pick one track to keep and merge the others into it.")
+        }
+        if project.activeTrackID.map({ touched.contains($0.uuidString) }) == true {
+            problems.append("The active track cannot be merged away or deleted. Merge the other track into it.")
+        }
+        guard problems.isEmpty else { throw ToolError(problems.joined(separator: " ")) }
+
+        if let waiting = proposed(for: project.id, in: context) { context.delete(waiting) }
+        let plan = CleanupPlan(
+            project: project,
+            summary: summary.trimmingCharacters(in: .whitespacesAndNewlines),
+            changes: changes,
+            client: client
+        )
+        context.insert(plan)
+        project.touch()
+        return plan
+    }
+
+    static func shape(_ plan: CleanupPlan) -> [String: Any] {
+        [
+            "id": plan.id.uuidString,
+            "status": plan.status.rawValue,
+            "summary": plan.summary,
+            "changes": plan.changes.map { ["change": $0.sentence, "reason": $0.reason, "outcome": $0.outcome] },
+            "next": "Nothing has changed. The user reviews this on the project's page in the app and applies it there. Tell them it is ready."
+        ]
+    }
+
+    static func setAccepted(_ accepted: Bool, change id: UUID, on plan: CleanupPlan) {
+        var changes = plan.changes
+        guard let index = changes.firstIndex(where: { $0.id == id }) else { return }
+        changes[index].isAccepted = accepted
+        plan.changes = changes
+    }
+
+    static func dismiss(_ plan: CleanupPlan, in context: ModelContext) {
+        plan.status = .dismissed
+        try? context.persist()
+    }
+
+    /// Makes the accepted changes, each through the same tool an agent would use, so each lands in Lately and
+    /// can be taken back. Returns how many were made and how many could not be.
+    @discardableResult
+    static func apply(_ planID: UUID, container: ModelContainer) -> (done: Int, failed: Int) {
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        guard let plan = try? context.fetch(FetchDescriptor<CleanupPlan>(predicate: #Predicate { $0.id == planID })).first,
+              plan.status == .proposed else { return (0, 0) }
+        var changes = plan.changes
+        var done = 0
+        var failed = 0
+        let origin = ActionOrigin(client: plan.client.isEmpty ? "Membrae" : plan.client)
+        for index in changes.indices where changes[index].isAccepted {
+            let change = changes[index]
+            let result: [String: Any]
+            switch change.action {
+            case .mergeTracks:
+                result = Tools.call("merge_tracks", arguments: ["track_id": change.targetID, "into_track_id": change.intoID], container: container, announce: false, origin: origin)
+            case .delete:
+                result = Tools.call("delete_record", arguments: ["target_type": change.targetType, "target_id": change.targetID], container: container, announce: false, origin: origin)
+            case .retireDecision:
+                result = Tools.call("update_decision", arguments: ["decision_id": change.targetID, "status": DecisionStatus.superseded.rawValue], container: container, announce: false, origin: origin)
+            }
+            if result["isError"] as? Bool == true {
+                changes[index].outcome = (result["content"] as? [[String: Any]])?.first?["text"] as? String ?? "Could not be done."
+                failed += 1
+            } else {
+                changes[index].outcome = "done"
+                done += 1
+            }
+        }
+        plan.changes = changes
+        plan.status = .applied
+        try? context.persist()
+        Store.announceChange()
+        return (done, failed)
+    }
+}
+
 enum DeletableKind: String, CaseIterable {
     case task, note, track, decision, chat
 }

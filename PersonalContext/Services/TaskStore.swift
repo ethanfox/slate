@@ -687,65 +687,17 @@ enum JunctionStore {
         }
     }
 
-    /// Makes the two tracks one, once everything the junction lists has been reconciled. The second track's stops
-    /// follow the first's; its tasks, decisions, notes, and chats move to the first. What the second track said, and
-    /// what was reconciled, is kept as a note on the first. The second track is then removed.
+    /// Makes the two tracks one, once everything the junction lists has been reconciled.
     @discardableResult
     static func merge(_ junction: TrackJunction, in context: ModelContext) throws -> ProjectThread {
         guard junction.kind == .merge else { throw JunctionStoreError.notAMerge }
-        guard let first = junction.first, let second = junction.second, let project = first.project else {
-            throw JunctionStoreError.missingTrack
-        }
+        guard let first = junction.first, let second = junction.second else { throw JunctionStoreError.missingTrack }
         guard !junction.requirements.isEmpty else { throw JunctionStoreError.nothingToReconcile }
         let unmet = junction.orderedRequirements.filter { !$0.isMet }
         guard unmet.isEmpty else { throw JunctionStoreError.unmet(unmet.map(\.displayText)) }
-
-        var record = [second.summary, second.body]
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        record.append("Reconciled before merging:\n" + junction.orderedRequirements.map { "- \($0.displayText)" }.joined(separator: "\n"))
-        let title = second.title.isEmpty ? "Untitled" : second.title
-        context.insert(Note(
-            content: record.joined(separator: "\n\n"),
-            project: project,
-            title: "\(title) (merged into this track)",
-            thread: first
-        ))
-
-        let base = (first.stops.map(\.order).max() ?? -1) + 1
-        for (offset, stop) in second.orderedStops.enumerated() {
-            stop.thread = first
-            stop.order = base + offset
-        }
-        for item in AgendaStore.items(on: second, includingChildren: false) {
-            // Link the first track before unlinking, so the task never sits on no track and loses its project.
-            if !item.liveTracks.contains(where: { $0.id == first.id }) {
-                AssociationService.applyLink(thread: first, onto: item)
-            }
-            AssociationService.unlink(threadID: second.id, from: item, in: context)
-            item.touch()
-        }
-        for decision in second.decisions { decision.thread = first }
-        for note in second.notes { note.thread = first }
-        for conversation in second.conversations { conversation.thread = first }
-        for child in second.children { child.parent = nil }
-        for tag in second.tags where !first.tags.contains(where: { $0.id == tag.id }) {
-            first.tags.append(tag)
-        }
-        // Other junctions on the second track now belong to the merged one.
-        for other in second.junctions where other.id != junction.id {
-            if other.first?.id == second.id { other.first = first }
-            if other.second?.id == second.id { other.second = first }
-            if other.first?.id == other.second?.id { context.delete(other) }
-        }
-        if project.activeTrackID == second.id { project.activeTrackID = first.id }
-        DeletionMarks.remove(targetingIDs: [second.id], in: context)
+        let reconciled = junction.orderedRequirements.map(\.displayText)
         context.delete(junction)
-        context.delete(second)
-        first.updatedAt = .now
-        project.touch()
-        try? context.persist()
-        return first
+        return try TrackMerge.fold(second, into: first, reconciled: reconciled, in: context)
     }
 
     private static func check(
@@ -797,6 +749,172 @@ enum JunctionStore {
     }
 }
 
+/// Folding one track into another, and putting it back.
+enum TrackMerge {
+    /// Marks the note that keeps what a merged track said, so undoing the merge can find it.
+    static func source(for id: UUID) -> String {
+        "membrae://merged-track/\(id.uuidString.lowercased())"
+    }
+
+    /// The second track's stops follow the first's; its tasks, decisions, notes, and chats move to the first.
+    /// What the second track said, and what was reconciled, is kept as a note on the first. The second is removed.
+    @discardableResult
+    static func fold(
+        _ second: ProjectThread,
+        into first: ProjectThread,
+        reconciled: [String] = [],
+        in context: ModelContext
+    ) throws -> ProjectThread {
+        guard first.id != second.id else { throw JunctionStoreError.sameTrack }
+        guard let project = first.project, project.id == second.project?.id else { throw JunctionStoreError.differentProjects }
+
+        var record = [second.summary, second.body]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if !reconciled.isEmpty {
+            record.append("Reconciled before merging:\n" + reconciled.map { "- \($0)" }.joined(separator: "\n"))
+        }
+        if !record.isEmpty {
+            let title = second.title.isEmpty ? "Untitled" : second.title
+            context.insert(Note(
+                content: record.joined(separator: "\n\n"),
+                project: project,
+                title: "\(title) (merged into this track)",
+                source: source(for: second.id),
+                thread: first
+            ))
+        }
+
+        let base = (first.stops.map(\.order).max() ?? -1) + 1
+        for (offset, stop) in second.orderedStops.enumerated() {
+            stop.thread = first
+            stop.order = base + offset
+        }
+        for item in AgendaStore.items(on: second, includingChildren: false) {
+            // Link the first track before unlinking, so the task never sits on no track and loses its project.
+            if !item.liveTracks.contains(where: { $0.id == first.id }) {
+                AssociationService.applyLink(thread: first, onto: item)
+            }
+            AssociationService.unlink(threadID: second.id, from: item, in: context)
+            item.touch()
+        }
+        for decision in second.decisions { decision.thread = first }
+        for note in second.notes { note.thread = first }
+        for conversation in second.conversations { conversation.thread = first }
+        for child in second.children { child.parent = nil }
+        for tag in second.tags where !first.tags.contains(where: { $0.id == tag.id }) {
+            first.tags.append(tag)
+        }
+        // Junctions on the second track now belong to the merged one. One between the two has nothing left to join.
+        for junction in second.junctions {
+            if junction.first?.id == second.id { junction.first = first }
+            if junction.second?.id == second.id { junction.second = first }
+            if junction.first?.id == junction.second?.id { context.delete(junction) }
+        }
+        if project.activeTrackID == second.id { project.activeTrackID = first.id }
+        DeletionMarks.remove(targetingIDs: [second.id], in: context)
+        context.delete(second)
+        first.updatedAt = .now
+        project.touch()
+        try? context.persist()
+        return first
+    }
+
+    /// What putting a merged track back needs, taken before the merge. Plain values, so it fits the action log.
+    static func snapshot(of second: ProjectThread, into first: ProjectThread) -> [String: Any] {
+        let tasks = AgendaStore.items(on: second, includingChildren: false)
+        let shared = tasks.filter { item in item.liveTracks.contains { $0.id == first.id } }
+        let sharedIDs = Set(shared.map(\.id))
+        return [
+            "into_id": first.id.uuidString,
+            "track": [
+                "id": second.id.uuidString,
+                "title": second.title,
+                "summary": second.summary,
+                "body": second.body,
+                "kind": second.kindRaw,
+                "status": second.statusRaw,
+                "theme": second.theme?.name ?? "",
+                "created_at": second.createdAt.timeIntervalSinceReferenceDate
+            ] as [String: Any],
+            "stop_ids": second.orderedStops.map(\.id.uuidString),
+            "task_ids": tasks.filter { !sharedIDs.contains($0.id) }.map(\.id.uuidString),
+            "shared_task_ids": shared.map(\.id.uuidString),
+            "decision_ids": second.decisions.map(\.id.uuidString),
+            "note_ids": second.notes.map(\.id.uuidString),
+            "chat_ids": second.conversations.map(\.id.uuidString),
+            "tag_ids": second.tags.map(\.id.uuidString),
+            "was_active": first.project?.activeTrackID == second.id
+        ]
+    }
+
+    /// Brings a merged track back as it was and returns what moved to the other track.
+    static func restore(_ snapshot: [String: Any], in context: ModelContext) throws {
+        func ids(_ key: String) -> [UUID] {
+            (snapshot[key] as? [String] ?? []).compactMap(UUID.init(uuidString:))
+        }
+        guard let saved = snapshot["track"] as? [String: Any],
+              let id = (saved["id"] as? String).flatMap(UUID.init(uuidString:)),
+              let intoID = (snapshot["into_id"] as? String).flatMap(UUID.init(uuidString:)),
+              let first = try context.fetch(FetchDescriptor<ProjectThread>(predicate: #Predicate { $0.id == intoID })).first,
+              let project = first.project,
+              try context.fetch(FetchDescriptor<ProjectThread>(predicate: #Predicate { $0.id == id })).isEmpty else {
+            throw JunctionStoreError.cannotRestore
+        }
+        let track = ProjectThread(
+            title: saved["title"] as? String ?? "",
+            kind: ThreadKind(rawValue: saved["kind"] as? String ?? "") ?? .topic,
+            project: project
+        )
+        track.id = id
+        track.summary = saved["summary"] as? String ?? ""
+        track.body = saved["body"] as? String ?? ""
+        track.statusRaw = saved["status"] as? String ?? track.statusRaw
+        if let made = saved["created_at"] as? Double { track.createdAt = Date(timeIntervalSinceReferenceDate: made) }
+        context.insert(track)
+
+        let stops = ids("stop_ids")
+        for (order, stopID) in stops.enumerated() {
+            guard let stop = first.stops.first(where: { $0.id == stopID }) else { continue }
+            stop.thread = track
+            stop.order = order
+        }
+        for (order, stop) in first.orderedStops.filter({ !stops.contains($0.id) }).enumerated() {
+            stop.order = order
+        }
+        let moved = Set(ids("task_ids"))
+        let shared = Set(ids("shared_task_ids"))
+        for item in AgendaStore.items(on: first, includingChildren: false) where moved.contains(item.id) || shared.contains(item.id) {
+            AssociationService.applyLink(thread: track, onto: item)
+            if moved.contains(item.id) {
+                AssociationService.unlink(threadID: first.id, from: item, in: context)
+            }
+        }
+        let decisions = Set(ids("decision_ids"))
+        for decision in first.decisions where decisions.contains(decision.id) { decision.thread = track }
+        let notes = Set(ids("note_ids"))
+        let marker = source(for: id)
+        for note in first.notes {
+            if note.source == marker {
+                context.delete(note)
+            } else if notes.contains(note.id) {
+                note.thread = track
+            }
+        }
+        let chats = Set(ids("chat_ids"))
+        for conversation in first.conversations where chats.contains(conversation.id) { conversation.thread = track }
+        let tags = Set(ids("tag_ids"))
+        track.tags = first.tags.filter { tags.contains($0.id) }
+        if snapshot["was_active"] as? Bool == true { project.activeTrackID = id }
+        if let theme = saved["theme"] as? String, !theme.isEmpty {
+            ThemeStore.setTheme(theme, on: track, in: context)
+        }
+        first.updatedAt = .now
+        project.touch()
+        try? context.persist()
+    }
+}
+
 enum JunctionStoreError: LocalizedError {
     case sameTrack
     case differentProjects
@@ -814,6 +932,7 @@ enum JunctionStoreError: LocalizedError {
     case missingTrack
     case nothingToReconcile
     case unmet([String])
+    case cannotRestore
 
     var errorDescription: String? {
         switch self {
@@ -833,6 +952,7 @@ enum JunctionStoreError: LocalizedError {
         case .missingTrack: "One of this junction's tracks is gone."
         case .nothingToReconcile: "List what has to be reconciled between the two tracks before merging them."
         case .unmet(let texts): "Not reconciled yet: \(texts.joined(separator: "; "))."
+        case .cannotRestore: "That track cannot be brought back: the track it was merged into is gone, or it already exists."
         }
     }
 }
