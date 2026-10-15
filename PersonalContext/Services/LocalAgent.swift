@@ -518,7 +518,8 @@ final class LocalAgentProcess {
             executable: executable.path,
             arguments: agent.arguments(for: request),
             environment: environment,
-            directory: request.directory
+            directory: request.directory,
+            parentPID: ProcessInfo.processInfo.processIdentifier
         )
         return AsyncThrowingStream { continuation in
             let task = Task { @MainActor [weak self] in

@@ -14,6 +14,8 @@ enum WorkerRelay {
         var arguments: [String]
         var environment: [String: String]
         var directory: String
+        /// Membrae's process. The helper ends the tool if Membrae is gone, so a quit never leaves a worker running blind.
+        var parentPID: Int32 = 0
     }
 
     static var root: URL {
@@ -142,7 +144,8 @@ enum WorkerRelay {
         let stop = stopURL(for: id)
         var askedToStop = false
         while process.isRunning {
-            if !askedToStop, manager.fileExists(atPath: stop.path) {
+            let parentGone = ticket.parentPID > 0 && kill(ticket.parentPID, 0) != 0 && errno == ESRCH
+            if !askedToStop, manager.fileExists(atPath: stop.path) || parentGone {
                 askedToStop = true
                 process.terminate()
                 DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
