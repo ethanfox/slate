@@ -302,9 +302,25 @@ struct SpaceSectionPills: View {
 
     @Environment(AppModel.self) private var app
 
+    /// Overview always; a section only once the Space has something in it, or while the user is on it.
+    private var shown: [SpaceTab] {
+        SpaceTab.allCases.filter { section in
+            if section == .overview || section == current { return true }
+            switch section {
+            case .tasks: return space.agendaItems.contains { $0.kind == .task }
+            case .threads: return !space.threads.isEmpty
+            case .notes: return !space.notes.isEmpty
+            case .decisions: return !space.decisions.isEmpty
+            case .chat: return !space.conversations.isEmpty
+            case .runs: return !space.runs.isEmpty
+            case .overview: return true
+            }
+        }
+    }
+
     var body: some View {
         HStack(spacing: 6) {
-            ForEach(SpaceTab.allCases) { section in
+            ForEach(shown) { section in
                 Button {
                     app.open(space, tab: section, newTab: false)
                 } label: {

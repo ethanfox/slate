@@ -139,15 +139,30 @@ enum WorkerRelay {
         configuration.activates = false
         configuration.addsToRecentItems = false
         configuration.createsNewApplicationInstance = true
-        do {
-            _ = try await NSWorkspace.shared.openApplication(at: app, configuration: configuration)
-        } catch {
-            throw BrowserSupportError("Couldn’t start the worker helper: \(error.localizedDescription)")
+        // Launch Services answers once the helper has launched; the tail below gives up on its own if it never does.
+        let launch = Task { try await NSWorkspace.shared.openApplication(at: app, configuration: configuration) }
+        let outcome = await withTaskGroup(of: String?.self) { group -> String? in
+            group.addTask {
+                do { _ = try await launch.value; return nil } catch { return error.localizedDescription }
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(8))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        if let outcome {
+            throw BrowserSupportError("Couldn’t start the worker helper: \(outcome)")
         }
         let handle = Handle(id: ticket.id)
         handle.beginTailing()
         return handle
     }
+
+    /// The exit status the tail reports when the helper never wrote anything.
+    static let neverStarted: Int32 = -2
 
     /// Everything the app gets back from a relayed tool.
     final class Handle: @unchecked Sendable {
@@ -193,7 +208,14 @@ enum WorkerRelay {
                 var drainedAfterExit = false
                 let output = WorkerRelay.outputURL(for: id)
                 let exit = WorkerRelay.exitURL(for: id)
+                let startedAt = Date.now
+                var sawOutput = false
                 while !Task.isCancelled {
+                    if !sawOutput, FileManager.default.fileExists(atPath: output.path) { sawOutput = true }
+                    if !sawOutput, Date.now.timeIntervalSince(startedAt) > 25 {
+                        self?.finish(status: WorkerRelay.neverStarted)
+                        return
+                    }
                     if let handle = try? FileHandle(forReadingFrom: output) {
                         try? handle.seek(toOffset: offset)
                         let data = (try? handle.readToEnd()) ?? Data()

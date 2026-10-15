@@ -496,6 +496,10 @@ final class LocalAgentProcess {
                         }
                     }
                     let status = await handle.exitStatus()
+                    if status == WorkerRelay.neverStarted {
+                        continuation.finish(throwing: LocalAgentError("The worker helper did not start. Quit Membrae, open it again, and try once more."))
+                        return
+                    }
                     if !ended, status != 0, status != 15 {
                         let detail = WorkerRelay.lastErrorLine(for: ticket.id)
                         let message = "\(agent.title) stopped before finishing (exit \(status))."

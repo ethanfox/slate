@@ -44,8 +44,25 @@ final class BrowserHelperApp: NSObject, NSApplicationDelegate {
 
 // A coding tool run for Membrae: no Playwright, just the tool, relayed through files. Launch Services put us
 // outside the app's sandbox, which is the point.
+/// Finishes launching as an app first, so Launch Services answers the caller, then runs the tool and exits.
+final class WorkerHelperApp: NSObject, NSApplicationDelegate {
+    let ticket: URL
+    init(ticket: URL) { self.ticket = ticket }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let ticket = ticket
+        DispatchQueue.global(qos: .userInitiated).async {
+            exit(WorkerRelay.serve(ticketURL: ticket))
+        }
+    }
+}
+
 if let index = CommandLine.arguments.firstIndex(of: "--exec"), CommandLine.arguments.indices.contains(index + 1) {
-    exit(WorkerRelay.serve(ticketURL: URL(fileURLWithPath: CommandLine.arguments[index + 1])))
+    let worker = NSApplication.shared
+    let workerDelegate = WorkerHelperApp(ticket: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+    worker.delegate = workerDelegate
+    worker.setActivationPolicy(.prohibited)
+    worker.run()
 }
 
 BrowserSupport.attachStandardStreamsToLog()
