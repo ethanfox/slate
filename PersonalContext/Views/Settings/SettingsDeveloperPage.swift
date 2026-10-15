@@ -4,7 +4,10 @@ import SwiftUI
 struct SettingsDeveloperPage: View {
     @Environment(AppModel.self) private var app
     @Environment(\.modalHost) private var modalHost
+    @Environment(\.modelContext) private var context
     @Query(sort: \Project.name) private var projects: [Project]
+    @Query(ChangeLog.latestDescriptor) private var latestChanges: [RecordChange]
+    @State private var changeCount = 0
     @State private var previewProjectID: UUID?
     @State private var lifetimeDays = 7
     @State private var customDays = "7"
@@ -141,11 +144,41 @@ struct SettingsDeveloperPage: View {
                     }
                 }
             }
+
+            SettingsGroup("Change record") {
+                SettingsRow {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Records changed on this Mac")
+                        Text("One row per record, kept for sync. A deleted record keeps its row.")
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 16)
+                    Text("\(changeCount)")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                if let latest = latestChanges.first {
+                    Hairline().padding(.horizontal, 16)
+                    SettingsRow {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Latest: \(latest.sentence)")
+                            Text("\(latest.origin) · \(latest.changedAt.formatted(date: .abbreviated, time: .shortened)) · sequence \(latest.sequence)")
+                                .font(CraftFont.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 16)
+                    }
+                }
+            }
         }
         .onAppear {
             if previewProjectID == nil {
                 previewProjectID = projects.first?.id
             }
+        }
+        .onChange(of: latestChanges.first?.sequence, initial: true) { _, _ in
+            changeCount = ChangeLog.count(in: context)
         }
         .onDisappear { app.importRelay.hideKey() }
     }

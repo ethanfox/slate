@@ -197,6 +197,8 @@ enum TitleIndexStore {
 extension ModelContext {
     func persist() throws {
         let start = ContinuousClock.now
+        // The change record first, so it sees the records themselves and not the index rows.
+        ChangeLog.record(in: self)
         TitleIndexStore.applyPending(in: self)
         try save()
         NavTrace.event("store.persist \(NavTrace.elapsed(start))")

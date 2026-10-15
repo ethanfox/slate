@@ -90,7 +90,7 @@ enum SpaceStore {
         if let summary { space.summary = summary }
         if let gradient, SpaceGradientName.all.contains(gradient) { space.gradientRaw = gradient }
         space.touch()
-        try context.save()
+        try context.persist()
     }
 
     /// The one way a Space goes. Its types, records, events, widgets, tracks, notes, decisions, chats,
@@ -115,7 +115,7 @@ enum SpaceStore {
         item.project = space
         item.spaceIDString = ""
         space.touch()
-        try context.save()
+        try context.persist()
     }
 
     static func tracks(in space: Space, context: ModelContext) -> [ProjectThread] { space.threads }
@@ -168,7 +168,7 @@ enum SpaceStore {
         context.insert(type)
         space.enabledKinds.insert(.records)
         space.touch()
-        try context.save()
+        try context.persist()
         return type
     }
 
@@ -223,7 +223,7 @@ enum SpaceStore {
         }
         type.cardFields = fields
         type.updatedAt = .now
-        try context.save()
+        try context.persist()
     }
 
     /// The layouts a type's records can take.
@@ -249,7 +249,7 @@ enum SpaceStore {
         if let problem { throw SpaceStoreError.invalidScreen([problem]) }
         type.layoutRaw = layout
         type.updatedAt = .now
-        try context.save()
+        try context.persist()
     }
 
     // MARK: Widgets
@@ -295,13 +295,13 @@ enum SpaceStore {
         widget.size = size
         widget.definition = definition
         widget.updatedAt = .now
-        try context.save()
+        try context.persist()
         return widget
     }
 
     static func delete(_ widget: AreaWidget, in context: ModelContext) throws {
         context.delete(widget)
-        try context.save()
+        try context.persist()
     }
 
     /// Replace a type's schema without losing stored values. See `SpaceSchema.replacing`.
@@ -313,7 +313,7 @@ enum SpaceStore {
         type.schema = merged
         type.schemaVersion += 1
         type.updatedAt = .now
-        try context.save()
+        try context.persist()
     }
 
     /// An independent definition in the other Space. Records are not copied.
@@ -340,7 +340,7 @@ enum SpaceStore {
             context.delete(record)
         }
         context.delete(type)
-        try context.save()
+        try context.persist()
     }
 
     // MARK: Records
@@ -377,7 +377,7 @@ enum SpaceStore {
         try checkLinks(in: values, schema: type.schema, spaceKey: type.spaceIDString, in: context)
         let record = SpaceRecord(type: type, title: title, values: values)
         context.insert(record)
-        try context.save()
+        try context.persist()
         syncImages(of: record, schema: type.schema, in: context)
         return record
     }
@@ -390,7 +390,7 @@ enum SpaceStore {
         }
         let copy = SpaceRecord(type: type, title: "\(record.displayTitle) copy", values: record.values)
         context.insert(copy)
-        try context.save()
+        try context.persist()
         syncImages(of: copy, schema: type.schema, in: context)
         return copy
     }
@@ -399,7 +399,7 @@ enum SpaceStore {
     static func setArchived(_ archived: Bool, on record: SpaceRecord, in context: ModelContext) throws {
         record.isArchived = archived
         record.updatedAt = .now
-        try context.save()
+        try context.persist()
     }
 
     /// The one record of a settings type, made the first time it is asked for.
@@ -409,7 +409,7 @@ enum SpaceStore {
         if let existing = records(of: type, in: context).first { return existing }
         let record = SpaceRecord(type: type, title: type.name, values: [:])
         context.insert(record)
-        try context.save()
+        try context.persist()
         return record
     }
 
@@ -438,7 +438,7 @@ enum SpaceStore {
             record.values = record.values.merging(values) { _, new in new }
         }
         record.updatedAt = .now
-        try context.save()
+        try context.persist()
         if let typeID = record.typeID, let type = type(typeID, in: context) {
             syncImages(of: record, schema: type.schema, in: context)
         }
@@ -462,7 +462,7 @@ enum SpaceStore {
         record.title = title
         record.values = kept.merging(values) { _, new in new }
         record.updatedAt = .now
-        try context.save()
+        try context.persist()
         if let schema {
             syncImages(of: record, schema: schema, in: context)
         }
@@ -490,7 +490,7 @@ enum SpaceStore {
         releaseImages(of: [record], in: context)
         unlink(record, in: context)
         context.delete(record)
-        try context.save()
+        try context.persist()
     }
 
     private static func unlink(_ record: SpaceRecord, in context: ModelContext) {
@@ -607,7 +607,7 @@ enum SpaceStore {
         try checkLinks(in: values, schema: type.schema, spaceKey: type.spaceIDString, in: context)
         let event = SpaceEvent(type: type, occurredAt: occurredAt, values: values, recordIDs: records.map(\.id))
         context.insert(event)
-        try context.save()
+        try context.persist()
         return event
     }
 
@@ -626,7 +626,7 @@ enum SpaceStore {
             event.values = values
         }
         if let occurredAt { event.occurredAt = occurredAt }
-        try context.save()
+        try context.persist()
     }
 
     static func event(_ id: UUID, in context: ModelContext) -> SpaceEvent? {
@@ -636,7 +636,7 @@ enum SpaceStore {
 
     static func delete(_ event: SpaceEvent, in context: ModelContext) throws {
         context.delete(event)
-        try context.save()
+        try context.persist()
     }
 
     private static func fetch<Model: PersistentModel>(
@@ -736,12 +736,12 @@ enum FactStore {
             origin: origin
         )
         context.insert(fact)
-        try context.save()
+        try context.persist()
         return fact
     }
 
     static func delete(_ fact: PersonalFact, in context: ModelContext) throws {
         context.delete(fact)
-        try context.save()
+        try context.persist()
     }
 }

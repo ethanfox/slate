@@ -68,6 +68,9 @@
 		A11C0DE100000020 /* Tools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75926FA04CD11DF7C22B424B /* Tools.swift */; };
 		A11C0DE100000022 /* StoreSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000021 /* StoreSyncTests.swift */; };
 		T17E010000000002 /* TitleIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = T17E010000000001 /* TitleIndex.swift */; };
+		C4A26E000000000000000002 /* RecordChange.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A26E000000000000000001 /* RecordChange.swift */; };
+		C4A26E000000000000000003 /* RecordChange.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A26E000000000000000001 /* RecordChange.swift */; };
+		C4A26E000000000000000008 /* RecordChangeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A26E000000000000000007 /* RecordChangeTests.swift */; };
 		5BACE0100000000000000002 /* Space.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BACE0100000000000000001 /* Space.swift */; };
 		5BACE0300000000000000002 /* SpaceScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BACE0300000000000000001 /* SpaceScreen.swift */; };
 		5BACE0100000000000000003 /* Space.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BACE0100000000000000001 /* Space.swift */; };
@@ -419,6 +422,8 @@
 		5BACE0100000000000000007 /* SpaceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceStoreTests.swift; sourceTree = "<group>"; };
 		T17E010000000004 /* TitleIndexStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleIndexStore.swift; sourceTree = "<group>"; };
 		T17E010000000007 /* TitleIndexStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleIndexStoreTests.swift; sourceTree = "<group>"; };
+		C4A26E000000000000000001 /* RecordChange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordChange.swift; sourceTree = "<group>"; };
+		C4A26E000000000000000007 /* RecordChangeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordChangeTests.swift; sourceTree = "<group>"; };
 		T17E010000000009 /* NavTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavTrace.swift; sourceTree = "<group>"; };
 		8F3A1C2E4B5D60718293A004 /* HarborEvalFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarborEvalFixture.swift; sourceTree = "<group>"; };
 		8F3A1C2E4B5D60718293A006 /* track-first-eval.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = Scenarios/track-first-eval.md; sourceTree = "<group>"; };
@@ -881,6 +886,7 @@
 			children = (
 				E0C540C9CE3A784CC7E9EBD1 /* Records.swift */,
 				T17E010000000001 /* TitleIndex.swift */,
+				C4A26E000000000000000001 /* RecordChange.swift */,
 				5BACE0100000000000000001 /* Space.swift */,
 				5BACE0300000000000000001 /* SpaceScreen.swift */,
 				F11E5704A0000001 /* StoredAsset.swift */,
@@ -962,6 +968,7 @@
 				8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */,
 				A11C0DE100000021 /* StoreSyncTests.swift */,
 				T17E010000000007 /* TitleIndexStoreTests.swift */,
+				C4A26E000000000000000007 /* RecordChangeTests.swift */,
 				5BACE0100000000000000007 /* SpaceStoreTests.swift */,
 				A11C0DE100000013 /* MCPConnectionTests.swift */,
 				B20A01000000000000000015 /* BrowserTests.swift */,
@@ -1175,6 +1182,7 @@
 				D73D56957AE1419967DCB01B /* ContextBuilder.swift in Sources */,
 				7D9F8C63712BBB12934A5FDE /* Records.swift in Sources */,
 				T17E010000000003 /* TitleIndex.swift in Sources */,
+				C4A26E000000000000000003 /* RecordChange.swift in Sources */,
 				5BACE0100000000000000003 /* Space.swift in Sources */,
 				5BACE0300000000000000003 /* SpaceScreen.swift in Sources */,
 				5BACE0100000000000000006 /* SpaceStore.swift in Sources */,
@@ -1220,6 +1228,7 @@
 				8F3A1C2E4B5D60718293A002 /* MCPToolsTests.swift in Sources */,
 				A11C0DE100000022 /* StoreSyncTests.swift in Sources */,
 				T17E010000000008 /* TitleIndexStoreTests.swift in Sources */,
+				C4A26E000000000000000008 /* RecordChangeTests.swift in Sources */,
 				5BACE0100000000000000008 /* SpaceStoreTests.swift in Sources */,
 				B20A01000000000000000016 /* BrowserTests.swift in Sources */,
 				A11C0DE100000014 /* MCPConnectionTests.swift in Sources */,
@@ -1356,6 +1365,7 @@
 				A5A73498891F3755C5AEFD81 /* RecordRow.swift in Sources */,
 				C3F5F2636A9119A4EC956BB3 /* Records.swift in Sources */,
 				T17E010000000002 /* TitleIndex.swift in Sources */,
+				C4A26E000000000000000002 /* RecordChange.swift in Sources */,
 				5BACE0100000000000000002 /* Space.swift in Sources */,
 				5BACE0300000000000000002 /* SpaceScreen.swift in Sources */,
 				5BACE0100000000000000005 /* SpaceStore.swift in Sources */,

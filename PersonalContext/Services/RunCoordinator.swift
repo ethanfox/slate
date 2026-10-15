@@ -358,7 +358,7 @@ final class RunCoordinator {
             case .session(let session):
                 if let context = liveContext(), let live = resolvedRun(id) {
                     live.externalID = session
-                    try? context.save()
+                    try? context.persist()
                 }
             case .finished(let text, let names):
                 summary = text
@@ -437,7 +437,7 @@ final class RunCoordinator {
     private func record(_ id: UUID, _ kind: RunEventKind, _ detail: String) {
         guard let context = liveContext(), let run = resolvedRun(id) else { return }
         run.append(kind, detail: detail)
-        try? context.save()
+        try? context.persist()
     }
 
     private static func commitLines(in path: String, since sha: String?) -> [String] {

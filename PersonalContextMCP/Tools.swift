@@ -179,6 +179,10 @@ enum Tools {
         }
         let context = ModelContext(container)
         context.autosaveEnabled = false
+        // The change record names the client that wrote, for as long as this call lasts.
+        let previousOrigin = ChangeLog.origin
+        if !origin.client.isEmpty { ChangeLog.origin = origin.client }
+        defer { ChangeLog.origin = previousOrigin }
         do {
             let args = Args(raw: migrate(arguments))
             if tool.name == "delete_record", !origin.conversationID.isEmpty,
@@ -1432,7 +1436,7 @@ enum Tools {
             }
             run.steps = steps
             run.updatedAt = .now
-            try context.save()
+            try context.persist()
             return ["steps": steps.map { ["title": $0.title, "done": $0.done] }]
         },
         Tool(
@@ -1711,7 +1715,7 @@ enum Tools {
             }
             widget.isOnYou = args.bool("on_you_page") ?? false
             widget.updatedAt = .now
-            try context.save()
+            try context.persist()
             let types = SpaceStore.types(in: space, context: context)
             return SpaceTools.widget(widget, typeKey: types.first { SpaceJSON.key($0.id) == widget.typeIDString }?.key ?? "")
         },

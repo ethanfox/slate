@@ -77,6 +77,9 @@ func openStore() throws -> ModelContainer {
 /// Name the connected client gave at initialize, kept for the action log.
 var client = ""
 
+// Until a client names itself at initialize, the change record says the helper wrote.
+ChangeLog.origin = "mcp"
+
 /// Set by the app when it starts a worker for a Run, so the worker sees only that Run's tools.
 let allowedTools = ProcessInfo.processInfo.environment["MEMBRAE_ALLOWED_TOOLS"].map {
     Set($0.split(separator: ",").map(String.init))
