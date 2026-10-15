@@ -86,6 +86,8 @@ struct LocalAgentRequest: Equatable, Sendable {
     var runID: String = ""
     /// Carries on an earlier session with `prompt` as the user's reply, so the worker keeps what it knew.
     var resumeSessionID: String?
+    /// Folders besides `directory` the tool may work in.
+    var extraDirectories: [String] = []
 }
 
 struct LocalAgentError: LocalizedError, Sendable {
@@ -108,6 +110,9 @@ extension LocalAgent {
             if request.allowEdits {
                 arguments += ["--permission-mode", "acceptEdits"]
                 allowed.append("Bash")
+            }
+            for directory in request.extraDirectories {
+                arguments += ["--add-dir", directory]
             }
             if let mcp {
                 let config: [String: Any] = [

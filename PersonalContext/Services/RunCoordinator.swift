@@ -287,6 +287,14 @@ final class RunCoordinator {
         }
         guard let run = resolvedRun(id) else { return }
         let policy = policy(for: run)
+        // A session works whatever the Space has attached, including a folder attached after it began.
+        if run.isSession, let project = run.project, let context = liveContext() {
+            let attached = ProjectCodeWorkspace.attachments(on: project).map { $0.locator.isEmpty ? $0.title : $0.locator }
+            if !attached.isEmpty, Set(attached) != Set(run.repositoryLocators) {
+                run.repositoryLocators = attached
+                try? context.save()
+            }
+        }
         let roots = try await selectedRoots(for: run)
         guard let run = resolvedRun(id), let context = liveContext() else { return }
         let folder = context.container.configurations.first?.url
@@ -301,13 +309,16 @@ final class RunCoordinator {
         let track = run.trackID.flatMap { TitleIndexStore.thread($0, in: context) }
         let prompt: String
         if let resume {
-            prompt = run.isSession ? RunPrompt.sessionTurn(message: resume.message, track: track) : resume.message
+            prompt = run.isSession
+                ? RunPrompt.sessionTurn(message: resume.message, track: track, extraDirectories: roots.dropFirst().map(\.path))
+                : resume.message
         } else if run.isSession {
             prompt = RunPrompt.session(
                 brief: run.brief,
                 track: track,
                 project: run.project,
                 directory: repository,
+                extraDirectories: roots.dropFirst().map(\.path),
                 allowEdits: allowEdits,
                 hasMembrae: !tools.isEmpty
             )
@@ -328,7 +339,8 @@ final class RunCoordinator {
             mcpCommand: Bundle.main.url(forAuxiliaryExecutable: "membrae-mcp")?.path,
             membraeTools: tools,
             runID: run.id.uuidString,
-            resumeSessionID: resume?.session
+            resumeSessionID: resume?.session,
+            extraDirectories: roots.dropFirst().map(\.path)
         )
         let before = repository.flatMap { try? GitHistory.commits(in: $0, limit: 1) }
         let process = LocalAgentProcess()

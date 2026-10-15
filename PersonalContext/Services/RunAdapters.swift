@@ -316,6 +316,7 @@ enum RunPrompt {
         track: ProjectThread?,
         project: Project?,
         directory: String?,
+        extraDirectories: [String] = [],
         allowEdits: Bool,
         hasMembrae: Bool
     ) -> String {
@@ -331,7 +332,11 @@ enum RunPrompt {
             lines.append("The membrae tools read and write this Space’s decisions, tracks, notes, tasks, and records. When you finish a stop, call mark_stop with its id. Work you leave for later goes in a task on its stop, with create_task and stop_id. Record what was decided with create_decision on the track. Each of your messages lists the stops as they stand now.")
         }
         if allowEdits, let directory {
-            lines.append("You are working in \(directory). Make the changes the work asks for. If it is a git repository, commit what you change with a clear message before you say what you did, so the user can relaunch the app and see it. Do not push.")
+            var line = "You are working in \(directory)."
+            if !extraDirectories.isEmpty {
+                line += " You may also read and write in: \(extraDirectories.joined(separator: ", "))."
+            }
+            lines.append(line + " Make the changes the work asks for. If it is a git repository, commit what you change with a clear message before you say what you did, so the user can relaunch the app and see it. Do not push.")
         } else if allowEdits {
             lines.append("No code is attached to this session.")
         } else {
@@ -342,7 +347,11 @@ enum RunPrompt {
     }
 
     /// A later turn of a session: the user's message, with the stops as they stand so the worker need not look.
-    static func sessionTurn(message: String, track: ProjectThread?) -> String {
+    static func sessionTurn(message: String, track: ProjectThread?, extraDirectories: [String] = []) -> String {
+        var message = message
+        if !extraDirectories.isEmpty {
+            message += "\n\nFolders you may work in besides the one you started in: \(extraDirectories.joined(separator: ", "))."
+        }
         guard let track else { return message }
         let stops = track.orderedStops
         guard !stops.isEmpty else { return message }

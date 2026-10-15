@@ -183,9 +183,11 @@ final class SyncController {
             try await push(key: key, context: context)
             try await pull(key: key, context: context)
             status = .synced(.now)
+            app.flash(lastPushed == 0 && lastPulled == 0 ? "Synced. Nothing new to send." : "Synced: sent \(lastPushed), received \(lastPulled).")
         } catch {
             status = .failed(error.localizedDescription)
             NavTrace.event("sync.failed \(error.localizedDescription)")
+            app.flash("Sync failed: \(error.localizedDescription)")
         }
     }
 

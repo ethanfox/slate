@@ -64,7 +64,7 @@ struct RunPage: View {
                         }
                         .onAppear { proxy.scrollTo("end", anchor: .bottom) }
                     }
-                    if run.status == .waiting {
+                    if run.status.isActive {
                         composer
                             .padding(.horizontal, 32)
                             .padding(.bottom, 24)
@@ -111,7 +111,7 @@ struct RunPage: View {
                 .padding(.top, 10)
             }
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("Your turn. Tell it what to do next.", text: $replyText, axis: .vertical)
+                TextField(run.status == .waiting ? "Your turn. Tell it what to do next." : "Write while it works; it goes when the turn ends.", text: $replyText, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(CraftFont.body)
                     .lineLimit(1...8)
@@ -127,7 +127,8 @@ struct RunPage: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || run.status != .waiting)
+                .help(run.status == .waiting ? "Send (⌘↩)" : "The worker is on its turn")
                 .padding(8)
             }
         }
@@ -137,7 +138,7 @@ struct RunPage: View {
 
     private func send() {
         let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty, run.status == .waiting else { return }
         app.runCoordinator.reply(text, to: run, in: context)
         replyText = ""
     }

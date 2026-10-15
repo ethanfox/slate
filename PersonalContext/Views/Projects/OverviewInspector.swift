@@ -227,9 +227,18 @@ private struct OverviewInspectorSettings: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Toggle("Sync to Cloudflare", isOn: Binding(
                         get: { project.isSynced },
-                        set: { try? SpaceStore.setSynced($0, on: project, in: context) }
+                        set: { on in
+                            try? SpaceStore.setSynced(on, on: project, in: context)
+                            if on { app.sync.syncSoon() }
+                        }
                     ))
                     .toggleStyle(.switch)
+                    if project.isSynced {
+                        Text(app.sync.status.label)
+                            .font(CraftFont.caption)
+                            .foregroundStyle(app.sync.status.isFailure ? Color.red : Color.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Text(project.isSynced
                          ? "Everything in this Space is stored in Cloudflare too, where Membrae's servers can read it. That is what lets web AIs and jobs work with it when this Mac is off."
                          : "This Space stays on this Mac. Turn sync on to reach it from web AIs and other devices.")
@@ -365,5 +374,13 @@ private struct OverviewInsertTile: View {
         .onHover { hovering = $0 }
         .animation(Motion.hover, value: hovering)
         .accessibilityLabel("Insert \(kind.label)")
+    }
+}
+
+
+extension SyncStatus {
+    var isFailure: Bool {
+        if case .failed = self { return true }
+        return false
     }
 }
