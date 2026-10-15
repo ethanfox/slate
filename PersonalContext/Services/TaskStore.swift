@@ -44,15 +44,20 @@ enum TaskStore {
             .sorted(by: boardSort)
     }
 
-    /// With an active track, the first open task on it that nothing blocks and no junction holds.
-    /// Without one, the task marked by hand.
+    /// With an active track, the first open task on the stop in hand that nothing blocks and no junction holds.
+    /// A track past its stops, or with none, offers its first open task. Without an active track, the task marked by hand.
     static func nextTask(in project: Project) -> AgendaItem? {
         guard let track = project.activeTrack else {
             return project.agendaItems.first { $0.kind == .task && $0.isNext }
         }
+        let current = currentStop(on: track)
         return AgendaStore.items(on: track, includingChildren: true)
             .filter { $0.project?.id == project.id && $0.canBeNext && $0.unresolvedBlockers.isEmpty }
             .filter { JunctionStore.holding($0, on: track) == nil }
+            .filter { item in
+                guard let current else { return true }
+                return item.stop?.id == current.id
+            }
             .min { lhs, rhs in
                 let stops = (stopRank(lhs, on: track), stopRank(rhs, on: track))
                 if stops.0 != stops.1 { return stops.0 < stops.1 }
@@ -60,6 +65,16 @@ enum TaskStore {
                 if started.0 != started.1 { return started.0 }
                 return lhs.createdAt < rhs.createdAt
             }
+    }
+
+    /// The stop the track is on: the first one not ticked done whose work is not all finished. A stop with no tasks
+    /// is work still to do; one whose every task is done has been passed, ticked or not.
+    static func currentStop(on track: ProjectThread) -> TrackStop? {
+        track.orderedStops.first { stop in
+            guard !stop.isDone else { return false }
+            let tasks = stop.tasks.filter { $0.kind == .task }
+            return tasks.isEmpty || tasks.contains { !$0.isCompleted }
+        }
     }
 
     /// Where a task falls in the track's order: its stop's place, or after every stop when it has none.

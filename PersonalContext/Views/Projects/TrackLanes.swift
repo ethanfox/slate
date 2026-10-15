@@ -66,7 +66,8 @@ struct LaneModel: Identifiable {
 
     init(track: ProjectThread, space: Space) {
         let stops = track.orderedStops
-        let current = stops.firstIndex { !$0.isDone }
+        // The same stop the Space's Next comes from.
+        let current = TaskStore.currentStop(on: track).flatMap { stop in stops.firstIndex { $0.id == stop.id } }
         let isActive = space.activeTrackID == track.id && track.status != .completed
         let junctions = track.junctions
         let waiting = junctions.first { $0.kind == .wait && $0.second?.id == track.id && !$0.isMet }

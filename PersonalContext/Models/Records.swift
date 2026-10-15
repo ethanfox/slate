@@ -514,6 +514,18 @@ final class TrackStop: Identifiable {
     }
 }
 
+extension TrackStop {
+    /// What an agent handed this stop is told.
+    var runBrief: String {
+        let track = thread.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "Untitled"
+        let space = thread?.project?.name ?? ""
+        var lines = ["Work on the stop \"\(displayTitle)\" of the track \"\(track)\"" + (space.isEmpty ? "." : " in \(space).")]
+        let text = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty { lines.append(text) }
+        return lines.joined(separator: "\n\n")
+    }
+}
+
 enum JunctionKind: String, CaseIterable, Identifiable {
     case wait
     case merge

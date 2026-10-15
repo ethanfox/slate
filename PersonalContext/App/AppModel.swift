@@ -855,12 +855,19 @@ final class AppModel {
             present(.newRun(RunStore.retryDraft(from: retryOf)))
             return
         }
+        var written = brief
+        if written.isEmpty, let task {
+            // The form shows what the Run is for; the user can add to it or leave it.
+            written = task.displayTitle
+            let notes = task.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !notes.isEmpty { written += "\n\n" + notes }
+        }
         var draft = NewRunDraft.blank(
             origin: origin,
             projectID: project?.id,
             taskID: task?.id,
             originChatID: chat?.id,
-            brief: brief,
+            brief: written,
             providerID: defaults.provider,
             modelID: defaults.model,
             pathRaw: defaults.path

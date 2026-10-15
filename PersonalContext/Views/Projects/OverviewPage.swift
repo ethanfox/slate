@@ -752,7 +752,16 @@ struct SpaceOverview: View {
     var body: some View {
         let nextItem = TaskStore.nextTask(in: project)
         let open = upNext(of(.task).filter { $0.statusRaw != "done" }, nextID: nextItem?.id)
-        let focus = nextItem ?? open.first.flatMap { TitleIndexStore.task($0.id, in: context) }
+        let currentStop = project.activeTrack.flatMap(TaskStore.currentStop(on:))
+        // The stop in hand with no task yet is itself what is next; only without one does any open task stand in.
+        let focus = nextItem ?? (currentStop == nil ? open.first.flatMap { TitleIndexStore.task($0.id, in: context) } : nil)
+        let step: NextStep = if let focus {
+            .task(focus)
+        } else if let currentStop, let track = project.activeTrack {
+            .stop(currentStop, track)
+        } else {
+            .nothing
+        }
         let after = open.filter { $0.id != focus?.id }
         let decided = project.decisions.filter { $0.status == .active }.sorted { $0.createdAt > $1.createdAt }
         let lines = project.threads
@@ -792,7 +801,7 @@ struct SpaceOverview: View {
                                     CleanupPlanCard(plan: plan)
                                 }
 
-                                nextStep(focus)
+                                nextStep(step)
 
                                 HStack(alignment: .top, spacing: 40) {
                                     column("After that", rows: after.prefix(3).map { row in
@@ -874,56 +883,37 @@ struct SpaceOverview: View {
         return trimmed.isEmpty ? project.name : trimmed + "."
     }
 
-    /// The one task to do now, between two rules.
-    private func nextStep(_ task: AgendaItem?) -> some View {
+    /// What the Space is on now: a task, or the active track's stop in hand when that stop has no task yet.
+    private enum NextStep {
+        case task(AgendaItem)
+        case stop(TrackStop, ProjectThread)
+        case nothing
+    }
+
+    /// The one thing to do now, between two rules.
+    private func nextStep(_ step: NextStep) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Next")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
-            if let task {
-                HStack(alignment: .center, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(task.displayTitle)
-                            .font(.system(size: 20, weight: .semibold))
-                            .tracking(-0.2)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if let place = task.stop?.displayTitle ?? task.liveTracks.first?.title, !place.isEmpty {
-                            Text(place)
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    HStack(spacing: 8) {
-                        Button {
-                            app.presentNewRun(origin: .task, project: project, task: task)
-                        } label: {
-                            Text("Hand to an Agent")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 14)
-                                .frame(height: 30)
-                                .background(Color.accentColor, in: Capsule())
-                                .contentShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        Button {
-                            app.present(.editTask(task))
-                        } label: {
-                            Text("Open")
-                                .font(.system(size: 13, weight: .medium))
-                                .padding(.horizontal, 14)
-                                .frame(height: 30)
-                                .background(CraftColor.elevated, in: Capsule())
-                                .overlay(Capsule().strokeBorder(CraftColor.hairline))
-                                .contentShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .fixedSize()
-                }
-            } else {
+            switch step {
+            case .task(let task):
+                nextRow(
+                    title: task.displayTitle,
+                    place: task.stop?.displayTitle ?? task.liveTracks.first?.title ?? "",
+                    hand: { app.presentNewRun(origin: .task, project: project, task: task) },
+                    open: { app.present(.editTask(task)) }
+                )
+            case .stop(let stop, let track):
+                let stops = track.orderedStops
+                let index = stops.firstIndex { $0.id == stop.id } ?? 0
+                nextRow(
+                    title: stop.displayTitle,
+                    place: "Stop \(index + 1) of \(stops.count) on \(track.title.isEmpty ? "Untitled" : track.title)",
+                    hand: { app.presentNewRun(origin: .project, project: project, brief: stop.runBrief) },
+                    open: { app.open(stop, newTab: false) }
+                )
+            case .nothing:
                 Text("Nothing open. Tell Membrae what you want to do next.")
                     .font(.system(size: 15))
                     .foregroundStyle(.secondary)
@@ -934,6 +924,47 @@ struct SpaceOverview: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .top) { Hairline() }
         .overlay(alignment: .bottom) { Hairline() }
+    }
+
+    private func nextRow(title: String, place: String, hand: @escaping () -> Void, open: @escaping () -> Void) -> some View {
+        HStack(alignment: .center, spacing: 24) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 20, weight: .semibold))
+                    .tracking(-0.2)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !place.isEmpty {
+                    Text(place)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                Button(action: hand) {
+                    Text("Hand to an Agent")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .frame(height: 30)
+                        .background(Color.accentColor, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                Button(action: open) {
+                    Text("Open")
+                        .font(.system(size: 13, weight: .medium))
+                        .padding(.horizontal, 14)
+                        .frame(height: 30)
+                        .background(CraftColor.elevated, in: Capsule())
+                        .overlay(Capsule().strokeBorder(CraftColor.hairline))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .fixedSize()
+        }
     }
 
     private func column(

@@ -226,7 +226,7 @@ private struct StopDocument: View {
     private var actions: some View {
         HStack(spacing: 8) {
             Button {
-                app.presentNewRun(origin: .project, project: space, brief: brief)
+                app.presentNewRun(origin: .project, project: space, brief: stop.runBrief)
             } label: {
                 Text("Hand to an Agent")
                     .font(.system(size: 13, weight: .semibold))
@@ -252,13 +252,6 @@ private struct StopDocument: View {
                 .buttonStyle(.plain)
             }
         }
-    }
-
-    private var brief: String {
-        var lines = ["Work on the stop \"\(stop.displayTitle)\" of the track \"\(track.map(LaneModel.title) ?? "Untitled")\" in \(space.name)."]
-        let body = stop.body.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !body.isEmpty { lines.append(body) }
-        return lines.joined(separator: "\n\n")
     }
 
     private func touch() {
