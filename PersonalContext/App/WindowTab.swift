@@ -175,17 +175,18 @@ struct SpaceViewMemory: Codable, Equatable {
     var conversation: UUID?
     var run: UUID?
 
+    /// Opening a Space lands on its page, and opening a section lands on that section's list. Where the user
+    /// was last is for Back, not for the next visit: a page that reopened on a session or a track swallowed the Space.
     static func windowTab(spaceID: UUID, tab: SpaceTab?, memory: SpaceViewMemory?) -> WindowTab {
-        let section = tab ?? memory?.tab ?? .overview
-        return WindowTab(
+        WindowTab(
             id: UUID(),
             destination: .space(spaceID),
-            section: section,
-            selectedThread: section == .threads ? memory?.thread : nil,
-            selectedNote: section == .notes ? memory?.note : nil,
-            selectedDecision: section == .decisions ? memory?.decision : nil,
-            selectedConversation: section == .chat ? memory?.conversation : nil,
-            selectedRun: section == .runs ? memory?.run : nil
+            section: tab ?? .overview,
+            selectedThread: nil,
+            selectedNote: nil,
+            selectedDecision: nil,
+            selectedConversation: nil,
+            selectedRun: nil
         )
     }
 

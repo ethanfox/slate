@@ -887,7 +887,8 @@ final class AppModel {
         let context = container.mainContext
         let text = message.trimmingCharacters(in: .whitespacesAndNewlines)
         if let session = RunStore.session(for: track.id, in: context) {
-            open(session, newTab: false)
+            // A session lasts, so it lives in its own tab and the page the user was on stays put.
+            open(session, newTab: true)
             guard !text.isEmpty else { return }
             if session.status == .waiting {
                 runCoordinator.reply(text, to: session, in: context)
@@ -922,7 +923,7 @@ final class AppModel {
         do {
             let run = try RunStore.enqueue(draft, in: container.mainContext)
             dismissModal()
-            open(run)
+            open(run, newTab: run.isSession)
             runCoordinator.start(run, in: container.mainContext)
         } catch {
             flash(error.localizedDescription)

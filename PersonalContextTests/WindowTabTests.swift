@@ -61,14 +61,16 @@ final class WindowTabTests: XCTestCase {
         XCTAssertNil(tab.selectedConversation)
     }
 
-    func testSidebarOpenRestoresLastTabAndSelection() {
+    func testSidebarOpenAlwaysLandsOnTheSpacePage() {
         let project = UUID()
-        let thread = UUID()
-        let memory = SpaceViewMemory(tab: .threads, thread: thread, note: nil, decision: nil, conversation: nil, run: nil)
+        let memory = SpaceViewMemory(tab: .runs, thread: UUID(), note: nil, decision: nil, conversation: nil, run: UUID())
         let tab = SpaceViewMemory.windowTab(spaceID: project, tab: nil, memory: memory)
-        XCTAssertEqual(tab.section, .threads)
-        XCTAssertEqual(tab.selectedThread, thread)
-        XCTAssertNil(tab.selectedNote)
+        XCTAssertEqual(tab.section, .overview)
+        XCTAssertNil(tab.selectedThread)
+        XCTAssertNil(tab.selectedRun)
+        let tracks = SpaceViewMemory.windowTab(spaceID: project, tab: .threads, memory: memory)
+        XCTAssertEqual(tracks.section, .threads)
+        XCTAssertNil(tracks.selectedThread, "a section opens on its list, not on what was open last")
     }
 
     func testExplicitTabDoesNotCarryAnotherSectionSelection() {
