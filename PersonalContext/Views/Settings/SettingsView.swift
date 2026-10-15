@@ -22,6 +22,8 @@ struct SettingsView: View {
     @ViewBuilder
     private var detail: some View {
         switch app.settingsSection {
+        case .account:
+            SettingsAccountPage()
         case .chatgpt:
             SettingsChatGPTPage()
         case .cursor:

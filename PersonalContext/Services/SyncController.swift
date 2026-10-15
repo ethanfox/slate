@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import SwiftData
 
@@ -132,8 +131,8 @@ final class SyncController {
         static let pushed = "sync.pushedSequence"
         static let pulled = "sync.pulledCursor"
         static let device = "sync.deviceID"
-        /// A hash of the key the cursors belong to. A new key is a new, empty database.
-        static let keyHash = "sync.keyHash"
+        /// The account the cursors belong to. A different account is a different database.
+        static let account = "sync.accountID"
     }
 
     init() {
@@ -174,17 +173,16 @@ final class SyncController {
             status = .idle("Nothing is synced")
             return
         }
-        // Sync signs with the import key until the device key exists. If it has expired or was
-        // never made, this drops the old one and makes a new one rather than stopping silently.
-        app.importRelay.ensureKey()
-        guard let key = ImportKeyStore.readKey() else {
-            status = .idle("No key to sign in with")
+        // Every request carries the key this device holds from the account; the account names
+        // the database in Cloudflare.
+        guard app.account.isSignedIn, let key = app.account.deviceKey else {
+            status = .idle("Sign in to sync")
             return
         }
         running = true
         defer { running = false }
         status = .syncing
-        startOverIfKeyChanged(key)
+        startOverIfAccountChanged(app.account.accountID)
         do {
             if context.hasChanges { try context.persist() }
             try await push(key: key, context: context)
@@ -237,19 +235,18 @@ final class SyncController {
         lastPulled = received
     }
 
-    /// The database in Cloudflare is named after the key, so a new key is a new, empty database:
-    /// push everything again from the start and pull from the start.
-    private func startOverIfKeyChanged(_ key: String) {
-        let hash = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
+    /// The database in Cloudflare is named after the account, so a different account is a
+    /// different database: push everything again from the start and pull from the start.
+    private func startOverIfAccountChanged(_ accountID: String) {
         let defaults = UserDefaults.standard
-        let previous = defaults.string(forKey: Keys.keyHash) ?? ""
-        if !previous.isEmpty, previous != hash {
+        let previous = defaults.string(forKey: Keys.account) ?? ""
+        if !previous.isEmpty, previous != accountID {
             setPushed(0)
             pulledCursor = 0
             defaults.set(0, forKey: Keys.pulled)
-            NavTrace.event("sync.key-changed cursors reset")
+            NavTrace.event("sync.account-changed cursors reset")
         }
-        if previous != hash { defaults.set(hash, forKey: Keys.keyHash) }
+        if previous != accountID { defaults.set(accountID, forKey: Keys.account) }
     }
 
     private func setPushed(_ sequence: Int) {
@@ -262,7 +259,6 @@ final class SyncController {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("mac", forHTTPHeaderField: "X-Membrae-Role")
         request.setValue(deviceID, forHTTPHeaderField: "X-Membrae-Device")
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")

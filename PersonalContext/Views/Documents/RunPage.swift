@@ -831,7 +831,7 @@ private struct SessionTranscript: View {
                     }
                 case .work(let events):
                     let live = run.status == .running && index == items.count - 1
-                    WorkFold(steps: events, live: live, label: live ? waitLabel : nil)
+                    WorkFold(steps: events, live: live, label: live ? waitLabel : nil, since: live ? events.last?.at : nil)
                 }
             }
             if let draft, !draft.isEmpty {
@@ -878,6 +878,8 @@ private struct WorkFold: View {
     var steps: [RunEvent]
     var live: Bool
     var label: String?
+    /// When the live step began, so the row shows how long it has been going.
+    var since: Date?
 
     @State private var open = false
 
@@ -894,8 +896,18 @@ private struct WorkFold: View {
                             .font(.system(size: 9, weight: .semibold))
                             .rotationEffect(.degrees(open ? 90 : 0))
                     }
-                    Text(live ? (label ?? steps.last?.detail ?? "Working") : "Worked · \(steps.count) step\(steps.count == 1 ? "" : "s")")
-                        .font(.system(size: 12))
+                    if live {
+                        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                            let seconds = since.map { Int(timeline.date.timeIntervalSince($0)) } ?? 0
+                            Text((label ?? steps.last?.detail ?? "Working") + (seconds >= 5 ? " · \(seconds >= 60 ? "\(seconds / 60)m \(seconds % 60)s" : "\(seconds)s")" : ""))
+                                .font(.system(size: 12))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    } else {
+                        Text("Worked · \(steps.count) step\(steps.count == 1 ? "" : "s")")
+                            .font(.system(size: 12))
+                    }
                 }
                 .foregroundStyle(.secondary)
                 .contentShape(Rectangle())
@@ -908,6 +920,8 @@ private struct WorkFold: View {
                             .font(.system(size: 10))
                         Text(step.detail)
                             .font(.system(size: 12))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                     .foregroundStyle(.tertiary)
                     .padding(.leading, 14)

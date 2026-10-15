@@ -153,6 +153,7 @@ enum SpaceSort: String, CaseIterable, Identifiable, Hashable {
 }
 
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
+    case account
     case chatgpt
     case cursor
     case compatible
@@ -173,6 +174,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
+        case .account: "Account"
         case .chatgpt: "ChatGPT"
         case .cursor: "Cursor"
         case .compatible: "Compatible endpoint"
@@ -193,6 +195,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 
     var symbol: String {
         switch self {
+        case .account: "person.crop.circle"
         case .chatgpt: "bubble.left"
         case .cursor: "sparkle"
         case .compatible: "link.circle"

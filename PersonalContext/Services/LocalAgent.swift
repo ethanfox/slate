@@ -232,7 +232,7 @@ extension LocalAgent {
                     let text = (block["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                     return text.isEmpty ? nil : .text(text)
                 case "tool_use":
-                    return .activity(Self.activity(forTool: block["name"] as? String ?? ""))
+                    return .activity(Self.activity(forTool: block["name"] as? String ?? "", input: block["input"] as? [String: Any] ?? [:]))
                 case "thinking":
                     return .activity("Thinking")
                 default:
@@ -284,7 +284,9 @@ extension LocalAgent {
                 let text = (item["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 return text.isEmpty ? [] : [.text(text)]
             case "command_execution":
-                return type == "item.started" ? [.activity("Running a command")] : []
+                guard type == "item.started" else { return [] }
+                let command = (item["command"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                return [.activity(command.isEmpty ? "Running a command" : "Running: \(Self.clip(command))")]
             case "file_change":
                 return [.activity("Editing files")]
             case "mcp_tool_call":
@@ -316,16 +318,70 @@ extension LocalAgent {
     }
 
     static func activity(forTool name: String) -> String {
+        activity(forTool: name, input: [:])
+    }
+
+    /// What the worker is doing, with the command, file, or search it is doing it on.
+    static func activity(forTool name: String, input: [String: Any]) -> String {
         let bare = name.split(separator: "__").last.map(String.init) ?? name
-        switch bare {
-        case "Bash", "BashOutput": return "Running a command"
-        case "Edit", "Write", "MultiEdit", "NotebookEdit": return "Editing files"
-        case "Read", "Grep", "Glob", "LS": return "Reading code"
-        case "WebSearch", "WebFetch": return "Searching the web"
-        case "": return "Working"
-        default:
-            return name.contains("membrae") ? "Updating Membrae" : "Working"
+        func file(_ key: String) -> String {
+            URL(fileURLWithPath: input[key] as? String ?? "").lastPathComponent
         }
+        func text(_ key: String) -> String {
+            clip((input[key] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        switch bare {
+        case "Bash", "BashOutput":
+            let command = text("command")
+            return command.isEmpty ? "Running a command" : "Running: \(command)"
+        case "Edit", "Write", "MultiEdit", "NotebookEdit":
+            let name = file("file_path").isEmpty ? file("notebook_path") : file("file_path")
+            return name.isEmpty ? "Editing files" : "Editing \(name)"
+        case "Read":
+            let name = file("file_path")
+            return name.isEmpty ? "Reading code" : "Reading \(name)"
+        case "Grep":
+            let pattern = text("pattern")
+            return pattern.isEmpty ? "Searching code" : "Searching code for \(pattern)"
+        case "Glob":
+            let pattern = text("pattern")
+            return pattern.isEmpty ? "Listing files" : "Listing \(pattern)"
+        case "LS":
+            return "Listing files"
+        case "WebSearch":
+            let query = text("query")
+            return query.isEmpty ? "Searching the web" : "Searching the web for \(query)"
+        case "WebFetch":
+            let host = URL(string: input["url"] as? String ?? "")?.host ?? ""
+            return host.isEmpty ? "Fetching a page" : "Fetching \(host)"
+        case "Task", "Agent":
+            let what = text("description")
+            return what.isEmpty ? "Delegating" : "Delegating: \(what)"
+        case "TodoWrite":
+            return "Planning"
+        case "":
+            return "Working"
+        default:
+            if name.hasPrefix("mcp__") {
+                let parts = name.split(separator: "__").map(String.init)
+                let server = parts.count > 1 ? parts[1] : "a tool"
+                let tool = bare.replacingOccurrences(of: "_", with: " ")
+                return server == "membrae" ? "Membrae: \(tool)" : "\(server.capitalized): \(tool)"
+            }
+            return "Working"
+        }
+    }
+
+    /// One line, with the shell's noise trimmed, short enough for a step row.
+    static func clip(_ text: String, _ limit: Int = 90) -> String {
+        var line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+        if let range = line.range(of: "cd /Users/", options: .anchored) {
+            // "cd /x && real command" reads better as the real command.
+            if let amp = line.range(of: "&& ", range: range.upperBound..<line.endIndex) {
+                line = String(line[amp.upperBound...])
+            }
+        }
+        return line.count > limit ? String(line.prefix(limit)) + "…" : line
     }
 
     /// Says whose limit it was, so a refusal does not read as Membrae failing.

@@ -8,7 +8,9 @@ struct SettingsColumn: View {
         ScrollView {
             PageBody {
                 VStack(alignment: .leading, spacing: 1) {
-                    section("AI Providers", first: true)
+                    section("Membrae", first: true)
+                    row(.account)
+                    section("AI Providers")
                     ForEach(providers) { row($0) }
                     connectRow
                     section("Sources")

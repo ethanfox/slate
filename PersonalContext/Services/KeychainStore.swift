@@ -7,6 +7,8 @@ enum KeychainAccount: String {
     case compatibleAPIKey = "compatible-api-key"
     case github = "github-token"
     case gitlab = "gitlab-token"
+    /// The key this device holds from the Membrae account. Sync signs with it.
+    case deviceKey = "device-key"
 }
 
 enum KeychainStore {
