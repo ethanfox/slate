@@ -48,7 +48,7 @@ struct RunPage: View {
                                         .padding(.top, 16)
                                 }
 
-                                transcript
+                                SessionTranscript(run: run, waitLabel: app.runCoordinator.waitLabel(for: run.id))
                                     .padding(.top, 24)
                                 Color.clear
                                     .frame(height: 1)
@@ -92,9 +92,23 @@ struct RunPage: View {
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
             if run.statusDetail == RunStore.quitMidTurnDetail {
-                Text(run.statusDetail)
-                    .font(CraftFont.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    Text("Membrae quit while the worker was mid-turn. What it had finished is kept; the rest was not done.")
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button("Carry On") {
+                        app.runCoordinator.reply(
+                            "Membrae quit while you were mid-turn. First say in a few lines what you had finished and what was cut off, then carry on.",
+                            to: run, in: context
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
             }
             HStack(alignment: .bottom, spacing: 8) {
                 TextField("Your turn. Tell it what to do next.", text: $replyText, axis: .vertical)
@@ -704,5 +718,157 @@ private struct SessionStops: View {
             return
         }
         app.runCoordinator.reply("Work on the stop \"\(stop.displayTitle)\" now (id \(stop.id.uuidString)).", to: run, in: context)
+    }
+}
+
+
+/// A session's conversation: what the worker said, its steps folded into one line per stretch of work, the user's
+/// turns, the commits each turn made, and what each turn cost.
+private struct SessionTranscript: View {
+    var run: AgentRun
+    var waitLabel: String?
+
+    private enum Item: Identifiable {
+        case said(RunEvent)
+        case reply(RunEvent)
+        case commits(RunEvent)
+        case turn(RunEvent)
+        case work([RunEvent])
+
+        var id: UUID {
+            switch self {
+            case .said(let event), .reply(let event), .commits(let event), .turn(let event): event.id
+            case .work(let events): events.first?.id ?? UUID()
+            }
+        }
+    }
+
+    private var items: [Item] {
+        var items: [Item] = []
+        var steps: [RunEvent] = []
+        func flush() {
+            if !steps.isEmpty { items.append(.work(steps)); steps = [] }
+        }
+        for event in run.history where event.kind.isTranscript {
+            switch event.kind {
+            case .step: steps.append(event)
+            case .said: flush(); items.append(.said(event))
+            case .reply: flush(); items.append(.reply(event))
+            case .commits: flush(); items.append(.commits(event))
+            case .turn: flush(); items.append(.turn(event))
+            default: break
+            }
+        }
+        flush()
+        return items
+    }
+
+    var body: some View {
+        let items = items
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                switch item {
+                case .said(let event):
+                    AssistantMarkdown(text: event.detail)
+                        .textSelection(.enabled)
+                case .reply(let event):
+                    Text(event.detail)
+                        .font(CraftFont.body)
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.top, 10)
+                case .commits(let event):
+                    commits(event.detail)
+                case .turn(let event):
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Turn · \(event.detail)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                        Hairline()
+                    }
+                case .work(let events):
+                    let live = run.status == .running && index == items.count - 1
+                    WorkFold(steps: events, live: live, label: live ? waitLabel : nil)
+                }
+            }
+            if run.status == .running, let waitLabel, !(items.last.map { if case .work = $0 { return true } else { return false } } ?? false) {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(waitLabel)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func commits(_ text: String) -> some View {
+        let lines = text.split(separator: "\n").map(String.init)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 11))
+                Text(lines.count == 1 ? "Committed" : "Committed \(lines.count) times")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(.secondary)
+            ForEach(lines, id: \.self) { line in
+                Text(line)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(CraftColor.hairline))
+    }
+}
+
+/// A stretch of the worker's steps as one line, opened on click.
+private struct WorkFold: View {
+    var steps: [RunEvent]
+    var live: Bool
+    var label: String?
+
+    @State private var open = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                withAnimation(Motion.quick) { open.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    if live {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .rotationEffect(.degrees(open ? 90 : 0))
+                    }
+                    Text(live ? (label ?? steps.last?.detail ?? "Working") : "Worked · \(steps.count) step\(steps.count == 1 ? "" : "s")")
+                        .font(.system(size: 12))
+                }
+                .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if open {
+                ForEach(steps) { step in
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.turn.down.right")
+                            .font(.system(size: 10))
+                        Text(step.detail)
+                            .font(.system(size: 12))
+                    }
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 14)
+                }
+            }
+        }
     }
 }

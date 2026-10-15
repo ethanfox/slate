@@ -165,6 +165,20 @@ enum LocalAgentEvent: Equatable, Sendable {
     case failed(String)
     /// The id the worker gave this conversation, for carrying it on later.
     case session(String)
+    /// What the turn cost. Cost is 0 when the tool does not say.
+    case usage(cost: Double, inputTokens: Int, outputTokens: Int, durationMs: Int)
+}
+
+extension LocalAgentEvent {
+    /// "38k in · 2k out · $0.41 · 1m 12s"
+    static func usageLine(cost: Double, inputTokens: Int, outputTokens: Int, durationMs: Int) -> String {
+        func tokens(_ n: Int) -> String { n >= 1000 ? "\(n / 1000)k" : "\(n)" }
+        var parts = ["\(tokens(inputTokens)) in", "\(tokens(outputTokens)) out"]
+        if cost > 0 { parts.append(String(format: "$%.2f", cost)) }
+        let seconds = durationMs / 1000
+        if seconds >= 60 { parts.append("\(seconds / 60)m \(seconds % 60)s") } else if seconds > 0 { parts.append("\(seconds)s") }
+        return parts.joined(separator: " · ")
+    }
 }
 
 extension LocalAgent {
@@ -211,7 +225,20 @@ extension LocalAgent {
             for name in denials.compactMap({ $0["tool_name"] as? String }) where !refused.contains(name) {
                 refused.append(name)
             }
-            return [.finished(summary: text, refused: refused)]
+            var events: [LocalAgentEvent] = []
+            let usage = object["usage"] as? [String: Any] ?? [:]
+            let input = (usage["input_tokens"] as? Int ?? 0) + (usage["cache_read_input_tokens"] as? Int ?? 0) + (usage["cache_creation_input_tokens"] as? Int ?? 0)
+            let output = usage["output_tokens"] as? Int ?? 0
+            if input > 0 || output > 0 {
+                events.append(.usage(
+                    cost: object["total_cost_usd"] as? Double ?? 0,
+                    inputTokens: input,
+                    outputTokens: output,
+                    durationMs: object["duration_ms"] as? Int ?? 0
+                ))
+            }
+            events.append(.finished(summary: text, refused: refused))
+            return events
         default:
             return []
         }
@@ -238,7 +265,16 @@ extension LocalAgent {
                 return []
             }
         case "turn.completed":
-            return [.finished(summary: "", refused: [])]
+            var events: [LocalAgentEvent] = []
+            if let usage = object["usage"] as? [String: Any] {
+                let input = (usage["input_tokens"] as? Int ?? 0) + (usage["cached_input_tokens"] as? Int ?? 0)
+                let output = usage["output_tokens"] as? Int ?? 0
+                if input > 0 || output > 0 {
+                    events.append(.usage(cost: 0, inputTokens: input, outputTokens: output, durationMs: 0))
+                }
+            }
+            events.append(.finished(summary: "", refused: []))
+            return events
         case "turn.failed":
             let message = (object["error"] as? [String: Any])?["message"] as? String
             return [.failed(message ?? "\(title) could not finish.")]
@@ -321,7 +357,7 @@ extension LocalAgent {
             case .text(let text): reply = text
             case .finished(let summary, _): if !summary.isEmpty { reply = summary }
             case .failed(let message): throw LocalAgentError(message)
-            case .activity, .session: break
+            case .activity, .session, .usage: break
             }
         }
         guard !reply.isEmpty else { throw LocalAgentError("\(title) did not answer.") }
@@ -430,7 +466,7 @@ final class LocalAgentProcess {
                     for event in agent.events(fromLine: line) {
                         switch event {
                         case .finished, .failed: ended = true
-                        case .activity, .text, .session: break
+                        case .activity, .text, .session, .usage: break
                         }
                         continuation.yield(event)
                     }
@@ -492,7 +528,7 @@ final class LocalAgentProcess {
                         for event in agent.events(fromLine: line) {
                             switch event {
                             case .finished, .failed: ended = true
-                            case .activity, .text, .session: break
+                            case .activity, .text, .session, .usage: break
                             }
                             continuation.yield(event)
                         }

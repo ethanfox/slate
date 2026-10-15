@@ -51,10 +51,14 @@ enum RunEventKind: String, Codable, Hashable {
     case step
     /// What the user wrote back to the worker.
     case reply
+    /// Commits the worker made in a turn, one per line.
+    case commits
+    /// What a turn cost: tokens, dollars, time.
+    case turn
 
     /// The worker's messages, its steps, and the user's replies: the conversation, not the status changes.
     var isTranscript: Bool {
-        self == .said || self == .step || self == .reply
+        self == .said || self == .step || self == .reply || self == .commits || self == .turn
     }
 
     var label: String {

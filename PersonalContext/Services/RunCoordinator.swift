@@ -340,6 +340,7 @@ final class RunCoordinator {
         var summary = ""
         var refused: [String] = []
         var lastStep = ""
+        var usageLine = ""
         for try await event in try process.start(agent, executable: executable, request: request) {
             try Task.checkCancellation()
             switch event {
@@ -363,6 +364,8 @@ final class RunCoordinator {
             case .finished(let text, let names):
                 summary = text
                 refused = names
+            case .usage(let cost, let input, let output, let duration):
+                usageLine = LocalAgentEvent.usageLine(cost: cost, inputTokens: input, outputTokens: output, durationMs: duration)
             case .failed(let message):
                 throw LocalAgentError(message)
             }
@@ -374,11 +377,12 @@ final class RunCoordinator {
             if let repository, let before {
                 let commits = Self.commitLines(in: repository, since: before.first?.sha)
                 if !commits.isEmpty {
-                    live.append(.step, detail: "Committed: " + commits.joined(separator: "; "))
+                    live.append(.commits, detail: commits.joined(separator: "\n"))
                 }
             }
             let refusal = agent.refusalNote(refused, allowEdits: allowEdits)
             if !refusal.isEmpty { live.append(.step, detail: refusal) }
+            if !usageLine.isEmpty { live.append(.turn, detail: usageLine) }
             guard !live.externalID.isEmpty else {
                 throw LocalAgentError("\(agent.title) gave no session to carry on. Start the session again.")
             }
