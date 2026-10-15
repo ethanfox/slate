@@ -346,3 +346,17 @@ enum AccentedView: String, CaseIterable, Identifiable, Hashable {
         }
     }
 }
+
+extension TitleIndexKind {
+    /// The Space section that lists this kind.
+    var sectionTab: SpaceTab {
+        switch self {
+        case .track: .threads
+        case .note: .notes
+        case .decision: .decisions
+        case .chat: .chat
+        case .run: .runs
+        default: .overview
+        }
+    }
+}

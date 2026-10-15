@@ -42,13 +42,10 @@ struct SpaceView: View {
     @Environment(\.modelContext) private var context
 
     var body: some View {
-        VStack(spacing: 0) {
-            SpaceSectionPills(space: space, current: tab)
-            center
-        }
-        .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
-        .onAppear {
+        center
+            .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .onAppear {
             NavTrace.event("space.view appear tab=\(tab.rawValue) thread=\(app.selectedThread?.uuidString ?? "-") note=\(app.selectedNote?.uuidString ?? "-")")
         }
     }
@@ -298,7 +295,7 @@ struct SpaceToolbar: View {
     }
 }
 
-/// The Space's sections as a row of pills across the top of every view in it. The current one is filled.
+/// The Space's sections as a row of pills at the top of each section page, scrolling with it. The current one is filled.
 struct SpaceSectionPills: View {
     var space: Space
     var current: SpaceTab
@@ -333,10 +330,6 @@ struct SpaceSectionPills: View {
                 icon("gearshape", help: "Settings") { app.toggleSpaceSettings() }
             }
         }
-        .padding(.horizontal, 48)
-        .padding(.top, 24)
-        .padding(.bottom, 4)
-        .background(CraftColor.canvas)
     }
 
     private func icon(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {

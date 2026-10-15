@@ -68,10 +68,13 @@ struct ProjectTasksBoard: View {
             let width = columnWidth(in: geo.size.width)
             ScrollView([.horizontal, .vertical]) {
                 PageBody {
-                    HStack(alignment: .top, spacing: BoardMetrics.gap) {
-                        ForEach(TaskWorkflowStatus.allCases) { status in
-                            column(status)
-                                .frame(width: width, alignment: .topLeading)
+                    VStack(alignment: .leading, spacing: 20) {
+                        SpaceSectionPills(space: project, current: .tasks)
+                        HStack(alignment: .top, spacing: BoardMetrics.gap) {
+                            ForEach(TaskWorkflowStatus.allCases) { status in
+                                column(status)
+                                    .frame(width: width, alignment: .topLeading)
+                            }
                         }
                     }
                     .padding(BoardMetrics.inset)
@@ -96,6 +99,7 @@ struct ProjectTasksBoard: View {
         ScrollView {
             PageBody {
                 VStack(alignment: .leading, spacing: 24) {
+                    SpaceSectionPills(space: project, current: .tasks)
                     ForEach(TaskWorkflowStatus.allCases) { status in
                         listSection(status)
                     }

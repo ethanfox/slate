@@ -772,6 +772,7 @@ struct SpaceOverview: View {
         ScrollView {
             PageBody {
                 VStack(alignment: .leading, spacing: 36) {
+                    SpaceSectionPills(space: project, current: .overview)
 
                     if !ownedWidgets.isEmpty {
                         block("widgets", "Widgets") {
@@ -816,7 +817,7 @@ struct SpaceOverview: View {
                     }
                 }
                 .padding(.horizontal, 48)
-                .padding(.top, 6)
+                .padding(.top, 24)
                 // Room to scroll the last row clear of the composer that floats over the page.
                 .padding(.bottom, 140)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1161,6 +1162,9 @@ struct ProjectListPage: View {
         ScrollView {
             PageBody {
                 VStack(alignment: .leading, spacing: 16) {
+                    SpaceSectionPills(space: project, current: kind.sectionTab)
+                        .padding(.bottom, 8)
+
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text(kind.plural)
                             .font(.system(size: 28, weight: .semibold))

@@ -572,6 +572,8 @@ struct TrackLanesPage: View {
         ScrollView {
             PageBody {
                 VStack(alignment: .leading, spacing: 0) {
+                    SpaceSectionPills(space: space, current: .threads)
+                        .padding(.bottom, 20)
                     if lanes.isEmpty {
                         EmptyLine(
                             text: space.threads.isEmpty
@@ -585,7 +587,7 @@ struct TrackLanesPage: View {
                     }
                 }
                 .padding(.horizontal, 24)
-                .padding(.top, 20)
+                .padding(.top, 24)
                 .padding(.bottom, 140)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
