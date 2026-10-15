@@ -42,12 +42,15 @@ struct SpaceView: View {
     @Environment(\.modelContext) private var context
 
     var body: some View {
-        center
-            .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-            .onAppear {
-                NavTrace.event("space.view appear tab=\(tab.rawValue) thread=\(app.selectedThread?.uuidString ?? "-") note=\(app.selectedNote?.uuidString ?? "-")")
-            }
+        VStack(spacing: 0) {
+            SpaceSectionPills(space: space, current: tab)
+            center
+        }
+        .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .onAppear {
+            NavTrace.event("space.view appear tab=\(tab.rawValue) thread=\(app.selectedThread?.uuidString ?? "-") note=\(app.selectedNote?.uuidString ?? "-")")
+        }
     }
 
     @ViewBuilder
@@ -292,6 +295,39 @@ struct SpaceToolbar: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .contentShape(Capsule())
+    }
+}
+
+/// The Space's sections as a row of pills across the top of every view in it. The current one is filled.
+struct SpaceSectionPills: View {
+    var space: Space
+    var current: SpaceTab
+
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(SpaceTab.allCases) { section in
+                Button {
+                    app.open(space, tab: section, newTab: false)
+                } label: {
+                    Text(section.title)
+                        .font(.system(size: 12, weight: section == current ? .medium : .regular))
+                        .foregroundStyle(section == current ? Color.primary : Color.secondary)
+                        .padding(.horizontal, 11)
+                        .frame(height: 26)
+                        .background(section == current ? CraftColor.selection : CraftColor.elevated, in: Capsule())
+                        .overlay(Capsule().strokeBorder(CraftColor.hairline, lineWidth: section == current ? 0 : 1))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help(section.title)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 48)
+        .padding(.top, 24)
+        .background(CraftColor.canvas)
     }
 }
 

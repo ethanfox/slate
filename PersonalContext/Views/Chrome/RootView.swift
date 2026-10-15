@@ -329,19 +329,6 @@ struct RootView: View {
             GlassEffectContainer {
                 HStack(spacing: 10) {
                     SpaceToolbar(spaceID: space.id)
-                    if !space.threads.isEmpty {
-                        Button {
-                            app.showTracks(in: space, newTab: false)
-                        } label: {
-                            Label("Tracks", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .contentShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .glassEffect(.regular, in: Capsule())
-                        .help("Tracks")
-                    }
                     newChatButton(space)
                 }
             }

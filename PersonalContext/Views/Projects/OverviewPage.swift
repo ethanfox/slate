@@ -784,7 +784,7 @@ struct SpaceOverview: View {
                         }
                         iconButton("gearshape", help: "Settings") { app.toggleSpaceSettings() }
                     }
-                    .padding(.top, 28)
+                    .padding(.top, 8)
 
                     if !ownedWidgets.isEmpty {
                         block("widgets", "Widgets") {
@@ -829,7 +829,7 @@ struct SpaceOverview: View {
                     }
                 }
                 .padding(.horizontal, 48)
-                .padding(.top, 36)
+                .padding(.top, 16)
                 // Room to scroll the last row clear of the composer that floats over the page.
                 .padding(.bottom, 140)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1186,20 +1186,6 @@ struct ProjectListPage: View {
         ScrollView {
             PageBody {
                 VStack(alignment: .leading, spacing: 16) {
-                    Button(action: close) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 10, weight: .semibold))
-                            Text(project.name)
-                                .font(CraftFont.body)
-                        }
-                        .foregroundStyle(.secondary)
-                        .frame(height: 28)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Back to the overview")
-
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text(kind.plural)
                             .font(.system(size: 28, weight: .semibold))
