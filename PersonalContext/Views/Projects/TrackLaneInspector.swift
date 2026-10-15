@@ -119,10 +119,13 @@ private struct StopDocument: View {
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
 
-            TextField("Stop", text: $stop.title)
+            TextField("Stop", text: $stop.title, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 17, weight: .semibold))
+                .lineLimit(1...2)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 4)
+                .help(stop.displayTitle)
 
             TextField("What this stop is", text: $stop.body, axis: .vertical)
                 .textFieldStyle(.plain)
