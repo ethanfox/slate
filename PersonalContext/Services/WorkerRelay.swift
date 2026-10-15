@@ -29,6 +29,42 @@ enum WorkerRelay {
     static func errorURL(for id: String) -> URL { folder(for: id).appending(path: "err.log") }
     static func exitURL(for id: String) -> URL { folder(for: id).appending(path: "exit") }
     static func stopURL(for id: String) -> URL { folder(for: id).appending(path: "stop") }
+    /// Written by the helper the moment it launches, before it runs anything.
+    static func startedURL(for id: String) -> URL { folder(for: id).appending(path: "started") }
+    /// Launch Services drops the arguments and environment a sandboxed app passes, so the app also leaves the
+    /// ticket's id here and a helper launched with nothing claims the oldest one.
+    static var pendingFolder: URL { root.appending(path: "pending", directoryHint: .isDirectory) }
+    static func pendingURL(for id: String) -> URL { pendingFolder.appending(path: id + ".json") }
+
+    static let ticketVariable = "MEMBRAE_WORKER_TICKET"
+
+    /// Helper side: the ticket to run, from the arguments, the environment, or the pending folder.
+    static func claimTicket(arguments: [String], environment: [String: String]) -> (url: URL, route: String)? {
+        if let index = arguments.firstIndex(of: "--exec"), arguments.indices.contains(index + 1) {
+            return (URL(fileURLWithPath: arguments[index + 1]), "arguments")
+        }
+        if let path = environment[ticketVariable], !path.isEmpty {
+            return (URL(fileURLWithPath: path), "environment")
+        }
+        let manager = FileManager.default
+        guard let files = try? manager.contentsOfDirectory(at: pendingFolder, includingPropertiesForKeys: [.contentModificationDateKey]) else { return nil }
+        let oldest = files
+            .filter { $0.pathExtension == "json" }
+            .sorted { lhs, rhs in
+                let l = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                let r = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                return l < r
+            }
+        for file in oldest {
+            let id = file.deletingPathExtension().lastPathComponent
+            let claimed = folder(for: id).appending(path: "claimed")
+            // Rename is atomic: two helpers cannot both take one ticket.
+            if (try? manager.moveItem(at: file, to: claimed)) != nil {
+                return (ticketURL(for: id), "pending folder")
+            }
+        }
+        return nil
+    }
 
     static func writeTicket(_ ticket: Ticket) throws -> URL {
         let folder = folder(for: ticket.id)
@@ -66,7 +102,7 @@ enum WorkerRelay {
     // MARK: - Helper side
 
     /// Runs the ticket's tool to the end, relaying its output, and returns the helper's own exit code.
-    static func serve(ticketURL: URL) -> Int32 {
+    static func serve(ticketURL: URL, route: String = "arguments") -> Int32 {
         let ticket: Ticket
         do {
             ticket = try readTicket(at: ticketURL)
@@ -76,6 +112,8 @@ enum WorkerRelay {
         }
         let id = ticket.id
         let manager = FileManager.default
+        try? manager.removeItem(at: pendingURL(for: id))
+        manager.createFile(atPath: startedURL(for: id).path, contents: Data("\(ProcessInfo.processInfo.processIdentifier) via \(route)".utf8))
         manager.createFile(atPath: outputURL(for: id).path, contents: nil)
         manager.createFile(atPath: errorURL(for: id).path, contents: nil)
         guard let output = try? FileHandle(forWritingTo: outputURL(for: id)),
@@ -128,35 +166,47 @@ enum WorkerRelay {
     // MARK: - App side
 
     /// Starts the helper app for the ticket through Launch Services and tails what the tool writes.
+    /// Every step is reported through `report`, so the session page shows where a launch stops.
     @MainActor
-    static func launch(_ ticket: Ticket) async throws -> Handle {
+    static func launch(_ ticket: Ticket, report: @escaping (String) -> Void) async throws -> Handle {
         guard let app = BrowserSupport.helperAppURL else {
-            throw BrowserSupportError("The worker helper is missing from the app.")
+            throw BrowserSupportError("The worker helper is missing from the app at Contents/Helpers/Membrae Browser.app.")
         }
         let url = try writeTicket(ticket)
+        try FileManager.default.createDirectory(at: pendingFolder, withIntermediateDirectories: true)
+        try Data(url.path.utf8).write(to: pendingURL(for: ticket.id), options: .atomic)
+        report("Wrote the worker ticket to \(url.path)")
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.arguments = ["--exec", url.path]
+        configuration.environment = [ticketVariable: url.path]
         configuration.activates = false
         configuration.addsToRecentItems = false
         configuration.createsNewApplicationInstance = true
-        // Launch Services answers once the helper has launched; the tail below gives up on its own if it never does.
+        report("Asking Launch Services to start \(app.lastPathComponent)")
+        let started = Date.now
         let launch = Task { try await NSWorkspace.shared.openApplication(at: app, configuration: configuration) }
-        let outcome = await withTaskGroup(of: String?.self) { group -> String? in
+        enum Outcome { case launched(pid_t), refused(String), slow }
+        let outcome = await withTaskGroup(of: Outcome.self) { group -> Outcome in
             group.addTask {
-                do { _ = try await launch.value; return nil } catch { return error.localizedDescription }
+                do { return .launched(try await launch.value.processIdentifier) } catch { return .refused(error.localizedDescription) }
             }
             group.addTask {
                 try? await Task.sleep(for: .seconds(8))
-                return nil
+                return .slow
             }
-            let first = await group.next() ?? nil
+            let first = await group.next() ?? .slow
             group.cancelAll()
             return first
         }
-        if let outcome {
-            throw BrowserSupportError("Couldn’t start the worker helper: \(outcome)")
+        switch outcome {
+        case .refused(let message):
+            throw BrowserSupportError("Launch Services refused to start the worker helper: \(message)")
+        case .launched(let pid):
+            report("Helper launched as process \(pid) after \(Int(Date.now.timeIntervalSince(started) * 1000)) ms")
+        case .slow:
+            report("Launch Services has not answered after 8 s; watching for the helper anyway")
         }
-        let handle = Handle(id: ticket.id)
+        let handle = Handle(id: ticket.id, report: report)
         handle.beginTailing()
         return handle
     }
@@ -170,13 +220,15 @@ enum WorkerRelay {
         /// Each line the tool wrote to stdout, as it is written.
         let lines: AsyncStream<String>
         private let continuation: AsyncStream<String>.Continuation
+        private let report: (String) -> Void
         private let lock = NSLock()
         private var status: Int32?
         private var waiters: [CheckedContinuation<Int32, Never>] = []
         private var tail: Task<Void, Never>?
 
-        init(id: String) {
+        init(id: String, report: @escaping (String) -> Void = { _ in }) {
             self.id = id
+            self.report = report
             var continuation: AsyncStream<String>.Continuation!
             lines = AsyncStream { continuation = $0 }
             self.continuation = continuation
@@ -209,10 +261,26 @@ enum WorkerRelay {
                 let output = WorkerRelay.outputURL(for: id)
                 let exit = WorkerRelay.exitURL(for: id)
                 let startedAt = Date.now
+                var sawHelper = false
                 var sawOutput = false
+                let startedMarker = WorkerRelay.startedURL(for: id)
                 while !Task.isCancelled {
-                    if !sawOutput, FileManager.default.fileExists(atPath: output.path) { sawOutput = true }
+                    if !sawHelper, let pid = try? String(contentsOf: startedMarker, encoding: .utf8) {
+                        sawHelper = true
+                        self?.report("Helper is running as process \(pid.trimmingCharacters(in: .whitespacesAndNewlines)); starting the tool")
+                    }
                     if !sawOutput, Date.now.timeIntervalSince(startedAt) > 25 {
+                        try? FileManager.default.removeItem(at: WorkerRelay.pendingURL(for: id))
+                    }
+                    if !sawOutput, FileManager.default.fileExists(atPath: output.path) {
+                        sawOutput = true
+                        self?.report("Tool started; waiting for its first line")
+                    }
+                    if !sawOutput, Date.now.timeIntervalSince(startedAt) > 25 {
+                        let error = WorkerRelay.lastErrorLine(for: id)
+                        self?.report(sawHelper
+                            ? "The helper ran but the tool wrote nothing in 25 s" + (error.isEmpty ? "" : ": \(error)")
+                            : "The helper never launched in 25 s. Launch Services started nothing at \(WorkerRelay.folder(for: id).path)")
                         self?.finish(status: WorkerRelay.neverStarted)
                         return
                     }

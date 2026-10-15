@@ -482,7 +482,9 @@ final class LocalAgentProcess {
         return AsyncThrowingStream { continuation in
             let task = Task { @MainActor [weak self] in
                 do {
-                    let handle = try await WorkerRelay.launch(ticket)
+                    let handle = try await WorkerRelay.launch(ticket) { line in
+                        continuation.yield(.activity(line))
+                    }
                     self?.relay = handle
                     var ended = false
                     for await line in handle.lines {
@@ -497,7 +499,7 @@ final class LocalAgentProcess {
                     }
                     let status = await handle.exitStatus()
                     if status == WorkerRelay.neverStarted {
-                        continuation.finish(throwing: LocalAgentError("The worker helper did not start. Quit Membrae, open it again, and try once more."))
+                        continuation.finish(throwing: LocalAgentError("The worker helper did not start. The lines above say how far it got."))
                         return
                     }
                     if !ended, status != 0, status != 15 {

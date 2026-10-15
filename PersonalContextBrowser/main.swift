@@ -47,19 +47,29 @@ final class BrowserHelperApp: NSObject, NSApplicationDelegate {
 /// Finishes launching as an app first, so Launch Services answers the caller, then runs the tool and exits.
 final class WorkerHelperApp: NSObject, NSApplicationDelegate {
     let ticket: URL
-    init(ticket: URL) { self.ticket = ticket }
+    let route: String
+    init(ticket: URL, route: String) {
+        self.ticket = ticket
+        self.route = route
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let ticket = ticket
+        let route = route
         DispatchQueue.global(qos: .userInitiated).async {
-            exit(WorkerRelay.serve(ticketURL: ticket))
+            exit(WorkerRelay.serve(ticketURL: ticket, route: route))
         }
     }
 }
 
-if let index = CommandLine.arguments.firstIndex(of: "--exec"), CommandLine.arguments.indices.contains(index + 1) {
+// A coding tool to run for Membrae. Launched by the sandboxed app, the helper gets no arguments and no
+// environment, so the ticket is also claimed from the pending folder. Browser launches never leave one there.
+if let claim = WorkerRelay.claimTicket(
+    arguments: Array(CommandLine.arguments.dropFirst()),
+    environment: ProcessInfo.processInfo.environment
+) {
     let worker = NSApplication.shared
-    let workerDelegate = WorkerHelperApp(ticket: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+    let workerDelegate = WorkerHelperApp(ticket: claim.url, route: claim.route)
     worker.delegate = workerDelegate
     worker.setActivationPolicy(.prohibited)
     worker.run()
