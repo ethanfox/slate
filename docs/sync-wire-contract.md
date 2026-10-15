@@ -40,6 +40,10 @@ Reply: `{ "changes": [ "<record>", "..." ], "cursor": <n> }`. Returns changes wi
 - A deletion is `"deleted": true` with empty `fields` and `links`. It is a tombstone; keep it.
 - `sequence` on the way up is the device's own counter; on the way down it is the database's. The database should keep one row per `kind` + `id` and give each write a rising sequence, the same shape as the Mac's `RecordChange`.
 
+## The key
+
+Until the second stop, the key is the import key. If it is missing or has expired when sync runs, the Mac makes a new one (180 days) rather than stop. The database in Cloudflare is named after the key, so a new key is a new, empty database: the Mac keeps a hash of the key its cursors belong to and, when it changes, pushes everything again from the start and pulls from the start.
+
 ## What goes up
 
 Changes in Spaces whose `isSynced` is on, plus tags, sources, and facts (records outside any Space that belong to the user) once any Space is synced. Changes in local Spaces are passed over and the cursor still moves past them. Turning a Space on re-stamps every record in it so the first push sends all of it.

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftData
 
@@ -131,6 +132,8 @@ final class SyncController {
         static let pushed = "sync.pushedSequence"
         static let pulled = "sync.pulledCursor"
         static let device = "sync.deviceID"
+        /// A hash of the key the cursors belong to. A new key is a new, empty database.
+        static let keyHash = "sync.keyHash"
     }
 
     init() {
@@ -171,6 +174,9 @@ final class SyncController {
             status = .idle("Nothing is synced")
             return
         }
+        // Sync signs with the import key until the device key exists. If it has expired or was
+        // never made, this drops the old one and makes a new one rather than stopping silently.
+        app.importRelay.ensureKey()
         guard let key = ImportKeyStore.readKey() else {
             status = .idle("No key to sign in with")
             return
@@ -178,6 +184,7 @@ final class SyncController {
         running = true
         defer { running = false }
         status = .syncing
+        startOverIfKeyChanged(key)
         do {
             if context.hasChanges { try context.persist() }
             try await push(key: key, context: context)
@@ -228,6 +235,21 @@ final class SyncController {
             if reply.changes.isEmpty { break }
         }
         lastPulled = received
+    }
+
+    /// The database in Cloudflare is named after the key, so a new key is a new, empty database:
+    /// push everything again from the start and pull from the start.
+    private func startOverIfKeyChanged(_ key: String) {
+        let hash = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
+        let defaults = UserDefaults.standard
+        let previous = defaults.string(forKey: Keys.keyHash) ?? ""
+        if !previous.isEmpty, previous != hash {
+            setPushed(0)
+            pulledCursor = 0
+            defaults.set(0, forKey: Keys.pulled)
+            NavTrace.event("sync.key-changed cursors reset")
+        }
+        if previous != hash { defaults.set(hash, forKey: Keys.keyHash) }
     }
 
     private func setPushed(_ sequence: Int) {
