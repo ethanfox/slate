@@ -851,18 +851,28 @@ final class AppModel {
             return
         }
         let defaults = runDefaults(for: project)
-        present(.newRun(
-            retryOf.map(RunStore.retryDraft) ?? NewRunDraft.blank(
-                origin: origin,
-                projectID: project?.id,
-                taskID: task?.id,
-                originChatID: chat?.id,
-                brief: brief,
-                providerID: defaults.provider,
-                modelID: defaults.model,
-                pathRaw: defaults.path
-            )
-        ))
+        if let retryOf {
+            present(.newRun(RunStore.retryDraft(from: retryOf)))
+            return
+        }
+        var draft = NewRunDraft.blank(
+            origin: origin,
+            projectID: project?.id,
+            taskID: task?.id,
+            originChatID: chat?.id,
+            brief: brief,
+            providerID: defaults.provider,
+            modelID: defaults.model,
+            pathRaw: defaults.path
+        )
+        // A Space with one attached folder or repository gets it ticked, as the chat door does; with more, the user picks.
+        if let project {
+            let attachments = ProjectCodeWorkspace.attachments(on: project)
+            if attachments.count == 1, let only = attachments.first {
+                draft.repositoryLocators = [only.locator.isEmpty ? only.title : only.locator]
+            }
+        }
+        present(.newRun(draft))
     }
 
     func startRun(_ draft: NewRunDraft) {
