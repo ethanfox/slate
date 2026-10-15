@@ -240,11 +240,8 @@ struct LaneLine: View {
     var onJunction: (TrackJunction) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hoveringSignal = false
-    @State private var hoveringCard = false
 
     private var tint: Color { lane.track.color.tint }
-    private var showingCard: Bool { hoveringSignal || hoveringCard }
 
     var body: some View {
         GeometryReader { geo in
@@ -281,25 +278,13 @@ struct LaneLine: View {
                         .position(x: LaneMetrics.firstStop + 24, y: midY + 20)
                 }
                 if let wait = lane.wait {
-                    let x = LaneMetrics.stopX(wait.index)
                     LaneSignal()
-                        .position(x: x, y: midY - 18)
-                        .onHover { hoveringSignal = $0 }
-                        .onTapGesture { onJunction(wait.junction) }
-                        .help("Waiting: click for what is holding it")
-                    if showingCard {
-                        JunctionCard(junction: wait.junction)
-                            .onHover { hoveringCard = $0 }
-                            .onTapGesture { onJunction(wait.junction) }
-                            .position(x: x, y: midY + 100)
-                            .transition(.opacity)
-                    }
+                        .junctionCard(wait.junction) { onJunction(wait.junction) }
+                        .position(x: LaneMetrics.stopX(wait.index), y: midY - 18)
                 }
             }
-            .animation(Motion.quick, value: showingCard)
         }
         .frame(height: compact ? LaneMetrics.compactHeight : LaneMetrics.height)
-        .zIndex(showingCard ? 2 : 0)
     }
 
     private func drawLine(in context: GraphicsContext, width: CGFloat, midY: CGFloat) {
@@ -464,12 +449,6 @@ struct JunctionCard: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .frame(width: 214, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(CraftColor.elevated)
-                .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
-        )
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(CraftColor.hairline))
     }
 
     private var headline: String {
@@ -485,6 +464,63 @@ struct JunctionCard: View {
         switch junction.kind {
         case .wait: "Met when \(junction.first.map(LaneModel.title) ?? "the other track") is completed."
         case .merge: "Nothing listed to reconcile."
+        }
+    }
+}
+
+extension View {
+    /// Shows what a junction is waiting for in a popover while the mouse is over this view or the card, and runs
+    /// `onClick` when this view is clicked. A popover floats above the lanes, so a scrolling lane cannot clip it.
+    func junctionCard(_ junction: TrackJunction, onClick: @escaping () -> Void) -> some View {
+        modifier(JunctionHoverCard(junction: junction, onClick: onClick))
+    }
+}
+
+private struct JunctionHoverCard: ViewModifier {
+    var junction: TrackJunction
+    var onClick: () -> Void
+
+    @State private var overAnchor = false
+    @State private var overCard = false
+    @State private var shown = false
+    @State private var closing: Task<Void, Never>?
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .onTapGesture {
+                shown = false
+                onClick()
+            }
+            .onHover { over in
+                overAnchor = over
+                settle()
+            }
+            .popover(isPresented: $shown, arrowEdge: .bottom) {
+                JunctionCard(junction: junction)
+                    .padding(2)
+                    .onHover { over in
+                        overCard = over
+                        settle()
+                    }
+                    .onTapGesture {
+                        shown = false
+                        onClick()
+                    }
+            }
+    }
+
+    /// Opens at once; closes a beat after the mouse has left both the anchor and the card.
+    private func settle() {
+        closing?.cancel()
+        if overAnchor || overCard {
+            shown = true
+            return
+        }
+        closing = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(260))
+            guard !Task.isCancelled, !overAnchor, !overCard else { return }
+            shown = false
         }
     }
 }
@@ -570,7 +606,6 @@ private struct LaneStack: View {
     var space: Space
 
     @Environment(AppModel.self) private var app
-    @State private var hoveringMerge: UUID?
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -616,15 +651,8 @@ private struct LaneStack: View {
             .allowsHitTesting(false)
             ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
                 if lane.mergesIntoNext, let merge = lane.merge {
-                    let point = mergePoint(at: index)
                     mergeNode(merge, tint: continuingTint(at: index))
-                        .position(point)
-                    if hoveringMerge == merge.id {
-                        JunctionCard(junction: merge)
-                            .onHover { hoveringMerge = $0 ? merge.id : nil }
-                            .onTapGesture { app.selectJunction(merge.id) }
-                            .position(x: point.x, y: point.y + 72)
-                    }
+                        .position(mergePoint(at: index))
                 }
             }
         }
@@ -648,21 +676,15 @@ private struct LaneStack: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize()
-            Button {
-                app.selectJunction(merge.id)
-            } label: {
-                ZStack {
-                    if selected {
-                        Circle().stroke(tint.opacity(0.3), lineWidth: 3).frame(width: 26, height: 26)
-                    }
-                    Circle().fill(tint).frame(width: 16, height: 16)
-                    Circle().stroke(.white, lineWidth: 1.7).frame(width: 8, height: 8)
+            ZStack {
+                if selected {
+                    Circle().stroke(tint.opacity(0.3), lineWidth: 3).frame(width: 26, height: 26)
                 }
-                .frame(width: 28, height: 28)
-                .contentShape(Circle())
+                Circle().fill(tint).frame(width: 16, height: 16)
+                Circle().stroke(.white, lineWidth: 1.7).frame(width: 8, height: 8)
             }
-            .buttonStyle(.plain)
-            .onHover { hoveringMerge = $0 ? merge.id : nil }
+            .frame(width: 28, height: 28)
+            .junctionCard(merge) { app.selectJunction(merge.id) }
         }
         .offset(y: -12)
     }
