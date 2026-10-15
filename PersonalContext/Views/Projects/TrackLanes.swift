@@ -29,7 +29,7 @@ private extension NSColor {
 /// How a lane is laid out: a header column, then the line with a stop every hundred points.
 enum LaneMetrics {
     static let headerWidth: CGFloat = 176
-    static let firstStop: CGFloat = 36
+    static let firstStop: CGFloat = 56
     static let spacing: CGFloat = 100
     static let height: CGFloat = 150
     static let compactHeight: CGFloat = 116
