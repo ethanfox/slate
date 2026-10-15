@@ -156,18 +156,13 @@ struct SettingsDeveloperPage: View {
                     Spacer(minLength: 16)
                     Button("Sync now") { app.sync.syncSoon() }
                 }
-                ForEach(projects) { project in
-                    Hairline().padding(.horizontal, 16)
-                    SettingsRow {
-                        Text(project.displayName)
-                        Spacer(minLength: 16)
-                        Toggle("Synced", isOn: Binding(
-                            get: { project.isSynced },
-                            set: { try? SpaceStore.setSynced($0, on: project, in: context) }
-                        ))
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                    }
+                Hairline().padding(.horizontal, 16)
+                SettingsRow {
+                    Text("Synced Spaces")
+                    Spacer(minLength: 16)
+                    Text(syncedSpaces.isEmpty ? "None. Turn sync on in a Space's settings." : syncedSpaces.map(\.displayName).joined(separator: ", "))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
                 }
             }
 
@@ -207,6 +202,10 @@ struct SettingsDeveloperPage: View {
             changeCount = ChangeLog.count(in: context)
         }
         .onDisappear { app.importRelay.hideKey() }
+    }
+
+    private var syncedSpaces: [Project] {
+        projects.filter(\.isSynced)
     }
 
     private var hasLiveKey: Bool {

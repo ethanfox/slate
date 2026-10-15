@@ -223,6 +223,22 @@ private struct OverviewInspectorSettings: View {
                 }
             }
 
+            inspectorField("Sync") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Sync to Cloudflare", isOn: Binding(
+                        get: { project.isSynced },
+                        set: { try? SpaceStore.setSynced($0, on: project, in: context) }
+                    ))
+                    .toggleStyle(.switch)
+                    Text(project.isSynced
+                         ? "Everything in this Space is stored in Cloudflare too, where Membrae's servers can read it. That is what lets web AIs and jobs work with it when this Mac is off."
+                         : "This Space stays on this Mac. Turn sync on to reach it from web AIs and other devices.")
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             inspectorField("Notes for Membrae") {
                 TextField("What you call things here, units you use, and anything Membrae should remember", text: $project.agentNotes, axis: .vertical)
                     .textFieldStyle(.plain)

@@ -53,5 +53,4 @@ The later `changed_at` wins. The Mac keeps its own unsent edit when it is later,
 - Files: `asset` rows travel as metadata only. The bytes need file storage under the user's id (R2) and a transfer step.
 - Creation on the Mac of junctions, junction requirements, files, deletion marks, code attachments, agent actions, and cleanup plans from a pull; updates and deletions of them do apply.
 - To-many link application on the Mac.
-- A Space's `isSynced` switch in its own settings; the Developer page carries a temporary one.
 - The Cloudflare half itself: a Durable Object per user (keyed by the import key's owner until the passkey account exists) with one SQLite table of kind, id, space_id, deleted, sequence, changed_at, origin, fields JSON, links JSON, device; and an R2 bucket for files.
