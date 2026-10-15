@@ -498,17 +498,38 @@ extension AppModel {
     }
 
     func goBack() {
-        guard var history = tabHistories[selectedTabID], let previous = history.back.popLast() else { return }
+        guard var history = tabHistories[selectedTabID] else { return }
         persistCurrentIntoSelectedTab()
-        history.forward.append(currentWindowTab())
+        let current = currentWindowTab()
+        // Back always lands somewhere else: an entry for the view already showing is skipped.
+        var previous = history.back.popLast()
+        while let candidate = previous, candidate.viewKey == current.viewKey {
+            previous = history.back.popLast()
+        }
+        guard let previous else {
+            tabHistories[selectedTabID] = history
+            syncHistoryButtons()
+            return
+        }
+        history.forward.append(current)
         tabHistories[selectedTabID] = history
         restoreHistory(previous)
     }
 
     func goForward() {
-        guard var history = tabHistories[selectedTabID], let next = history.forward.popLast() else { return }
+        guard var history = tabHistories[selectedTabID] else { return }
         persistCurrentIntoSelectedTab()
-        history.back.append(currentWindowTab())
+        let current = currentWindowTab()
+        var next = history.forward.popLast()
+        while let candidate = next, candidate.viewKey == current.viewKey {
+            next = history.forward.popLast()
+        }
+        guard let next else {
+            tabHistories[selectedTabID] = history
+            syncHistoryButtons()
+            return
+        }
+        history.back.append(current)
         tabHistories[selectedTabID] = history
         restoreHistory(next)
     }
@@ -808,7 +829,10 @@ extension AppModel {
     private func recordNavigation(from previous: WindowTab, to next: WindowTab) {
         guard previous.viewKey != next.viewKey else { return }
         var history = tabHistories[selectedTabID] ?? TabHistory()
-        history.back.append(previous)
+        // The same view twice in a row would make Back a dead click.
+        if history.back.last?.viewKey != previous.viewKey {
+            history.back.append(previous)
+        }
         if history.back.count > 50 {
             history.back.removeFirst(history.back.count - 50)
         }

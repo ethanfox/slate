@@ -385,6 +385,7 @@ private final class LocalAgentErrorTail: @unchecked Sendable {
 @MainActor
 final class LocalAgentProcess {
     private var process: Process?
+    private var relay: WorkerRelay.Handle?
 
     func start(
         _ agent: LocalAgent,
@@ -392,6 +393,9 @@ final class LocalAgentProcess {
         request: LocalAgentRequest
     ) throws -> AsyncThrowingStream<LocalAgentEvent, Error> {
         stop()
+        if BrowserSupport.helperAppURL != nil {
+            return startRelayed(agent, executable: executable, request: request)
+        }
         let process = Process()
         process.executableURL = executable
         process.arguments = agent.arguments(for: request)
@@ -453,5 +457,60 @@ final class LocalAgentProcess {
             process.terminate()
         }
         process = nil
+        relay?.stop()
+        relay = nil
+    }
+
+    /// The tool runs outside Membrae's sandbox, started by Launch Services through the helper app, so it can
+    /// write to the user's repository. Its output comes back through files the relay tails.
+    private func startRelayed(
+        _ agent: LocalAgent,
+        executable: URL,
+        request: LocalAgentRequest
+    ) -> AsyncThrowingStream<LocalAgentEvent, Error> {
+        // Outside the sandbox the tool's own temporary folder is fine; only the app's needed pointing elsewhere.
+        var environment = LocalAgent.environment()
+        environment.removeValue(forKey: "TMPDIR")
+        environment.removeValue(forKey: "CLAUDE_CODE_TMPDIR")
+        let ticket = WorkerRelay.Ticket(
+            id: UUID().uuidString,
+            executable: executable.path,
+            arguments: agent.arguments(for: request),
+            environment: environment,
+            directory: request.directory
+        )
+        return AsyncThrowingStream { continuation in
+            let task = Task { @MainActor [weak self] in
+                do {
+                    let handle = try await WorkerRelay.launch(ticket)
+                    self?.relay = handle
+                    var ended = false
+                    for await line in handle.lines {
+                        try Task.checkCancellation()
+                        for event in agent.events(fromLine: line) {
+                            switch event {
+                            case .finished, .failed: ended = true
+                            case .activity, .text, .session: break
+                            }
+                            continuation.yield(event)
+                        }
+                    }
+                    let status = await handle.exitStatus()
+                    if !ended, status != 0, status != 15 {
+                        let detail = WorkerRelay.lastErrorLine(for: ticket.id)
+                        let message = "\(agent.title) stopped before finishing (exit \(status))."
+                        continuation.finish(throwing: LocalAgentError(detail.isEmpty ? message : "\(message) \(detail)"))
+                    } else {
+                        continuation.finish()
+                    }
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { [weak self] _ in
+                task.cancel()
+                Task { @MainActor in self?.stop() }
+            }
+        }
     }
 }

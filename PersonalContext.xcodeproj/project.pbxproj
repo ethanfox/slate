@@ -18,6 +18,7 @@
 		A11C0DE100000012 /* SettingsMCPPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000011 /* SettingsMCPPage.swift */; };
 		A11C0DE100000014 /* MCPConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0DE100000013 /* MCPConnectionTests.swift */; };
 		B20A01000000000000000002 /* BrowserSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000001 /* BrowserSupport.swift */; };
+		8D2E0F3A5B7C9D1E2F4A6B8C /* WorkerRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1D9E2F4A6B8C0D1E3F5A7B /* WorkerRelay.swift */; };
 		B20A01000000000000000004 /* BrowserPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000003 /* BrowserPermissions.swift */; };
 		B20A01000000000000000006 /* BrowserChallenge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000005 /* BrowserChallenge.swift */; };
 		B20A01000000000000000008 /* BrowserActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000007 /* BrowserActivity.swift */; };
@@ -30,6 +31,7 @@
 		B20A01000000000000000016 /* BrowserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000015 /* BrowserTests.swift */; };
 		B20B01000000000000000002 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20B01000000000000000001 /* main.swift */; };
 		B20B01000000000000000003 /* BrowserSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20A01000000000000000001 /* BrowserSupport.swift */; };
+		9E3F1A4B6C8D0E2F3A5B7C9D /* WorkerRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1D9E2F4A6B8C0D1E3F5A7B /* WorkerRelay.swift */; };
 		B20B01000000000000000006 /* PersonalContextBrowser in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = B20B01000000000000000005 /* PersonalContextBrowser */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		05BA026B4AF137407DFFBB70 /* ColorHex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A843C76D621958EDA8D94D61 /* ColorHex.swift */; };
 		1CA1A6E0000000000000017 /* LiquidSand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA1A6E0000000000000007 /* LiquidSand.swift */; };
@@ -493,6 +495,7 @@
 		A11C0DE100000011 /* SettingsMCPPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsMCPPage.swift; sourceTree = "<group>"; };
 		A11C0DE100000013 /* MCPConnectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPConnectionTests.swift; sourceTree = "<group>"; };
 		B20A01000000000000000001 /* BrowserSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserSupport.swift; sourceTree = "<group>"; };
+		7C1D9E2F4A6B8C0D1E3F5A7B /* WorkerRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerRelay.swift; sourceTree = "<group>"; };
 		B20A01000000000000000003 /* BrowserPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserPermissions.swift; sourceTree = "<group>"; };
 		B20A01000000000000000005 /* BrowserChallenge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserChallenge.swift; sourceTree = "<group>"; };
 		B20A01000000000000000007 /* BrowserActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserActivity.swift; sourceTree = "<group>"; };
@@ -749,6 +752,7 @@
 				A11C0DE10000000D /* MCPToolRegistry.swift */,
 				A11C0DE10000000F /* MCPRuntime.swift */,
 				B20A01000000000000000001 /* BrowserSupport.swift */,
+				7C1D9E2F4A6B8C0D1E3F5A7B /* WorkerRelay.swift */,
 				B20A01000000000000000003 /* BrowserPermissions.swift */,
 				B20A01000000000000000005 /* BrowserChallenge.swift */,
 				B20A01000000000000000007 /* BrowserActivity.swift */,
@@ -1141,6 +1145,7 @@
 				"$(SRCROOT)/PersonalContextRunner/runner.entitlements",
 				"$(SRCROOT)/PersonalContextBrowser/package.json",
 				"$(SRCROOT)/PersonalContextBrowser/bundle.sh",
+				"$(BUILT_PRODUCTS_DIR)/membrae-browser",
 			);
 			name = "Build agent runner";
 			outputFileListPaths = (
@@ -1193,6 +1198,7 @@
 			files = (
 				B20B01000000000000000002 /* main.swift in Sources */,
 				B20B01000000000000000003 /* BrowserSupport.swift in Sources */,
+				9E3F1A4B6C8D0E2F3A5B7C9D /* WorkerRelay.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1411,6 +1417,7 @@
 				A11C0DE10000000E /* MCPToolRegistry.swift in Sources */,
 				A11C0DE100000010 /* MCPRuntime.swift in Sources */,
 				B20A01000000000000000002 /* BrowserSupport.swift in Sources */,
+				8D2E0F3A5B7C9D1E2F4A6B8C /* WorkerRelay.swift in Sources */,
 				B20A01000000000000000004 /* BrowserPermissions.swift in Sources */,
 				B20A01000000000000000006 /* BrowserChallenge.swift in Sources */,
 				B20A01000000000000000008 /* BrowserActivity.swift in Sources */,
