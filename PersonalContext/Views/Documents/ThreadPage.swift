@@ -72,10 +72,16 @@ struct ThreadPage: View {
                     }
                 }
                 activePill
+                farePill
                 linked
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 8)
+
+            Text(journey)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(.top, 6)
 
             MarkdownEditor(text: $thread.body, minHeight: 360, findField: .body, traceKind: "thread", traceObjectID: thread.id.uuidString)
                 .padding(.top, 16)
@@ -129,6 +135,35 @@ struct ThreadPage: View {
                 Button("Make This the Active Track") { TaskStore.setActiveTrack(thread, on: project, in: context) }
             }
         }
+    }
+
+    private var farePill: some View {
+        PropertyPill(title: thread.fareDays > 0 ? thread.fareLabel : "No fare", systemImage: "ticket") {
+            ForEach([7, 14, 21, 42, 84], id: \.self) { days in
+                Button(days % 7 == 0 ? "\(days / 7) week\(days == 7 ? "" : "s")" : "\(days) days") { thread.fareDays = days; touch() }
+            }
+            Divider()
+            Button("No Fare") { thread.fareDays = 0; touch() }
+        }
+    }
+
+    /// "Departed 3 Oct · arrived 12 Oct", or where the fare stands on an open track.
+    private var journey: String {
+        let day: (Date) -> String = { $0.formatted(date: .abbreviated, time: .omitted) }
+        var parts = ["Departed \(day(thread.departedAt))"]
+        if let arrived = thread.arrivedAt {
+            parts.append("arrived \(day(arrived))")
+        } else if let ends = thread.fareEndsAt {
+            let left = Calendar.current.dateComponents([.day], from: .now, to: ends).day ?? 0
+            if left < 0 {
+                parts.append("fare ran out \(ends.relativeLabel)")
+            } else if left == 0 {
+                parts.append("last day of the fare")
+            } else {
+                parts.append("\(left) day\(left == 1 ? "" : "s") left of the \(thread.fareLabel)")
+            }
+        }
+        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder

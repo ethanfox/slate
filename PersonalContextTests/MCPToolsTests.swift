@@ -278,6 +278,32 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertTrue(text.hasPrefix(HarborEvalFixture.authBody))
     }
 
+    func testCompletingTrackRecordsArrivalAndFare() throws {
+        let seed = HarborEvalFixture.seed(in: context)
+        try context.save()
+        let id = seed.auth.id.uuidString
+
+        var shape = try object(Tools.call(
+            "update_track", arguments: ["track_id": id, "fare_days": 14], container: container
+        ))
+        XCTAssertEqual(shape["fare_days"] as? Int, 14)
+        XCTAssertFalse((shape["departed_at"] as? String ?? "").isEmpty)
+        XCTAssertFalse((shape["fare_ends_at"] as? String ?? "").isEmpty)
+        XCTAssertEqual(shape["arrived_at"] as? String, "")
+
+        shape = try object(Tools.call(
+            "update_track", arguments: ["track_id": id, "status": "completed"], container: container
+        ))
+        XCTAssertFalse((shape["arrived_at"] as? String ?? "").isEmpty)
+
+        shape = try object(Tools.call(
+            "update_track", arguments: ["track_id": id, "status": "active", "fare_days": "0"], container: container
+        ))
+        XCTAssertEqual(shape["arrived_at"] as? String, "")
+        XCTAssertEqual(shape["fare_days"] as? Int, 0)
+        XCTAssertEqual(shape["fare_ends_at"] as? String, "")
+    }
+
     func testUpdateThreadPreservesAssociations() throws {
         let seed = HarborEvalFixture.seed(in: context)
         try context.save()

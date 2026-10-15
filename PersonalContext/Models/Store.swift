@@ -67,7 +67,7 @@ enum Store {
 
     /// Bump whenever a model or a stored property is added. A build that opens a store written by a
     /// newer schema drops the tables and columns it does not know, so older builds must refuse.
-    static let schemaVersion = 24
+    static let schemaVersion = 25
 
     /// Sits beside the store and holds the highest schema version that has opened it.
     static func schemaMarkerURL(for store: URL) -> URL {
@@ -204,6 +204,7 @@ enum Store {
             upgrade = readSpaceUpgrade(at: configuration.url, running: schemaVersion)
         }
         let start = ContinuousClock.now
+        let recorded = configuration.isStoredInMemoryOnly ? schemaVersion : recordedSchemaVersion(for: configuration.url)
         let container = try ModelContainer(for: schema, configurations: configuration)
         if !configuration.isStoredInMemoryOnly {
             recordSchemaVersion(at: configuration.url, running: schemaVersion)
@@ -215,6 +216,9 @@ enum Store {
         }
         if let upgrade {
             try apply(upgrade, in: context)
+        }
+        if recorded < 25, schemaVersion >= 25 {
+            try backfillArrivals(in: context)
         }
         guard mode == .prepare else {
             // A helper built before the title index existed drops its table when it saves.
@@ -412,6 +416,18 @@ enum Store {
             }
         }
         return upgrade
+    }
+
+    /// Tracks completed before arrivals were recorded take their last change as the arrival.
+    static func backfillArrivals(in context: ModelContext) throws {
+        let completed = ThreadStatus.completed.rawValue
+        let threads = try context.fetch(FetchDescriptor<ProjectThread>(predicate: #Predicate { $0.statusRaw == completed }))
+        var changed = false
+        for thread in threads where thread.arrivedAt == nil {
+            thread.arrivedAt = thread.updatedAt
+            changed = true
+        }
+        if changed { try context.save() }
     }
 
     static func apply(_ upgrade: SpaceUpgrade, in context: ModelContext) throws {

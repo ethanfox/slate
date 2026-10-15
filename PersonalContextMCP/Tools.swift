@@ -39,6 +39,17 @@ struct Args {
 
     func bool(_ key: String) -> Bool? { raw[key] as? Bool }
 
+    func integer(_ key: String) throws -> Int? {
+        guard let value = raw[key] else { return nil }
+        if let number = value as? Int { return number }
+        if let number = value as? Double, number == number.rounded() { return Int(number) }
+        if let text = value as? String {
+            if text.isEmpty { return nil }
+            if let number = Int(text.trimmingCharacters(in: .whitespaces)) { return number }
+        }
+        throw ToolError("\(key) must be a whole number.")
+    }
+
     func choice<T: RawRepresentable & CaseIterable>(_ key: String, as type: T.Type) throws -> T? where T.RawValue == String {
         guard let value = string(key) else { return nil }
         if let parsed = T(rawValue: value) { return parsed }
@@ -491,6 +502,10 @@ enum Tools {
         ["type": "boolean", "description": description]
     }
 
+    private static func integer(_ description: String) -> [String: Any] {
+        ["type": "integer", "description": description]
+    }
+
     private static func objectList(_ description: String) -> [String: Any] {
         ["type": "array", "items": ["type": "object", "additionalProperties": true], "description": description]
     }
@@ -797,7 +812,8 @@ enum Tools {
                 "status": options(ThreadStatus.self, "Defaults to exploring."),
                 "summary": text("One or two sentences."),
                 "body": text("Markdown spec."),
-                "theme": text("Name of the theme to list this track under. A theme with that name is made if the Space has none.")
+                "theme": text("Name of the theme to list this track under. A theme with that name is made if the Space has none."),
+                "fare_days": integer("The fare: how many days the user is willing to spend on this track, counted from the day it was made. Set it only when the user says how long. 0 clears it."),
             ],
             required: ["space_id", "title"], readOnly: false
         ) { args, context in
@@ -812,6 +828,7 @@ enum Tools {
             if let status = try args.choice("status", as: ThreadStatus.self) { thread.status = status }
             thread.summary = args.string("summary") ?? ""
             thread.body = args.string("body") ?? ""
+            if let fare = try args.integer("fare_days") { thread.fareDays = max(0, fare) }
             context.insert(thread)
             if let theme = args.string("theme") { ThemeStore.setTheme(theme, on: thread, in: context) }
             project.touch()
@@ -829,7 +846,8 @@ enum Tools {
                 "body": text("Replaces the whole markdown spec. Omit or leave empty to keep the current body."),
                 "append_to_body": text("Markdown appended to the end of the spec."),
                 "parent_id": text("Empty string takes a nested track out from under its parent. Tracks no longer nest, so do not set a parent."),
-                "theme": text("Name of the theme to list this track under. Empty string takes it out of its theme.")
+                "theme": text("Name of the theme to list this track under. Empty string takes it out of its theme."),
+                "fare_days": integer("The fare: how many days the user is willing to spend on this track, counted from the day it was made. Set it only when the user says how long. 0 clears it."),
             ],
             required: ["track_id"], readOnly: false
         ) { args, context in
@@ -848,6 +866,7 @@ enum Tools {
                 thread.parent = parent
             }
             if let theme = args.string("theme") { ThemeStore.setTheme(theme, on: thread, in: context) }
+            if let fare = try args.integer("fare_days") { thread.fareDays = max(0, fare) }
             thread.updatedAt = .now
             thread.project?.touch()
             return JSONShape.track(thread, full: true)
@@ -2810,6 +2829,10 @@ enum JSONShape {
             "parent_id": thread.parent?.id.uuidString ?? "",
             "is_active": thread.project?.activeTrackID == thread.id,
             "theme": thread.theme?.displayName ?? "",
+            "departed_at": iso.string(from: thread.departedAt),
+            "arrived_at": thread.arrivedAt.map { iso.string(from: $0) } ?? "",
+            "fare_days": thread.fareDays,
+            "fare_ends_at": thread.fareEndsAt.map { iso.string(from: $0) } ?? "",
             "updated_at": iso.string(from: thread.updatedAt),
             "tags": tags(thread.tags)
         ]

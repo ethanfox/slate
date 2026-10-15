@@ -259,6 +259,14 @@ enum ContextBuilder {
         lines.append("Track: \(title) (id \(thread.id.uuidString))")
         lines.append("Kind: \(thread.kind.label)")
         lines.append("Status: \(thread.status.label)")
+        lines.append("Departed: \(thread.departedAt.formatted(date: .abbreviated, time: .omitted))")
+        if let arrived = thread.arrivedAt {
+            lines.append("Arrived: \(arrived.formatted(date: .abbreviated, time: .omitted))")
+        }
+        if let ends = thread.fareEndsAt {
+            let state = ends < .now && thread.arrivedAt == nil ? ", ran out" : ""
+            lines.append("Fare: \(thread.fareLabel), ends \(ends.formatted(date: .abbreviated, time: .omitted))\(state)")
+        }
         if !thread.summary.isEmpty {
             lines.append("Summary: \(clip(thread.summary, 400))")
         }

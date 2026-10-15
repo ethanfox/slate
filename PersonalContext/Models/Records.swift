@@ -298,6 +298,10 @@ final class ProjectThread {
     var project: Project?
     var parent: ProjectThread?
     var spaceIDString: String = ""
+    /// When the track was completed. Set when status becomes completed, cleared when it leaves it.
+    var arrivedAt: Date?
+    /// The fare: how many days the user is willing to spend on this track, counted from when it departed. 0 is no fare.
+    var fareDays: Int = 0
     /// The group this track is listed under.
     var theme: TrackTheme?
 
@@ -345,7 +349,30 @@ final class ProjectThread {
 
     var status: ThreadStatus {
         get { ThreadStatus(rawValue: statusRaw) ?? .exploring }
-        set { statusRaw = newValue.rawValue }
+        set {
+            statusRaw = newValue.rawValue
+            if newValue == .completed {
+                if arrivedAt == nil { arrivedAt = .now }
+            } else {
+                arrivedAt = nil
+            }
+        }
+    }
+
+    /// When the track was made.
+    var departedAt: Date { createdAt }
+
+    /// When the fare runs out, if one is set.
+    var fareEndsAt: Date? {
+        guard fareDays > 0 else { return nil }
+        return Calendar.current.date(byAdding: .day, value: fareDays, to: departedAt)
+    }
+
+    /// "2-week fare" or "10-day fare"; empty when there is no fare.
+    var fareLabel: String {
+        guard fareDays > 0 else { return "" }
+        if fareDays % 7 == 0 { return "\(fareDays / 7)-week fare" }
+        return "\(fareDays)-day fare"
     }
 
     var orderedChildren: [ProjectThread] {
