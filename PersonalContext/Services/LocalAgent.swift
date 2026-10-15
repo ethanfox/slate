@@ -116,7 +116,7 @@ extension LocalAgent {
         let mcp = request.membraeTools.isEmpty ? nil : request.mcpCommand
         switch self {
         case .claudeCode:
-            var arguments = ["-p", request.prompt, "--output-format", "stream-json", "--verbose"]
+            var arguments = ["-p", request.prompt, "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
             if let session = request.resumeSessionID, !session.isEmpty {
                 arguments += ["--resume", session]
             }
@@ -183,6 +183,8 @@ enum LocalAgentEvent: Equatable, Sendable {
     case activity(String)
     /// One whole message from the worker.
     case text(String)
+    /// A piece of the message being written, as it is written. The whole message follows as `text`.
+    case textDelta(String)
     /// `refused` names the tools the worker asked for and was not allowed to use.
     case finished(summary: String, refused: [String])
     case failed(String)
@@ -237,6 +239,11 @@ extension LocalAgent {
                     return nil
                 }
             }
+        case "stream_event":
+            guard let event = object["event"] as? [String: Any], event["type"] as? String == "content_block_delta",
+                  let delta = event["delta"] as? [String: Any], delta["type"] as? String == "text_delta",
+                  let piece = delta["text"] as? String, !piece.isEmpty else { return [] }
+            return [.textDelta(piece)]
         case "result":
             let text = (object["result"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if object["is_error"] as? Bool == true {
@@ -380,7 +387,7 @@ extension LocalAgent {
             case .text(let text): reply = text
             case .finished(let summary, _): if !summary.isEmpty { reply = summary }
             case .failed(let message): throw LocalAgentError(message)
-            case .activity, .session, .usage: break
+            case .activity, .session, .usage, .textDelta: break
             }
         }
         guard !reply.isEmpty else { throw LocalAgentError("\(title) did not answer.") }
@@ -491,7 +498,7 @@ final class LocalAgentProcess {
                     for event in agent.events(fromLine: line) {
                         switch event {
                         case .finished, .failed: ended = true
-                        case .activity, .text, .session, .usage: break
+                        case .activity, .text, .session, .usage, .textDelta: break
                         }
                         continuation.yield(event)
                     }
@@ -574,7 +581,7 @@ final class LocalAgentProcess {
                         for event in agent.events(fromLine: line) {
                             switch event {
                             case .finished, .failed: ended = true
-                            case .activity, .text, .session, .usage: break
+                            case .activity, .text, .session, .usage, .textDelta: break
                             }
                             continuation.yield(event)
                         }

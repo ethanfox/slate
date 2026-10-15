@@ -48,8 +48,12 @@ struct RunPage: View {
                                         .padding(.top, 16)
                                 }
 
-                                SessionTranscript(run: run, waitLabel: app.runCoordinator.waitLabel(for: run.id))
-                                    .padding(.top, 24)
+                                SessionTranscript(
+                                    run: run,
+                                    waitLabel: app.runCoordinator.waitLabel(for: run.id),
+                                    draft: app.runCoordinator.drafts[run.id]
+                                )
+                                .padding(.top, 24)
                                 Color.clear
                                     .frame(height: 1)
                                     .id("end")
@@ -61,6 +65,9 @@ struct RunPage: View {
                         .scrollContentBackground(.hidden)
                         .onChange(of: run.historyJSON) { _, _ in
                             withAnimation(Motion.quick) { proxy.scrollTo("end", anchor: .bottom) }
+                        }
+                        .onChange(of: app.runCoordinator.drafts[run.id]?.count ?? 0) { _, _ in
+                            proxy.scrollTo("end", anchor: .bottom)
                         }
                         .onAppear { proxy.scrollTo("end", anchor: .bottom) }
                     }
@@ -135,9 +142,10 @@ struct RunPage: View {
             HStack(alignment: .bottom, spacing: 8) {
                 TextField(run.status == .waiting ? "Your turn. Tell it what to do next." : "It goes when the turn ends, or Send Now stops the turn.", text: $replyText, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(CraftFont.body)
+                    .font(CraftFont.chatBody)
                     .lineLimit(1...8)
-                    .padding(10)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
                     .onSubmit(send)
                 if run.status == .running {
                     Button {
@@ -170,8 +178,9 @@ struct RunPage: View {
                 .padding(8)
             }
         }
-        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(CraftColor.hairline))
+        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: CraftRadius.composer, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: CraftRadius.composer, style: .continuous).strokeBorder(CraftColor.hairline))
+        .shadow(color: .black.opacity(0.07), radius: 15, y: 8)
     }
 
     private func send() {
@@ -770,6 +779,10 @@ private struct SessionStops: View {
 private struct SessionTranscript: View {
     var run: AgentRun
     var waitLabel: String?
+    /// What the worker is writing right now.
+    var draft: String?
+
+    @Environment(AppModel.self) private var app
 
     private enum Item: Identifiable {
         case said(RunEvent)
@@ -816,11 +829,15 @@ private struct SessionTranscript: View {
                         .textSelection(.enabled)
                 case .reply(let event):
                     Text(event.detail)
-                        .font(CraftFont.body)
+                        .font(CraftFont.chatBody)
+                        .lineSpacing(7)
+                        .foregroundStyle(.white)
                         .textSelection(.enabled)
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .padding(.vertical, 10)
+                        .background(app.accent.color, in: RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: 480, alignment: .trailing)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(.top, 10)
                 case .commits(let event):
@@ -837,7 +854,11 @@ private struct SessionTranscript: View {
                     WorkFold(steps: events, live: live, label: live ? waitLabel : nil)
                 }
             }
-            if run.status == .running, let waitLabel, !(items.last.map { if case .work = $0 { return true } else { return false } } ?? false) {
+            if let draft, !draft.isEmpty {
+                AssistantMarkdown(text: draft, streaming: true)
+                    .textSelection(.enabled)
+            }
+            if run.status == .running, let waitLabel, (draft ?? "").isEmpty, !(items.last.map { if case .work = $0 { return true } else { return false } } ?? false) {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
                     Text(waitLabel)

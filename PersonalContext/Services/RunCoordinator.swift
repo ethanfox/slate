@@ -25,6 +25,8 @@ final class RunCoordinator {
 
     /// A message the user sent while the worker was on its turn. It goes the moment the turn ends.
     private(set) var queued: [UUID: String] = [:]
+    /// The message a worker is writing right now, as far as it has got.
+    private(set) var drafts: [UUID: String] = [:]
     @ObservationIgnored private var interrupting: Set<UUID> = []
 
     func recover(in context: ModelContext) {
@@ -97,9 +99,13 @@ final class RunCoordinator {
                         lastStep = label
                         record(id, .step, label)
                     }
+                case .textDelta(let piece):
+                    drafts[id, default: ""] += piece
+                    setWait(id, ChatWaitState.writing.label)
                 case .text(let text):
                     lastText = text
                     lastStep = ""
+                    drafts[id] = nil
                     setWait(id, ChatWaitState.writing.label)
                     record(id, .said, text)
                 case .session(let session):
@@ -477,9 +483,13 @@ final class RunCoordinator {
                     lastStep = label
                     record(id, .step, label)
                 }
+            case .textDelta(let piece):
+                drafts[id, default: ""] += piece
+                setWait(id, ChatWaitState.writing.label)
             case .text(let text):
                 lastText = text
                 lastStep = ""
+                drafts[id] = nil
                 setWait(id, ChatWaitState.writing.label)
                 record(id, .said, text)
             case .session(let session):
@@ -709,6 +719,7 @@ final class RunCoordinator {
         jobs[id]?.process?.stop()
         jobs[id]?.local?.stop()
         jobs[id] = nil
+        drafts[id] = nil
         running.removeAll { $0.id == id }
         BrowserRuntime.shared.cancel(runID: id)
     }
