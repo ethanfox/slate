@@ -274,8 +274,10 @@
 		FCF956190420683B665BF2B1 /* SettingsOrbPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2F383ABB4798F3AF6233DD5 /* SettingsOrbPage.swift */; };
 		F11E5704B0000030 /* ImportKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000030 /* ImportKeyStore.swift */; };
 		F11E5704B0000031 /* ImportRelayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000031 /* ImportRelayClient.swift */; };
+		F11E5704B0000091 /* AccountController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000091 /* AccountController.swift */; };
 		F11E5704B0000032 /* ImportToolHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000032 /* ImportToolHost.swift */; };
 		F11E5704B0000033 /* SettingsImportPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000033 /* SettingsImportPage.swift */; };
+		F11E5704B0000092 /* SettingsAccountPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000092 /* SettingsAccountPage.swift */; };
 		F11E5704B0000034 /* ImportToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000034 /* ImportToolsTests.swift */; };
 		F11E5704B0000035 /* ImportApprovalServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000035 /* ImportApprovalServer.swift */; };
 /* End PBXBuildFile section */
@@ -286,7 +288,7 @@
 			containerPortal = 11B693922469774ABBEC915F /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = CBA356DD8E61CD0A567465DB;
-			remoteInfo = PersonalContext;
+			remoteInfo = Membrae;
 		};
 		DE1828F0047067EDB0188030 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -569,8 +571,10 @@
 		F9B1DE9ED0526412EC9393D2 /* LiquidOrb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidOrb.swift; sourceTree = "<group>"; };
 		F11E5704A0000030 /* ImportKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportKeyStore.swift; sourceTree = "<group>"; };
 		F11E5704A0000031 /* ImportRelayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportRelayClient.swift; sourceTree = "<group>"; };
+		F11E5704A0000091 /* AccountController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountController.swift; sourceTree = "<group>"; };
 		F11E5704A0000032 /* ImportToolHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportToolHost.swift; sourceTree = "<group>"; };
 		F11E5704A0000033 /* SettingsImportPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsImportPage.swift; sourceTree = "<group>"; };
+		F11E5704A0000092 /* SettingsAccountPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsAccountPage.swift; sourceTree = "<group>"; };
 		F11E5704A0000034 /* ImportToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportToolsTests.swift; sourceTree = "<group>"; };
 		F11E5704A0000035 /* ImportApprovalServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportApprovalServer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -750,6 +754,7 @@
 				718061204D90BCFCD66D501C /* KeychainStore.swift */,
 				F11E5704A0000030 /* ImportKeyStore.swift */,
 				F11E5704A0000031 /* ImportRelayClient.swift */,
+				F11E5704A0000091 /* AccountController.swift */,
 				C4A26E000000000000000011 /* SyncCodec.swift */,
 				C4A26E000000000000000013 /* SyncController.swift */,
 				F11E5704A0000035 /* ImportApprovalServer.swift */,
@@ -918,6 +923,7 @@
 				1CA1A6E00000000000000002 /* SettingsLocalAgentPage.swift */,
 				3F3CB7A7C440980D6F3F0544 /* SettingsCursorPage.swift */,
 				F11E5704A0000033 /* SettingsImportPage.swift */,
+				F11E5704A0000092 /* SettingsAccountPage.swift */,
 				4A07E5F475297DE983C9EAB1 /* SettingsDeveloperPage.swift */,
 				6CB5A9AA568D21B3A29ABC80 /* SettingsModelPage.swift */,
 				D2F383ABB4798F3AF6233DD5 /* SettingsOrbPage.swift */,
@@ -1024,7 +1030,7 @@
 			productReference = 9DCF857159F2CA0D9169DC1D /* PersonalContextTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		CBA356DD8E61CD0A567465DB /* PersonalContext */ = {
+		CBA356DD8E61CD0A567465DB /* Membrae */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FE62BA0F3ADDAD6491796ECB /* Build configuration list for PBXNativeTarget "PersonalContext" */;
 			buildPhases = (
@@ -1040,12 +1046,12 @@
 				EA3CE144B0E0CCC53A004BC4 /* PBXTargetDependency */,
 				B20B0100000000000000000D /* PBXTargetDependency */,
 			);
-			name = PersonalContext;
+			name = Membrae;
 			packageProductDependencies = (
 				855CC522E2C68F2262E913DC /* MarkdownUI */,
 				F11E5704D0000002 /* SwiftGitX */,
 			);
-			productName = PersonalContext;
+			productName = Membrae;
 			productReference = 7CB763C78357F21BD7C53F4E /* PersonalContext.app */;
 			productType = "com.apple.product-type.application";
 		};
@@ -1128,7 +1134,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				CBA356DD8E61CD0A567465DB /* PersonalContext */,
+				CBA356DD8E61CD0A567465DB /* Membrae */,
 				F5986EA1BE0334BB6C6D8FB5 /* PersonalContextMCP */,
 				B20B01000000000000000007 /* PersonalContextBrowser */,
 				57C86C944223EE44977E858A /* PersonalContextTests */,
@@ -1330,6 +1336,7 @@
 				6271F4DD4DF1EF931FFE51BD /* KeychainStore.swift in Sources */,
 				F11E5704B0000030 /* ImportKeyStore.swift in Sources */,
 				F11E5704B0000031 /* ImportRelayClient.swift in Sources */,
+				F11E5704B0000091 /* AccountController.swift in Sources */,
 				C4A26E000000000000000012 /* SyncCodec.swift in Sources */,
 				C4A26E000000000000000014 /* SyncController.swift in Sources */,
 				F11E5704B0000035 /* ImportApprovalServer.swift in Sources */,
@@ -1423,6 +1430,7 @@
 				DE92F59D86BACF2159A03545 /* SettingsColumn.swift in Sources */,
 				99F4012674FF0C6F6E3EB1E0 /* SettingsCursorPage.swift in Sources */,
 				F11E5704B0000033 /* SettingsImportPage.swift in Sources */,
+				F11E5704B0000092 /* SettingsAccountPage.swift in Sources */,
 				2B3FFCA249FAB9946EA65A82 /* SettingsDeveloperPage.swift in Sources */,
 				19928B69F66B86E39584DBB3 /* SettingsModelPage.swift in Sources */,
 				FCF956190420683B665BF2B1 /* SettingsOrbPage.swift in Sources */,

@@ -3,13 +3,13 @@
 Swift tests protect the plumbing. The runner in `TrackFirstEval` drives ChatGPT through these scenarios against an in-memory Harbor fixture, then scores the answer and the actual records.
 
 ```sh
-TEST_RUNNER_MEMBRAE_EVAL_REPEATS=3 xcodebuild -project PersonalContext.xcodeproj -scheme PersonalContext -derivedDataPath build -destination 'platform=macOS' -only-testing:PersonalContextTests/TrackFirstEvalTests/testLiveHarborScenarios test
+TEST_RUNNER_MEMBRAE_EVAL_REPEATS=3 xcodebuild -project Membrae.xcodeproj -scheme Membrae -derivedDataPath build -destination 'platform=macOS' -only-testing:PersonalContextTests/TrackFirstEvalTests/testLiveHarborScenarios test
 ```
 
 xcodebuild often does not forward `SLATE_EVAL_*` into the test host. Use the `TEST_RUNNER_` prefix so filters apply:
 
 ```sh
-TEST_RUNNER_MEMBRAE_EVAL_IDS=1,2,9 TEST_RUNNER_MEMBRAE_EVAL_REPEATS=3 TEST_RUNNER_MEMBRAE_EVAL_MODEL=gpt-5.5 xcodebuild -project PersonalContext.xcodeproj -scheme PersonalContext -derivedDataPath build -destination 'platform=macOS' -only-testing:PersonalContextTests/TrackFirstEvalTests/testLiveHarborScenarios test
+TEST_RUNNER_MEMBRAE_EVAL_IDS=1,2,9 TEST_RUNNER_MEMBRAE_EVAL_REPEATS=3 TEST_RUNNER_MEMBRAE_EVAL_MODEL=gpt-5.5 xcodebuild -project Membrae.xcodeproj -scheme Membrae -derivedDataPath build -destination 'platform=macOS' -only-testing:PersonalContextTests/TrackFirstEvalTests/testLiveHarborScenarios test
 ```
 
 Default model is `gpt-5.5`. ChatGPT must already be connected in Membrae. The scorer tests always run and do not call a model. Scenario 9 always prints tool arguments and outputs so extra retrieval stays visible even when findings are correct.
