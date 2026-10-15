@@ -71,11 +71,14 @@ struct RunPage: View {
                             proxy.scrollTo("end", anchor: .bottom)
                         }
                         .onAppear { proxy.scrollTo("end", anchor: .bottom) }
-                    }
-                    if run.status.isActive {
-                        composer
-                            .padding(.horizontal, 32)
-                            .padding(.bottom, 24)
+                        .safeAreaInset(edge: .bottom, spacing: 0) {
+                            if run.status.isActive {
+                                composer
+                                    .padding(.horizontal, 32)
+                                    .padding(.top, 12)
+                                    .padding(.bottom, 24)
+                            }
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -118,23 +121,22 @@ struct RunPage: View {
                 .padding(.horizontal, 4)
             }
             if let queued = app.runCoordinator.queued[run.id] {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text("Queued")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                    Text(queued)
-                        .font(CraftFont.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
-                    Spacer(minLength: 8)
-                    Button("Send Now") { app.runCoordinator.interrupt(run) }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                HStack(alignment: .bottom, spacing: 6) {
+                    Spacer(minLength: 0)
+                    bubbleButton("Clear") { app.runCoordinator.clearQueued(for: run.id) }
+                    bubbleButton("Send now", filled: true) { app.runCoordinator.interrupt(run) }
                         .help("Stop the worker's turn and send this")
-                    Button("Clear") { app.runCoordinator.clearQueued(for: run.id) }
-                        .buttonStyle(.plain)
-                        .font(CraftFont.caption)
-                        .foregroundStyle(.secondary)
+                    Text(queued)
+                        .font(.system(size: 13))
+                        .lineSpacing(4)
+                        .foregroundStyle(.primary)
+                        .lineLimit(4)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: 420, alignment: .trailing)
+                        .help("Goes when the worker's turn ends")
                 }
                 .padding(.horizontal, 4)
             }
@@ -154,6 +156,21 @@ struct RunPage: View {
                 allowsSendWhileGenerating: true
             )
         }
+    }
+
+    /// A small bubble that acts: the queued message's Send now and Clear.
+    private func bubbleButton(_ title: String, filled: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(filled ? Color.white : Color.primary)
+                .padding(.horizontal, 11)
+                .frame(height: 30)
+                .background(filled ? app.accent.color : CraftColor.elevated, in: Capsule())
+                .overlay(Capsule().strokeBorder(CraftColor.hairline, lineWidth: filled ? 0 : 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     /// Attached files go by path: the worker runs on this Mac and can open them.
