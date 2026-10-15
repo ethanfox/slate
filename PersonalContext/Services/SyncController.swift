@@ -240,10 +240,13 @@ final class SyncController {
     private func startOverIfAccountChanged(_ accountID: String) {
         let defaults = UserDefaults.standard
         let previous = defaults.string(forKey: Keys.account) ?? ""
-        if !previous.isEmpty, previous != accountID {
+        // Cursors from before accounts existed belong to a database named after the import key.
+        let fromBeforeAccounts = defaults.object(forKey: "sync.keyHash") != nil
+        if previous != accountID || fromBeforeAccounts {
             setPushed(0)
             pulledCursor = 0
             defaults.set(0, forKey: Keys.pulled)
+            defaults.removeObject(forKey: "sync.keyHash")
             NavTrace.event("sync.account-changed cursors reset")
         }
         if previous != accountID { defaults.set(accountID, forKey: Keys.account) }
