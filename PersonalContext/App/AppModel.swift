@@ -882,6 +882,42 @@ final class AppModel {
         present(.newRun(draft))
     }
 
+    /// Works a track in one session that lasts, with a coding tool on this Mac. Starts one, or carries the open one on.
+    func workOn(_ track: ProjectThread, saying message: String) {
+        let context = container.mainContext
+        let text = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let session = RunStore.session(for: track.id, in: context) {
+            open(session, newTab: false)
+            guard !text.isEmpty else { return }
+            if session.status == .waiting {
+                runCoordinator.reply(text, to: session, in: context)
+            } else {
+                flash("The session is still working. Send that when it is your turn.")
+            }
+            return
+        }
+        guard let agent = [LocalAgent.claudeCode, .codex].first(where: isConnected) else {
+            flash("Connect Claude Code or Codex in Settings to work a track in a session.")
+            return
+        }
+        guard let project = track.project else { return }
+        var draft = NewRunDraft.blank(
+            origin: .project,
+            projectID: project.id,
+            brief: text.isEmpty ? "Start on this track with the stop in hand." : text,
+            providerID: agent.rawValue,
+            modelID: "",
+            pathRaw: WorkerPath.local.rawValue
+        )
+        draft.trackID = track.id
+        draft.allowEdits = true
+        let attachments = ProjectCodeWorkspace.attachments(on: project)
+        if attachments.count == 1, let only = attachments.first {
+            draft.repositoryLocators = [only.locator.isEmpty ? only.title : only.locator]
+        }
+        startRun(draft)
+    }
+
     func startRun(_ draft: NewRunDraft) {
         do {
             let run = try RunStore.enqueue(draft, in: container.mainContext)

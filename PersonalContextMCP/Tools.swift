@@ -212,7 +212,7 @@ enum Tools {
         "create_task": (.added, "task"), "update_task": (.changed, "task"), "complete_task": (.completed, "task"),
         "delete_completion": (.removed, "completion"),
         "create_decision": (.added, "decision"), "update_decision": (.changed, "decision"),
-        "create_track": (.added, "track"), "update_track": (.changed, "track"), "set_stops": (.changed, "track"), "convert_track_to_stop": (.changed, "track"),
+        "create_track": (.added, "track"), "update_track": (.changed, "track"), "set_stops": (.changed, "track"), "mark_stop": (.changed, "track"), "convert_track_to_stop": (.changed, "track"),
         "set_junction": (.changed, "track"), "delete_junction": (.changed, "track"), "merge_tracks": (.changed, "track"),
         "create_note": (.added, "note"), "update_note": (.changed, "note"),
         "create_source": (.added, "source"), "update_source": (.changed, "source"),
@@ -919,6 +919,20 @@ enum Tools {
             } catch let error as StopStoreError {
                 throw ToolError(error.localizedDescription)
             }
+            return JSONShape.track(thread, full: true)
+        },
+        Tool(
+            name: "mark_stop",
+            description: "Tick one stop done, or untick it. Nothing else about the track changes. Returns the track.",
+            properties: [
+                "stop_id": text("Stop id, from get_track."),
+                "is_done": flag("true when the stop is finished.")
+            ],
+            required: ["stop_id", "is_done"], readOnly: false
+        ) { args, context in
+            let stop = try Lookup.stop(try args.uuid("stop_id"), in: context)
+            guard let thread = stop.thread else { throw ToolError("That stop is on no track.") }
+            StopStore.setDone(args.bool("is_done") ?? true, on: stop, in: context)
             return JSONShape.track(thread, full: true)
         },
         Tool(

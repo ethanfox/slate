@@ -123,6 +123,8 @@ struct NewRunDraft: Equatable {
     var retryOfID: UUID?
     /// For a coding tool on this Mac: whether it may edit files and run commands.
     var allowEdits = false
+    /// Set for a session: the track it works, turn after turn.
+    var trackID: UUID? = nil
 
     static func blank(
         origin: RunOrigin,
@@ -181,8 +183,14 @@ final class AgentRun {
     var project: Project?
     var task: AgendaItem?
     var spaceIDString: String = ""
+    /// Set on a session: the track it works. A session lasts; each turn ends waiting for the user.
+    var trackIDString: String = ""
     var originChat: Conversation?
     var retryOf: AgentRun?
+
+    var isSession: Bool { !trackIDString.isEmpty }
+
+    var trackID: UUID? { UUID(uuidString: trackIDString) }
 
     var origin: RunOrigin {
         get { RunOrigin(rawValue: originRaw) ?? .workspace }

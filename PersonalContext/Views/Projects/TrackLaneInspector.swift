@@ -226,7 +226,7 @@ private struct StopDocument: View {
     private var actions: some View {
         HStack(spacing: 8) {
             Button {
-                app.presentNewRun(origin: .project, project: space, brief: stop.runBrief)
+                if let track { app.workOn(track, saying: stop.runBrief) }
             } label: {
                 Text("Hand to an Agent")
                     .font(.system(size: 13, weight: .semibold))

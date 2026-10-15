@@ -910,7 +910,7 @@ struct SpaceOverview: View {
                 nextRow(
                     title: stop.displayTitle,
                     place: "Stop \(index + 1) of \(stops.count) on \(track.title.isEmpty ? "Untitled" : track.title)",
-                    hand: { app.presentNewRun(origin: .project, project: project, brief: stop.runBrief) },
+                    hand: { app.workOn(track, saying: stop.runBrief) },
                     open: { app.open(stop, newTab: false) }
                 )
             case .nothing:

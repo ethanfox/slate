@@ -83,6 +83,40 @@ final class RunStoreTests: XCTestCase {
         XCTAssertEqual(run.statusDetail, RunStore.quitDetail)
     }
 
+    func testASessionIsBoundToItsTrackAndSurvivesAQuitMidTurn() throws {
+        let harbor = project("Harbor")
+        let sync = ProjectThread(title: "Sync", kind: .feature, project: harbor)
+        context.insert(sync)
+        var pending = draft(origin: .project, brief: "Start on this track", project: harbor, provider: "claude-code")
+        pending.trackID = sync.id
+        let session = try RunStore.enqueue(pending, in: context)
+        XCTAssertTrue(session.isSession)
+        XCTAssertEqual(session.trackID, sync.id)
+        XCTAssertEqual(session.title, "Session · Sync")
+        XCTAssertEqual(RunStore.session(for: sync.id, in: context)?.id, session.id)
+
+        // Cut off mid-turn with a worker session to resume: waits for the user instead of failing.
+        try RunStore.transition(session, to: .running, in: context)
+        session.externalID = "claude-session-1"
+        RunStore.recoverAbandoned(in: context)
+        XCTAssertEqual(session.status, .waiting)
+        XCTAssertEqual(session.history.last?.kind, .quit)
+        XCTAssertEqual(session.statusDetail, RunStore.quitMidTurnDetail)
+        XCTAssertEqual(RunStore.session(for: sync.id, in: context)?.id, session.id)
+
+        // Starting again from this session keeps it on the track.
+        XCTAssertEqual(RunStore.retryDraft(from: session).trackID, sync.id)
+
+        // One cut off before its worker ever answered has nothing to resume, so it fails like any Run.
+        var fresh = draft(origin: .project, brief: "Start again", project: harbor, provider: "claude-code")
+        fresh.trackID = sync.id
+        try RunStore.cancel(session, in: context)
+        let second = try RunStore.enqueue(fresh, in: context)
+        try RunStore.transition(second, to: .running, in: context)
+        RunStore.recoverAbandoned(in: context)
+        XCTAssertEqual(second.status, .failed)
+    }
+
     func testQueuedSurvivesRecoverAbandoned() throws {
         let run = try RunStore.enqueue(draft(origin: .workspace, brief: "Not started yet"), in: context)
         RunStore.recoverAbandoned(in: context)

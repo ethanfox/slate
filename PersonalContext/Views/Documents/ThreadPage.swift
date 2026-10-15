@@ -73,6 +73,7 @@ struct ThreadPage: View {
                 }
                 activePill
                 farePill
+                workButton
                 linked
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -135,6 +136,27 @@ struct ThreadPage: View {
                 Button("Make This the Active Track") { TaskStore.setActiveTrack(thread, on: project, in: context) }
             }
         }
+    }
+
+    /// One session that lasts for this track, with a coding tool on this Mac.
+    private var workButton: some View {
+        let open = RunStore.session(for: thread.id, in: context) != nil
+        return Button {
+            app.workOn(thread, saying: "")
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: open ? "bubble.left.and.text.bubble.right" : "play.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(open ? "Open Session" : "Work on This Track")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(Color.accentColor.opacity(0.12), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(open ? "The session on this track" : "Start a session on this track")
     }
 
     private var farePill: some View {

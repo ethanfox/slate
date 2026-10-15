@@ -82,6 +82,11 @@ final class RunCoordinator {
         running.first { $0.id == id }?.label
     }
 
+    /// A session's worker is mid-turn. Quitting now would cut it off.
+    var hasRunningSessionTurn: Bool {
+        jobs.keys.compactMap(resolvedRun).contains { $0.isSession && $0.status == .running }
+    }
+
     /// MCP writes reopen `AppModel.container`. A held `AgentRun` or `ModelContext`
     /// then traps in SwiftData getters (EXC_BREAKPOINT on `id`). Always resolve
     /// from the live container after an await.
@@ -293,15 +298,31 @@ final class RunCoordinator {
         let repository = roots.first?.path
         let allowEdits = run.allowEdits
         let tools = policy.allowedNames(from: RunToolPolicy.generalCatalog(for: run))
-        let request = LocalAgentRequest(
-            prompt: resume?.message ?? RunPrompt.localAgent(
+        let track = run.trackID.flatMap { TitleIndexStore.thread($0, in: context) }
+        let prompt: String
+        if let resume {
+            prompt = run.isSession ? RunPrompt.sessionTurn(message: resume.message, track: track) : resume.message
+        } else if run.isSession {
+            prompt = RunPrompt.session(
+                brief: run.brief,
+                track: track,
+                project: run.project,
+                directory: repository,
+                allowEdits: allowEdits,
+                hasMembrae: !tools.isEmpty
+            )
+        } else {
+            prompt = RunPrompt.localAgent(
                 brief: run.brief,
                 project: run.project,
                 directory: repository,
                 allowEdits: allowEdits,
                 hasMembrae: !tools.isEmpty,
                 task: run.task
-            ),
+            )
+        }
+        let request = LocalAgentRequest(
+            prompt: prompt,
             directory: repository ?? folder?.path ?? NSTemporaryDirectory(),
             allowEdits: allowEdits,
             mcpCommand: Bundle.main.url(forAuxiliaryExecutable: "membrae-mcp")?.path,
@@ -347,8 +368,26 @@ final class RunCoordinator {
             }
         }
         process.stop()
-        // A worker that ends on a question is waiting for the user, not done. Its session carries on with the reply.
         let closing = summary.isEmpty ? lastText : summary
+        // A session's turn ends with the user's turn, never with the Run finishing.
+        if let context = liveContext(), let live = resolvedRun(id), live.isSession {
+            if let repository, let before {
+                let commits = Self.commitLines(in: repository, since: before.first?.sha)
+                if !commits.isEmpty {
+                    live.append(.step, detail: "Committed: " + commits.joined(separator: "; "))
+                }
+            }
+            let refusal = agent.refusalNote(refused, allowEdits: allowEdits)
+            if !refusal.isEmpty { live.append(.step, detail: refusal) }
+            guard !live.externalID.isEmpty else {
+                throw LocalAgentError("\(agent.title) gave no session to carry on. Start the session again.")
+            }
+            live.resultSummary = closing
+            try RunStore.transition(live, to: .waiting, detail: "Your turn", in: context)
+            clear(id)
+            return
+        }
+        // A worker that ends on a question is waiting for the user, not done. Its session carries on with the reply.
         if refused.isEmpty, Self.asksTheUser(closing),
            let context = liveContext(), let live = resolvedRun(id), !live.externalID.isEmpty {
             live.resultSummary = closing
@@ -563,7 +602,7 @@ extension RunToolPolicy {
         "list_tasks", "get_task", "create_task", "update_task",
         "list_completions", "get_completion",
         "list_decisions", "get_decision", "create_decision", "update_decision",
-        "list_tracks", "get_track", "create_track", "update_track", "set_stops", "convert_track_to_stop",
+        "list_tracks", "get_track", "create_track", "update_track", "set_stops", "mark_stop", "convert_track_to_stop",
         "set_junction", "delete_junction", "merge_tracks",
         "list_notes", "get_note", "create_note", "update_note",
         "list_sources", "get_source", "create_source", "update_source",

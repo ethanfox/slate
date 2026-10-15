@@ -11,6 +11,124 @@ struct RunPage: View {
     @State private var replyText = ""
 
     var body: some View {
+        if run.isSession {
+            sessionBody
+        } else {
+            jobBody
+        }
+    }
+
+    /// A session: the conversation down the middle, the user's turn at the bottom, the track's stops beside it.
+    private var sessionBody: some View {
+        VStack(spacing: 0) {
+            titleBar
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 0) {
+                                HStack(spacing: 10) {
+                                    RunStatusBadge(status: run.status)
+                                    Text(metaText)
+                                        .font(CraftFont.body)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 8)
+                                    if run.status.isActive {
+                                        RunActionButton(title: "End Session", symbol: "stop.fill") { app.cancelRun(run) }
+                                    } else {
+                                        RunActionButton(title: "Start Again", symbol: "arrow.clockwise") { app.retryRun(run) }
+                                        RunActionButton(title: "Delete", symbol: "trash", isDestructive: true) { confirmDelete = true }
+                                    }
+                                }
+                                .findHighlight(.status)
+
+                                if !run.statusDetail.isEmpty, run.status == .failed || run.status == .cancelled {
+                                    reason
+                                        .padding(.top, 16)
+                                }
+
+                                transcript
+                                    .padding(.top, 24)
+                                Color.clear
+                                    .frame(height: 1)
+                                    .id("end")
+                            }
+                            .padding(.horizontal, 32)
+                            .padding(.vertical, 24)
+                            .frame(maxWidth: DocumentMeasure.proseWidth, alignment: .leading)
+                        }
+                        .scrollContentBackground(.hidden)
+                        .onChange(of: run.historyJSON) { _, _ in
+                            withAnimation(Motion.quick) { proxy.scrollTo("end", anchor: .bottom) }
+                        }
+                        .onAppear { proxy.scrollTo("end", anchor: .bottom) }
+                    }
+                    if run.status == .waiting {
+                        composer
+                            .padding(.horizontal, 32)
+                            .padding(.bottom, 24)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                Rectangle()
+                    .fill(CraftColor.hairline)
+                    .frame(width: 1)
+                SessionStops(run: run)
+                    .frame(width: 280)
+            }
+        }
+        .objectFindable(id: run.id, fields: findFields)
+        .confirmationDialog("Delete this session?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                try? RunStore.deleteTerminal(run, in: context)
+            }
+        } message: {
+            Text("The transcript is removed from this Mac. What it changed and filed stays.")
+        }
+    }
+
+    /// The user's turn. ⌘↩ sends, and the same worker carries on with what it knew.
+    private var composer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if run.statusDetail == RunStore.quitMidTurnDetail {
+                Text(run.statusDetail)
+                    .font(CraftFont.caption)
+                    .foregroundStyle(.secondary)
+            }
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField("Your turn. Tell it what to do next.", text: $replyText, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(CraftFont.body)
+                    .lineLimit(1...8)
+                    .padding(10)
+                    .onSubmit(send)
+                Button(action: send) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 26, height: 26)
+                        .background(Color.accentColor, in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .padding(8)
+            }
+        }
+        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(CraftColor.hairline))
+    }
+
+    private func send() {
+        let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        app.runCoordinator.reply(text, to: run, in: context)
+        replyText = ""
+    }
+
+    private var jobBody: some View {
         VStack(spacing: 0) {
             titleBar
             DocumentPage {
@@ -490,5 +608,101 @@ struct ProjectRunsEmpty: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(32)
+    }
+}
+
+
+/// The track's stops beside a session: where it stands, and a click to send the worker there.
+private struct SessionStops: View {
+    var run: AgentRun
+
+    @Environment(AppModel.self) private var app
+    @Environment(\.modelContext) private var context
+
+    private var track: ProjectThread? {
+        run.trackID.flatMap { TitleIndexStore.thread($0, in: context) }
+    }
+
+    var body: some View {
+        if let track {
+            let stops = track.orderedStops
+            let current = TaskStore.currentStop(on: track)
+            let done = stops.filter(\.isDone).count
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Button {
+                        app.open(track, newTab: false)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Circle().fill(track.color.tint).frame(width: 8, height: 8)
+                            Text(LaneModel.title(track))
+                                .font(.system(size: 13, weight: .semibold))
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open the track")
+                    Text(stops.isEmpty ? "No stops yet" : "\(done) of \(stops.count) done")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 18)
+                Hairline()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(stops) { stop in
+                            row(stop, isCurrent: current?.id == stop.id)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+                .scrollContentBackground(.hidden)
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+        } else {
+            Text("The track is gone.")
+                .font(CraftFont.body)
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func row(_ stop: TrackStop, isCurrent: Bool) -> some View {
+        Button {
+            steer(to: stop)
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                TaskGlyph(state: stop.isDone ? .done : isCurrent ? .inProgress : .open)
+                    .padding(.top, 2)
+                Text(stop.displayTitle)
+                    .font(.system(size: 13, weight: isCurrent ? .semibold : .regular))
+                    .foregroundStyle(stop.isDone ? Color.secondary : Color.primary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(run.status == .waiting ? "Send the worker to this stop" : "Wait for your turn to send the worker here")
+        .contextMenu {
+            Button(stop.isDone ? "Mark Not Done" : "Mark Done") {
+                StopStore.setDone(!stop.isDone, on: stop, in: context)
+            }
+            Button("Open in Tracks") { app.open(stop, newTab: false) }
+        }
+    }
+
+    private func steer(to stop: TrackStop) {
+        guard run.status == .waiting else {
+            app.flash("The worker is still on its turn. Click the stop when it is yours.")
+            return
+        }
+        app.runCoordinator.reply("Work on the stop \"\(stop.displayTitle)\" now (id \(stop.id.uuidString)).", to: run, in: context)
     }
 }

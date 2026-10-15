@@ -87,6 +87,11 @@ enum RunStore {
         )
         run.repositoryLocators = draft.repositoryLocators
         if draft.allowEdits { run.allowEdits = true }
+        if let trackID = draft.trackID {
+            let track = try lookupThread(trackID, in: context)
+            run.trackIDString = trackID.uuidString
+            run.title = "Session · \(track.title.isEmpty ? "Untitled" : track.title)"
+        }
         run.append(.queued)
         context.insert(run)
         project?.touch()
@@ -106,8 +111,15 @@ enum RunStore {
             pathRaw: run.pathRaw,
             repositoryLocators: run.repositoryLocators,
             retryOfID: run.id,
-            allowEdits: run.allowEdits
+            allowEdits: run.allowEdits,
+            trackID: run.trackID
         )
+    }
+
+    /// The session open on a track, if one is: queued, running, or waiting for the user.
+    static func session(for trackID: UUID, in context: ModelContext) -> AgentRun? {
+        let key = trackID.uuidString
+        return activeRuns(in: context).first { $0.trackIDString == key }
     }
 
     static func transition(_ run: AgentRun, to status: RunStatus, detail: String = "", in context: ModelContext) throws {
@@ -165,13 +177,20 @@ enum RunStore {
         activeRun(forTask: task.id, in: context) == nil
     }
 
+    static let quitMidTurnDetail = "Membrae stopped in the middle of a turn. Send a message to carry on."
+
     static func recoverAbandoned(in context: ModelContext) {
         // A Run waiting on the user is not abandoned: its worker's session is kept and a reply carries it on.
         let abandoned = activeRuns(in: context).filter { $0.status == .running }
         guard !abandoned.isEmpty else { return }
         for run in abandoned {
-            apply(.failed, on: run, detail: quitDetail, event: .quit)
+            // A session keeps its worker's session id, so the next message resumes it where the quit cut in.
+            if run.isSession, !run.externalID.isEmpty {
+                apply(.waiting, on: run, detail: quitMidTurnDetail, event: .quit)
+            } else {
+                apply(.failed, on: run, detail: quitDetail, event: .quit)
             }
+        }
         try? save(context)
     }
 
@@ -226,6 +245,14 @@ enum RunStore {
             throw RunStoreError.taskWrongProject
         }
         return project
+    }
+
+    private static func lookupThread(_ id: UUID, in context: ModelContext) throws -> ProjectThread {
+        let descriptor = FetchDescriptor<ProjectThread>(predicate: #Predicate { $0.id == id })
+        guard let thread = try context.fetch(descriptor).first else {
+            throw RunStoreError.taskWrongProject
+        }
+        return thread
     }
 
     private static func lookupTask(_ id: UUID, in context: ModelContext) throws -> AgendaItem {

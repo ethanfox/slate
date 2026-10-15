@@ -2,8 +2,33 @@ import AppKit
 import SwiftData
 import SwiftUI
 
+/// Quitting waits for a session's running turn, so the worker can commit and the session carries on after relaunch.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Set once the app model exists.
+    static var turnIsRunning: () -> Bool = { false }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard Self.turnIsRunning() else { return .terminateNow }
+        let alert = NSAlert()
+        alert.messageText = "The agent is in the middle of a turn"
+        alert.informativeText = "Membrae will quit as soon as it finishes, so the session carries on when you come back."
+        alert.addButton(withTitle: "Wait")
+        alert.addButton(withTitle: "Quit Now")
+        if alert.runModal() == .alertSecondButtonReturn { return .terminateNow }
+        Task { @MainActor in
+            let deadline = Date.now.addingTimeInterval(180)
+            while Self.turnIsRunning(), Date.now < deadline {
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+}
+
 @main
 struct MembraeApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var app = AppModel()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -18,6 +43,8 @@ struct MembraeApp: App {
                 .onAppear {
                     FocusDismissal.install()
                     CloseTabShortcut.install(app)
+                    let model = app
+                    AppDelegate.turnIsRunning = { model.runCoordinator.hasRunningSessionTurn }
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { app.importRelay.handleForeground() }

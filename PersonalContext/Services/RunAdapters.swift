@@ -310,6 +310,48 @@ enum RunPrompt {
         return lines.filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 
+    /// The first turn of a session on a track. The worker keeps this across turns through its own session.
+    static func session(
+        brief: String,
+        track: ProjectThread?,
+        project: Project?,
+        directory: String?,
+        allowEdits: Bool,
+        hasMembrae: Bool
+    ) -> String {
+        var lines: [String] = []
+        if let project {
+            lines.append(ContextBuilder.identity(for: project))
+        }
+        lines.append("You are in a session on one track, and it lasts. You and the user take turns: you work, then say in a few lines what you did and what you suggest next, and stop. The user answers and you carry on with everything you knew. When you need a decision from them, ask and stop. The stops are a list, not a queue: work the stop the user points at, and the one you were on when they say nothing.")
+        if let track {
+            lines.append(ContextBuilder.focusedTrack(for: track))
+        }
+        if hasMembrae {
+            lines.append("The membrae tools read and write this Space’s decisions, tracks, notes, tasks, and records. When you finish a stop, call mark_stop with its id. Work you leave for later goes in a task on its stop, with create_task and stop_id. Record what was decided with create_decision on the track. Each of your messages lists the stops as they stand now.")
+        }
+        if allowEdits, let directory {
+            lines.append("You are working in \(directory). Make the changes the work asks for. If it is a git repository, commit what you change with a clear message before you say what you did, so the user can relaunch the app and see it. Do not push.")
+        } else if allowEdits {
+            lines.append("No code is attached to this session.")
+        } else {
+            lines.append("Do not change files. Report what you find, with file paths and line numbers.")
+        }
+        lines.append(brief)
+        return lines.filter { !$0.isEmpty }.joined(separator: "\n\n")
+    }
+
+    /// A later turn of a session: the user's message, with the stops as they stand so the worker need not look.
+    static func sessionTurn(message: String, track: ProjectThread?) -> String {
+        guard let track else { return message }
+        let stops = track.orderedStops
+        guard !stops.isEmpty else { return message }
+        let list = stops.enumerated().map { index, stop in
+            "\(index + 1). \(stop.isDone ? "done" : "open") · \(stop.displayTitle) (id \(stop.id.uuidString))"
+        }
+        return message + "\n\nStops now:\n" + list.joined(separator: "\n")
+    }
+
     /// The task a Run was started from. The prompt may add to it or stand in for it.
     static func assigned(_ task: AgendaItem?) -> String {
         guard let task else { return "" }
