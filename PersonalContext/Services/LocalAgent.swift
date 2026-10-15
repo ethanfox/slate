@@ -97,22 +97,40 @@ struct LocalAgentError: LocalizedError, Sendable {
 }
 
 extension LocalAgent {
+    /// The MCP servers the user set up for Claude Code: the user scope in ~/.claude.json and the project's .mcp.json.
+    static func userMCPServers(in directory: String) -> [String] {
+        var names: [String] = []
+        func read(_ url: URL) {
+            guard let data = try? Data(contentsOf: url),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let servers = object["mcpServers"] as? [String: Any] else { return }
+            for name in servers.keys.sorted() where !names.contains(name) { names.append(name) }
+        }
+        read(URL(fileURLWithPath: home).appending(path: ".claude.json"))
+        read(URL(fileURLWithPath: directory).appending(path: ".mcp.json"))
+        return names
+    }
+
     func arguments(for request: LocalAgentRequest) -> [String] {
         let tools = request.membraeTools.joined(separator: ",")
         let mcp = request.membraeTools.isEmpty ? nil : request.mcpCommand
         switch self {
         case .claudeCode:
-            var arguments = ["-p", request.prompt, "--output-format", "stream-json", "--verbose", "--strict-mcp-config"]
+            var arguments = ["-p", request.prompt, "--output-format", "stream-json", "--verbose"]
             if let session = request.resumeSessionID, !session.isEmpty {
                 arguments += ["--resume", session]
             }
-            var allowed: [String] = []
+            var allowed: [String] = ["WebSearch", "WebFetch"]
             if request.allowEdits {
                 arguments += ["--permission-mode", "acceptEdits"]
                 allowed.append("Bash")
             }
             for directory in request.extraDirectories {
                 arguments += ["--add-dir", directory]
+            }
+            // The user's own MCP servers, as in a terminal: Claude Code loads them itself, and each is allowed.
+            for name in Self.userMCPServers(in: request.directory) where name != "membrae" {
+                allowed.append("mcp__\(name)")
             }
             if let mcp {
                 let config: [String: Any] = [
@@ -427,6 +445,8 @@ private final class LocalAgentErrorTail: @unchecked Sendable {
 final class LocalAgentProcess {
     private var process: Process?
     private var relay: WorkerRelay.Handle?
+    /// The relay worker's id once one is started, so the Run can find it again after a relaunch.
+    private(set) var workerID: String?
 
     func start(
         _ agent: LocalAgent,
@@ -521,10 +541,30 @@ final class LocalAgentProcess {
             directory: request.directory,
             parentPID: ProcessInfo.processInfo.processIdentifier
         )
-        return AsyncThrowingStream { continuation in
+        workerID = ticket.id
+        return relayed(agent, id: ticket.id) { report in
+            try await WorkerRelay.launch(ticket, report: report)
+        }
+    }
+
+    /// Picks a worker's turn back up after Membrae relaunched while it ran.
+    func reattach(_ agent: LocalAgent, workerID id: String) -> AsyncThrowingStream<LocalAgentEvent, Error> {
+        stop()
+        workerID = id
+        return relayed(agent, id: id) { report in
+            WorkerRelay.reattach(id, report: report)
+        }
+    }
+
+    private func relayed(
+        _ agent: LocalAgent,
+        id: String,
+        open: @escaping @MainActor (@escaping (String) -> Void) async throws -> WorkerRelay.Handle
+    ) -> AsyncThrowingStream<LocalAgentEvent, Error> {
+        AsyncThrowingStream { continuation in
             let task = Task { @MainActor [weak self] in
                 do {
-                    let handle = try await WorkerRelay.launch(ticket) { line in
+                    let handle = try await open { line in
                         continuation.yield(.activity(line))
                     }
                     self?.relay = handle
@@ -545,7 +585,7 @@ final class LocalAgentProcess {
                         return
                     }
                     if !ended, status != 0, status != 15 {
-                        let detail = WorkerRelay.lastErrorLine(for: ticket.id)
+                        let detail = WorkerRelay.lastErrorLine(for: id)
                         let message = "\(agent.title) stopped before finishing (exit \(status))."
                         continuation.finish(throwing: LocalAgentError(detail.isEmpty ? message : "\(message) \(detail)"))
                     } else {

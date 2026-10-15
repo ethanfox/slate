@@ -179,9 +179,9 @@ enum RunStore {
 
     static let quitMidTurnDetail = "Membrae stopped in the middle of a turn. Send a message to carry on."
 
-    static func recoverAbandoned(in context: ModelContext) {
+    static func recoverAbandoned(in context: ModelContext, except reattached: Set<UUID> = []) {
         // A Run waiting on the user is not abandoned: its worker's session is kept and a reply carries it on.
-        let abandoned = activeRuns(in: context).filter { $0.status == .running }
+        let abandoned = activeRuns(in: context).filter { $0.status == .running && !reattached.contains($0.id) }
         guard !abandoned.isEmpty else { return }
         for run in abandoned {
             // A session keeps its worker's session id, so the next message resumes it where the quit cut in.

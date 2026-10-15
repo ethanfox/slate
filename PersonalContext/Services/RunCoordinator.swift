@@ -23,10 +23,113 @@ final class RunCoordinator {
         self.app = app
     }
 
+    /// A message the user sent while the worker was on its turn. It goes the moment the turn ends.
+    private(set) var queued: [UUID: String] = [:]
+    @ObservationIgnored private var interrupting: Set<UUID> = []
+
     func recover(in context: ModelContext) {
-        RunStore.recoverAbandoned(in: context)
         running = []
         jobs = [:]
+        // A session whose worker is still running outside the app, because the app restarted under it,
+        // is picked back up rather than written off.
+        var reattached: Set<UUID> = []
+        for run in RunStore.activeRuns(in: context) where run.status == .running && run.isSession && WorkerRelay.isAlive(run.workerID) {
+            guard let agent = LocalAgent(rawValue: run.providerID) else { continue }
+            let id = run.id
+            reattached.insert(id)
+            setWait(id, "Picking the turn back up")
+            let task = Task { [weak self] in
+                guard let self else { return }
+                await self.reattachSession(id, agent: agent, workerID: run.workerID)
+            }
+            jobs[id] = Job(task: task, process: nil)
+        }
+        RunStore.recoverAbandoned(in: context, except: reattached)
+    }
+
+    /// Queues a message for a session whose worker is mid-turn; it is sent as the next turn when this one ends.
+    func queue(_ text: String, for run: AgentRun) {
+        let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty else { return }
+        if run.status == .waiting, let context = liveContext() {
+            reply(message, to: run, in: context)
+            return
+        }
+        queued[run.id] = message
+    }
+
+    func clearQueued(for id: UUID) {
+        queued[id] = nil
+    }
+
+    /// Ends the worker's turn now. The session stays; whatever is queued goes next.
+    func interrupt(_ run: AgentRun) {
+        guard run.isSession, run.status == .running else { return }
+        interrupting.insert(run.id)
+        jobs[run.id]?.local?.stop()
+        jobs[run.id]?.process?.stop()
+    }
+
+    /// After a session turn ends: whatever the user queued goes as the next turn.
+    private func sendQueued(_ id: UUID) {
+        guard let message = queued[id], let context = liveContext(), let run = resolvedRun(id), run.status == .waiting else { return }
+        queued[id] = nil
+        reply(message, to: run, in: context)
+    }
+
+    /// Carries on recording a session turn whose worker outlived a relaunch of the app.
+    private func reattachSession(_ id: UUID, agent: LocalAgent, workerID: String) async {
+        let process = LocalAgentProcess()
+        if var job = jobs[id] {
+            job.local = process
+            jobs[id] = job
+        }
+        var lastText = ""
+        var lastStep = ""
+        var usageLine = ""
+        do {
+            for try await event in process.reattach(agent, workerID: workerID) {
+                try Task.checkCancellation()
+                switch event {
+                case .activity(let label):
+                    setWait(id, label)
+                    if label != lastStep {
+                        lastStep = label
+                        record(id, .step, label)
+                    }
+                case .text(let text):
+                    lastText = text
+                    lastStep = ""
+                    setWait(id, ChatWaitState.writing.label)
+                    record(id, .said, text)
+                case .session(let session):
+                    if let context = liveContext(), let live = resolvedRun(id) {
+                        live.externalID = session
+                        try? context.save()
+                    }
+                case .finished(let text, _):
+                    if !text.isEmpty { lastText = text }
+                case .usage(let cost, let input, let output, let duration):
+                    usageLine = LocalAgentEvent.usageLine(cost: cost, inputTokens: input, outputTokens: output, durationMs: duration)
+                case .failed(let message):
+                    throw LocalAgentError(message)
+                }
+            }
+            process.stop()
+            guard let context = liveContext(), let live = resolvedRun(id), live.status == .running else { return }
+            if !usageLine.isEmpty { live.append(.turn, detail: usageLine) }
+            live.resultSummary = lastText
+            try RunStore.transition(live, to: .waiting, detail: "Your turn", in: context)
+            clear(id)
+            sendQueued(id)
+        } catch is CancellationError {
+            clear(id)
+        } catch {
+            if let context = liveContext(), let run = resolvedRun(id), run.status.isActive {
+                try? RunStore.fail(run, detail: error.localizedDescription, in: context)
+            }
+            clear(id)
+        }
     }
 
     func start(_ run: AgentRun, in context: ModelContext) {
@@ -348,12 +451,23 @@ final class RunCoordinator {
             job.local = process
             jobs[id] = job
         }
+        defer {
+            if let context = liveContext(), let live = resolvedRun(id), live.workerID != "" {
+                live.workerID = ""
+                try? context.save()
+            }
+        }
         var lastText = ""
         var summary = ""
         var refused: [String] = []
         var lastStep = ""
         var usageLine = ""
-        for try await event in try process.start(agent, executable: executable, request: request) {
+        let stream = try process.start(agent, executable: executable, request: request)
+        if let worker = process.workerID, let context = liveContext(), let live = resolvedRun(id) {
+            live.workerID = worker
+            try? context.save()
+        }
+        for try await event in stream {
             try Task.checkCancellation()
             switch event {
             case .activity(let label):
@@ -399,8 +513,10 @@ final class RunCoordinator {
                 throw LocalAgentError("\(agent.title) gave no session to carry on. Start the session again.")
             }
             live.resultSummary = closing
-            try RunStore.transition(live, to: .waiting, detail: "Your turn", in: context)
+            let stopped = interrupting.remove(id) != nil
+            try RunStore.transition(live, to: .waiting, detail: stopped ? "Stopped. Your turn." : "Your turn", in: context)
             clear(id)
+            sendQueued(id)
             return
         }
         // A worker that ends on a question is waiting for the user, not done. Its session carries on with the reply.

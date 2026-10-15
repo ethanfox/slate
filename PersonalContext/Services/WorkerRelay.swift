@@ -14,7 +14,8 @@ enum WorkerRelay {
         var arguments: [String]
         var environment: [String: String]
         var directory: String
-        /// Membrae's process. The helper ends the tool if Membrae is gone, so a quit never leaves a worker running blind.
+        /// Membrae's process at launch. Kept for the record; the helper does not end the tool when Membrae goes,
+        /// because a worker building Membrae restarts Membrae, and Membrae picks the turn back up when it opens.
         var parentPID: Int32 = 0
     }
 
@@ -33,6 +34,32 @@ enum WorkerRelay {
     static func stopURL(for id: String) -> URL { folder(for: id).appending(path: "stop") }
     /// Written by the helper the moment it launches, before it runs anything.
     static func startedURL(for id: String) -> URL { folder(for: id).appending(path: "started") }
+    /// How far the app has read the output, so a relaunched Membrae carries on from there.
+    static func consumedURL(for id: String) -> URL { folder(for: id).appending(path: "consumed") }
+
+    /// The helper's process id, from its started marker.
+    static func helperPID(for id: String) -> pid_t? {
+        guard let text = try? String(contentsOf: startedURL(for: id), encoding: .utf8) else { return nil }
+        return text.split(separator: " ").first.flatMap { pid_t($0) }
+    }
+
+    /// The tool is still running: the helper started, has not written its exit, and its process exists.
+    static func isAlive(_ id: String) -> Bool {
+        guard !id.isEmpty, !FileManager.default.fileExists(atPath: exitURL(for: id).path), let pid = helperPID(for: id) else { return false }
+        return kill(pid, 0) == 0
+    }
+
+    /// The output already handed to the app before a relaunch.
+    static func consumedOffset(for id: String) -> UInt64 {
+        UInt64((try? String(contentsOf: consumedURL(for: id), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") ?? 0
+    }
+
+    /// Picks a worker's output back up where the app left off, after a relaunch.
+    static func reattach(_ id: String, report: @escaping (String) -> Void) -> Handle {
+        let handle = Handle(id: id, report: report)
+        handle.beginTailing(from: consumedOffset(for: id))
+        return handle
+    }
     /// Launch Services drops the arguments and environment a sandboxed app passes, so the app also leaves the
     /// ticket's id here and a helper launched with nothing claims the oldest one.
     static var pendingFolder: URL { root.appending(path: "pending", directoryHint: .isDirectory) }
@@ -144,8 +171,7 @@ enum WorkerRelay {
         let stop = stopURL(for: id)
         var askedToStop = false
         while process.isRunning {
-            let parentGone = ticket.parentPID > 0 && kill(ticket.parentPID, 0) != 0 && errno == ESRCH
-            if !askedToStop, manager.fileExists(atPath: stop.path) || parentGone {
+            if !askedToStop, manager.fileExists(atPath: stop.path) {
                 askedToStop = true
                 process.terminate()
                 DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
@@ -255,10 +281,11 @@ enum WorkerRelay {
             FileManager.default.createFile(atPath: WorkerRelay.stopURL(for: id).path, contents: nil)
         }
 
-        fileprivate func beginTailing() {
+        fileprivate func beginTailing(from start: UInt64 = 0) {
             let id = id
             tail = Task.detached(priority: .userInitiated) { [weak self] in
-                var offset: UInt64 = 0
+                var offset: UInt64 = start
+                var consumedWhole: UInt64 = start
                 var partial = Data()
                 var drainedAfterExit = false
                 let output = WorkerRelay.outputURL(for: id)
@@ -294,10 +321,17 @@ enum WorkerRelay {
                         if !data.isEmpty {
                             offset += UInt64(data.count)
                             partial.append(data)
+                            var cut = 0
                             while let newline = partial.firstIndex(of: 0x0A) {
                                 let line = String(decoding: partial[partial.startIndex..<newline], as: UTF8.self)
+                                cut += newline - partial.startIndex + 1
                                 partial.removeSubrange(partial.startIndex...newline)
                                 if !line.isEmpty { self?.continuation.yield(line) }
+                            }
+                            // Only whole lines count as handed over; a part line is read again after a relaunch.
+                            if cut > 0 {
+                                consumedWhole += UInt64(cut)
+                                try? String(consumedWhole).write(to: WorkerRelay.consumedURL(for: id), atomically: true, encoding: .utf8)
                             }
                         }
                     }

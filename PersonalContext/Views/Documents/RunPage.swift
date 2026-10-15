@@ -110,13 +110,51 @@ struct RunPage: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
             }
+            if let queued = app.runCoordinator.queued[run.id] {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text("Queued")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Text(queued)
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                    Spacer(minLength: 8)
+                    Button("Send Now") { app.runCoordinator.interrupt(run) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .help("Stop the worker's turn and send this")
+                    Button("Clear") { app.runCoordinator.clearQueued(for: run.id) }
+                        .buttonStyle(.plain)
+                        .font(CraftFont.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+            }
             HStack(alignment: .bottom, spacing: 8) {
-                TextField(run.status == .waiting ? "Your turn. Tell it what to do next." : "Write while it works; it goes when the turn ends.", text: $replyText, axis: .vertical)
+                TextField(run.status == .waiting ? "Your turn. Tell it what to do next." : "It goes when the turn ends, or Send Now stops the turn.", text: $replyText, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(CraftFont.body)
                     .lineLimit(1...8)
                     .padding(10)
                     .onSubmit(send)
+                if run.status == .running {
+                    Button {
+                        app.runCoordinator.interrupt(run)
+                    } label: {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 26, height: 26)
+                            .background(CraftColor.elevated, in: Circle())
+                            .overlay(Circle().strokeBorder(CraftColor.hairline))
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Stop the worker's turn. The session stays.")
+                    .padding(.vertical, 8)
+                }
                 Button(action: send) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 12, weight: .bold))
@@ -127,8 +165,8 @@ struct RunPage: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || run.status != .waiting)
-                .help(run.status == .waiting ? "Send (⌘↩)" : "The worker is on its turn")
+                .disabled(replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .help(run.status == .waiting ? "Send (⌘↩)" : "Queue it for when the turn ends (⌘↩)")
                 .padding(8)
             }
         }
@@ -138,8 +176,12 @@ struct RunPage: View {
 
     private func send() {
         let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, run.status == .waiting else { return }
-        app.runCoordinator.reply(text, to: run, in: context)
+        guard !text.isEmpty else { return }
+        if run.status == .waiting {
+            app.runCoordinator.reply(text, to: run, in: context)
+        } else {
+            app.runCoordinator.queue(text, for: run)
+        }
         replyText = ""
     }
 

@@ -189,6 +189,8 @@ final class AgentRun {
     var spaceIDString: String = ""
     /// Set on a session: the track it works. A session lasts; each turn ends waiting for the user.
     var trackIDString: String = ""
+    /// The relay worker running this Run's current turn, so a relaunched Membrae can pick the turn back up.
+    var workerID: String = ""
     var originChat: Conversation?
     var retryOf: AgentRun?
 
