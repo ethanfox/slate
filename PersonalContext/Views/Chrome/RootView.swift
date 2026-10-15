@@ -24,6 +24,7 @@ private enum LayoutMetrics {
     static let chatMax: CGFloat = 450
     static let inspectorWidth: CGFloat = 250
     static let taskPaneWidth: CGFloat = 400
+    static let lanePaneWidth: CGFloat = 300
     static let gap: CGFloat = 8
     static let edgePad: CGFloat = 10
     static let chatMotionDuration = 0.3
@@ -346,17 +347,27 @@ struct RootView: View {
             GlassEffectContainer {
                 HStack(spacing: 10) {
                     SpaceToolbar(spaceID: space.id)
-                    Button {
-                        app.showNewChat(in: space)
-                    } label: {
-                        Label("New Chat", systemImage: "square.and.pencil")
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .contentShape(Capsule())
+                    if !space.threads.isEmpty {
+                        Button {
+                            app.showTracks(in: space, newTab: false)
+                        } label: {
+                            Label("Tracks", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .glassEffect(.regular, in: Capsule())
+                        .help("Tracks")
                     }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular, in: Capsule())
-                    .help("New Chat")
+                    newChatButton(space)
+                }
+            }
+        } else if let space = openSpace, app.tab(for: space.id) == .threads, app.selectedThread == nil {
+            GlassEffectContainer {
+                HStack(spacing: 10) {
+                    ShownTracksMenu(space: space)
+                    newChatButton(space)
                 }
             }
         } else if case .spaceRecord(_, let recordID) = app.destination {
@@ -508,6 +519,20 @@ struct RootView: View {
         return space
     }
 
+    private func newChatButton(_ space: Space) -> some View {
+        Button {
+            app.showNewChat(in: space)
+        } label: {
+            Label("New Chat", systemImage: "square.and.pencil")
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular, in: Capsule())
+        .help("New Chat")
+    }
+
     private var showingTrackChat: Bool {
         app.trackChatOpen && focusedThread != nil
     }
@@ -515,7 +540,13 @@ struct RootView: View {
     private var showingInspector: Bool {
         guard let space = openSpace else { return false }
         let tab = app.tab(for: space.id)
-        return app.inspectorOpen && (tab == .overview || tab == .tasks)
+        return app.inspectorOpen && (tab == .overview || tab == .tasks || showingLanes)
+    }
+
+    /// The Tracks view: lanes, with no one track open.
+    private var showingLanes: Bool {
+        guard let space = openSpace else { return false }
+        return app.tab(for: space.id) == .threads && app.selectedThread == nil
     }
 
     private var showingTaskPane: Bool {
@@ -525,13 +556,22 @@ struct RootView: View {
 
     private var trailingPaneWidth: CGFloat {
         guard showingInspector else { return 0 }
-        return showingTaskPane ? LayoutMetrics.taskPaneWidth : LayoutMetrics.inspectorWidth
+        return paneWidth
+    }
+
+    private var paneWidth: CGFloat {
+        if showingTaskPane { return LayoutMetrics.taskPaneWidth }
+        if showingLanes { return LayoutMetrics.lanePaneWidth }
+        return LayoutMetrics.inspectorWidth
     }
 
     @ViewBuilder
     private func inspectorContent(for space: Space) -> some View {
         if showingTaskPane {
             TaskInspector()
+                .modifier(PaneChrome())
+        } else if showingLanes {
+            TrackLaneInspector(space: space)
                 .modifier(PaneChrome())
         } else {
             OverviewInspector(project: space)
@@ -562,7 +602,7 @@ struct RootView: View {
 
     private func toggleInspector() {
         if !app.inspectorOpen {
-            let width = showingTaskPane ? LayoutMetrics.taskPaneWidth : LayoutMetrics.inspectorWidth
+            let width = paneWidth
             growWindow(to: LayoutMetrics.windowMin(sidebar: !sidebarHidden, chat: showingTrackChat, trailing: width))
         }
         app.toggleInspector()

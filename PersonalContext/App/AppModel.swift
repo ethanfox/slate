@@ -186,6 +186,17 @@ final class AppModel {
     var selectedTaskID: UUID?
     /// The task board's track filter for each Space. A Space not listed shows its active track.
     var taskTrackFilters: [UUID: TaskTrackFilter] = [:]
+    /// The stop or signal picked on a Space's Tracks view. The inspector shows it.
+    var selectedStopID: UUID?
+    var selectedJunctionID: UUID?
+    /// The tracks each Space's Tracks view draws. A Space not listed draws Membrae's pick.
+    var shownTracks: [UUID: [UUID]] {
+        didSet { AppModel.save(shownTracks, key: Keys.shownTracks) }
+    }
+    /// The blocks of each Space's page the user folded away: widgets, brief, records.
+    var collapsedBlocks: [UUID: [String]] {
+        didSet { AppModel.save(collapsedBlocks, key: Keys.collapsedBlocks) }
+    }
     let objectFind = ObjectFindSession()
     let composer = ComposerSession()
 
@@ -203,6 +214,46 @@ final class AppModel {
         withAnimation(.easeInOut(duration: 0.22)) {
             inspectorOpen = true
         }
+    }
+
+    func selectStop(_ id: UUID?) {
+        selectedStopID = id
+        if id != nil { selectedJunctionID = nil }
+        setInspector(open: id != nil)
+    }
+
+    func selectJunction(_ id: UUID?) {
+        selectedJunctionID = id
+        if id != nil { selectedStopID = nil }
+        setInspector(open: id != nil)
+    }
+
+    private func setInspector(open: Bool) {
+        guard inspectorOpen != open else { return }
+        withAnimation(.easeInOut(duration: 0.22)) {
+            inspectorOpen = open
+        }
+    }
+
+    func isCollapsed(_ block: String, in space: UUID) -> Bool {
+        collapsedBlocks[space]?.contains(block) ?? false
+    }
+
+    func toggleCollapsed(_ block: String, in space: UUID) {
+        var blocks = collapsedBlocks[space] ?? []
+        if let index = blocks.firstIndex(of: block) { blocks.remove(at: index) } else { blocks.append(block) }
+        collapsedBlocks[space] = blocks
+    }
+
+    static func save<T: Encodable>(_ value: T, key: String) {
+        if let data = try? JSONEncoder().encode(value) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    static func load<T: Decodable>(_ type: T.Type, key: String) -> T? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(type, from: data)
     }
 
     func selectTask(_ id: UUID?) {
@@ -303,6 +354,8 @@ final class AppModel {
         spacesLayout = storedLayout == "list" ? .card : (SpacesLayout(rawValue: storedLayout) ?? .table)
         spaceTasksLayout = SpaceTasksLayout(rawValue: UserDefaults.standard.string(forKey: Keys.spaceTasksLayout) ?? "") ?? .kanban
         sidebarCollapsed = UserDefaults.standard.bool(forKey: Keys.sidebarCollapsed)
+        shownTracks = AppModel.load([UUID: [UUID]].self, key: Keys.shownTracks) ?? [:]
+        collapsedBlocks = AppModel.load([UUID: [String]].self, key: Keys.collapsedBlocks) ?? [:]
         settingsSection = SettingsSection(rawValue: UserDefaults.standard.string(forKey: Keys.settingsSection) ?? "") ?? .model
         if UserDefaults.standard.object(forKey: Keys.openChatLinksInNewTab) == nil {
             openChatLinksInNewTab = true
@@ -900,6 +953,8 @@ enum Keys {
     static let orbPalette = "orbPalette"
     static let windowTabs = "windowTabs"
     static let openChatLinksInNewTab = "openChatLinksInNewTab"
+    static let shownTracks = "shownTracks"
+    static let collapsedBlocks = "collapsedBlocks"
     static let importEnabled = "importEnabled"
     static let importRelayURL = "importRelayURL"
 }

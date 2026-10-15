@@ -61,7 +61,7 @@ struct SpaceView: View {
             if let id = app.selectedThread, let thread = TitleIndexStore.thread(id, in: context) {
                 ThreadPage(thread: thread, project: space).id(thread.id)
             } else {
-                OverviewPage(project: space, listing: .track)
+                TrackLanesPage(space: space)
             }
         case .notes:
             if let id = app.selectedNote, let note = TitleIndexStore.note(id, in: context) {
@@ -107,7 +107,6 @@ struct SpaceRecordsSection: View {
     var body: some View {
         let shown = SpaceSelection.pageTypes(in: space.id, types: types, records: records)
         VStack(alignment: .leading, spacing: 36) {
-            AreaWidgetShelf(spaceID: space.id)
             if shown.isEmpty {
                 EmptyLine(text: "No records yet. Tell Membrae what this Space should hold.")
             }

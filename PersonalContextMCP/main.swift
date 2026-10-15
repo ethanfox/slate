@@ -12,6 +12,7 @@ get_track lists the stops, set_stops rewrites them, and stop_id puts a task on o
 A track departs the first time its status becomes active and arrives when it becomes completed; get_track shows made_at, departed_at, and arrived_at. \
 A track can have a fare, fare_days: the days the user is willing to spend on it, set before the work starts and counted from when it departs. \
 When the fare runs out, the track stops at its next stop and the user decides whether to give it another fare or retire it; say so when you see fare_ends_at has passed on an open track. \
+Each track is drawn in a colour the app picks; change it with color on update_track only when the user asks. \
 A theme is a named group of tracks, set with theme on create_track or update_track; it holds no work of its own. \
 A junction sits between two tracks, in any themes, and is shown on get_track. A wait, the usual kind, holds the second track until the first has done what the junction requires. \
 A merge is for two tracks that turn out to be the same work: its requirements are the gaps and conflicts to reconcile first, and merge_tracks then makes them one. Use set_junction for both. \

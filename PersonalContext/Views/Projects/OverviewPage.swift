@@ -720,7 +720,13 @@ struct SpaceOverview: View {
     @Environment(AppModel.self) private var app
     @Query private var rows: [TitleIndex]
     @Query private var plans: [CleanupPlan]
+    @Query(sort: \AreaWidget.createdAt) private var widgets: [AreaWidget]
     @Environment(\.modelContext) private var context
+
+    private var ownedWidgets: [AreaWidget] {
+        let key = SpaceJSON.key(project.id)
+        return widgets.filter { $0.spaceIDString == key }
+    }
 
     init(project: Project, list: @escaping (TitleIndexKind) -> Void) {
         self.project = project
@@ -757,53 +763,60 @@ struct SpaceOverview: View {
         ScrollView {
             PageBody {
                 VStack(alignment: .leading, spacing: 36) {
-                    VStack(alignment: .leading, spacing: 30) {
-                        VStack(alignment: .leading, spacing: 14) {
-                            HStack(spacing: 4) {
-                                Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(.tertiary)
-                                Spacer(minLength: 8)
-                                if works {
-                                    iconButton("wand.and.stars", help: "Tidy Up: Membrae proposes what to merge, retire, and delete") {
-                                        app.presentNewRun(origin: .project, project: project, brief: ContextBuilder.cleanupBrief(for: project))
-                                    }
-                                }
-                                iconButton("gearshape", help: "Settings") { app.toggleSpaceSettings() }
-                            }
-                            Text(headline)
-                                .font(.system(size: 34, weight: .semibold))
-                                .tracking(-0.85)
-                                .lineSpacing(0)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: 640, alignment: .leading)
-                        }
-                        .padding(.top, 28)
-
-                        if let plan = plans.first {
-                            CleanupPlanCard(plan: plan)
-                        }
-
+                    HStack(spacing: 4) {
+                        Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                        Spacer(minLength: 8)
                         if works {
-                            nextStep(focus)
-
-                            HStack(alignment: .top, spacing: 40) {
-                                column("After that", rows: after.prefix(3).map { row in
-                                    (row.displayTitle, { app.open(row) })
-                                }, more: open.isEmpty ? nil : ("All \(open.count) tasks", { app.open(project, tab: .tasks, newTab: false) }))
-                                column("Decided lately", rows: decided.prefix(3).map { decision in
-                                    (decision.title.isEmpty ? "Untitled" : decision.title, { app.open(decision) })
-                                }, more: decided.isEmpty ? nil : ("All decisions", { list(.decision) }))
-                                column("Lines of work", rows: lines.prefix(3).map { track in
-                                    (track.title.isEmpty ? "Untitled" : track.title, { app.open(track) })
-                                }, more: lines.count > 3 ? ("\(lines.count - 3) more", { list(.track) }) : nil)
+                            iconButton("wand.and.stars", help: "Tidy Up: Membrae proposes what to merge, retire, and delete") {
+                                app.presentNewRun(origin: .project, project: project, brief: ContextBuilder.cleanupBrief(for: project))
                             }
+                        }
+                        iconButton("gearshape", help: "Settings") { app.toggleSpaceSettings() }
+                    }
+                    .padding(.top, 28)
+
+                    if !ownedWidgets.isEmpty {
+                        block("widgets", "Widgets") {
+                            AreaWidgetShelf(spaceID: project.id)
                         }
                     }
-                    .frame(maxWidth: 940, alignment: .leading)
+
+                    if works {
+                        block("brief", "Brief") {
+                            VStack(alignment: .leading, spacing: 30) {
+                                headlineText
+
+                                if let plan = plans.first {
+                                    CleanupPlanCard(plan: plan)
+                                }
+
+                                nextStep(focus)
+
+                                HStack(alignment: .top, spacing: 40) {
+                                    column("After that", rows: after.prefix(3).map { row in
+                                        (row.displayTitle, { app.open(row) })
+                                    }, more: open.isEmpty ? nil : ("All \(open.count) tasks", { app.open(project, tab: .tasks, newTab: false) }))
+                                    column("Decided lately", rows: decided.prefix(3).map { decision in
+                                        (decision.title.isEmpty ? "Untitled" : decision.title, { app.open(decision) })
+                                    }, more: decided.isEmpty ? nil : ("All decisions", { list(.decision) }))
+                                }
+
+                                if let track = project.activeTrack ?? lines.first {
+                                    CompactTrackLane(track: track, space: project)
+                                }
+                            }
+                            .frame(maxWidth: 940, alignment: .leading)
+                        }
+                    } else {
+                        headlineText
+                    }
 
                     if project.collects {
-                        SpaceRecordsSection(space: project)
+                        block("records", "Records") {
+                            SpaceRecordsSection(space: project)
+                        }
                     }
                 }
                 .padding(.horizontal, 48)
@@ -814,6 +827,41 @@ struct SpaceOverview: View {
             }
         }
         .scrollContentBackground(.hidden)
+    }
+
+    private var headlineText: some View {
+        Text(headline)
+            .font(.system(size: 34, weight: .semibold))
+            .tracking(-0.85)
+            .lineSpacing(0)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 640, alignment: .leading)
+    }
+
+    /// A block of the page the user can fold away. The Space remembers which are folded.
+    private func block<Content: View>(_ key: String, _ title: String, @ViewBuilder content: () -> Content) -> some View {
+        let collapsed = app.isCollapsed(key, in: project.id)
+        return VStack(alignment: .leading, spacing: 18) {
+            Button {
+                withAnimation(Motion.quick) { app.toggleCollapsed(key, in: project.id) }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .rotationEffect(.degrees(collapsed ? 0 : 90))
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(collapsed ? "Show \(title)" : "Hide \(title)")
+            if !collapsed {
+                content()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// The sentence Membrae wrote for this Space. Until it has, the summary, or the direction's first sentence.

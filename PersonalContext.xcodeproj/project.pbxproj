@@ -58,6 +58,8 @@
 		AC3E4F5B6D708192A3B4C5D6 /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1C2E3F4B5D6E708192A3B4 /* TaskStore.swift */; };
 		CE5A6B7D8192A3B4C5D6E7F8 /* ProjectTasksBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD4F5A6C708192A3B4C5D6E7 /* ProjectTasksBoard.swift */; };
 		D5E6F708192A3B4C5D6E7F80 /* TaskInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4D5E6F708192A3B4C5D6E7F /* TaskInspector.swift */; };
+		AD4E5F60718293A4B5C6D7E8 /* TrackLaneInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C3D4E5F60718293A4B5C6D7 /* TrackLaneInspector.swift */; };
+		8B2C3D4E5F60718293A4B5C6 /* TrackLanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B2C3D4E5F60718293A4B5 /* TrackLanes.swift */; };
 		F18A2B3C4D5E6F708192A3B4 /* ChromeChoiceDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A1B2C3D4E5F60718293A4 /* ChromeChoiceDialog.swift */; };
 		E07C8D9F3A4B5C6D7E8F901A /* TaskStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */; };
 		8F3A1C2E4B5D60718293A002 /* MCPToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */; };
@@ -400,6 +402,8 @@
 		8A1C2E3F4B5D6E708192A3B4 /* TaskStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStore.swift; sourceTree = "<group>"; };
 		BD4F5A6C708192A3B4C5D6E7 /* ProjectTasksBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectTasksBoard.swift; sourceTree = "<group>"; };
 		C4D5E6F708192A3B4C5D6E7F /* TaskInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskInspector.swift; sourceTree = "<group>"; };
+		9C3D4E5F60718293A4B5C6D7 /* TrackLaneInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackLaneInspector.swift; sourceTree = "<group>"; };
+		7A1B2C3D4E5F60718293A4B5 /* TrackLanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackLanes.swift; sourceTree = "<group>"; };
 		E07A1B2C3D4E5F60718293A4 /* ChromeChoiceDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeChoiceDialog.swift; sourceTree = "<group>"; };
 		DF6B7C8E92A3B4C5D6E7F809 /* TaskStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStoreTests.swift; sourceTree = "<group>"; };
 		8F3A1C2E4B5D60718293A001 /* MCPToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPToolsTests.swift; sourceTree = "<group>"; };
@@ -921,6 +925,8 @@
 				8DC37F181EBBBF8E1E7F7E4D /* SpacesView.swift */,
 				BD4F5A6C708192A3B4C5D6E7 /* ProjectTasksBoard.swift */,
 				C4D5E6F708192A3B4C5D6E7F /* TaskInspector.swift */,
+				9C3D4E5F60718293A4B5C6D7 /* TrackLaneInspector.swift */,
+				7A1B2C3D4E5F60718293A4B5 /* TrackLanes.swift */,
 				D8B9A9D93886D56BA6078212 /* SymbolPicker.swift */,
 			);
 			path = Projects;
@@ -1238,6 +1244,8 @@
 				9B2D3F4A5C6E708192A3B4C5 /* TaskStore.swift in Sources */,
 				CE5A6B7D8192A3B4C5D6E7F8 /* ProjectTasksBoard.swift in Sources */,
 				D5E6F708192A3B4C5D6E7F80 /* TaskInspector.swift in Sources */,
+				AD4E5F60718293A4B5C6D7E8 /* TrackLaneInspector.swift in Sources */,
+				8B2C3D4E5F60718293A4B5C6 /* TrackLanes.swift in Sources */,
 				F18A2B3C4D5E6F708192A3B4 /* ChromeChoiceDialog.swift in Sources */,
 				9665D488425D5973C2F14AF3 /* AttachCodeViews.swift in Sources */,
 				243486DBC4096A0FF300FA65 /* BrandMark.swift in Sources */,

@@ -325,6 +325,29 @@ extension AppModel {
         )
     }
 
+    /// The Space's Tracks view: its lanes, with no one track open.
+    func showTracks(in space: Space, newTab: Bool = TabActivation.commandClick) {
+        reveal(
+            WindowTab(
+                id: UUID(),
+                destination: .space(space.id),
+                section: .threads,
+                selectedThread: nil,
+                selectedNote: nil,
+                selectedDecision: nil,
+                selectedConversation: nil
+            ),
+            newTab: newTab
+        )
+    }
+
+    /// Opens the Tracks view with this stop picked.
+    func open(_ stop: TrackStop, newTab: Bool = TabActivation.commandClick) {
+        guard let space = stop.thread?.project else { return }
+        showTracks(in: space, newTab: newTab)
+        selectStop(stop.id)
+    }
+
     func open(_ note: Note, newTab: Bool = TabActivation.commandClick) {
         guard let project = note.project else { return }
         reveal(

@@ -285,6 +285,38 @@ final class CodeAttachment {
     }
 }
 
+/// The colour a track is drawn in. The app picks one no other track in the Space uses; the user can change it.
+enum TrackColor: String, Codable, CaseIterable, Identifiable {
+    case teal, slate, moss, plum, ochre, rust, pine, mauve
+
+    var id: String { rawValue }
+    var label: String { rawValue.capitalized }
+
+    /// sRGB hex for light and dark appearances.
+    var hex: (light: String, dark: String) {
+        switch self {
+        case .teal: ("3D8E93", "67B3B8")
+        case .slate: ("5B6FA6", "8A9BD0")
+        case .moss: ("6E8B4F", "9AB87A")
+        case .plum: ("8A5C8E", "B98BBC")
+        case .ochre: ("A8812C", "D4AA55")
+        case .rust: ("B5553E", "DA8068")
+        case .pine: ("4E7A5C", "7FAA8E")
+        case .mauve: ("9A6A7A", "C494A4")
+        }
+    }
+
+    /// The first colour no track in the Space uses, then round robin.
+    static func next(after used: [String]) -> TrackColor {
+        allCases.first { !used.contains($0.rawValue) } ?? allCases[used.count % allCases.count]
+    }
+
+    /// A stable colour for a track made before colours existed.
+    static func fallback(for id: UUID) -> TrackColor {
+        allCases[Int(id.uuid.0) % allCases.count]
+    }
+}
+
 @Model
 final class ProjectThread {
     var id: UUID
@@ -304,6 +336,8 @@ final class ProjectThread {
     var arrivedAt: Date?
     /// The fare: how many days the user is willing to spend on this track, counted from when it departed. 0 is no fare.
     var fareDays: Int = 0
+    /// The colour the track is drawn in; see `color`.
+    var colorRaw: String = ""
     /// The group this track is listed under.
     var theme: TrackTheme?
 
@@ -363,6 +397,11 @@ final class ProjectThread {
         }
     }
 
+    var color: TrackColor {
+        get { TrackColor(rawValue: colorRaw) ?? TrackColor.fallback(for: id) }
+        set { colorRaw = newValue.rawValue }
+    }
+
     /// When the fare runs out: fare days after departure. Nil without a fare or before departure.
     var fareEndsAt: Date? {
         guard fareDays > 0, let departedAt else { return nil }
@@ -395,6 +434,7 @@ final class ProjectThread {
         self.updatedAt = .now
         self.project = project
         self.parent = parent
+        self.colorRaw = TrackColor.next(after: project.threads.map(\.color.rawValue)).rawValue
     }
 
     func contains(_ other: ProjectThread) -> Bool {

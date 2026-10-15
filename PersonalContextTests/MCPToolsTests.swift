@@ -311,6 +311,14 @@ final class MCPToolsTests: XCTestCase {
         ))
         XCTAssertEqual(shape["arrived_at"] as? String, "")
         XCTAssertFalse((shape["departed_at"] as? String ?? "").isEmpty, "departure is kept once a track has started")
+        XCTAssertFalse((shape["color"] as? String ?? "").isEmpty, "every track is drawn in a colour")
+
+        shape = try object(Tools.call(
+            "update_track", arguments: ["track_id": id, "color": "plum"], container: container
+        ))
+        XCTAssertEqual(shape["color"] as? String, "plum")
+        let refused = try Tools.call("update_track", arguments: ["track_id": id, "color": "neon"], container: container)
+        XCTAssertEqual(refused["isError"] as? Bool, true, "a colour off the palette is refused")
         XCTAssertEqual(shape["fare_days"] as? Int, 0)
         XCTAssertEqual(shape["fare_ends_at"] as? String, "")
     }

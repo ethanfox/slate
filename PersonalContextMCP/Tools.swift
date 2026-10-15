@@ -813,6 +813,7 @@ enum Tools {
                 "summary": text("One or two sentences."),
                 "body": text("Markdown spec."),
                 "theme": text("Name of the theme to list this track under. A theme with that name is made if the Space has none."),
+                "color": options(TrackColor.self, "The colour the track is drawn in. The app picks one; set it only when the user asks for a colour."),
                 "fare_days": integer("The fare: how many days the user is willing to spend on this track, counted from the day it departed. Set it only when the user says how long. 0 clears it."),
             ],
             required: ["space_id", "title"], readOnly: false
@@ -829,6 +830,7 @@ enum Tools {
             thread.summary = args.string("summary") ?? ""
             thread.body = args.string("body") ?? ""
             if let fare = try args.integer("fare_days") { thread.fareDays = max(0, fare) }
+            if let color = try args.choice("color", as: TrackColor.self) { thread.color = color }
             context.insert(thread)
             if let theme = args.string("theme") { ThemeStore.setTheme(theme, on: thread, in: context) }
             project.touch()
@@ -847,6 +849,7 @@ enum Tools {
                 "append_to_body": text("Markdown appended to the end of the spec."),
                 "parent_id": text("Empty string takes a nested track out from under its parent. Tracks no longer nest, so do not set a parent."),
                 "theme": text("Name of the theme to list this track under. Empty string takes it out of its theme."),
+                "color": options(TrackColor.self, "The colour the track is drawn in. The app picks one; set it only when the user asks for a colour."),
                 "fare_days": integer("The fare: how many days the user is willing to spend on this track, counted from the day it departed. Set it only when the user says how long. 0 clears it."),
             ],
             required: ["track_id"], readOnly: false
@@ -867,6 +870,7 @@ enum Tools {
             }
             if let theme = args.string("theme") { ThemeStore.setTheme(theme, on: thread, in: context) }
             if let fare = try args.integer("fare_days") { thread.fareDays = max(0, fare) }
+            if let color = try args.choice("color", as: TrackColor.self) { thread.color = color }
             thread.updatedAt = .now
             thread.project?.touch()
             return JSONShape.track(thread, full: true)
@@ -2829,6 +2833,7 @@ enum JSONShape {
             "parent_id": thread.parent?.id.uuidString ?? "",
             "is_active": thread.project?.activeTrackID == thread.id,
             "theme": thread.theme?.displayName ?? "",
+            "color": thread.color.rawValue,
             "made_at": iso.string(from: thread.createdAt),
             "departed_at": thread.departedAt.map { iso.string(from: $0) } ?? "",
             "arrived_at": thread.arrivedAt.map { iso.string(from: $0) } ?? "",
