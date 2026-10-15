@@ -145,6 +145,32 @@ struct SettingsDeveloperPage: View {
                 }
             }
 
+            SettingsGroup("Sync") {
+                SettingsRow {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(app.sync.status.label)
+                        Text("Pushed through \(app.sync.pushedSequence) · pulled to \(app.sync.pulledCursor) · last run sent \(app.sync.lastPushed), received \(app.sync.lastPulled)")
+                            .font(CraftFont.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 16)
+                    Button("Sync now") { app.sync.syncSoon() }
+                }
+                ForEach(projects) { project in
+                    Hairline().padding(.horizontal, 16)
+                    SettingsRow {
+                        Text(project.displayName)
+                        Spacer(minLength: 16)
+                        Toggle("Synced", isOn: Binding(
+                            get: { project.isSynced },
+                            set: { try? SpaceStore.setSynced($0, on: project, in: context) }
+                        ))
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                    }
+                }
+            }
+
             SettingsGroup("Change record") {
                 SettingsRow {
                     VStack(alignment: .leading, spacing: 2) {

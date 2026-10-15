@@ -47,7 +47,10 @@ struct MembraeApp: App {
                     AppDelegate.turnIsRunning = { model.runCoordinator.hasRunningSessionTurn }
                 }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { app.importRelay.handleForeground() }
+                    if phase == .active {
+                        app.importRelay.handleForeground()
+                        app.sync.handleForeground()
+                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     app.flushWindowTabs()
@@ -56,6 +59,7 @@ struct MembraeApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.didWakeNotification)) { _ in
                     app.importRelay.handleWake()
+                    app.sync.handleWake()
                 }
         }
         .defaultSize(width: 1180, height: 760)

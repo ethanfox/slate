@@ -90,6 +90,8 @@ final class Project: Identifiable {
     var agentNotes: String = ""
     /// The shape of the picture on this Space's cards. Empty is landscape; "portrait" suits covers and posters.
     var cardShapeRaw: String = ""
+    /// Whether this Space syncs to the user's database in Cloudflare. Every Space starts local.
+    var isSynced: Bool = false
 
     @Relationship(deleteRule: .cascade, inverse: \ProjectThread.project)
     var threads: [ProjectThread] = []

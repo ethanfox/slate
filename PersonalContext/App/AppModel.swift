@@ -69,6 +69,7 @@ final class AppModel {
     private(set) var runningChats: [RunningChat] = []
     let runCoordinator = RunCoordinator()
     let importRelay = ImportRelayController()
+    let sync = SyncController()
     @ObservationIgnored private var chatRuntimes: [UUID: ChatRuntime] = [:]
     @ObservationIgnored private var retiredContainers: [ModelContainer] = []
     @ObservationIgnored private var storeReloadTask: Task<Void, Never>?
@@ -426,6 +427,7 @@ final class AppModel {
         }
         browser.warm()
         importRelay.attach(self)
+        sync.attach(self)
         objectFind.installShortcuts { [weak self] in
             guard let self else { return false }
             return self.isObjectPage || self.objectFind.isOpen

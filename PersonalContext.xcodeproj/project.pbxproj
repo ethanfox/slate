@@ -71,6 +71,9 @@
 		C4A26E000000000000000002 /* RecordChange.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A26E000000000000000001 /* RecordChange.swift */; };
 		C4A26E000000000000000003 /* RecordChange.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A26E000000000000000001 /* RecordChange.swift */; };
 		C4A26E000000000000000008 /* RecordChangeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A26E000000000000000007 /* RecordChangeTests.swift */; };
+		C4A26E000000000000000012 /* SyncCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A26E000000000000000011 /* SyncCodec.swift */; };
+		C4A26E000000000000000014 /* SyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A26E000000000000000013 /* SyncController.swift */; };
+		C4A26E000000000000000018 /* SyncCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A26E000000000000000017 /* SyncCodecTests.swift */; };
 		5BACE0100000000000000002 /* Space.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BACE0100000000000000001 /* Space.swift */; };
 		5BACE0300000000000000002 /* SpaceScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BACE0300000000000000001 /* SpaceScreen.swift */; };
 		5BACE0100000000000000003 /* Space.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BACE0100000000000000001 /* Space.swift */; };
@@ -424,6 +427,9 @@
 		T17E010000000007 /* TitleIndexStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleIndexStoreTests.swift; sourceTree = "<group>"; };
 		C4A26E000000000000000001 /* RecordChange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordChange.swift; sourceTree = "<group>"; };
 		C4A26E000000000000000007 /* RecordChangeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordChangeTests.swift; sourceTree = "<group>"; };
+		C4A26E000000000000000011 /* SyncCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCodec.swift; sourceTree = "<group>"; };
+		C4A26E000000000000000013 /* SyncController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncController.swift; sourceTree = "<group>"; };
+		C4A26E000000000000000017 /* SyncCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCodecTests.swift; sourceTree = "<group>"; };
 		T17E010000000009 /* NavTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavTrace.swift; sourceTree = "<group>"; };
 		8F3A1C2E4B5D60718293A004 /* HarborEvalFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarborEvalFixture.swift; sourceTree = "<group>"; };
 		8F3A1C2E4B5D60718293A006 /* track-first-eval.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = Scenarios/track-first-eval.md; sourceTree = "<group>"; };
@@ -744,6 +750,8 @@
 				718061204D90BCFCD66D501C /* KeychainStore.swift */,
 				F11E5704A0000030 /* ImportKeyStore.swift */,
 				F11E5704A0000031 /* ImportRelayClient.swift */,
+				C4A26E000000000000000011 /* SyncCodec.swift */,
+				C4A26E000000000000000013 /* SyncController.swift */,
 				F11E5704A0000035 /* ImportApprovalServer.swift */,
 				F11E5704A0000032 /* ImportToolHost.swift */,
 				F93C81A0E693EB3D6CE616F2 /* LoopbackAuth.swift */,
@@ -969,6 +977,7 @@
 				A11C0DE100000021 /* StoreSyncTests.swift */,
 				T17E010000000007 /* TitleIndexStoreTests.swift */,
 				C4A26E000000000000000007 /* RecordChangeTests.swift */,
+				C4A26E000000000000000017 /* SyncCodecTests.swift */,
 				5BACE0100000000000000007 /* SpaceStoreTests.swift */,
 				A11C0DE100000013 /* MCPConnectionTests.swift */,
 				B20A01000000000000000015 /* BrowserTests.swift */,
@@ -1229,6 +1238,7 @@
 				A11C0DE100000022 /* StoreSyncTests.swift in Sources */,
 				T17E010000000008 /* TitleIndexStoreTests.swift in Sources */,
 				C4A26E000000000000000008 /* RecordChangeTests.swift in Sources */,
+				C4A26E000000000000000018 /* SyncCodecTests.swift in Sources */,
 				5BACE0100000000000000008 /* SpaceStoreTests.swift in Sources */,
 				B20A01000000000000000016 /* BrowserTests.swift in Sources */,
 				A11C0DE100000014 /* MCPConnectionTests.swift in Sources */,
@@ -1320,6 +1330,8 @@
 				6271F4DD4DF1EF931FFE51BD /* KeychainStore.swift in Sources */,
 				F11E5704B0000030 /* ImportKeyStore.swift in Sources */,
 				F11E5704B0000031 /* ImportRelayClient.swift in Sources */,
+				C4A26E000000000000000012 /* SyncCodec.swift in Sources */,
+				C4A26E000000000000000014 /* SyncController.swift in Sources */,
 				F11E5704B0000035 /* ImportApprovalServer.swift in Sources */,
 				F11E5704B0000032 /* ImportToolHost.swift in Sources */,
 				8EF3176206A8C89215961D73 /* LiquidOrb.swift in Sources */,

@@ -84,7 +84,7 @@ final class RecordChange {
 
 /// A model whose changes are recorded. Every model in the schema adopts it except the title index
 /// and the change record itself; a test asserts that over `Store.models`.
-protocol ChangeTracked: AnyObject {
+protocol ChangeTracked: PersistentModel {
     static var changeKind: ChangeKind { get }
     var changeID: UUID { get }
     /// The Space the record is in. Nil for records that belong to no Space.
@@ -143,6 +143,20 @@ enum ChangeLog {
             guard let tracked = model as? any ChangeTracked else { continue }
             note(tracked, deleted: false, into: &pending)
         }
+        write(pending, deletedSpaces: deletedSpaces, in: context)
+    }
+
+    /// Moves the rows of `records` to new sequences, as if each had just been written. Used when a
+    /// Space is turned on for sync, so everything already in it is sent.
+    static func touch(_ records: [any ChangeTracked], in context: ModelContext) {
+        var pending: [String: Pending] = [:]
+        for record in records {
+            note(record, deleted: false, into: &pending)
+        }
+        write(pending, deletedSpaces: [], in: context)
+    }
+
+    private static func write(_ pending: [String: Pending], deletedSpaces: [String], in context: ModelContext) {
         guard !pending.isEmpty || !deletedSpaces.isEmpty else { return }
 
         let now = Date.now
@@ -229,6 +243,19 @@ enum ChangeLog {
 
     static func row(for id: UUID, in context: ModelContext) -> RecordChange? {
         rows(for: [SpaceJSON.key(id)], in: context).first
+    }
+
+    /// Every tracked record in a Space, of every kind.
+    static func records(inSpace spaceID: UUID, in context: ModelContext) -> [any ChangeTracked] {
+        var found: [any ChangeTracked] = []
+        for model in Store.models where model is any ChangeTracked.Type {
+            found += fetchAll(model, in: context).compactMap { $0 as? any ChangeTracked }.filter { $0.changeSpaceID == spaceID }
+        }
+        return found
+    }
+
+    private static func fetchAll<T: PersistentModel>(_: T.Type, in context: ModelContext) -> [any PersistentModel] {
+        (try? context.fetch(FetchDescriptor<T>())) ?? []
     }
 
     private static func rows(for keys: [String], in context: ModelContext) -> [RecordChange] {

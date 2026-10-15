@@ -108,6 +108,18 @@ enum SpaceStore {
         try context.persist()
     }
 
+    /// Turns sync on or off for a Space. Turning it on moves every record in the Space to a new
+    /// sequence in the change record, so the first push sends all of it.
+    static func setSynced(_ synced: Bool, on space: Space, in context: ModelContext) throws {
+        guard space.isSynced != synced else { return }
+        space.isSynced = synced
+        space.touch()
+        if synced {
+            ChangeLog.touch(ChangeLog.records(inSpace: space.id, in: context), in: context)
+        }
+        try context.persist()
+    }
+
     // MARK: Built-in records
 
     /// A record belongs to one Space.
