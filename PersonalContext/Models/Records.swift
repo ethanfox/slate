@@ -298,6 +298,8 @@ final class ProjectThread {
     var project: Project?
     var parent: ProjectThread?
     var spaceIDString: String = ""
+    /// When work on the track started: the first time its status became active. Nil until then.
+    var departedAt: Date?
     /// When the track was completed. Set when status becomes completed, cleared when it leaves it.
     var arrivedAt: Date?
     /// The fare: how many days the user is willing to spend on this track, counted from when it departed. 0 is no fare.
@@ -351,7 +353,9 @@ final class ProjectThread {
         get { ThreadStatus(rawValue: statusRaw) ?? .exploring }
         set {
             statusRaw = newValue.rawValue
+            if newValue == .active, departedAt == nil { departedAt = .now }
             if newValue == .completed {
+                if departedAt == nil { departedAt = .now }
                 if arrivedAt == nil { arrivedAt = .now }
             } else {
                 arrivedAt = nil
@@ -359,12 +363,9 @@ final class ProjectThread {
         }
     }
 
-    /// When the track was made.
-    var departedAt: Date { createdAt }
-
-    /// When the fare runs out, if one is set.
+    /// When the fare runs out: fare days after departure. Nil without a fare or before departure.
     var fareEndsAt: Date? {
-        guard fareDays > 0 else { return nil }
+        guard fareDays > 0, let departedAt else { return nil }
         return Calendar.current.date(byAdding: .day, value: fareDays, to: departedAt)
     }
 

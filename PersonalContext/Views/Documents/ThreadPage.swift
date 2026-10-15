@@ -150,9 +150,11 @@ struct ThreadPage: View {
     /// "Departed 3 Oct · arrived 12 Oct", or where the fare stands on an open track.
     private var journey: String {
         let day: (Date) -> String = { $0.formatted(date: .abbreviated, time: .omitted) }
-        var parts = ["Departed \(day(thread.departedAt))"]
+        var parts = [thread.departedAt.map { "Departed \(day($0))" } ?? "Made \(day(thread.createdAt)) · not departed"]
         if let arrived = thread.arrivedAt {
             parts.append("arrived \(day(arrived))")
+        } else if thread.departedAt == nil, thread.fareDays > 0 {
+            parts.append("\(thread.fareLabel) starts when it departs")
         } else if let ends = thread.fareEndsAt {
             let left = Calendar.current.dateComponents([.day], from: .now, to: ends).day ?? 0
             if left < 0 {

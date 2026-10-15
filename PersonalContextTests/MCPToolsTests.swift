@@ -287,19 +287,30 @@ final class MCPToolsTests: XCTestCase {
             "update_track", arguments: ["track_id": id, "fare_days": 14], container: container
         ))
         XCTAssertEqual(shape["fare_days"] as? Int, 14)
-        XCTAssertFalse((shape["departed_at"] as? String ?? "").isEmpty)
-        XCTAssertFalse((shape["fare_ends_at"] as? String ?? "").isEmpty)
+        XCTAssertFalse((shape["made_at"] as? String ?? "").isEmpty)
+        let departedBefore = shape["departed_at"] as? String ?? ""
+        let endsBefore = shape["fare_ends_at"] as? String ?? ""
         XCTAssertEqual(shape["arrived_at"] as? String, "")
+        if seed.auth.status == .exploring {
+            XCTAssertEqual(departedBefore, "", "a track departs when it starts, not when it is made")
+            XCTAssertEqual(endsBefore, "")
+        } else {
+            XCTAssertFalse(departedBefore.isEmpty)
+            XCTAssertFalse(endsBefore.isEmpty)
+        }
 
         shape = try object(Tools.call(
             "update_track", arguments: ["track_id": id, "status": "completed"], container: container
         ))
         XCTAssertFalse((shape["arrived_at"] as? String ?? "").isEmpty)
+        XCTAssertFalse((shape["departed_at"] as? String ?? "").isEmpty)
+        XCTAssertFalse((shape["fare_ends_at"] as? String ?? "").isEmpty)
 
         shape = try object(Tools.call(
             "update_track", arguments: ["track_id": id, "status": "active", "fare_days": "0"], container: container
         ))
         XCTAssertEqual(shape["arrived_at"] as? String, "")
+        XCTAssertFalse((shape["departed_at"] as? String ?? "").isEmpty, "departure is kept once a track has started")
         XCTAssertEqual(shape["fare_days"] as? Int, 0)
         XCTAssertEqual(shape["fare_ends_at"] as? String, "")
     }

@@ -9,8 +9,8 @@ such as a product they are building, a job search, their recipes, or their habit
 A Space holds lines of work (decisions, tracks, notes, tasks), records of its own types (set with set_space_type), or both. \
 Decisions are what was decided and why. A track is a line of work, broken into ordered stops: each stop is one idea inside it, most important first. \
 get_track lists the stops, set_stops rewrites them, and stop_id puts a task on one. Break a track down with stops, not with child tracks: tracks do not nest. \
-A track departs when it is made and arrives when its status becomes completed; get_track shows departed_at and arrived_at. \
-A track can have a fare, fare_days: the days the user is willing to spend on it, set before the work starts and counted from when it departed. \
+A track departs the first time its status becomes active and arrives when it becomes completed; get_track shows made_at, departed_at, and arrived_at. \
+A track can have a fare, fare_days: the days the user is willing to spend on it, set before the work starts and counted from when it departs. \
 When the fare runs out, the track stops at its next stop and the user decides whether to give it another fare or retire it; say so when you see fare_ends_at has passed on an open track. \
 A theme is a named group of tracks, set with theme on create_track or update_track; it holds no work of its own. \
 A junction sits between two tracks, in any themes, and is shown on get_track. A wait, the usual kind, holds the second track until the first has done what the junction requires. \

@@ -67,7 +67,7 @@ enum Store {
 
     /// Bump whenever a model or a stored property is added. A build that opens a store written by a
     /// newer schema drops the tables and columns it does not know, so older builds must refuse.
-    static let schemaVersion = 25
+    static let schemaVersion = 26
 
     /// Sits beside the store and holds the highest schema version that has opened it.
     static func schemaMarkerURL(for store: URL) -> URL {
@@ -217,7 +217,7 @@ enum Store {
         if let upgrade {
             try apply(upgrade, in: context)
         }
-        if recorded < 25, schemaVersion >= 25 {
+        if recorded < 26, schemaVersion >= 26 {
             try backfillArrivals(in: context)
         }
         guard mode == .prepare else {
@@ -418,14 +418,20 @@ enum Store {
         return upgrade
     }
 
-    /// Tracks completed before arrivals were recorded take their last change as the arrival.
+    /// Tracks from before departures and arrivals were recorded: one that has been active, paused, or
+    /// completed departed when it was made, and a completed one arrived at its last change.
     static func backfillArrivals(in context: ModelContext) throws {
-        let completed = ThreadStatus.completed.rawValue
-        let threads = try context.fetch(FetchDescriptor<ProjectThread>(predicate: #Predicate { $0.statusRaw == completed }))
         var changed = false
-        for thread in threads where thread.arrivedAt == nil {
-            thread.arrivedAt = thread.updatedAt
-            changed = true
+        for thread in try context.fetch(FetchDescriptor<ProjectThread>()) {
+            let status = thread.status
+            if thread.departedAt == nil, status == .active || status == .paused || status == .completed {
+                thread.departedAt = thread.createdAt
+                changed = true
+            }
+            if thread.arrivedAt == nil, status == .completed {
+                thread.arrivedAt = thread.updatedAt
+                changed = true
+            }
         }
         if changed { try context.save() }
     }

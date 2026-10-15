@@ -259,7 +259,10 @@ enum ContextBuilder {
         lines.append("Track: \(title) (id \(thread.id.uuidString))")
         lines.append("Kind: \(thread.kind.label)")
         lines.append("Status: \(thread.status.label)")
-        lines.append("Departed: \(thread.departedAt.formatted(date: .abbreviated, time: .omitted))")
+        lines.append("Made: \(thread.createdAt.formatted(date: .abbreviated, time: .omitted))")
+        if let departed = thread.departedAt {
+            lines.append("Departed: \(departed.formatted(date: .abbreviated, time: .omitted))")
+        }
         if let arrived = thread.arrivedAt {
             lines.append("Arrived: \(arrived.formatted(date: .abbreviated, time: .omitted))")
         }

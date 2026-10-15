@@ -813,7 +813,7 @@ enum Tools {
                 "summary": text("One or two sentences."),
                 "body": text("Markdown spec."),
                 "theme": text("Name of the theme to list this track under. A theme with that name is made if the Space has none."),
-                "fare_days": integer("The fare: how many days the user is willing to spend on this track, counted from the day it was made. Set it only when the user says how long. 0 clears it."),
+                "fare_days": integer("The fare: how many days the user is willing to spend on this track, counted from the day it departed. Set it only when the user says how long. 0 clears it."),
             ],
             required: ["space_id", "title"], readOnly: false
         ) { args, context in
@@ -847,7 +847,7 @@ enum Tools {
                 "append_to_body": text("Markdown appended to the end of the spec."),
                 "parent_id": text("Empty string takes a nested track out from under its parent. Tracks no longer nest, so do not set a parent."),
                 "theme": text("Name of the theme to list this track under. Empty string takes it out of its theme."),
-                "fare_days": integer("The fare: how many days the user is willing to spend on this track, counted from the day it was made. Set it only when the user says how long. 0 clears it."),
+                "fare_days": integer("The fare: how many days the user is willing to spend on this track, counted from the day it departed. Set it only when the user says how long. 0 clears it."),
             ],
             required: ["track_id"], readOnly: false
         ) { args, context in
@@ -2829,7 +2829,8 @@ enum JSONShape {
             "parent_id": thread.parent?.id.uuidString ?? "",
             "is_active": thread.project?.activeTrackID == thread.id,
             "theme": thread.theme?.displayName ?? "",
-            "departed_at": iso.string(from: thread.departedAt),
+            "made_at": iso.string(from: thread.createdAt),
+            "departed_at": thread.departedAt.map { iso.string(from: $0) } ?? "",
             "arrived_at": thread.arrivedAt.map { iso.string(from: $0) } ?? "",
             "fare_days": thread.fareDays,
             "fare_ends_at": thread.fareEndsAt.map { iso.string(from: $0) } ?? "",
