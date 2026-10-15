@@ -77,7 +77,9 @@ struct ProjectTasksBoard: View {
                             }
                         }
                     }
-                    .padding(BoardMetrics.inset)
+                    .padding(.horizontal, BoardMetrics.inset)
+                    .padding(.top, 24)
+                    .padding(.bottom, BoardMetrics.inset)
                     .frame(minHeight: geo.size.height, alignment: .topLeading)
                 }
             }
@@ -105,7 +107,8 @@ struct ProjectTasksBoard: View {
                     }
                 }
                 .padding(.horizontal, 32)
-                .padding(.vertical, 28)
+                .padding(.top, 24)
+                .padding(.bottom, 28)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }

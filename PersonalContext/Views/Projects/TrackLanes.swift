@@ -580,13 +580,12 @@ struct TrackLanesPage: View {
                                 ? "No tracks yet. Ask Membrae to start one."
                                 : "No tracks shown. Pick some from the toolbar."
                         )
-                        .padding(.horizontal, 24)
                         .padding(.top, 32)
                     } else {
                         LaneStack(lanes: lanes, space: space)
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 32)
                 .padding(.top, 24)
                 .padding(.bottom, 140)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -816,7 +816,7 @@ struct SpaceOverview: View {
                         }
                     }
                 }
-                .padding(.horizontal, 48)
+                .padding(.horizontal, 32)
                 .padding(.top, 24)
                 // Room to scroll the last row clear of the composer that floats over the page.
                 .padding(.bottom, 140)
@@ -1238,8 +1238,9 @@ struct ProjectListPage: View {
                         }
                     }
                 }
-                .padding(.horizontal, 48)
-                .padding(.vertical, 36)
+                .padding(.horizontal, 32)
+                .padding(.top, 24)
+                .padding(.bottom, 36)
                 .frame(maxWidth: 760, alignment: .leading)
             }
         }
