@@ -192,35 +192,21 @@ enum LaneSet {
     }
 }
 
-/// One track drawn as a lane: its name and caption on the left, then the line with its stops.
-struct TrackLaneRow: View {
+/// How wide a lane's line area has to be to show every stop and label.
+extension LaneModel {
+    var neededWidth: CGFloat {
+        guard !stops.isEmpty else { return LaneMetrics.firstStop + 120 }
+        return lastStopX + LaneMetrics.labelWidth / 2 + LaneMetrics.trailing
+    }
+}
+
+/// The left column of a lane: the track's name and a line on where it stands.
+struct LaneHeader: View {
     var lane: LaneModel
     var compact = false
-    /// Where the line stops, from the line area's left edge. Nil runs it to the edge.
-    var lineEnd: CGFloat? = nil
-    var selectedStop: UUID?
-    var onStop: (TrackStop) -> Void
-    var onJunction: (TrackJunction) -> Void
     var onTitle: () -> Void
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hoveringSignal = false
-    @State private var hoveringCard = false
-
-    private var tint: Color { lane.track.color.tint }
-    private var showingCard: Bool { hoveringSignal || hoveringCard }
-
     var body: some View {
-        HStack(alignment: .center, spacing: 0) {
-            header
-                .frame(width: LaneMetrics.headerWidth, alignment: .leading)
-            lineArea
-        }
-        .frame(height: compact ? LaneMetrics.compactHeight : LaneMetrics.height)
-        .zIndex(showingCard ? 2 : 0)
-    }
-
-    private var header: some View {
         VStack(alignment: .leading, spacing: 14) {
             Button(action: onTitle) {
                 Text(LaneModel.title(lane.track))
@@ -239,9 +225,28 @@ struct TrackLaneRow: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.trailing, 12)
+        .frame(width: LaneMetrics.headerWidth, height: compact ? LaneMetrics.compactHeight : LaneMetrics.height, alignment: .leading)
     }
+}
 
-    private var lineArea: some View {
+/// The line of a lane with its stops, labels, and signal. Sized by its parent; draws to its own width.
+struct LaneLine: View {
+    var lane: LaneModel
+    var compact = false
+    /// Where the line stops, from the left edge. Nil runs it to the edge.
+    var lineEnd: CGFloat? = nil
+    var selectedStop: UUID?
+    var onStop: (TrackStop) -> Void
+    var onJunction: (TrackJunction) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hoveringSignal = false
+    @State private var hoveringCard = false
+
+    private var tint: Color { lane.track.color.tint }
+    private var showingCard: Bool { hoveringSignal || hoveringCard }
+
+    var body: some View {
         GeometryReader { geo in
             let midY = geo.size.height / 2
             ZStack(alignment: .topLeading) {
@@ -293,6 +298,8 @@ struct TrackLaneRow: View {
             }
             .animation(Motion.quick, value: showingCard)
         }
+        .frame(height: compact ? LaneMetrics.compactHeight : LaneMetrics.height)
+        .zIndex(showingCard ? 2 : 0)
     }
 
     private func drawLine(in context: GraphicsContext, width: CGFloat, midY: CGFloat) {
@@ -331,6 +338,29 @@ struct TrackLaneRow: View {
             path.addLine(to: CGPoint(x: dotted.upperBound, y: midY))
             context.stroke(path, with: .color(tint), style: StrokeStyle(lineWidth: LaneMetrics.line, lineCap: .round, dash: [0.1, 8]))
         }
+    }
+}
+
+/// One track as a lane on its own: the header pinned, the line scrolling sideways when it is longer than the page.
+struct TrackLaneRow: View {
+    var lane: LaneModel
+    var compact = false
+    var selectedStop: UUID?
+    var onStop: (TrackStop) -> Void
+    var onJunction: (TrackJunction) -> Void
+    var onTitle: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 0) {
+            LaneHeader(lane: lane, compact: compact, onTitle: onTitle)
+            GeometryReader { geo in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LaneLine(lane: lane, compact: compact, selectedStop: selectedStop, onStop: onStop, onJunction: onJunction)
+                        .frame(width: max(geo.size.width, lane.neededWidth))
+                }
+            }
+        }
+        .frame(height: compact ? LaneMetrics.compactHeight : LaneMetrics.height)
     }
 }
 
@@ -533,7 +563,8 @@ struct TrackLanesPage: View {
     }
 }
 
-/// The lanes stacked, with each merge drawn across the two lanes it joins.
+/// The lanes stacked: headers pinned on the left, the lines scrolling sideways together, merges drawn across
+/// the two lanes they join.
 private struct LaneStack: View {
     var lanes: [LaneModel]
     var space: Space
@@ -542,44 +573,70 @@ private struct LaneStack: View {
     @State private var hoveringMerge: UUID?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
-                TrackLaneRow(
-                    lane: lane,
-                    lineEnd: lineEnd(at: index),
-                    selectedStop: app.selectedStopID,
-                    onStop: { app.selectStop($0.id) },
-                    onJunction: { app.selectJunction($0.id) },
-                    onTitle: { app.open(lane.track, newTab: false) }
-                )
-                .overlay(alignment: .bottom) {
-                    if index < lanes.count - 1, !lane.mergesIntoNext {
-                        Hairline()
-                    }
+        HStack(alignment: .top, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
+                    LaneHeader(lane: lane) { app.open(lane.track, newTab: false) }
+                        .overlay(alignment: .bottom) { separator(after: index) }
                 }
             }
-        }
-        .overlay(alignment: .topLeading) {
             GeometryReader { geo in
-                Canvas { context, _ in
-                    drawMerges(in: context, width: geo.size.width)
-                }
-                .allowsHitTesting(false)
-                ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
-                    if lane.mergesIntoNext, let merge = lane.merge {
-                        let point = mergePoint(at: index)
-                        mergeNode(merge, tint: continuingTint(at: index))
-                            .position(point)
-                        if hoveringMerge == merge.id {
-                            JunctionCard(junction: merge)
-                                .onHover { hoveringMerge = $0 ? merge.id : nil }
-                                .onTapGesture { app.selectJunction(merge.id) }
-                                .position(x: point.x, y: point.y + 72)
+                ScrollView(.horizontal, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
+                            LaneLine(
+                                lane: lane,
+                                lineEnd: lineEnd(at: index),
+                                selectedStop: app.selectedStopID,
+                                onStop: { app.selectStop($0.id) },
+                                onJunction: { app.selectJunction($0.id) }
+                            )
+                            .overlay(alignment: .bottom) { separator(after: index) }
                         }
                     }
+                    .frame(width: max(geo.size.width, neededWidth))
+                    .overlay(alignment: .topLeading) { merges }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func separator(after index: Int) -> some View {
+        if index < lanes.count - 1, !lanes[index].mergesIntoNext {
+            Hairline()
+        }
+    }
+
+    private var merges: some View {
+        GeometryReader { geo in
+            Canvas { context, _ in
+                drawMerges(in: context, width: geo.size.width)
+            }
+            .allowsHitTesting(false)
+            ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
+                if lane.mergesIntoNext, let merge = lane.merge {
+                    let point = mergePoint(at: index)
+                    mergeNode(merge, tint: continuingTint(at: index))
+                        .position(point)
+                    if hoveringMerge == merge.id {
+                        JunctionCard(junction: merge)
+                            .onHover { hoveringMerge = $0 ? merge.id : nil }
+                            .onTapGesture { app.selectJunction(merge.id) }
+                            .position(x: point.x, y: point.y + 72)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Wide enough for the longest lane, and for any merge to bend and run on.
+    private var neededWidth: CGFloat {
+        var width = lanes.map(\.neededWidth).max() ?? 0
+        for index in lanes.indices where lanes[index].mergesIntoNext {
+            width = max(width, mergeStart(for: index) + LaneMetrics.mergeRun + 140)
+        }
+        return width
     }
 
     private func mergeNode(_ merge: TrackJunction, tint: Color) -> some View {
@@ -621,7 +678,7 @@ private struct LaneStack: View {
         return nil
     }
 
-    /// From the line area's left edge: past the later of the two lanes' last stops.
+    /// Past the later of the two lanes' last stops.
     private func mergeStart(for index: Int) -> CGFloat {
         max(lanes[index].lastStopX, lanes[index + 1].lastStopX) + LaneMetrics.mergeLead
     }
@@ -632,7 +689,7 @@ private struct LaneStack: View {
 
     private func mergePoint(at index: Int) -> CGPoint {
         CGPoint(
-            x: LaneMetrics.headerWidth + mergeStart(for: index) + LaneMetrics.mergeRun,
+            x: mergeStart(for: index) + LaneMetrics.mergeRun,
             y: (laneMidY(index) + laneMidY(index + 1)) / 2
         )
     }
@@ -649,7 +706,7 @@ private struct LaneStack: View {
     private func drawMerges(in context: GraphicsContext, width: CGFloat) {
         let style = StrokeStyle(lineWidth: LaneMetrics.line, lineCap: .round, lineJoin: .round)
         for index in lanes.indices where lanes[index].mergesIntoNext {
-            let startX = LaneMetrics.headerWidth + mergeStart(for: index)
+            let startX = mergeStart(for: index)
             let point = mergePoint(at: index)
             for (lane, y) in [(lanes[index], laneMidY(index)), (lanes[index + 1], laneMidY(index + 1))] {
                 var path = Path()
@@ -709,46 +766,158 @@ struct CompactTrackLane: View {
     }
 }
 
-/// The toolbar's "4 of 13 tracks" menu: which tracks the Tracks view draws.
+/// The toolbar's "4 of 13 tracks" control: a panel to search and pick which tracks the Tracks view draws.
 struct ShownTracksMenu: View {
     var space: Space
 
     @Environment(AppModel.self) private var app
+    @State private var isPresented = false
 
     var body: some View {
         let candidates = LaneSet.candidates(in: space)
-        let shown = Set(LaneSet.shownIDs(in: space, chosen: app.shownTracks[space.id]))
-        Menu {
-            ForEach(candidates) { track in
-                Toggle(isOn: Binding(
-                    get: { shown.contains(track.id) },
-                    set: { on in
-                        var next = shown
-                        if on { next.insert(track.id) } else { next.remove(track.id) }
-                        app.shownTracks[space.id] = candidates.filter { next.contains($0.id) }.map(\.id)
-                    }
-                )) {
-                    Text(LaneModel.title(track))
-                }
-            }
-            Divider()
-            Button("Show All") { app.shownTracks[space.id] = candidates.map(\.id) }
-            Button("Membrae's Pick") { app.shownTracks[space.id] = nil }
+        let shown = LaneSet.shownIDs(in: space, chosen: app.shownTracks[space.id])
+        Button {
+            isPresented = true
         } label: {
             HStack(spacing: 5) {
-                Text("\(shown.count) of \(candidates.count) tracks")
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary)
+                Text("\(shown.count) of \(candidates.count) tracks")
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .contentShape(Capsule())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()
         .glassEffect(.regular, in: Capsule())
         .help("Which tracks to draw")
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            ShownTracksPanel(space: space, candidates: candidates, shown: Set(shown))
+        }
+    }
+}
+
+/// Search by name, click to show or hide. The field has focus as soon as the panel opens.
+private struct ShownTracksPanel: View {
+    var space: Space
+    var candidates: [ProjectThread]
+    var shown: Set<UUID>
+
+    @Environment(AppModel.self) private var app
+    @State private var query = ""
+    @FocusState private var searching: Bool
+
+    private var matching: [ProjectThread] {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return candidates }
+        return candidates.filter { LaneModel.title($0).localizedCaseInsensitiveContains(text) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                TextField("Find a track", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(CraftFont.body)
+                    .focused($searching)
+                    .onSubmit {
+                        if let first = matching.first { toggle(first) }
+                    }
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(CraftColor.field))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(CraftColor.hairline))
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    if matching.isEmpty {
+                        Text("No track by that name.")
+                            .font(CraftFont.body)
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 8)
+                            .frame(height: 28)
+                    }
+                    ForEach(matching) { track in
+                        ShownTrackRow(track: track, isShown: shown.contains(track.id)) {
+                            toggle(track)
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 300)
+
+            Hairline()
+
+            HStack(spacing: 4) {
+                footerButton("Show All") { app.shownTracks[space.id] = candidates.map(\.id) }
+                footerButton("Membrae's Pick") { app.shownTracks[space.id] = nil }
+            }
+        }
+        .padding(8)
+        .frame(width: 280)
+        .onAppear { searching = true }
+    }
+
+    private func toggle(_ track: ProjectThread) {
+        var next = shown
+        if next.contains(track.id) { next.remove(track.id) } else { next.insert(track.id) }
+        app.shownTracks[space.id] = candidates.filter { next.contains($0.id) }.map(\.id)
+    }
+
+    private func footerButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(CraftFont.body)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .frame(height: 26)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ShownTrackRow: View {
+    var track: ProjectThread
+    var isShown: Bool
+    var action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(track.color.tint)
+                    .frame(width: 8, height: 8)
+                Text(LaneModel.title(track))
+                    .font(isShown ? .system(size: 13, weight: .medium) : CraftFont.body)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if isShown {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .background {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(hovering ? CraftColor.hover : Color.clear)
+                    .animation(Motion.hover, value: hovering)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityAddTraits(isShown ? .isSelected : [])
     }
 }
