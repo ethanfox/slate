@@ -914,10 +914,8 @@ final class AppModel {
         )
         draft.trackID = track.id
         draft.allowEdits = true
-        let attachments = ProjectCodeWorkspace.attachments(on: project)
-        if attachments.count == 1, let only = attachments.first {
-            draft.repositoryLocators = [only.locator.isEmpty ? only.title : only.locator]
-        }
+        // A session works in everything the Space has attached; the first folder is where it starts.
+        draft.repositoryLocators = ProjectCodeWorkspace.attachments(on: project).map { $0.locator.isEmpty ? $0.title : $0.locator }
         startRun(draft)
     }
 
