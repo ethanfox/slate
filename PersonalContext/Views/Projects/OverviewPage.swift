@@ -898,11 +898,18 @@ struct SpaceOverview: View {
                 .foregroundStyle(.secondary)
             switch step {
             case .task(let task):
+                let track = task.liveTracks.first { $0.id == project.activeTrackID } ?? task.liveTracks.first
                 nextRow(
                     title: task.displayTitle,
-                    place: task.stop?.displayTitle ?? task.liveTracks.first?.title ?? "",
-                    hand: { app.presentNewRun(origin: .task, project: project, task: task) },
-                    open: { app.present(.editTask(task)) }
+                    place: task.stop?.displayTitle ?? track?.title ?? "",
+                    open: { app.present(.editTask(task)) },
+                    work: {
+                        if let track {
+                            app.workOn(track, saying: "Work on the task \"\(task.displayTitle)\" (id \(task.id.uuidString)).")
+                        } else {
+                            app.presentNewRun(origin: .task, project: project, task: task)
+                        }
+                    }
                 )
             case .stop(let stop, let track):
                 let stops = track.orderedStops
@@ -910,8 +917,8 @@ struct SpaceOverview: View {
                 nextRow(
                     title: stop.displayTitle,
                     place: "Stop \(index + 1) of \(stops.count) on \(track.title.isEmpty ? "Untitled" : track.title)",
-                    hand: { app.workOn(track, saying: stop.runBrief) },
-                    open: { app.open(stop, newTab: false) }
+                    open: { app.open(stop, newTab: false) },
+                    work: { app.workOn(track, saying: stop.runBrief) }
                 )
             case .nothing:
                 Text("Nothing open. Tell Membrae what you want to do next.")
@@ -926,43 +933,38 @@ struct SpaceOverview: View {
         .overlay(alignment: .bottom) { Hairline() }
     }
 
-    private func nextRow(title: String, place: String, hand: @escaping () -> Void, open: @escaping () -> Void) -> some View {
+    /// The title opens the thing; the one button sends the track's session to work on it.
+    private func nextRow(title: String, place: String, open: @escaping () -> Void, work: @escaping () -> Void) -> some View {
         HStack(alignment: .center, spacing: 24) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 20, weight: .semibold))
-                    .tracking(-0.2)
-                    .fixedSize(horizontal: false, vertical: true)
-                if !place.isEmpty {
-                    Text(place)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+            Button(action: open) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 20, weight: .semibold))
+                        .tracking(-0.2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !place.isEmpty {
+                        Text(place)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 8) {
-                Button(action: hand) {
-                    Text("Hand to an Agent")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .frame(height: 30)
-                        .background(Color.accentColor, in: Capsule())
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                Button(action: open) {
-                    Text("Open")
-                        .font(.system(size: 13, weight: .medium))
-                        .padding(.horizontal, 14)
-                        .frame(height: 30)
-                        .background(CraftColor.elevated, in: Capsule())
-                        .overlay(Capsule().strokeBorder(CraftColor.hairline))
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
+            .buttonStyle(.plain)
+            .help("Open")
+            Button(action: work) {
+                Text("Work on It")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .frame(height: 30)
+                    .background(Color.accentColor, in: Capsule())
+                    .contentShape(Capsule())
             }
+            .buttonStyle(.plain)
             .fixedSize()
         }
     }
