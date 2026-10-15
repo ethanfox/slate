@@ -24,6 +24,8 @@ struct ChatInput: View {
     var draftKind = "composer"
     var draftObjectID = ""
     var draftRuntime = "-"
+    /// A session takes a message while its worker is on its turn and queues it; a chat does not.
+    var allowsSendWhileGenerating = false
 
     @Environment(AppModel.self) private var app
     @Environment(\.modelContext) private var context
@@ -41,7 +43,7 @@ struct ChatInput: View {
 
     private var canSend: Bool {
         hasContent
-            && !isGenerating
+            && (!isGenerating || allowsSendWhileGenerating)
             && attachments.allSatisfy(\.isReady)
             && !attachments.contains { if case .failed = $0.status { return true }; return false }
     }
@@ -73,7 +75,8 @@ struct ChatInput: View {
                 usage: providerID == TalkProvider.cursor.rawValue ? app.usage : nil,
                 onAttach: pickFiles,
                 onSend: send,
-                onStop: onStop
+                onStop: onStop,
+                alsoSend: allowsSendWhileGenerating
             )
 
             if let disclosure = attachments.compactMap(\.disclosure).first {
@@ -560,6 +563,7 @@ private struct ComposerToolbar: View {
     var onAttach: () -> Void
     var onSend: () -> Void
     var onStop: (() -> Void)?
+    var alsoSend = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -611,7 +615,8 @@ private struct ComposerToolbar: View {
                 canSend: canSend,
                 isGenerating: isGenerating,
                 onSend: onSend,
-                onStop: onStop
+                onStop: onStop,
+                alsoSend: alsoSend
             )
         }
         .padding(.horizontal, 14)
@@ -625,6 +630,8 @@ private struct ComposerSendButton: View {
     var isGenerating: Bool
     var onSend: () -> Void
     var onStop: (() -> Void)?
+    /// Show Send beside Stop while generating, for a composer that queues.
+    var alsoSend = false
 
     var body: some View {
         if isGenerating, let onStop {
@@ -638,7 +645,9 @@ private struct ComposerSendButton: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Stop")
-        } else {
+            .help("Stop the turn")
+        }
+        if !isGenerating || onStop == nil || alsoSend {
             Button(action: onSend) {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 12, weight: .semibold))

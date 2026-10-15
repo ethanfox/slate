@@ -9,6 +9,19 @@ struct ModelPicker: View {
     @State private var isPresented = false
 
     var body: some View {
+        if let agent = LocalAgent(rawValue: providerID) {
+            Text(agent.title)
+                .font(CraftFont.body)
+                .foregroundStyle(.secondary)
+                .frame(minHeight: 28)
+                .accessibilityLabel("Worker")
+                .accessibilityValue(agent.title)
+        } else {
+            picker
+        }
+    }
+
+    private var picker: some View {
         Button(action: present) {
             HStack(spacing: 6) {
                 if let mark = TalkProvider(rawValue: providerID)?.mark {

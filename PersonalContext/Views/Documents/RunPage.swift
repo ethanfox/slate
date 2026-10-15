@@ -9,6 +9,7 @@ struct RunPage: View {
     @Environment(\.openURL) private var openURL
     @State private var confirmDelete = false
     @State private var replyText = ""
+    @State private var attachments: [ComposerAttachment] = []
 
     var body: some View {
         if run.isSession {
@@ -95,7 +96,7 @@ struct RunPage: View {
         }
     }
 
-    /// The user's turn. ⌘↩ sends, and the same worker carries on with what it knew.
+    /// The user's turn, in the chats' own composer. Sending on the worker's turn queues; Stop ends the turn.
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
             if run.statusDetail == RunStore.quitMidTurnDetail {
@@ -114,8 +115,7 @@ struct RunPage: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
-                .padding(.horizontal, 12)
-                .padding(.top, 10)
+                .padding(.horizontal, 4)
             }
             if let queued = app.runCoordinator.queued[run.id] {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -136,62 +136,42 @@ struct RunPage: View {
                         .font(CraftFont.caption)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 12)
-                .padding(.top, 10)
+                .padding(.horizontal, 4)
             }
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField(run.status == .waiting ? "Your turn. Tell it what to do next." : "It goes when the turn ends, or Send Now stops the turn.", text: $replyText, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(CraftFont.chatBody)
-                    .lineLimit(1...8)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 14)
-                    .onSubmit(send)
-                if run.status == .running {
-                    Button {
-                        app.runCoordinator.interrupt(run)
-                    } label: {
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.primary)
-                            .frame(width: 26, height: 26)
-                            .background(CraftColor.elevated, in: Circle())
-                            .overlay(Circle().strokeBorder(CraftColor.hairline))
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Stop the worker's turn. The session stays.")
-                    .padding(.vertical, 8)
-                }
-                Button(action: send) {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 26, height: 26)
-                        .background(Color.accentColor, in: Circle())
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.return, modifiers: .command)
-                .disabled(replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .help(run.status == .waiting ? "Send (⌘↩)" : "Queue it for when the turn ends (⌘↩)")
-                .padding(8)
-            }
+            ChatInput(
+                text: $replyText,
+                modelID: .constant(""),
+                providerID: .constant(run.providerID),
+                allowsProviderChange: false,
+                placeholder: run.status == .waiting ? "Your turn. Tell it what to do next." : "It goes when the turn ends, or stop the turn to send it now.",
+                isGenerating: run.status == .running,
+                onSend: send,
+                composerOwnerID: run.id,
+                attachments: $attachments,
+                onStop: { app.runCoordinator.interrupt(run) },
+                draftKind: "session",
+                draftObjectID: run.id.uuidString,
+                allowsSendWhileGenerating: true
+            )
         }
-        .background(CraftColor.elevated, in: RoundedRectangle(cornerRadius: CraftRadius.composer, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: CraftRadius.composer, style: .continuous).strokeBorder(CraftColor.hairline))
-        .shadow(color: .black.opacity(0.07), radius: 15, y: 8)
     }
 
-    private func send() {
-        let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+    /// Attached files go by path: the worker runs on this Mac and can open them.
+    private func send(_ submission: ChatSubmission) -> Bool {
+        var text = submission.trimmedText
+        let store = FileStore.default(context: context)
+        let paths = submission.attachments.compactMap { ref in store.asset(id: ref.id).map { store.resolve($0).path } }
+        if !paths.isEmpty {
+            text += (text.isEmpty ? "" : "\n\n") + "Attached files:\n" + paths.map { "- \($0)" }.joined(separator: "\n")
+        }
+        guard !text.isEmpty else { return false }
         if run.status == .waiting {
             app.runCoordinator.reply(text, to: run, in: context)
         } else {
             app.runCoordinator.queue(text, for: run)
         }
-        replyText = ""
+        attachments = []
+        return true
     }
 
     private var jobBody: some View {
