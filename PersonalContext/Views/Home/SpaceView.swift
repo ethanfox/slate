@@ -324,10 +324,32 @@ struct SpaceSectionPills: View {
                 .help(section.title)
             }
             Spacer(minLength: 0)
+            if current == .overview {
+                if space.works || !space.collects {
+                    icon("wand.and.stars", help: "Tidy Up: Membrae proposes what to merge, retire, and delete") {
+                        app.presentNewRun(origin: .project, project: space, brief: ContextBuilder.cleanupBrief(for: space))
+                    }
+                }
+                icon("gearshape", help: "Settings") { app.toggleSpaceSettings() }
+            }
         }
         .padding(.horizontal, 48)
         .padding(.top, 24)
+        .padding(.bottom, 4)
         .background(CraftColor.canvas)
+    }
+
+    private func icon(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(help)
     }
 }
 

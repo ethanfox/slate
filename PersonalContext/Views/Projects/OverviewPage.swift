@@ -772,19 +772,6 @@ struct SpaceOverview: View {
         ScrollView {
             PageBody {
                 VStack(alignment: .leading, spacing: 36) {
-                    HStack(spacing: 4) {
-                        Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.tertiary)
-                        Spacer(minLength: 8)
-                        if works {
-                            iconButton("wand.and.stars", help: "Tidy Up: Membrae proposes what to merge, retire, and delete") {
-                                app.presentNewRun(origin: .project, project: project, brief: ContextBuilder.cleanupBrief(for: project))
-                            }
-                        }
-                        iconButton("gearshape", help: "Settings") { app.toggleSpaceSettings() }
-                    }
-                    .padding(.top, 8)
 
                     if !ownedWidgets.isEmpty {
                         block("widgets", "Widgets") {
@@ -829,7 +816,7 @@ struct SpaceOverview: View {
                     }
                 }
                 .padding(.horizontal, 48)
-                .padding(.top, 16)
+                .padding(.top, 6)
                 // Room to scroll the last row clear of the composer that floats over the page.
                 .padding(.bottom, 140)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1007,18 +994,6 @@ struct SpaceOverview: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func iconButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 28)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
-        .accessibilityLabel(help)
-    }
 
     /// Open tasks in the order to pick them up: the Next task, then what is under way, then the rest,
     /// with blocked ones last.
