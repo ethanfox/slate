@@ -143,24 +143,6 @@ struct RootView: View {
                     .glassEffect(.regular, in: Circle())
                     .help(sidebarHidden ? "Show Sidebar" : "Hide Sidebar")
                     .accessibilityLabel(sidebarHidden ? "Show Sidebar" : "Hide Sidebar")
-                    if let space = openSpace, app.tab(for: space.id) != .overview {
-                        Button {
-                            app.open(space, tab: .overview, newTab: false)
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "chevron.left")
-                                    .font(.system(size: 10, weight: .semibold))
-                                Text(space.name)
-                                    .lineLimit(1)
-                            }
-                            .padding(.horizontal, 10)
-                            .frame(height: 28)
-                            .contentShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .glassEffect(.regular, in: Capsule())
-                        .help("Back to \(space.name)")
-                    }
                     WindowTabStrip()
                     Color.clear
                         .frame(minWidth: 16)
