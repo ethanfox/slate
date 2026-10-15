@@ -59,6 +59,8 @@ struct ProjectTasksBoard: View {
         .onChange(of: app.inspectorOpen) { _, open in
             if !open { app.selectedTaskID = nil }
         }
+        // The pane belongs to this view. Leaving it takes the pick, and the pane, with it.
+        .onDisappear { app.selectTask(nil) }
     }
 
     private var boardScroll: some View {

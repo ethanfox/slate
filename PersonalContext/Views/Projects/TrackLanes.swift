@@ -596,6 +596,11 @@ struct TrackLanesPage: View {
             app.selectJunction(nil)
         }
         .onAppear { NavTrace.event("tracks.lanes appear count=\(lanes.count)") }
+        // The pane belongs to this view. Leaving it takes the pick, and the pane, with it.
+        .onDisappear {
+            app.selectStop(nil)
+            app.selectJunction(nil)
+        }
     }
 }
 
