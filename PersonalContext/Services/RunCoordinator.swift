@@ -751,6 +751,8 @@ final class RunCoordinator {
             guard app.hasAPIKey else {
                 throw CursorAPIError(status: 0, message: "Add a Cursor API key in Settings.")
             }
+        case .apple:
+            throw CursorAPIError(status: 0, message: "Apple Intelligence can’t do Runs. Connect ChatGPT, Cursor, Claude Code, or Codex in Settings.")
         default:
             throw CursorAPIError(status: 0, message: "Choose a provider in Settings.")
         }

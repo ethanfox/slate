@@ -235,6 +235,7 @@
 		F11E5704B0000007 /* AttachmentCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000007 /* AttachmentCapabilities.swift */; };
 		F11E5704B0000008 /* AttachmentRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000008 /* AttachmentRouting.swift */; };
 		F11E5704B0000009 /* GenericChatProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000009 /* GenericChatProvider.swift */; };
+		A1F0DE01B0000001 /* AppleChatProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0DE01A0000001 /* AppleChatProvider.swift */; };
 		F11E5704B000000A /* ComposerAttachments.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A000000A /* ComposerAttachments.swift */; };
 		F11E5704B0000013 /* ComposerPaste.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000013 /* ComposerPaste.swift */; };
 		F11E5704B0000014 /* ComposerPasteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5704A0000014 /* ComposerPasteTests.swift */; };
@@ -372,6 +373,7 @@
 		F11E5704A0000007 /* AttachmentCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentCapabilities.swift; sourceTree = "<group>"; };
 		F11E5704A0000008 /* AttachmentRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentRouting.swift; sourceTree = "<group>"; };
 		F11E5704A0000009 /* GenericChatProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericChatProvider.swift; sourceTree = "<group>"; };
+		A1F0DE01A0000001 /* AppleChatProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleChatProvider.swift; sourceTree = "<group>"; };
 		F11E5704A000000A /* ComposerAttachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerAttachments.swift; sourceTree = "<group>"; };
 		F11E5704A0000013 /* ComposerPaste.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerPaste.swift; sourceTree = "<group>"; };
 		F11E5704A0000014 /* ComposerPasteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerPasteTests.swift; sourceTree = "<group>"; };
@@ -737,6 +739,7 @@
 				F11E5704A0000007 /* AttachmentCapabilities.swift */,
 				F11E5704A0000008 /* AttachmentRouting.swift */,
 				F11E5704A0000009 /* GenericChatProvider.swift */,
+				A1F0DE01A0000001 /* AppleChatProvider.swift */,
 				T17E010000000009 /* NavTrace.swift */,
 				E1A2B3C4D5E6F708192A3B07 /* DraftTrace.swift */,
 				B81A0C1D2E3F405162738A07 /* RunToolPolicy.swift */,
@@ -1416,6 +1419,7 @@
 				F11E5704B0000007 /* AttachmentCapabilities.swift in Sources */,
 				F11E5704B0000008 /* AttachmentRouting.swift in Sources */,
 				F11E5704B0000009 /* GenericChatProvider.swift in Sources */,
+				A1F0DE01B0000001 /* AppleChatProvider.swift in Sources */,
 				F11E5704B000000A /* ComposerAttachments.swift in Sources */,
 				F11E5704B000000B /* SettingsCompatiblePage.swift in Sources */,
 				E1A2B3C4D5E6F708192A3B08 /* DraftTrace.swift in Sources */,
