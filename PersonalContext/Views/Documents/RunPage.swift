@@ -736,6 +736,10 @@ private struct SessionStops: View {
                     .padding(.vertical, 8)
                 }
                 .scrollContentBackground(.hidden)
+                if track.hasBranch, track.status != .completed {
+                    Hairline()
+                    intoMain(track)
+                }
             }
             .frame(maxHeight: .infinity, alignment: .top)
         } else {
@@ -744,6 +748,38 @@ private struct SessionStops: View {
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// The last stop of a track on a branch: its branch into main, with the button that does it.
+    private func intoMain(_ track: ProjectThread) -> some View {
+        let base = track.baseBranch.isEmpty ? "main" : track.baseBranch
+        let conflicts = track.mergeConflicts
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Into \(base)")
+                .font(.system(size: 13, weight: .semibold))
+            Text(conflicts.isEmpty
+                 ? "The work is on \(track.branch). Bring it into \(base) to use it."
+                 : "\(conflicts.count) file\(conflicts.count == 1 ? "" : "s") conflict with \(base).")
+                .font(.system(size: 11))
+                .foregroundStyle(conflicts.isEmpty ? Color.secondary : Color.red)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                app.bringIntoMain(track)
+            } label: {
+                Text("Bring into \(base)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .background(Color.accentColor, in: Capsule())
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(run.status == .running)
+            .help(run.status == .running ? "Wait for your turn" : "Merge \(track.branch) into \(base)")
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func row(_ stop: TrackStop, isCurrent: Bool) -> some View {
