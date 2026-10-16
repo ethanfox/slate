@@ -193,6 +193,9 @@ final class AppModel {
     var selectedJunctionID: UUID?
     /// The "Into main" stop of a track on a branch, picked on the Tracks view.
     var selectedMergeTrackID: UUID?
+    /// What the user has typed and attached in each session's composer, kept while they look at other tabs.
+    var sessionDraftText: [UUID: String] = [:]
+    var sessionDraftAttachments: [UUID: [ComposerAttachment]] = [:]
     /// The tracks each Space's Tracks view draws. A Space not listed draws Membrae's pick.
     var shownTracks: [UUID: [UUID]] {
         didSet { AppModel.save(shownTracks, key: Keys.shownTracks) }

@@ -8,8 +8,21 @@ struct RunPage: View {
     @Environment(\.modelContext) private var context
     @Environment(\.openURL) private var openURL
     @State private var confirmDelete = false
-    @State private var replyText = ""
-    @State private var attachments: [ComposerAttachment] = []
+    /// The session's unsent message lives on the app, so leaving the tab keeps it.
+    private var replyText: String {
+        get { app.sessionDraftText[run.id] ?? "" }
+        nonmutating set { app.sessionDraftText[run.id] = newValue.isEmpty ? nil : newValue }
+    }
+    private var attachments: [ComposerAttachment] {
+        get { app.sessionDraftAttachments[run.id] ?? [] }
+        nonmutating set { app.sessionDraftAttachments[run.id] = newValue.isEmpty ? nil : newValue }
+    }
+    private var replyTextBinding: Binding<String> {
+        Binding(get: { replyText }, set: { replyText = $0 })
+    }
+    private var attachmentsBinding: Binding<[ComposerAttachment]> {
+        Binding(get: { attachments }, set: { attachments = $0 })
+    }
 
     var body: some View {
         if run.isSession {
@@ -146,7 +159,7 @@ struct RunPage: View {
                 .padding(.horizontal, 4)
             }
             ChatInput(
-                text: $replyText,
+                text: replyTextBinding,
                 modelID: .constant(""),
                 providerID: .constant(run.providerID),
                 allowsProviderChange: false,
@@ -154,7 +167,7 @@ struct RunPage: View {
                 isGenerating: run.status == .running,
                 onSend: send,
                 composerOwnerID: run.id,
-                attachments: $attachments,
+                attachments: attachmentsBinding,
                 onStop: { app.runCoordinator.interrupt(run) },
                 draftKind: "session",
                 draftObjectID: run.id.uuidString,
@@ -434,7 +447,7 @@ struct RunPage: View {
                 AssistantMarkdown(text: run.resultSummary)
                     .textSelection(.enabled)
             }
-            TextField("Your answer", text: $replyText, axis: .vertical)
+            TextField("Your answer", text: replyTextBinding, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(CraftFont.body)
                 .lineLimit(2...8)
