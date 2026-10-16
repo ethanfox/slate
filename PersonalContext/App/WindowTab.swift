@@ -74,6 +74,8 @@ struct WindowTab: Identifiable, Hashable, Codable {
                 selectedConversation.map { .conversation($0) } ?? .spaceChat(id)
             case .runs:
                 selectedRun.map { .run($0) } ?? .spaceRuns(id)
+            case .sessions:
+                selectedRun.map { .run($0) } ?? .spaceSessions(id)
             }
         }
     }
@@ -156,6 +158,7 @@ enum TabViewKey: Hashable {
     case spaceTasks(UUID)
     case spaceChat(UUID)
     case spaceRuns(UUID)
+    case spaceSessions(UUID)
     case spaceThreads(UUID)
     case spaceNotes(UUID)
     case spaceDecisions(UUID)
@@ -387,7 +390,7 @@ extension AppModel {
                 WindowTab(
                     id: UUID(),
                     destination: .space(project.id),
-                    section: .runs,
+                    section: run.isSession ? .sessions : .runs,
                     selectedThread: nil,
                     selectedNote: nil,
                     selectedDecision: nil,

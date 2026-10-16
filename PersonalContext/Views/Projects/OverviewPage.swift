@@ -6,11 +6,13 @@ struct OverviewPage: View {
     @Bindable var project: Project
     /// A full list showing in place of the overview: all tracks, all decisions, and so on.
     @State var listing: TitleIndexKind?
+    /// With a Run listing: the track sessions, which have a section of their own, instead of one-off Runs.
+    var sessions = false
 
     var body: some View {
         Group {
             if let listing {
-                ProjectListPage(project: project, kind: listing) { self.listing = nil }
+                ProjectListPage(project: project, kind: listing, sessions: listing == .run ? sessions : false) { self.listing = nil }
             } else {
                 SpaceOverview(project: project) { listing = $0 }
             }
@@ -1132,15 +1134,18 @@ private struct CleanupPlanCard: View {
 struct ProjectListPage: View {
     var project: Project
     var kind: TitleIndexKind
+    /// For Runs: list the track sessions instead of the one-off Runs.
+    var sessions = false
     var close: () -> Void
 
     @Environment(AppModel.self) private var app
     @Query private var rows: [TitleIndex]
     @State private var search = ""
 
-    init(project: Project, kind: TitleIndexKind, close: @escaping () -> Void) {
+    init(project: Project, kind: TitleIndexKind, sessions: Bool = false, close: @escaping () -> Void) {
         self.project = project
         self.kind = kind
+        self.sessions = sessions
         self.close = close
         let key = project.id.uuidString.lowercased()
         let raw = kind.rawValue
@@ -1151,7 +1156,17 @@ struct ProjectListPage: View {
         )
     }
 
+    /// Runs and sessions share an index kind; the Space knows which runs are sessions.
+    private var listed: [TitleIndex] {
+        guard kind == .run else { return rows }
+        let sessionIDs = Set(project.runs.filter(\.isSession).map(\.id))
+        return rows.filter { sessionIDs.contains($0.id) == sessions }
+    }
+
+    private var plural: String { sessions ? "Sessions" : kind.plural }
+
     private var shown: [TitleIndex] {
+        let rows = listed
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         let matching = query.isEmpty ? rows : rows.filter { $0.title.localizedCaseInsensitiveContains(query) }
         // Pinned first, then newest.
@@ -1162,16 +1177,16 @@ struct ProjectListPage: View {
         ScrollView {
             PageBody {
                 VStack(alignment: .leading, spacing: 16) {
-                    SpaceSectionPills(space: project, current: kind.sectionTab)
+                    SpaceSectionPills(space: project, current: sessions ? .sessions : kind.sectionTab)
                         .padding(.bottom, 8)
 
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(kind.plural)
+                        Text(plural)
                             .font(.system(size: 28, weight: .semibold))
-                        Text("\(rows.count)")
+                        Text("\(listed.count)")
                             .font(CraftFont.body)
                             .foregroundStyle(.tertiary)
-                        if kind == .run {
+                        if kind == .run, !sessions {
                             Spacer(minLength: 16)
                             Button {
                                 app.presentNewRun(origin: .project, project: project)
@@ -1192,7 +1207,7 @@ struct ProjectListPage: View {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 12))
                             .foregroundStyle(.tertiary)
-                        TextField("Search \(kind.plural.lowercased())", text: $search)
+                        TextField("Search \(plural.lowercased())", text: $search)
                             .textFieldStyle(.plain)
                     }
                     .padding(.horizontal, 12)
@@ -1203,7 +1218,7 @@ struct ProjectListPage: View {
 
                     let items = shown
                     if items.isEmpty {
-                        EmptyLine(text: rows.isEmpty ? "No \(kind.plural.lowercased()) in this Space yet." : "Nothing matches.")
+                        EmptyLine(text: listed.isEmpty ? "No \(plural.lowercased()) in this Space yet." : "Nothing matches.")
                     } else if kind == .track, !project.themes.isEmpty {
                         // Tracks are listed under their themes; the ones with no theme come last.
                         let themeOf = Dictionary(uniqueKeysWithValues: project.threads.compactMap { track in

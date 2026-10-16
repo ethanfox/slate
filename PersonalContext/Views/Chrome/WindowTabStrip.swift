@@ -327,7 +327,7 @@ struct WindowTabStrip: View {
         case .runs:
             return TabLabel(title: "Runs", symbol: "play.circle")
         case .run(let id):
-            return TabLabel(title: runTitle(id), symbol: "play.circle")
+            return TabLabel(title: runTitle(id), symbol: runSymbol(id))
         case .settings:
             return TabLabel(title: "Settings", symbol: "gearshape")
         case .library:
@@ -389,7 +389,7 @@ struct WindowTabStrip: View {
             case .run(let runID):
                 return TabLabel(
                     title: runTitle(runID),
-                    symbol: "play.circle",
+                    symbol: runSymbol(runID),
                     projectName: projectName,
                     projectSymbol: projectSymbol
                 )
@@ -407,6 +407,16 @@ struct WindowTabStrip: View {
                     projectName: projectName,
                     projectSymbol: projectSymbol
                 )
+            case .spaceSessions:
+                return TabLabel(
+                    title: "\(projectName): Sessions",
+                    symbol: SpaceTab.sessions.symbol,
+                    projectName: projectName,
+                    projectSymbol: projectSymbol
+                )
+            case .spaceThreads, .spaceNotes, .spaceDecisions, .spaceChat:
+                // The Space's name, with the icon of the section that is open.
+                return TabLabel(title: projectName, symbol: tab.section.symbol, projectName: projectName, projectSymbol: projectSymbol)
             default:
                 return TabLabel(title: projectName, symbol: projectSymbol)
             }
@@ -439,6 +449,14 @@ struct WindowTabStrip: View {
         var descriptor = FetchDescriptor<Conversation>(predicate: #Predicate { $0.id == match })
         descriptor.fetchLimit = 1
         return try? context.fetch(descriptor).first?.title
+    }
+
+    /// A session is a clock; a one-off Run is a play button.
+    private func runSymbol(_ id: UUID) -> String {
+        let match = id
+        var descriptor = FetchDescriptor<AgentRun>(predicate: #Predicate { $0.id == match })
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor).first)?.isSession == true ? SpaceTab.sessions.symbol : "play.circle"
     }
 
     private func runTitle(_ id: UUID) -> String {

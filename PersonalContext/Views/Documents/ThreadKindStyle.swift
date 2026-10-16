@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum TrackStyle {
-    static let symbol = "arrow.triangle.branch"
+    static let symbol = "point.topleft.down.to.point.bottomright.curvepath"
 }
 
 extension ThreadKind {
