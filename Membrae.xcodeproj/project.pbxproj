@@ -101,6 +101,7 @@
 		B81A0C1D2E3F405162738A0A /* RunGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A09 /* RunGateway.swift */; };
 		B81A0C1D2E3F405162738A0C /* RunCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A0B /* RunCoordinator.swift */; };
 		D4E5F60718293A4B5C6D7F80 /* TrackBranches.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D4E5F60718293A4B5C6D7F /* TrackBranches.swift */; };
+		B2C3D4E5F6071829304A5B6C /* ClaudeCodeChatProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829304A5B /* ClaudeCodeChatProvider.swift */; };
 		B81A0C1D2E3F405162738A0E /* RunAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A0D /* RunAdapters.swift */; };
 		B81A0C1D2E3F405162738A10 /* RunsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A0F /* RunsView.swift */; };
 		B81A0C1D2E3F405162738A12 /* NewRunSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A11 /* NewRunSheet.swift */; };
@@ -385,6 +386,7 @@
 		B81A0C1D2E3F405162738A09 /* RunGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunGateway.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A0B /* RunCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunCoordinator.swift; sourceTree = "<group>"; };
 		C3D4E5F60718293A4B5C6D7F /* TrackBranches.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackBranches.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6071829304A5B /* ClaudeCodeChatProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeCodeChatProvider.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A0D /* RunAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunAdapters.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A0F /* RunsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunsView.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A11 /* NewRunSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewRunSheet.swift; sourceTree = "<group>"; };
@@ -743,6 +745,7 @@
 				B81A0C1D2E3F405162738A09 /* RunGateway.swift */,
 				B81A0C1D2E3F405162738A0B /* RunCoordinator.swift */,
 				C3D4E5F60718293A4B5C6D7F /* TrackBranches.swift */,
+				A1B2C3D4E5F6071829304A5B /* ClaudeCodeChatProvider.swift */,
 				B81A0C1D2E3F405162738A0D /* RunAdapters.swift */,
 				DF040EA1BCECFFBD441F0F91 /* ChatGPTProvider.swift */,
 				E8B24C96AAB593E09C71D659 /* ChatGPTSignIn.swift */,
@@ -1424,6 +1427,7 @@
 				B81A0C1D2E3F405162738A0A /* RunGateway.swift in Sources */,
 				B81A0C1D2E3F405162738A0C /* RunCoordinator.swift in Sources */,
 				D4E5F60718293A4B5C6D7F80 /* TrackBranches.swift in Sources */,
+				B2C3D4E5F6071829304A5B6C /* ClaudeCodeChatProvider.swift in Sources */,
 				B81A0C1D2E3F405162738A0E /* RunAdapters.swift in Sources */,
 				B81A0C1D2E3F405162738A10 /* RunsView.swift in Sources */,
 				B81A0C1D2E3F405162738A12 /* NewRunSheet.swift in Sources */,

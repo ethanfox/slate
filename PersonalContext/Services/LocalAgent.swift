@@ -88,6 +88,12 @@ struct LocalAgentRequest: Equatable, Sendable {
     var resumeSessionID: String?
     /// Folders besides `directory` the tool may work in.
     var extraDirectories: [String] = []
+    /// A chat turn: Membrae and the web only, never a file change or a command.
+    var chatOnly = false
+    /// The model to use, by the tool's own name. Empty is the tool's default.
+    var model = ""
+    /// Added to the tool's own instructions.
+    var systemPrompt = ""
 }
 
 struct LocalAgentError: LocalizedError, Sendable {
@@ -119,6 +125,15 @@ extension LocalAgent {
             var arguments = ["-p", request.prompt, "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
             if let session = request.resumeSessionID, !session.isEmpty {
                 arguments += ["--resume", session]
+            }
+            if !request.model.isEmpty {
+                arguments += ["--model", request.model]
+            }
+            if !request.systemPrompt.isEmpty {
+                arguments += ["--append-system-prompt", request.systemPrompt]
+            }
+            if request.chatOnly {
+                arguments += ["--disallowedTools", "Bash,Edit,Write,MultiEdit,NotebookEdit"]
             }
             var allowed: [String] = ["WebSearch", "WebFetch"]
             if request.allowEdits {

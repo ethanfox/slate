@@ -22,6 +22,16 @@ enum ChatProviderFactory {
                 endpoint: UserDefaults.standard.string(forKey: Keys.compatibleEndpoint) ?? "",
                 apiKey: KeychainStore.read(.compatibleAPIKey)
             )
+        case .claudeCode:
+            #if DEBUG
+            return ClaudeCodeChatProvider(workspace: workspace)
+            #else
+            return UnavailableChatProvider(
+                id: conversation.providerID,
+                name: "Claude Code",
+                message: "Claude Code chat is only in development builds. Choose another model for this chat."
+            )
+            #endif
         case .unconfigured, .none:
             return UnavailableChatProvider(
                 id: conversation.providerID,

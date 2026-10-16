@@ -725,6 +725,9 @@ final class AppModel {
         if !compatibleEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             list.append(.compatible)
         }
+        #if DEBUG
+        if isConnected(LocalAgent.claudeCode) { list.append(TalkProvider.claudeCode) }
+        #endif
         return list
     }
 
@@ -738,6 +741,8 @@ final class AppModel {
                 return defaultModelID
             case .compatible:
                 return compatibleModelID
+            case .claudeCode:
+                return claudeCodeChatModelID
             case .unconfigured:
                 return ""
             }
@@ -750,6 +755,8 @@ final class AppModel {
                 defaultModelID = newValue
             case .compatible:
                 compatibleModelID = newValue
+            case .claudeCode:
+                claudeCodeChatModelID = newValue
             case .unconfigured:
                 break
             }
@@ -774,9 +781,17 @@ final class AppModel {
                 list.insert((id: compatibleModelID, name: compatibleModelID), at: 0)
             }
             return list
+        case .claudeCode:
+            return ClaudeCodeChatProvider.models
         case .none:
             return []
         }
+    }
+
+    /// The Claude Code model new chats start with.
+    var claudeCodeChatModelID: String {
+        get { UserDefaults.standard.string(forKey: "claudeCodeChatModelID") ?? "sonnet" }
+        set { UserDefaults.standard.set(newValue, forKey: "claudeCodeChatModelID") }
     }
 
     func modelName(for id: String, providerID: String? = nil) -> String {
@@ -788,6 +803,8 @@ final class AppModel {
             return models.first(where: { $0.id == id })?.displayName ?? id
         case .compatible:
             return compatibleModels.first(where: { $0.id == id })?.name ?? id
+        case .claudeCode:
+            return ClaudeCodeChatProvider.models.first(where: { $0.id == id })?.name ?? id
         default:
             if let name = chatGPTModels.first(where: { $0.id == id })?.displayName { return name }
             return models.first { $0.id == id }?.displayName ?? id

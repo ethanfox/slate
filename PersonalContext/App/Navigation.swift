@@ -254,6 +254,8 @@ enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
     case chatgpt
     case cursor
     case compatible
+    /// The user's own Claude Code, as a chat model. Offered in debug builds only.
+    case claudeCode = "claude-code-chat"
 
     var id: String { rawValue }
 
@@ -263,6 +265,7 @@ enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
         case .chatgpt: "ChatGPT"
         case .cursor: "Cursor"
         case .compatible: "Compatible endpoint"
+        case .claudeCode: "Claude Code"
         }
     }
 
@@ -272,6 +275,7 @@ enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
         case .chatgpt: .chatgpt
         case .cursor: .cursor
         case .compatible: nil
+        case .claudeCode: nil
         }
     }
 }

@@ -50,6 +50,9 @@ enum AttachmentCapabilityStore {
                 nativeDocuments: isOpenRouter(endpoint),
                 extraction: true
             )
+        case .claudeCode:
+            // Claude Code opens each file itself, by its path.
+            return AdapterCapabilities(images: true, nativeDocuments: true, extraction: true)
         case .unconfigured:
             return AdapterCapabilities(images: false, nativeDocuments: false, extraction: false)
         }
@@ -206,6 +209,8 @@ enum MaintainedModelCapabilities {
             return chatGPT[key] ?? datedFamily(key, in: chatGPT)
         case .cursor:
             return cursor[key] ?? datedFamily(key, in: cursor)
+        case .claudeCode:
+            return visionFiles
         case .compatible, .unconfigured:
             return nil
         }
