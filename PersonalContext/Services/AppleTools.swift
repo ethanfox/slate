@@ -154,7 +154,7 @@ final class AppleToolBox {
         .sorted { $0.score > $1.score }
         .prefix(3)
         guard !ranked.isEmpty else { return "No tool does that." }
-        report?(.tool(name: "find_tool", status: "completed", id: UUID().uuidString, detail: "Looked for a tool to \(want)", sources: []))
+        report?(.tool(name: "find_tool", status: "completed", id: UUID().uuidString, detail: "Found " + ranked.compactMap { $0.tool["name"] as? String }.joined(separator: ", "), sources: []))
         return ranked.map { Self.summary(of: $0.tool) }.joined(separator: "\n\n")
     }
 
@@ -242,7 +242,7 @@ struct AppleCreateTaskTool: Tool {
     @Generable
     struct Arguments {
         var title: String
-        @Guide(description: "Due date as YYYY-MM-DD")
+        @Guide(description: "Due date as YYYY-MM-DD, only when the user gave one")
         var due: String?
         @Guide(description: "Space id, when the chat is in no Space")
         var spaceID: String?
@@ -250,9 +250,34 @@ struct AppleCreateTaskTool: Tool {
 
     func call(arguments: Arguments) async throws -> String {
         var values: [String: String] = ["title": arguments.title]
-        if let due = arguments.due, !due.isEmpty { values["due"] = due }
+        var unread: String?
+        if let due = arguments.due?.trimmingCharacters(in: .whitespacesAndNewlines), !due.isEmpty {
+            if let day = Self.day(from: due) {
+                values["due"] = day
+            } else {
+                unread = due
+            }
+        }
         if let space = arguments.spaceID, !space.isEmpty { values["space_id"] = space }
-        return await box.call("create_task", values)
+        let result = await box.call("create_task", values)
+        guard let unread, !result.hasPrefix("Error:") else { return result }
+        return result + "\nThe task has no due date: “\(unread)” is not a date. Ask the user for one if they gave it."
+    }
+
+    /// A day the model wrote as a date or in words, such as tomorrow or next Friday, as YYYY-MM-DD.
+    /// Small models fill optional fields with placeholders, so anything else is no date.
+    static func day(from text: String) -> String? {
+        let format = DateFormatter()
+        format.locale = Locale(identifier: "en_US_POSIX")
+        format.timeZone = .current
+        format.dateFormat = "yyyy-MM-dd"
+        if text.count >= 10, format.date(from: String(text.prefix(10))) != nil {
+            return String(text.prefix(10))
+        }
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue),
+              let date = detector.firstMatch(in: text, range: NSRange(text.startIndex..., in: text))?.date
+        else { return nil }
+        return format.string(from: date)
     }
 }
 

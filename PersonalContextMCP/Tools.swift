@@ -66,7 +66,15 @@ struct Args {
         if let date = iso.date(from: value) { return .some(date) }
         iso.formatOptions = [.withInternetDateTime]
         if let date = iso.date(from: value) { return .some(date) }
-        throw ToolError("\(key) must be an ISO-8601 date.")
+        // A bare day or a time without a zone is in the Mac's zone.
+        let local = DateFormatter()
+        local.locale = Locale(identifier: "en_US_POSIX")
+        local.timeZone = .current
+        for format in ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd"] {
+            local.dateFormat = format
+            if let date = local.date(from: value) { return .some(date) }
+        }
+        throw ToolError("\(key) must be an ISO-8601 date, such as 2026-01-31T15:00:00 or 2026-01-31.")
     }
 
     func strings(_ key: String) throws -> [String]? {
