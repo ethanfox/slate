@@ -193,6 +193,8 @@ final class AppModel {
     var selectedJunctionID: UUID?
     /// The "Into main" stop of a track on a branch, picked on the Tracks view.
     var selectedMergeTrackID: UUID?
+    /// What happened the last time each track was brought into main, shown beside its button until the next try.
+    var mergeNotes: [UUID: String] = [:]
     /// What the user has typed and attached in each session's composer, kept while they look at other tabs.
     var sessionDraftText: [UUID: String] = [:]
     var sessionDraftAttachments: [UUID: [ComposerAttachment]] = [:]
@@ -260,11 +262,12 @@ final class AppModel {
             flash("The session is still working. Bring the track in when it is your turn.")
             return
         }
-        flash("Bringing \(track.branch) into \(base)…")
+        let id = track.id
+        mergeNotes[id] = "Bringing it into \(base)…"
         Task {
             do {
                 guard let repository = await TrackBranches.mainRepository(ofWorktree: track.worktreePath) else {
-                    flash("The checkout for \(track.branch) is gone from \(track.worktreePath).")
+                    mergeNotes[id] = "Couldn't find this track's copy at \(track.worktreePath)."
                     return
                 }
                 switch try await TrackBranches.mergeIntoBase(branch: track.branch, base: base, repository: repository) {
@@ -272,18 +275,18 @@ final class AppModel {
                     track.mergeConflicts = []
                     if track.orderedStops.allSatisfy(\.isDone) { track.status = .completed }
                     try? context.save()
-                    flash("Brought \(track.branch) into \(base).")
+                    mergeNotes[id] = "Done. It's in \(base). Quit and reopen Membrae to use it."
                 case .dirty:
-                    flash("Your checkout of \(base) has uncommitted changes. Commit or stash them, then bring the track in.")
+                    mergeNotes[id] = "Not merged. Files this track changes also have unsaved edits in your own folder. Save or discard those edits, then try again."
                 case .elsewhere(let current):
-                    flash("Your checkout is on \(current), not \(base). Check out \(base) first.")
+                    mergeNotes[id] = "Not merged. Your folder is on \(current), not \(base). Switch it to \(base), then try again."
                 case .conflicts(let files):
                     track.mergeConflicts = files
                     try? context.save()
-                    flash("\(files.count) file\(files.count == 1 ? "" : "s") conflict with \(base). The track's signal lists them.")
+                    mergeNotes[id] = "Not merged. \(files.count) file\(files.count == 1 ? " was" : "s were") changed both here and in \(base). Send the session to reconcile them."
                 }
             } catch {
-                flash(error.localizedDescription)
+                mergeNotes[id] = "Not merged. \(error.localizedDescription)"
             }
         }
     }

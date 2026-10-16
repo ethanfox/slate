@@ -86,6 +86,15 @@ struct ThreadPage: View {
                 .foregroundStyle(.secondary)
                 .padding(.top, 6)
 
+            if let note = app.mergeNotes[thread.id] {
+                Text(note)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(note.hasPrefix("Not merged") ? Color.red : Color.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .padding(.top, 8)
+            }
+
             MarkdownEditor(text: $thread.body, minHeight: 360, findField: .body, traceKind: "thread", traceObjectID: thread.id.uuidString)
                 .padding(.top, 16)
                 .findAnchor(.body)

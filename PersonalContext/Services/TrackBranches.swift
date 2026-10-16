@@ -114,12 +114,11 @@ enum TrackBranches {
     static func mergeIntoBase(branch: String, base: String, repository: String) async throws -> MergeOutcome {
         let current = await baseBranch(in: repository)
         if current != base { return .elsewhere(current) }
-        let status = try await GitRelay.run(["status", "--porcelain"], in: repository)
-        if status.status == 0, !status.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .dirty
-        }
         let merge = try await GitRelay.run(["merge", "--no-ff", "--no-edit", branch], in: repository)
         if merge.status == 0 { return .merged }
+        if (merge.output + merge.error).contains("would be overwritten") {
+            return .dirty
+        }
         let conflicts = (try? await GitRelay.run(["diff", "--name-only", "--diff-filter=U"], in: repository))?.output
             .split(whereSeparator: \.isNewline).map(String.init).filter { !$0.isEmpty } ?? []
         _ = try? await GitRelay.run(["merge", "--abort"], in: repository)

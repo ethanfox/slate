@@ -757,12 +757,18 @@ private struct SessionStops: View {
         return VStack(alignment: .leading, spacing: 8) {
             Text("Into \(base)")
                 .font(.system(size: 13, weight: .semibold))
-            Text(conflicts.isEmpty
-                 ? "The work is on \(track.branch). Bring it into \(base) to use it."
-                 : "\(conflicts.count) file\(conflicts.count == 1 ? "" : "s") conflict with \(base).")
-                .font(.system(size: 11))
-                .foregroundStyle(conflicts.isEmpty ? Color.secondary : Color.red)
-                .fixedSize(horizontal: false, vertical: true)
+            if let note = app.mergeNotes[track.id] {
+                Text(note)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(note.hasPrefix("Not merged") ? Color.red : Color.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            } else if !conflicts.isEmpty {
+                Text("\(conflicts.count) file\(conflicts.count == 1 ? "" : "s") changed both here and in \(base).")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Button {
                 app.bringIntoMain(track)
             } label: {
