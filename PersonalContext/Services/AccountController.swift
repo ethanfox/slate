@@ -34,6 +34,45 @@ struct AccountSummary: Decodable, Equatable {
     }
 }
 
+/// One chat the user allowed: when, how recently it was used, and when its access ends.
+struct AccountConnection: Decodable, Identifiable, Equatable {
+    var id: String
+    var client: String
+    var approvedAt: String
+    var lastUsedAt: String
+    var expiresAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, client
+        case approvedAt = "approved_at"
+        case lastUsedAt = "last_used_at"
+        case expiresAt = "expires_at"
+    }
+}
+
+/// One thing a chat read or wrote.
+struct AccountActivity: Decodable, Identifiable, Equatable {
+    var at: String
+    var connectionID: String
+    var client: String
+    var tool: String
+    var spaceID: String
+    var spaceName: String
+    var recordID: String
+    var isWrite: Bool
+
+    var id: String { at + tool + recordID }
+
+    enum CodingKeys: String, CodingKey {
+        case at, client, tool
+        case connectionID = "connection_id"
+        case spaceID = "space_id"
+        case spaceName = "space_name"
+        case recordID = "record_id"
+        case isWrite = "is_write"
+    }
+}
+
 struct AccountError: LocalizedError {
     var message: String
     init(_ message: String) { self.message = message }
@@ -49,6 +88,8 @@ final class AccountController {
     private(set) var accountID: String
     private(set) var deviceID: String
     private(set) var summary: AccountSummary?
+    private(set) var connections: [AccountConnection] = []
+    private(set) var activity: [String: [AccountActivity]] = [:]
 
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private let session = URLSession(configuration: .ephemeral)
@@ -111,11 +152,33 @@ final class AccountController {
         }
     }
 
+    func loadConnections() async {
+        guard let key = deviceKey, !accountID.isEmpty else { return }
+        if let reply: ConnectionsReply = try? await send("GET", "/account/connections", key: key) {
+            connections = reply.connections
+        }
+    }
+
+    func revoke(_ connectionID: String) async {
+        guard let key = deviceKey else { return }
+        _ = try? await send("DELETE", "/account/connections/\(connectionID)", key: key) as Empty
+        activity[connectionID] = nil
+        await loadConnections()
+    }
+
+    func loadActivity(for connectionID: String) async {
+        guard let key = deviceKey else { return }
+        if let reply: ActivityReply = try? await send("GET", "/account/activity?connection=\(connectionID)&limit=40", key: key) {
+            activity[connectionID] = reply.activity
+        }
+    }
+
     func refresh() async {
         guard let key = deviceKey, !accountID.isEmpty else { return }
         do {
             summary = try await send("GET", "/account", key: key)
             status = .signedIn
+            await loadConnections()
         } catch let error as AccountError where error.message == Self.signedOutMessage {
             forget()
         } catch {
@@ -213,6 +276,8 @@ final class AccountController {
         accountID = ""
         deviceID = ""
         summary = nil
+        connections = []
+        activity = [:]
         UserDefaults.standard.removeObject(forKey: Keys.accountID)
         UserDefaults.standard.removeObject(forKey: Keys.deviceID)
         status = .signedOut
@@ -252,6 +317,8 @@ final class AccountController {
         enum CodingKeys: String, CodingKey { case challengeID = "challenge_id", options }
     }
     private struct ServerError: Decodable { var error: String }
+    private struct ConnectionsReply: Decodable { var connections: [AccountConnection] }
+    private struct ActivityReply: Decodable { var activity: [AccountActivity] }
 
     private func json(_ object: [String: Any]) throws -> Data {
         try JSONSerialization.data(withJSONObject: object)

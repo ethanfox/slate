@@ -1,6 +1,45 @@
 import Foundation
 import SwiftData
 
+/// Where a Space lives for outside services: on this Mac only, available in the cloud for chats to
+/// read and write, or available read only. Set from the sidebar or the Space's settings.
+enum CloudState: String, CaseIterable, Identifiable {
+    case onThisMac, cloud, cloudReadOnly
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .onThisMac: "On this Mac"
+        case .cloud: "Available in the cloud"
+        case .cloudReadOnly: "Available in the cloud, read only"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .onThisMac: "desktopcomputer"
+        case .cloud: "cloud"
+        case .cloudReadOnly: "lock.fill"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .onThisMac: "This Space stays on this Mac. Make it available in the cloud to reach it from chats and other devices."
+        case .cloud: "This Space is stored in Cloudflare too, where Membrae's servers can read it. Chats you have allowed can read it and write to it, and what they write shows in Lately."
+        case .cloudReadOnly: "This Space is stored in Cloudflare too. Chats you have allowed can read it but not change it."
+        }
+    }
+}
+
+extension Project {
+    var cloudState: CloudState {
+        guard isSynced else { return .onThisMac }
+        return cloudAccessRaw == "readOnly" ? .cloudReadOnly : .cloud
+    }
+}
+
 enum SpaceStoreError: LocalizedError, Equatable {
     case emptyKey
     case duplicateKey(String)
@@ -111,10 +150,19 @@ enum SpaceStore {
     /// Turns sync on or off for a Space. Turning it on moves every record in the Space to a new
     /// sequence in the change record, so the first push sends all of it.
     static func setSynced(_ synced: Bool, on space: Space, in context: ModelContext) throws {
-        guard space.isSynced != synced else { return }
-        space.isSynced = synced
+        try setCloud(synced ? .cloud : .onThisMac, on: space, in: context)
+    }
+
+    /// Moves a Space between on this Mac, available in the cloud, and available read only. Entering
+    /// the cloud re-stamps every record in the Space so the first push sends all of it. Leaving it is
+    /// finished by the caller removing the Space's copy from Cloudflare.
+    static func setCloud(_ state: CloudState, on space: Space, in context: ModelContext) throws {
+        guard space.cloudState != state else { return }
+        let wasSynced = space.isSynced
+        space.isSynced = state != .onThisMac
+        space.cloudAccessRaw = state == .cloudReadOnly ? "readOnly" : "readWrite"
         space.touch()
-        if synced {
+        if space.isSynced, !wasSynced {
             ChangeLog.touch(ChangeLog.records(inSpace: space.id, in: context), in: context)
         }
         try context.persist()

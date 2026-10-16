@@ -223,25 +223,24 @@ private struct OverviewInspectorSettings: View {
                 }
             }
 
-            inspectorField("Sync") {
+            inspectorField("Cloud") {
                 VStack(alignment: .leading, spacing: 6) {
-                    Toggle("Sync to Cloudflare", isOn: Binding(
-                        get: { project.isSynced },
-                        set: { on in
-                            try? SpaceStore.setSynced(on, on: project, in: context)
-                            if on { app.sync.syncSoon() }
+                    Picker("Cloud", selection: Binding(
+                        get: { project.cloudState },
+                        set: { app.sync.setCloud($0, on: project, in: context) }
+                    )) {
+                        ForEach(CloudState.allCases) { state in
+                            Text(state.label).tag(state)
                         }
-                    ))
-                    .toggleStyle(.switch)
+                    }
+                    .labelsHidden()
                     if project.isSynced {
                         Text(app.sync.status.label)
                             .font(CraftFont.caption)
                             .foregroundStyle(app.sync.status.isFailure ? Color.red : Color.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    Text(project.isSynced
-                         ? "Everything in this Space is stored in Cloudflare too, where Membrae's servers can read it. That is what lets web AIs and jobs work with it when this Mac is off."
-                         : "This Space stays on this Mac. Turn sync on to reach it from web AIs and other devices.")
+                    Text(project.cloudState.explanation)
                         .font(CraftFont.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

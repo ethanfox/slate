@@ -36,6 +36,12 @@ struct SyncPullReply: Codable {
     var cursor: Int
 }
 
+/// What comes back when a Space, or everything, is removed from Cloudflare.
+struct SyncRemoved: Codable {
+    var removed: Int
+    var files: Int
+}
+
 /// Decides what goes up: changes in synced Spaces, and the records outside any Space that belong
 /// to the user rather than this device, once any Space is synced.
 enum SyncPlanner {
@@ -174,6 +180,59 @@ final class SyncController {
                 await self?.sync()
                 try? await Task.sleep(for: Self.interval)
             }
+        }
+    }
+
+    /// The user's control on a Space: on this Mac, available in the cloud, or available read only.
+    /// Leaving the cloud removes the Space's copy from Cloudflare.
+    func setCloud(_ state: CloudState, on space: Space, in context: ModelContext) {
+        let wasSynced = space.isSynced
+        do {
+            try SpaceStore.setCloud(state, on: space, in: context)
+        } catch {
+            status = .failed(error.localizedDescription)
+            return
+        }
+        if state == .onThisMac, wasSynced {
+            let id = SpaceJSON.key(space.id)
+            Task { await forget(spaceID: id) }
+        } else {
+            syncSoon()
+        }
+    }
+
+    private func forget(spaceID: String) async {
+        guard let app, app.account.isSignedIn, let key = app.account.deviceKey else { return }
+        do {
+            let removed: SyncRemoved = try await send("DELETE", path: "/sync/spaces/\(spaceID)", key: key)
+            NavTrace.event("sync.forgot space \(spaceID) removed=\(removed.removed)")
+            app.flash("Removed from the cloud.")
+        } catch {
+            app.flash("Could not remove it from the cloud: \(error.localizedDescription)")
+        }
+    }
+
+    /// Turning Cloud off: everything of the user's leaves Cloudflare and every Space stays on this Mac.
+    /// The device stays signed in.
+    func turnOffCloud(in context: ModelContext) async {
+        guard let app, app.account.isSignedIn, let key = app.account.deviceKey else { return }
+        do {
+            let removed: SyncRemoved = try await send("DELETE", path: "/sync", key: key)
+            let synced = (try? context.fetch(FetchDescriptor<Project>(predicate: #Predicate { $0.isSynced }))) ?? []
+            for space in synced {
+                space.isSynced = false
+                space.cloudAccessRaw = "readWrite"
+                space.touch()
+            }
+            try context.persist()
+            setPushed(0)
+            pulledCursor = 0
+            UserDefaults.standard.set(0, forKey: Keys.pulled)
+            status = .idle("Nothing is synced")
+            NavTrace.event("sync.cloud-off removed=\(removed.removed)")
+            app.flash("Cloud is off. \(removed.removed) records were removed from Cloudflare.")
+        } catch {
+            app.flash("Could not turn Cloud off: \(error.localizedDescription)")
         }
     }
 
