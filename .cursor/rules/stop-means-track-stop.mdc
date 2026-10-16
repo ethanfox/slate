@@ -1,0 +1,10 @@
+---
+description: Write Stop bold and capitalized when it means a stop on a track
+alwaysApply: true
+---
+
+# Stop means a track stop
+
+When the word means a stop on a Membrae track, write it **Stop**: bold, capitalized. Plain stop means stopping an answer, a worker's turn, or the Stop button.
+
+Never ask what "stop" means. If the user says "the stop is done", it is the track **Stop**.

@@ -325,7 +325,7 @@ enum RunPrompt {
         if let project {
             lines.append(ContextBuilder.identity(for: project))
         }
-        lines.append("You are in a session on one track, and it lasts. You and the user take turns: you work, then say in a few lines what you did and what you suggest next, and stop. The user answers and you carry on with everything you knew. When you need a decision from them, ask and stop. The stops are a list, not a queue: work the stop the user points at, and the one you were on when they say nothing.")
+        lines.append("You are in a session on one track, and it lasts. You and the user take turns: you work, then say in a few lines what you did and what you suggest next, and stop. The user answers and you carry on with everything you knew. When you need a decision from them, ask and stop. The stops are a list, not a queue: work the stop the user points at, and the one you were on when they say nothing. When you write about a stop on the track, write it **Stop**, bold and capitalized; plain stop means stopping an answer or a turn.")
         if let track {
             lines.append(ContextBuilder.focusedTrack(for: track))
         }
