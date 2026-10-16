@@ -104,7 +104,6 @@ struct ContextItems: DynamicProperty {
             (TalkProvider.compatible.rawValue, TalkProvider.compatible.title, "8E6AD8"),
             (LocalAgent.claudeCode.rawValue, LocalAgent.claudeCode.title, "D97757"),
             (LocalAgent.codex.rawValue, LocalAgent.codex.title, "2E9E8F"),
-            (TalkProvider.apple.rawValue, TalkProvider.apple.title, "8E8E93"),
         ]
         for (id, name, hex) in assistants where app.providerConnected(id) {
             items.append(ContextItem(

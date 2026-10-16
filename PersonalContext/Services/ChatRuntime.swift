@@ -264,7 +264,7 @@ final class ChatRuntime {
             : ""
         let includeHistory: Bool
         switch provider {
-        case .chatgpt, .compatible, .apple:
+        case .chatgpt, .compatible:
             includeHistory = true
         case .cursor:
             includeHistory = store.includeCursorHistory

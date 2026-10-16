@@ -50,8 +50,6 @@ enum AttachmentCapabilityStore {
                 nativeDocuments: isOpenRouter(endpoint),
                 extraction: true
             )
-        case .apple:
-            return AdapterCapabilities(images: false, nativeDocuments: false, extraction: true)
         case .unconfigured:
             return AdapterCapabilities(images: false, nativeDocuments: false, extraction: false)
         }
@@ -208,7 +206,7 @@ enum MaintainedModelCapabilities {
             return chatGPT[key] ?? datedFamily(key, in: chatGPT)
         case .cursor:
             return cursor[key] ?? datedFamily(key, in: cursor)
-        case .compatible, .apple, .unconfigured:
+        case .compatible, .unconfigured:
             return nil
         }
     }

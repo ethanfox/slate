@@ -725,8 +725,6 @@ final class AppModel {
         if !compatibleEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             list.append(.compatible)
         }
-        // Last, so a connected AI stays the default and Apple takes over only when nothing else is there.
-        if AppleChatProvider.isAvailable { list.append(.apple) }
         return list
     }
 
@@ -740,8 +738,6 @@ final class AppModel {
                 return defaultModelID
             case .compatible:
                 return compatibleModelID
-            case .apple:
-                return AppleChatProvider.modelID
             case .unconfigured:
                 return ""
             }
@@ -754,7 +750,7 @@ final class AppModel {
                 defaultModelID = newValue
             case .compatible:
                 compatibleModelID = newValue
-            case .apple, .unconfigured:
+            case .unconfigured:
                 break
             }
         }
@@ -778,8 +774,6 @@ final class AppModel {
                 list.insert((id: compatibleModelID, name: compatibleModelID), at: 0)
             }
             return list
-        case .apple:
-            return [(id: AppleChatProvider.modelID, name: AppleChatProvider.modelName)]
         case .none:
             return []
         }
@@ -794,8 +788,6 @@ final class AppModel {
             return models.first(where: { $0.id == id })?.displayName ?? id
         case .compatible:
             return compatibleModels.first(where: { $0.id == id })?.name ?? id
-        case .apple:
-            return AppleChatProvider.modelName
         default:
             if let name = chatGPTModels.first(where: { $0.id == id })?.displayName { return name }
             return models.first { $0.id == id }?.displayName ?? id
@@ -1026,7 +1018,6 @@ final class AppModel {
         case .chatgpt: sources.hasChatGPT
         case .cursor: hasAPIKey
         case .compatible: !compatibleEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .apple: AppleChatProvider.isAvailable
         default: LocalAgent(rawValue: id).map(isConnected) ?? false
         }
     }

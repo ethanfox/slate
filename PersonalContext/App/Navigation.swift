@@ -254,8 +254,6 @@ enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
     case chatgpt
     case cursor
     case compatible
-    /// Apple's on-device model. Free and on from the start where the Mac has it.
-    case apple
 
     var id: String { rawValue }
 
@@ -265,7 +263,6 @@ enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
         case .chatgpt: "ChatGPT"
         case .cursor: "Cursor"
         case .compatible: "Compatible endpoint"
-        case .apple: "Apple Intelligence"
         }
     }
 
@@ -274,7 +271,7 @@ enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
         case .unconfigured: nil
         case .chatgpt: .chatgpt
         case .cursor: .cursor
-        case .compatible, .apple: nil
+        case .compatible: nil
         }
     }
 }

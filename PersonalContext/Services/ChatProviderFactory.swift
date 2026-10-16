@@ -22,8 +22,6 @@ enum ChatProviderFactory {
                 endpoint: UserDefaults.standard.string(forKey: Keys.compatibleEndpoint) ?? "",
                 apiKey: KeychainStore.read(.compatibleAPIKey)
             )
-        case .apple:
-            return AppleChatProvider(workspace: workspace)
         case .unconfigured, .none:
             return UnavailableChatProvider(
                 id: conversation.providerID,
