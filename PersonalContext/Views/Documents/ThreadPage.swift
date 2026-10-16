@@ -74,7 +74,7 @@ struct ThreadPage: View {
                 activePill
                 farePill
                 if thread.hasBranch { branchPill }
-                if thread.hasBranch, thread.status != .completed { mergeButton }
+                if thread.hasBranch { MergeButton(track: thread) }
                 workButton
                 linked
             }
@@ -86,14 +86,6 @@ struct ThreadPage: View {
                 .foregroundStyle(.secondary)
                 .padding(.top, 6)
 
-            if let note = app.mergeNotes[thread.id] {
-                Text(note)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(note.hasPrefix("Not merged") ? Color.red : Color.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-                    .padding(.top, 8)
-            }
 
             MarkdownEditor(text: $thread.body, minHeight: 360, findField: .body, traceKind: "thread", traceObjectID: thread.id.uuidString)
                 .padding(.top, 16)
@@ -168,28 +160,6 @@ struct ThreadPage: View {
         }
         .buttonStyle(.plain)
         .help(open ? "The session on this track" : "Start a session on this track")
-    }
-
-    /// Brings the track's branch into the branch it came from, in the user's own checkout.
-    private var mergeButton: some View {
-        let base = thread.baseBranch.isEmpty ? "main" : thread.baseBranch
-        return Button {
-            app.bringIntoMain(thread)
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "arrow.triangle.merge")
-                    .font(.system(size: 10, weight: .semibold))
-                Text("Bring into \(base)")
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .frame(height: 28)
-            .background(Color.accentColor, in: Capsule())
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .help("Merge \(thread.branch) into \(base)")
     }
 
     /// The git branch the track's sessions work on, and the ways it comes back into main.

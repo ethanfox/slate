@@ -193,8 +193,8 @@ final class AppModel {
     var selectedJunctionID: UUID?
     /// The "Into main" stop of a track on a branch, picked on the Tracks view.
     var selectedMergeTrackID: UUID?
-    /// What happened the last time each track was brought into main, shown beside its button until the next try.
-    var mergeNotes: [UUID: String] = [:]
+    /// Where each track's merge into main stands. The button shows it.
+    var mergeStates: [UUID: MergeState] = [:]
     /// What the user has typed and attached in each session's composer, kept while they look at other tabs.
     var sessionDraftText: [UUID: String] = [:]
     var sessionDraftAttachments: [UUID: [ComposerAttachment]] = [:]
@@ -263,11 +263,11 @@ final class AppModel {
             return
         }
         let id = track.id
-        mergeNotes[id] = "Bringing it into \(base)…"
+        mergeStates[id] = .merging
         Task {
             do {
                 guard let repository = await TrackBranches.mainRepository(ofWorktree: track.worktreePath) else {
-                    mergeNotes[id] = "Couldn't find this track's copy at \(track.worktreePath)."
+                    mergeStates[id] = .failed("This track's copy is missing.")
                     return
                 }
                 switch try await TrackBranches.mergeIntoBase(branch: track.branch, base: base, repository: repository) {
@@ -275,20 +275,26 @@ final class AppModel {
                     track.mergeConflicts = []
                     if track.orderedStops.allSatisfy(\.isDone) { track.status = .completed }
                     try? context.save()
-                    mergeNotes[id] = "Done. It's in \(base). Quit and reopen Membrae to use it."
+                    mergeStates[id] = .merged
                 case .dirty:
-                    mergeNotes[id] = "Not merged. Files this track changes also have unsaved edits in your own folder. Save or discard those edits, then try again."
+                    mergeStates[id] = .failed("Unsaved edits in your folder are in the way.")
                 case .elsewhere(let current):
-                    mergeNotes[id] = "Not merged. Your folder is on \(current), not \(base). Switch it to \(base), then try again."
+                    mergeStates[id] = .failed("Your folder is on \(current), not \(base).")
                 case .conflicts(let files):
                     track.mergeConflicts = files
                     try? context.save()
-                    mergeNotes[id] = "Not merged. \(files.count) file\(files.count == 1 ? " was" : "s were") changed both here and in \(base). Send the session to reconcile them."
+                    mergeStates[id] = .failed("\(files.count) file\(files.count == 1 ? "" : "s") clash with \(base).")
                 }
             } catch {
-                mergeNotes[id] = "Not merged. \(error.localizedDescription)"
+                mergeStates[id] = .failed(error.localizedDescription)
             }
         }
+    }
+
+    enum MergeState: Equatable {
+        case merging
+        case merged
+        case failed(String)
     }
 
     /// What a session is told when the track's branch conflicts with the branch it merges into.

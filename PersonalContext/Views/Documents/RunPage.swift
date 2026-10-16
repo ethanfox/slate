@@ -736,9 +736,11 @@ private struct SessionStops: View {
                     .padding(.vertical, 8)
                 }
                 .scrollContentBackground(.hidden)
-                if track.hasBranch, track.status != .completed {
+                if track.hasBranch {
                     Hairline()
-                    intoMain(track)
+                    MergeButton(track: track, disabled: run.status == .running)
+                        .padding(18)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .frame(maxHeight: .infinity, alignment: .top)
@@ -748,44 +750,6 @@ private struct SessionStops: View {
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-    }
-
-    /// The last stop of a track on a branch: its branch into main, with the button that does it.
-    private func intoMain(_ track: ProjectThread) -> some View {
-        let base = track.baseBranch.isEmpty ? "main" : track.baseBranch
-        let conflicts = track.mergeConflicts
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("Into \(base)")
-                .font(.system(size: 13, weight: .semibold))
-            if let note = app.mergeNotes[track.id] {
-                Text(note)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(note.hasPrefix("Not merged") ? Color.red : Color.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-            } else if !conflicts.isEmpty {
-                Text("\(conflicts.count) file\(conflicts.count == 1 ? "" : "s") changed both here and in \(base).")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Button {
-                app.bringIntoMain(track)
-            } label: {
-                Text("Bring into \(base)")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .frame(height: 28)
-                    .background(Color.accentColor, in: Capsule())
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(run.status == .running)
-            .help(run.status == .running ? "Wait for your turn" : "Merge \(track.branch) into \(base)")
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func row(_ stop: TrackStop, isCurrent: Bool) -> some View {

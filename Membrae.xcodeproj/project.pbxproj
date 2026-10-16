@@ -258,6 +258,7 @@
 		D0BE55C67A0150AAA2EF6656 /* ConnectCursorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC016D22E36FCD26459AE8C5 /* ConnectCursorSheet.swift */; };
 		D3871C283E178B0A26AD8953 /* ConversationRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48D2751AE227D1D7C67EBCF3 /* ConversationRow.swift */; };
 		D47BCEA458926FFCF65F1AF9 /* ThreadPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1217433213208694A4C64DB4 /* ThreadPage.swift */; };
+		4E0446A7BC20E526FAAF3BC0 /* MergeButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 784E718A4D81EA6307E652CA /* MergeButton.swift */; };
 		D73D56957AE1419967DCB01B /* ContextBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55C705E6D771B0D57F792CD5 /* ContextBuilder.swift */; };
 		D88C1383F18E8D13DC515A15 /* DocumentTitle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6A64CB1FEFB6EBC10E76BB6 /* DocumentTitle.swift */; };
 		DE92F59D86BACF2159A03545 /* SettingsColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = F95931057DAA72031D16DD3F /* SettingsColumn.swift */; };
@@ -333,6 +334,7 @@
 		07F37A051B9234E5ABC850C5 /* PersonalContextMCP */ = {isa = PBXFileReference; includeInIndex = 0; path = PersonalContextMCP; sourceTree = BUILT_PRODUCTS_DIR; };
 		1129E66453242DE81FC7B81C /* ThreadBranch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadBranch.swift; sourceTree = "<group>"; };
 		1217433213208694A4C64DB4 /* ThreadPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadPage.swift; sourceTree = "<group>"; };
+		784E718A4D81EA6307E652CA /* MergeButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeButton.swift; sourceTree = "<group>"; };
 		12C040B90360AB165366647A /* OrbState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbState.swift; sourceTree = "<group>"; };
 		168EFE558B001E07EC27771C /* ProjectChatCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectChatCenter.swift; sourceTree = "<group>"; };
 		1ABA62B037C7E61D2C577C09 /* OverviewInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewInspector.swift; sourceTree = "<group>"; };
@@ -847,6 +849,7 @@
 				1129E66453242DE81FC7B81C /* ThreadBranch.swift */,
 				E3D0C1F706C485B4A9186664 /* ThreadKindStyle.swift */,
 				1217433213208694A4C64DB4 /* ThreadPage.swift */,
+				784E718A4D81EA6307E652CA /* MergeButton.swift */,
 			);
 			path = Documents;
 			sourceTree = "<group>";
@@ -1488,6 +1491,7 @@
 				B0D7C8F6F5979088E5D54CC8 /* ThreadChatPane.swift in Sources */,
 				91CF8A6B7E35679953D19C20 /* ThreadKindStyle.swift in Sources */,
 				D47BCEA458926FFCF65F1AF9 /* ThreadPage.swift in Sources */,
+				4E0446A7BC20E526FAAF3BC0 /* MergeButton.swift in Sources */,
 				67B0FD2834F5CD0EBE6277A4 /* WindowTab.swift in Sources */,
 				64B08D66F58530B1E3F9FCDE /* WindowTabStrip.swift in Sources */,
 			);
