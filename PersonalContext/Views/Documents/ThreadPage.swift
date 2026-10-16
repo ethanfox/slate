@@ -32,7 +32,16 @@ struct ThreadPage: View {
                 .findHighlight(.parent)
             }
 
-            DocumentTitle(text: $thread.title)
+            // The track's two actions sit with its title; the row below holds only its properties.
+            HStack(alignment: .top, spacing: 16) {
+                DocumentTitle(text: $thread.title)
+                HStack(spacing: 8) {
+                    if thread.hasBranch { MergeButton(track: thread) }
+                    workButton
+                }
+                .fixedSize()
+                .padding(.top, 6)
+            }
 
             TextField("One-line summary", text: $thread.summary, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -74,8 +83,6 @@ struct ThreadPage: View {
                 activePill
                 farePill
                 if thread.hasBranch { branchPill }
-                if thread.hasBranch { MergeButton(track: thread) }
-                workButton
                 linked
             }
             .frame(maxWidth: .infinity, alignment: .leading)
