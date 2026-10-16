@@ -24,7 +24,13 @@ final class RunCoordinator {
     }
 
     /// A message the user sent while the worker was on its turn. It goes the moment the turn ends.
-    private(set) var queued: [UUID: String] = [:]
+    private(set) var queued: [UUID: SessionMessage] = [:]
+
+    /// What the user sends on their turn: words, and files the worker is given by path.
+    struct SessionMessage: Equatable {
+        var text: String
+        var attachments: [ChatAttachmentRef] = []
+    }
     /// The message a worker is writing right now, as far as it has got.
     private(set) var drafts: [UUID: String] = [:]
     @ObservationIgnored private var interrupting: Set<UUID> = []
@@ -50,11 +56,11 @@ final class RunCoordinator {
     }
 
     /// Queues a message for a session whose worker is mid-turn; it is sent as the next turn when this one ends.
-    func queue(_ text: String, for run: AgentRun) {
-        let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty else { return }
+    func queue(_ text: String, attachments: [ChatAttachmentRef] = [], for run: AgentRun) {
+        let message = SessionMessage(text: text.trimmingCharacters(in: .whitespacesAndNewlines), attachments: attachments)
+        guard !message.text.isEmpty || !message.attachments.isEmpty else { return }
         if run.status == .waiting, let context = liveContext() {
-            reply(message, to: run, in: context)
+            reply(message.text, attachments: message.attachments, to: run, in: context)
             return
         }
         queued[run.id] = message
@@ -76,7 +82,7 @@ final class RunCoordinator {
     private func sendQueued(_ id: UUID) {
         guard let message = queued[id], let context = liveContext(), let run = resolvedRun(id), run.status == .waiting else { return }
         queued[id] = nil
-        reply(message, to: run, in: context)
+        reply(message.text, attachments: message.attachments, to: run, in: context)
     }
 
     /// Carries on recording a session turn whose worker outlived a relaunch of the app.
@@ -157,13 +163,21 @@ final class RunCoordinator {
     }
 
     /// Answers a Run that stopped to ask the user something. The same worker session carries on with the reply.
-    func reply(_ text: String, to run: AgentRun, in context: ModelContext) {
-        let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// The user's turn. The transcript keeps the words and the attachments as sent; the worker, which runs on
+    /// this Mac, is given each attached file by its path.
+    func reply(_ text: String, attachments: [ChatAttachmentRef] = [], to run: AgentRun, in context: ModelContext) {
+        let said = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var message = said
+        let store = FileStore.default(context: context)
+        let paths = attachments.compactMap { ref in store.asset(id: ref.id).map { store.resolve($0).path } }
+        if !paths.isEmpty {
+            message += (message.isEmpty ? "" : "\n\n") + "Attached files:\n" + paths.map { "- \($0)" }.joined(separator: "\n")
+        }
         guard !message.isEmpty, run.status == .waiting, jobs[run.id] == nil, !run.externalID.isEmpty else { return }
         let id = run.id
         let session = run.externalID
         setWait(id, ChatWaitState.starting.label)
-        run.append(.reply, detail: message)
+        run.append(.reply, detail: said, attachments: attachments)
         do {
             try RunStore.transition(run, to: .running, in: context)
         } catch {

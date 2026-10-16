@@ -344,7 +344,7 @@ final class ChatRuntime {
             includeHistory = true
         case .cursor:
             includeHistory = store.includeCursorHistory
-        case .unconfigured:
+        case .unconfigured, .claudeCode:
             includeHistory = false
         }
         let files = try store.fileStore()

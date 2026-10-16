@@ -92,6 +92,8 @@ final class Project: Identifiable {
     var cardShapeRaw: String = ""
     /// Whether this Space syncs to the user's database in Cloudflare. Every Space starts local.
     var isSynced: Bool = false
+    /// How chats may use this Space once it is in the cloud: readWrite or readOnly.
+    var cloudAccessRaw: String = "readWrite"
 
     @Relationship(deleteRule: .cascade, inverse: \ProjectThread.project)
     var threads: [ProjectThread] = []

@@ -87,6 +87,12 @@ struct SpaceView: View {
             } else {
                 OverviewPage(project: space, listing: .run)
             }
+        case .sessions:
+            if let id = app.selectedRun, let run = TitleIndexStore.run(id, in: context) {
+                RunPage(run: run).id(run.id)
+            } else {
+                OverviewPage(project: space, listing: .run, sessions: true)
+            }
         }
     }
 
@@ -312,7 +318,8 @@ struct SpaceSectionPills: View {
             case .notes: return !space.notes.isEmpty
             case .decisions: return !space.decisions.isEmpty
             case .chat: return !space.conversations.isEmpty
-            case .runs: return !space.runs.isEmpty
+            case .sessions: return space.runs.contains { $0.isSession }
+            case .runs: return space.runs.contains { !$0.isSession }
             case .overview: return true
             }
         }

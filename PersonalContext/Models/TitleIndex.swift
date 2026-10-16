@@ -15,7 +15,7 @@ enum TitleIndexKind: String, CaseIterable, Identifiable, Hashable {
     var symbol: String {
         switch self {
         case .space: "square.grid.2x2"
-        case .track: "arrow.triangle.branch"
+        case .track: "point.topleft.down.to.point.bottomright.curvepath"
         case .note: "note.text"
         case .decision: "checkmark.seal"
         case .chat: "bubble.left"

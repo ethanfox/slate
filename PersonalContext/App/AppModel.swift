@@ -193,6 +193,11 @@ final class AppModel {
     var selectedJunctionID: UUID?
     /// The "Into main" stop of a track on a branch, picked on the Tracks view.
     var selectedMergeTrackID: UUID?
+    /// Where each track's merge into main stands. The button shows it.
+    var mergeStates: [UUID: MergeState] = [:]
+    /// What the user has typed and attached in each session's composer, kept while they look at other tabs.
+    var sessionDraftText: [UUID: String] = [:]
+    var sessionDraftAttachments: [UUID: [ComposerAttachment]] = [:]
     /// The tracks each Space's Tracks view draws. A Space not listed draws Membrae's pick.
     var shownTracks: [UUID: [UUID]] {
         didSet { AppModel.save(shownTracks, key: Keys.shownTracks) }
@@ -257,11 +262,12 @@ final class AppModel {
             flash("The session is still working. Bring the track in when it is your turn.")
             return
         }
-        flash("Bringing \(track.branch) into \(base)…")
+        let id = track.id
+        mergeStates[id] = .merging
         Task {
             do {
                 guard let repository = await TrackBranches.mainRepository(ofWorktree: track.worktreePath) else {
-                    flash("The checkout for \(track.branch) is gone from \(track.worktreePath).")
+                    mergeStates[id] = .failed("This track's copy is missing.")
                     return
                 }
                 switch try await TrackBranches.mergeIntoBase(branch: track.branch, base: base, repository: repository) {
@@ -269,20 +275,26 @@ final class AppModel {
                     track.mergeConflicts = []
                     if track.orderedStops.allSatisfy(\.isDone) { track.status = .completed }
                     try? context.save()
-                    flash("Brought \(track.branch) into \(base).")
+                    mergeStates[id] = .merged
                 case .dirty:
-                    flash("Your checkout of \(base) has uncommitted changes. Commit or stash them, then bring the track in.")
+                    mergeStates[id] = .failed("Unsaved edits in your folder are in the way.")
                 case .elsewhere(let current):
-                    flash("Your checkout is on \(current), not \(base). Check out \(base) first.")
+                    mergeStates[id] = .failed("Your folder is on \(current), not \(base).")
                 case .conflicts(let files):
                     track.mergeConflicts = files
                     try? context.save()
-                    flash("\(files.count) file\(files.count == 1 ? "" : "s") conflict with \(base). The track's signal lists them.")
+                    mergeStates[id] = .failed("\(files.count) file\(files.count == 1 ? "" : "s") clash with \(base).")
                 }
             } catch {
-                flash(error.localizedDescription)
+                mergeStates[id] = .failed(error.localizedDescription)
             }
         }
+    }
+
+    enum MergeState: Equatable {
+        case merging
+        case merged
+        case failed(String)
     }
 
     /// What a session is told when the track's branch conflicts with the branch it merges into.
@@ -725,6 +737,9 @@ final class AppModel {
         if !compatibleEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             list.append(.compatible)
         }
+        #if DEBUG
+        if isConnected(LocalAgent.claudeCode) { list.append(TalkProvider.claudeCode) }
+        #endif
         return list
     }
 
@@ -738,6 +753,8 @@ final class AppModel {
                 return defaultModelID
             case .compatible:
                 return compatibleModelID
+            case .claudeCode:
+                return claudeCodeChatModelID
             case .unconfigured:
                 return ""
             }
@@ -750,6 +767,8 @@ final class AppModel {
                 defaultModelID = newValue
             case .compatible:
                 compatibleModelID = newValue
+            case .claudeCode:
+                claudeCodeChatModelID = newValue
             case .unconfigured:
                 break
             }
@@ -774,9 +793,17 @@ final class AppModel {
                 list.insert((id: compatibleModelID, name: compatibleModelID), at: 0)
             }
             return list
+        case .claudeCode:
+            return ClaudeCodeChatProvider.models
         case .none:
             return []
         }
+    }
+
+    /// The Claude Code model new chats start with.
+    var claudeCodeChatModelID: String {
+        get { UserDefaults.standard.string(forKey: "claudeCodeChatModelID") ?? "sonnet" }
+        set { UserDefaults.standard.set(newValue, forKey: "claudeCodeChatModelID") }
     }
 
     func modelName(for id: String, providerID: String? = nil) -> String {
@@ -788,6 +815,8 @@ final class AppModel {
             return models.first(where: { $0.id == id })?.displayName ?? id
         case .compatible:
             return compatibleModels.first(where: { $0.id == id })?.name ?? id
+        case .claudeCode:
+            return ClaudeCodeChatProvider.models.first(where: { $0.id == id })?.name ?? id
         default:
             if let name = chatGPTModels.first(where: { $0.id == id })?.displayName { return name }
             return models.first { $0.id == id }?.displayName ?? id

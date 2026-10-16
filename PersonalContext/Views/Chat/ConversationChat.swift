@@ -118,7 +118,7 @@ private struct ConversationSessionView: View {
                 if let queued = runtime.queued {
                     QueuedMessageBubble(
                         text: queued.trimmedText,
-                        fileCount: queued.attachments.count,
+                        attachments: queued.attachments,
                         onSendNow: runtime.sendQueuedNow,
                         onClear: runtime.clearQueued
                     )

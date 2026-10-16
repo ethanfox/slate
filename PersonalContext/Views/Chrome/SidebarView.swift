@@ -95,6 +95,9 @@ struct SidebarView: View {
                                 } label: {
                                     Label("Open in New Tab", systemImage: "plus.square.on.square")
                                 }
+                                if item.kind == .space, let record = TitleIndexStore.project(item.id, in: context) {
+                                    cloudMenu(for: record)
+                                }
                                 Button {
                                     app.togglePin(item.kind, item.id)
                                 } label: {
@@ -125,6 +128,9 @@ struct SidebarView: View {
                                     }
                                 } label: {
                                     Label("Settings", systemImage: "gearshape")
+                                }
+                                if let record = TitleIndexStore.project(space.id, in: context) {
+                                    cloudMenu(for: record)
                                 }
                                 Button {
                                     app.openSpace(space.id, newTab: true)
@@ -218,6 +224,25 @@ struct SidebarView: View {
         switch app.destination {
         case .home, .aboutYou, .context, .tasks, .calendar, .chats, .runs, .spaces, .library: true
         default: false
+        }
+    }
+
+    /// Where the Space lives for outside services, set right here: on this Mac, in the cloud, or in
+    /// the cloud read only.
+    private func cloudMenu(for space: Project) -> some View {
+        Menu {
+            Picker("Cloud", selection: Binding(
+                get: { space.cloudState },
+                set: { app.sync.setCloud($0, on: space, in: context) }
+            )) {
+                ForEach(CloudState.allCases) { state in
+                    Text(state.label).tag(state)
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            Label(space.cloudState == .onThisMac ? "Cloud" : space.cloudState.label, systemImage: space.cloudState.symbol)
         }
     }
 

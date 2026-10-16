@@ -447,7 +447,8 @@ private struct ChatToolMark: View {
     }
 }
 
-private struct UserMessageBubble: View {
+/// What the user said, in every chat: the accent bubble with its attachments under it.
+struct UserMessageBubble: View {
     let message: ChatEntry.User
     @Environment(AppModel.self) private var app
     @Environment(\.chatMessageLayout) private var layout

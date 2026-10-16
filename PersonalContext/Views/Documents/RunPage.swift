@@ -8,8 +8,21 @@ struct RunPage: View {
     @Environment(\.modelContext) private var context
     @Environment(\.openURL) private var openURL
     @State private var confirmDelete = false
-    @State private var replyText = ""
-    @State private var attachments: [ComposerAttachment] = []
+    /// The session's unsent message lives on the app, so leaving the tab keeps it.
+    private var replyText: String {
+        get { app.sessionDraftText[run.id] ?? "" }
+        nonmutating set { app.sessionDraftText[run.id] = newValue.isEmpty ? nil : newValue }
+    }
+    private var attachments: [ComposerAttachment] {
+        get { app.sessionDraftAttachments[run.id] ?? [] }
+        nonmutating set { app.sessionDraftAttachments[run.id] = newValue.isEmpty ? nil : newValue }
+    }
+    private var replyTextBinding: Binding<String> {
+        Binding(get: { replyText }, set: { replyText = $0 })
+    }
+    private var attachmentsBinding: Binding<[ComposerAttachment]> {
+        Binding(get: { attachments }, set: { attachments = $0 })
+    }
 
     var body: some View {
         if run.isSession {
@@ -122,14 +135,15 @@ struct RunPage: View {
             }
             if let queued = app.runCoordinator.queued[run.id] {
                 QueuedMessageBubble(
-                    text: queued,
+                    text: queued.text,
+                    attachments: queued.attachments,
                     onSendNow: { app.runCoordinator.interrupt(run) },
                     onClear: { app.runCoordinator.clearQueued(for: run.id) }
                 )
                 .padding(.horizontal, 4)
             }
             ChatInput(
-                text: $replyText,
+                text: replyTextBinding,
                 modelID: .constant(""),
                 providerID: .constant(run.providerID),
                 allowsProviderChange: false,
@@ -137,7 +151,7 @@ struct RunPage: View {
                 isGenerating: run.status == .running,
                 onSend: send,
                 composerOwnerID: run.id,
-                attachments: $attachments,
+                attachments: attachmentsBinding,
                 onStop: { app.runCoordinator.interrupt(run) },
                 draftKind: "session",
                 draftObjectID: run.id.uuidString,
@@ -146,19 +160,14 @@ struct RunPage: View {
         }
     }
 
-    /// Attached files go by path: the worker runs on this Mac and can open them.
+    /// The same submission every chat makes. The coordinator hands the worker each attached file by path.
     private func send(_ submission: ChatSubmission) -> Bool {
-        var text = submission.trimmedText
-        let store = FileStore.default(context: context)
-        let paths = submission.attachments.compactMap { ref in store.asset(id: ref.id).map { store.resolve($0).path } }
-        if !paths.isEmpty {
-            text += (text.isEmpty ? "" : "\n\n") + "Attached files:\n" + paths.map { "- \($0)" }.joined(separator: "\n")
-        }
-        guard !text.isEmpty else { return false }
+        let text = submission.trimmedText
+        guard !text.isEmpty || !submission.attachments.isEmpty else { return false }
         if run.status == .waiting {
-            app.runCoordinator.reply(text, to: run, in: context)
+            app.runCoordinator.reply(text, attachments: submission.attachments, to: run, in: context)
         } else {
-            app.runCoordinator.queue(text, for: run)
+            app.runCoordinator.queue(text, attachments: submission.attachments, for: run)
         }
         attachments = []
         return true
@@ -407,7 +416,7 @@ struct RunPage: View {
                 AssistantMarkdown(text: run.resultSummary)
                     .textSelection(.enabled)
             }
-            TextField("Your answer", text: $replyText, axis: .vertical)
+            TextField("Your answer", text: replyTextBinding, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(CraftFont.body)
                 .lineLimit(2...8)
@@ -696,6 +705,12 @@ private struct SessionStops: View {
                     .padding(.vertical, 8)
                 }
                 .scrollContentBackground(.hidden)
+                if track.hasBranch {
+                    Hairline()
+                    MergeButton(track: track, disabled: run.status == .running)
+                        .padding(18)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .frame(maxHeight: .infinity, alignment: .top)
         } else {
@@ -798,17 +813,7 @@ private struct SessionTranscript: View {
                     AssistantMarkdown(text: event.detail)
                         .textSelection(.enabled)
                 case .reply(let event):
-                    Text(event.detail)
-                        .font(CraftFont.chatBody)
-                        .lineSpacing(7)
-                        .foregroundStyle(.white)
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(app.accent.color, in: RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 480, alignment: .trailing)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    UserMessageBubble(message: ChatEntry.User(id: event.id, text: event.detail, attachments: event.attachments))
                         .padding(.top, 10)
                 case .commits(let event):
                     commits(event.detail)

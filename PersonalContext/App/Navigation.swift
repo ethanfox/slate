@@ -32,6 +32,7 @@ enum SpaceTab: String, CaseIterable, Identifiable, Hashable, Codable {
     case overview
     case tasks
     case threads
+    case sessions
     case notes
     case decisions
     case chat
@@ -39,11 +40,26 @@ enum SpaceTab: String, CaseIterable, Identifiable, Hashable, Codable {
 
     var id: String { rawValue }
 
+    /// The icon a window tab shows while this section is open.
+    var symbol: String {
+        switch self {
+        case .overview: "square.grid.2x2"
+        case .tasks: "checklist"
+        case .threads: TrackSymbol.name
+        case .sessions: "clock"
+        case .notes: "note.text"
+        case .decisions: "checkmark.seal"
+        case .chat: "bubble.left"
+        case .runs: "play.circle"
+        }
+    }
+
     var title: String {
         switch self {
         case .overview: "Overview"
         case .tasks: "Tasks"
         case .threads: "Tracks"
+        case .sessions: "Sessions"
         case .notes: "Notes"
         case .decisions: "Decisions"
         case .chat: "Chat"
@@ -238,6 +254,8 @@ enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
     case chatgpt
     case cursor
     case compatible
+    /// The user's own Claude Code, as a chat model. Offered in debug builds only.
+    case claudeCode = "claude-code-chat"
 
     var id: String { rawValue }
 
@@ -247,6 +265,7 @@ enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
         case .chatgpt: "ChatGPT"
         case .cursor: "Cursor"
         case .compatible: "Compatible endpoint"
+        case .claudeCode: "Claude Code"
         }
     }
 
@@ -256,6 +275,7 @@ enum TalkProvider: String, CaseIterable, Identifiable, Hashable {
         case .chatgpt: .chatgpt
         case .cursor: .cursor
         case .compatible: nil
+        case .claudeCode: nil
         }
     }
 }
@@ -348,6 +368,11 @@ enum AccentedView: String, CaseIterable, Identifiable, Hashable {
         case .calendar: AccentPreference.red.color
         }
     }
+}
+
+/// The tracks icon, in one place for the tab strip, the pills, and the lists.
+enum TrackSymbol {
+    static let name = "point.topleft.down.to.point.bottomright.curvepath"
 }
 
 extension TitleIndexKind {

@@ -335,17 +335,10 @@ struct ChatInput: View {
 /// The message sent while the answer was still writing: a small grey bubble with Send now and Clear beside it.
 struct QueuedMessageBubble: View {
     var text: String
-    var fileCount = 0
+    var attachments: [ChatAttachmentRef] = []
     var onSendNow: () -> Void
     var onClear: () -> Void
     @Environment(AppModel.self) private var app
-
-    private var label: String {
-        if text.isEmpty {
-            return fileCount == 1 ? "1 file" : "\(fileCount) files"
-        }
-        return text
-    }
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 6) {
@@ -353,17 +346,22 @@ struct QueuedMessageBubble: View {
             bubbleButton("Clear", action: onClear)
             bubbleButton("Send now", filled: true, action: onSendNow)
                 .help("Stop the answer and send this")
-            Text(label)
-                .font(.system(size: 13))
-                .lineSpacing(4)
-                .foregroundStyle(.primary)
-                .lineLimit(4)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous))
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 420, alignment: .trailing)
-                .help("Goes when the answer ends")
+            VStack(alignment: .trailing, spacing: 6) {
+                if !text.isEmpty {
+                    Text(text)
+                        .font(.system(size: 13))
+                        .lineSpacing(4)
+                        .foregroundStyle(.primary)
+                        .lineLimit(4)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HistoryAttachmentStrip(attachments: attachments)
+            }
+            .frame(maxWidth: 420, alignment: .trailing)
+            .help("Goes when the answer ends")
         }
     }
 

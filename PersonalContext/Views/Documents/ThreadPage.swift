@@ -44,6 +44,13 @@ struct ThreadPage: View {
                 .padding(.top, 4)
                 .findHighlight(.summary)
 
+            // The track's two actions, under its description.
+            HStack(alignment: .top, spacing: 8) {
+                if thread.hasBranch { MergeButton(track: thread) }
+                workButton
+            }
+            .padding(.top, 12)
+
             TagBar(tags: thread.tags) { thread.tags = $0; touch() }
                 .padding(.top, 8)
 
@@ -74,16 +81,14 @@ struct ThreadPage: View {
                 activePill
                 farePill
                 if thread.hasBranch { branchPill }
-                workButton
                 linked
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 8)
 
-            Text(journey)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .padding(.top, 6)
+            TrackJourney(track: thread)
+                .padding(.top, 14)
+
 
             MarkdownEditor(text: $thread.body, minHeight: 360, findField: .body, traceKind: "thread", traceObjectID: thread.id.uuidString)
                 .padding(.top, 16)
@@ -456,5 +461,72 @@ private struct StopRow: View {
         }
         .onChange(of: stop.title) { _, _ in stop.updatedAt = .now }
         .onChange(of: stop.body) { _, _ in stop.updatedAt = .now }
+    }
+}
+
+
+/// A track's journey as stops on a line: made, departed, the fare running out, arrived. What has happened is
+/// solid in the track's colour; what has not is a ring.
+private struct TrackJourney: View {
+    var track: ProjectThread
+
+    private struct Event: Identifiable {
+        var id: String { label }
+        var label: String
+        var date: String
+        var happened: Bool
+        var late = false
+    }
+
+    private var events: [Event] {
+        let day: (Date) -> String = { $0.formatted(.dateTime.month(.abbreviated).day()) }
+        var list = [Event(label: "Made", date: day(track.createdAt), happened: true)]
+        list.append(Event(label: "Departed", date: track.departedAt.map(day) ?? "Not yet", happened: track.departedAt != nil))
+        if track.fareDays > 0 {
+            if let ends = track.fareEndsAt {
+                let passed = ends < .now
+                list.append(Event(label: "Fare ends", date: day(ends), happened: passed, late: passed && track.arrivedAt == nil))
+            } else {
+                list.append(Event(label: "Fare", date: track.fareLabel, happened: false))
+            }
+        }
+        list.append(Event(label: "Arrived", date: track.arrivedAt.map(day) ?? "Not yet", happened: track.arrivedAt != nil))
+        return list
+    }
+
+    var body: some View {
+        let tint = track.color.tint
+        let events = events
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 0) {
+                        ZStack {
+                            if event.happened {
+                                Circle().fill(event.late ? Color.red : tint)
+                            } else {
+                                Circle().fill(CraftColor.canvas)
+                                Circle().stroke(tint, lineWidth: 1.5)
+                            }
+                        }
+                        .frame(width: 10, height: 10)
+                        if index < events.count - 1 {
+                            Rectangle()
+                                .fill(tint.opacity(events[index + 1].happened ? 1 : 0.35))
+                                .frame(width: 84, height: 2)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(event.label)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Text(event.date)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(event.late ? Color.red : event.happened ? Color.primary : Color.secondary)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }

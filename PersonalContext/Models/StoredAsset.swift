@@ -1,8 +1,8 @@
 import Foundation
 import SwiftData
 
-struct ChatAttachmentRef: Equatable, Identifiable, Sendable {
-    enum Kind: String, Sendable {
+struct ChatAttachmentRef: Equatable, Hashable, Identifiable, Sendable, Codable {
+    enum Kind: String, Sendable, Codable {
         case image
         case file
     }
