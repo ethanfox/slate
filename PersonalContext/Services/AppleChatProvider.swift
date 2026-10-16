@@ -2,7 +2,8 @@ import Foundation
 import FoundationModels
 
 /// Apple's on-device model: free, private, and there without an account.
-/// Its window is small, so it gets a short brief of the Space and the end of the chat, and no tools.
+/// Its window is small, so it gets a short brief of the Space, the end of the chat, and a few tools
+/// with a way to find the rest.
 struct AppleChatProvider: ChatProvider {
     let id = TalkProvider.apple.rawValue
     let name = TalkProvider.apple.title
@@ -27,7 +28,7 @@ struct AppleChatProvider: ChatProvider {
     }
 
     /// Characters of earlier chat kept in the brief. The model's whole window is about 4,000 tokens.
-    private static let historyBudget = 4_000
+    private static let historyBudget = 2_500
     private static let attachmentBudget = 3_000
 
     func stream(
@@ -44,11 +45,16 @@ struct AppleChatProvider: ChatProvider {
                     }
                     let last = messages.last(where: { $0.role == .user })
                     let prompt = Self.prompt(for: last, options: options)
-                    let (instructions, metadata) = await MainActor.run {
-                        Self.prepare(workspace: workspace, messages: messages, userText: last?.text ?? "")
+                    let (instructions, metadata, tools) = await MainActor.run {
+                        let box = AppleToolBox(workspace: workspace)
+                        box.report = { continuation.yield($0) }
+                        let (instructions, metadata) = Self.prepare(
+                            workspace: workspace, messages: messages, userText: last?.text ?? ""
+                        )
+                        return (instructions, metadata, box.tools)
                     }
                     continuation.yield(.metadata(metadata))
-                    let session = LanguageModelSession(instructions: instructions)
+                    let session = LanguageModelSession(tools: tools, instructions: instructions)
                     var sent = ""
                     for try await snapshot in session.streamResponse(to: prompt) {
                         try Task.checkCancellation()
@@ -86,7 +92,7 @@ struct AppleChatProvider: ChatProvider {
         }
         var parts = [
             "You are Membrae, a personal workspace on the user's Mac. Answer clearly and briefly.",
-            "You cannot read or change the user's Spaces, tasks, or files in this chat. If they ask you to, say that a connected AI such as ChatGPT or Cursor can do it."
+            "Use the tools to look things up and to add or change them. Copy ids exactly from tool results. For anything the other tools can't do, call find_tool, then use_tool."
         ]
         if let space = workspace.project {
             var brief = "The chat is in the Space \"\(space.name)\"."
