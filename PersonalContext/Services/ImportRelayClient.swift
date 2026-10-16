@@ -146,14 +146,23 @@ final class ImportRelayController {
         if !enabled {
             return .denied("Turn on import in Settings → Import and try again.")
         }
-        ensureKey()
-        guard let key = ImportKeyStore.readKey() else {
-            return .denied(keyError ?? "Membrae could not create an import key.")
-        }
-        if socket == nil { connect() }
-        for _ in 0..<40 {
-            if status == .ready { break }
-            try? await Task.sleep(for: .milliseconds(200))
+        // Signed in: the approval carries this device's key, so the chat is bound to the account and
+        // answered from the hosted context with the Mac open or not. Otherwise the import key and
+        // the relay to this Mac, as before.
+        let key: String
+        if let app, app.account.isSignedIn, let deviceKey = app.account.deviceKey {
+            key = deviceKey
+        } else {
+            ensureKey()
+            guard let importKey = ImportKeyStore.readKey() else {
+                return .denied(keyError ?? "Membrae could not create an import key.")
+            }
+            key = importKey
+            if socket == nil { connect() }
+            for _ in 0..<40 {
+                if status == .ready { break }
+                try? await Task.sleep(for: .milliseconds(200))
+            }
         }
         guard let consent = URL(string: trimmedEndpoint + "/oauth/consent") else {
             return .denied("Can’t reach the import relay")

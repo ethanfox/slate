@@ -12,7 +12,9 @@ struct SettingsImportPage: View {
         SettingsPage {
             SettingsGroup("Import") {
                 SettingsRow {
-                    Text("Keep Membrae open to receive imports")
+                    Text(app.account.isSignedIn
+                         ? "Chats file into your hosted context. Membrae need not be open."
+                         : "Keep Membrae open to receive imports")
                         .font(CraftFont.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

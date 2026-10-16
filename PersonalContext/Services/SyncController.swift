@@ -79,10 +79,12 @@ enum SyncPlanner {
     static func apply(_ records: [SyncRecord], unsentAfter pushed: Int, in context: ModelContext) -> Int {
         var applied = 0
         for record in records {
+            let existed = record.targetID.flatMap { record.changeKind?.find($0, in: context) } != nil
             let outcome = SyncCodec.apply(record, unsentAfter: pushed, in: context)
             switch outcome {
             case .applied, .deleted:
                 applied += 1
+                noteOutsideWrite(record, existed: existed, deleted: outcome == .deleted, in: context)
             case .keptLocal:
                 noteConflict(record, kept: "this Mac", in: context)
             case .skipped(let reason):
@@ -90,6 +92,23 @@ enum SyncPlanner {
             }
         }
         return applied
+    }
+
+    /// What an outside service wrote shows in Lately and can be taken back. The user's own devices
+    /// write as app and are not logged.
+    private static func noteOutsideWrite(_ record: SyncRecord, existed: Bool, deleted: Bool, in context: ModelContext) {
+        guard !record.origin.isEmpty, record.origin != "app", record.origin != "cloud", let id = record.targetID else { return }
+        let title = TitleIndexStore.row(id, in: context)?.title ?? record.fields["title"]?.text ?? ""
+        context.insert(AgentAction(
+            tool: "sync",
+            verb: deleted ? .removed : existed ? .changed : .added,
+            kind: record.kind,
+            targetID: record.id,
+            title: title,
+            detail: "Written by \(record.origin) into the hosted context.",
+            spaceID: record.spaceID,
+            origin: ActionOrigin(client: record.origin)
+        ))
     }
 
     private static func noteConflict(_ record: SyncRecord, kept: String, in context: ModelContext) {
