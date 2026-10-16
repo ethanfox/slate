@@ -73,6 +73,7 @@ struct ThreadPage: View {
                 }
                 activePill
                 farePill
+                if thread.hasBranch { branchPill }
                 workButton
                 linked
             }
@@ -157,6 +158,39 @@ struct ThreadPage: View {
         }
         .buttonStyle(.plain)
         .help(open ? "The session on this track" : "Start a session on this track")
+    }
+
+    /// The git branch the track's sessions work on, and the ways it comes back into main.
+    private var branchPill: some View {
+        let base = thread.baseBranch.isEmpty ? "main" : thread.baseBranch
+        let conflicts = thread.mergeConflicts
+        return PropertyPill(title: thread.branch, systemImage: "arrow.triangle.branch") {
+            Button("Bring into \(base)") { app.bringIntoMain(thread) }
+            if !conflicts.isEmpty {
+                Button("Reconcile Conflicts in Session") { app.workOn(thread, saying: AppModel.reconcileBrief(for: thread)) }
+            }
+            Button("Open Pull Request") { openPullRequest() }
+            Divider()
+            Button("Copy Branch Name") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(thread.branch, forType: .string)
+            }
+            Button("Show Checkout in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: thread.worktreePath)])
+            }
+        }
+    }
+
+    private func openPullRequest() {
+        let worktree = thread.worktreePath
+        let branch = thread.branch
+        Task {
+            if let url = await TrackBranches.pullRequestURL(repository: worktree, branch: branch) {
+                NSWorkspace.shared.open(url)
+            } else {
+                app.flash("This repository is not on GitHub, or has no remote.")
+            }
+        }
     }
 
     private var farePill: some View {

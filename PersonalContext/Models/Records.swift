@@ -340,6 +340,14 @@ final class ProjectThread {
     var fareDays: Int = 0
     /// The colour the track is drawn in; see `color`.
     var colorRaw: String = ""
+    /// The git branch this track's sessions work on, once one has started in a repository. Empty for every other track.
+    var branch: String = ""
+    /// The worktree folder that branch is checked out in.
+    var worktreePath: String = ""
+    /// The branch the user had checked out when the track's branch was made: what the track merges into.
+    var baseBranch: String = ""
+    /// Files that conflicted the last time the track was brought into main, as JSON. Empty when it merges cleanly.
+    var mergeConflictsJSON: String = ""
     /// The group this track is listed under.
     var theme: TrackTheme?
 
@@ -403,6 +411,14 @@ final class ProjectThread {
         get { TrackColor(rawValue: colorRaw) ?? TrackColor.fallback(for: id) }
         set { colorRaw = newValue.rawValue }
     }
+
+    var mergeConflicts: [String] {
+        get { (try? JSONDecoder().decode([String].self, from: Data(mergeConflictsJSON.utf8))) ?? [] }
+        set { mergeConflictsJSON = newValue.isEmpty ? "" : (String(data: (try? JSONEncoder().encode(newValue)) ?? Data(), encoding: .utf8) ?? "") }
+    }
+
+    /// A track on a branch has one more stop than its own: bringing the branch into main.
+    var hasBranch: Bool { !branch.isEmpty }
 
     /// When the fare runs out: fare days after departure. Nil without a fare or before departure.
     var fareEndsAt: Date? {

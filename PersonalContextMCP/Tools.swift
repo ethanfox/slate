@@ -2857,12 +2857,18 @@ enum JSONShape {
             "arrived_at": thread.arrivedAt.map { iso.string(from: $0) } ?? "",
             "fare_days": thread.fareDays,
             "fare_ends_at": thread.fareEndsAt.map { iso.string(from: $0) } ?? "",
+            "branch": thread.branch,
             "updated_at": iso.string(from: thread.updatedAt),
             "tags": tags(thread.tags)
         ]
         if full {
             shape["body"] = thread.body
             shape["stops"] = thread.orderedStops.map(stop)
+            if thread.hasBranch {
+                shape["base_branch"] = thread.baseBranch
+                shape["checkout"] = thread.worktreePath
+                shape["merge_conflicts"] = thread.mergeConflicts
+            }
             shape["junctions"] = thread.junctions.map(junction)
             shape["children"] = thread.orderedChildren.map { child in
                 [

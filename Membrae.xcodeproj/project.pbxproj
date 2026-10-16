@@ -100,12 +100,14 @@
 		A91E2F3A4B5C6D7E8F901006 /* AgentRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A91E2F3A4B5C6D7E8F901005 /* AgentRuntimeTests.swift */; };
 		B81A0C1D2E3F405162738A0A /* RunGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A09 /* RunGateway.swift */; };
 		B81A0C1D2E3F405162738A0C /* RunCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A0B /* RunCoordinator.swift */; };
+		D4E5F60718293A4B5C6D7F80 /* TrackBranches.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D4E5F60718293A4B5C6D7F /* TrackBranches.swift */; };
 		B81A0C1D2E3F405162738A0E /* RunAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A0D /* RunAdapters.swift */; };
 		B81A0C1D2E3F405162738A10 /* RunsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A0F /* RunsView.swift */; };
 		B81A0C1D2E3F405162738A12 /* NewRunSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A11 /* NewRunSheet.swift */; };
 		B81A0C1D2E3F405162738A14 /* RunPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A13 /* RunPage.swift */; };
 		B81A0C1D2E3F405162738A16 /* RunStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A15 /* RunStoreTests.swift */; };
 		2A3B4C5D6E7F80910B2C3D4E /* WorkerRelayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F2E3D4C5B6A79880A1B2C3D /* WorkerRelayTests.swift */; };
+		F60718293A4B5C6D7F809102 /* TrackBranchesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5F60718293A4B5C6D7F8091 /* TrackBranchesTests.swift */; };
 		B81A0C1D2E3F405162738A18 /* RunToolPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81A0C1D2E3F405162738A17 /* RunToolPolicyTests.swift */; };
 		27EFEA7479970E75FC4AB694 /* Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD732A03D4885370CA6EC0EB /* Inspector.swift */; };
 		29D44665FC2D878340D62760 /* ChatObjectLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCA29163C23868CA9F844257 /* ChatObjectLink.swift */; };
@@ -382,12 +384,14 @@
 		A91E2F3A4B5C6D7E8F901005 /* AgentRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntimeTests.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A09 /* RunGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunGateway.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A0B /* RunCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunCoordinator.swift; sourceTree = "<group>"; };
+		C3D4E5F60718293A4B5C6D7F /* TrackBranches.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackBranches.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A0D /* RunAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunAdapters.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A0F /* RunsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunsView.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A11 /* NewRunSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewRunSheet.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A13 /* RunPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunPage.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A15 /* RunStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunStoreTests.swift; sourceTree = "<group>"; };
 		1F2E3D4C5B6A79880A1B2C3D /* WorkerRelayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerRelayTests.swift; sourceTree = "<group>"; };
+		E5F60718293A4B5C6D7F8091 /* TrackBranchesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackBranchesTests.swift; sourceTree = "<group>"; };
 		B81A0C1D2E3F405162738A17 /* RunToolPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunToolPolicyTests.swift; sourceTree = "<group>"; };
 		C0DE1A2B3C4D5E6F70819211 /* code-index-eval.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = Scenarios/code-index-eval.md; sourceTree = "<group>"; };
 		375909AB0149768B4CB292E2 /* LiquidOrbMetalB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidOrbMetalB.swift; sourceTree = "<group>"; };
@@ -738,6 +742,7 @@
 				B81A0C1D2E3F405162738A07 /* RunToolPolicy.swift */,
 				B81A0C1D2E3F405162738A09 /* RunGateway.swift */,
 				B81A0C1D2E3F405162738A0B /* RunCoordinator.swift */,
+				C3D4E5F60718293A4B5C6D7F /* TrackBranches.swift */,
 				B81A0C1D2E3F405162738A0D /* RunAdapters.swift */,
 				DF040EA1BCECFFBD441F0F91 /* ChatGPTProvider.swift */,
 				E8B24C96AAB593E09C71D659 /* ChatGPTSignIn.swift */,
@@ -994,6 +999,7 @@
 				8F3A1C2E4B5D60718293A006 /* track-first-eval.md */,
 				B81A0C1D2E3F405162738A15 /* RunStoreTests.swift */,
 				1F2E3D4C5B6A79880A1B2C3D /* WorkerRelayTests.swift */,
+				E5F60718293A4B5C6D7F8091 /* TrackBranchesTests.swift */,
 				B81A0C1D2E3F405162738A17 /* RunToolPolicyTests.swift */,
 				1CA1A6E00000000000000003 /* LocalAgentTests.swift */,
 				A91E2F3A4B5C6D7E8F901005 /* AgentRuntimeTests.swift */,
@@ -1254,6 +1260,7 @@
 				8F3A1C2E4B5D60718293A00A /* TrackFirstEvalTests.swift in Sources */,
 				B81A0C1D2E3F405162738A16 /* RunStoreTests.swift in Sources */,
 				2A3B4C5D6E7F80910B2C3D4E /* WorkerRelayTests.swift in Sources */,
+				F60718293A4B5C6D7F809102 /* TrackBranchesTests.swift in Sources */,
 				B81A0C1D2E3F405162738A18 /* RunToolPolicyTests.swift in Sources */,
 				1CA1A6E00000000000000013 /* LocalAgentTests.swift in Sources */,
 				A91E2F3A4B5C6D7E8F901006 /* AgentRuntimeTests.swift in Sources */,
@@ -1416,6 +1423,7 @@
 				B81A0C1D2E3F405162738A08 /* RunToolPolicy.swift in Sources */,
 				B81A0C1D2E3F405162738A0A /* RunGateway.swift in Sources */,
 				B81A0C1D2E3F405162738A0C /* RunCoordinator.swift in Sources */,
+				D4E5F60718293A4B5C6D7F80 /* TrackBranches.swift in Sources */,
 				B81A0C1D2E3F405162738A0E /* RunAdapters.swift in Sources */,
 				B81A0C1D2E3F405162738A10 /* RunsView.swift in Sources */,
 				B81A0C1D2E3F405162738A12 /* NewRunSheet.swift in Sources */,

@@ -61,8 +61,21 @@ struct LaneModel: Identifiable {
     /// Set when the lane drawn right after this one is the other side of `merge`.
     var mergesIntoNext = false
     var caption: String
+    /// The git branch the track is worked on, for a track with a checkout of its own. Empty otherwise.
+    var branch: String
+    /// What that branch merges into.
+    var base: String
+    /// Files that conflicted the last time the branch was brought into `base`.
+    var conflicts: [String]
 
     var id: UUID { track.id }
+
+    /// A track on a branch ends with one more stop than its own: bringing the branch into `base`.
+    var hasBranch: Bool { !branch.isEmpty }
+    var mergeIndex: Int? { hasBranch ? stops.count : nil }
+    var dotCount: Int { stops.count + (hasBranch ? 1 : 0) }
+    /// The branch is in: the track arrived.
+    var isMerged: Bool { hasBranch && track.status == .completed }
 
     init(track: ProjectThread, space: Space) {
         let stops = track.orderedStops
@@ -84,12 +97,15 @@ struct LaneModel: Identifiable {
             self.wait = nil
         }
         self.merge = merge
+        self.branch = track.branch
+        self.base = track.baseBranch.isEmpty ? "main" : track.baseBranch
+        self.conflicts = track.mergeConflicts
         self.caption = LaneModel.caption(for: track, isActive: isActive, current: current, stopCount: stops.count, waiting: waiting, merge: merge)
     }
 
     /// Where the last stop sits, from the line area's left edge.
     var lastStopX: CGFloat {
-        LaneMetrics.stopX(max(stops.count - 1, 0))
+        LaneMetrics.stopX(max(dotCount - 1, 0))
     }
 
     static func title(_ track: ProjectThread) -> String {
@@ -121,6 +137,9 @@ struct LaneModel: Identifiable {
         if let ends = track.fareEndsAt {
             let left = Calendar.current.dateComponents([.day], from: .now, to: ends).day ?? 0
             parts.append(left < 0 ? "fare ran out" : "\(left) day\(left == 1 ? "" : "s") left")
+        }
+        if track.hasBranch {
+            parts.append("on \(track.branch)")
         }
         return parts.joined(separator: " · ")
     }
@@ -196,7 +215,7 @@ enum LaneSet {
 /// How wide a lane's line area has to be to show every stop and label.
 extension LaneModel {
     var neededWidth: CGFloat {
-        guard !stops.isEmpty else { return LaneMetrics.firstStop + 120 }
+        guard dotCount > 0 else { return LaneMetrics.firstStop + 120 }
         return lastStopX + LaneMetrics.labelWidth / 2 + LaneMetrics.trailing
     }
 }
@@ -237,8 +256,10 @@ struct LaneLine: View {
     /// Where the line stops, from the left edge. Nil runs it to the edge.
     var lineEnd: CGFloat? = nil
     var selectedStop: UUID?
+    var selectedMerge = false
     var onStop: (TrackStop) -> Void
     var onJunction: (TrackJunction) -> Void
+    var onMerge: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -272,7 +293,24 @@ struct LaneLine: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .position(x: LaneMetrics.stopX(index), y: midY + 28)
                 }
-                if lane.stops.isEmpty {
+                if let index = lane.mergeIndex {
+                    MergeDot(tint: tint, merged: lane.isMerged, isSelected: selectedMerge, action: onMerge)
+                        .position(x: LaneMetrics.stopX(index), y: midY)
+                    Text("Into \(lane.base)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .frame(width: LaneMetrics.labelWidth)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .position(x: LaneMetrics.stopX(index), y: midY + 28)
+                    if !lane.conflicts.isEmpty {
+                        LaneSignal()
+                            .laneCard(onClick: onMerge) { ConflictCard(files: lane.conflicts, base: lane.base) }
+                            .position(x: LaneMetrics.stopX(index), y: midY - 18)
+                    }
+                }
+                if lane.dotCount == 0 {
                     Text("No stops yet")
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
@@ -332,8 +370,10 @@ struct TrackLaneRow: View {
     var lane: LaneModel
     var compact = false
     var selectedStop: UUID?
+    var selectedMerge = false
     var onStop: (TrackStop) -> Void
     var onJunction: (TrackJunction) -> Void
+    var onMerge: () -> Void = {}
     var onTitle: () -> Void
 
     var body: some View {
@@ -341,7 +381,15 @@ struct TrackLaneRow: View {
             LaneHeader(lane: lane, compact: compact, onTitle: onTitle)
             GeometryReader { geo in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    LaneLine(lane: lane, compact: compact, selectedStop: selectedStop, onStop: onStop, onJunction: onJunction)
+                    LaneLine(
+                        lane: lane,
+                        compact: compact,
+                        selectedStop: selectedStop,
+                        selectedMerge: selectedMerge,
+                        onStop: onStop,
+                        onJunction: onJunction,
+                        onMerge: onMerge
+                    )
                         .frame(width: max(geo.size.width, lane.neededWidth))
                 }
             }
@@ -396,6 +444,84 @@ private struct StopDot: View {
         }
         .buttonStyle(.plain)
         .help(stop.displayTitle)
+    }
+}
+
+/// The last stop of a track on a branch: a ring until the branch is in, then solid with a check.
+private struct MergeDot: View {
+    var tint: Color
+    var merged: Bool
+    var isSelected: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                if isSelected {
+                    Circle()
+                        .stroke(tint.opacity(0.3), lineWidth: 3)
+                        .frame(width: LaneMetrics.dot + 10, height: LaneMetrics.dot + 10)
+                }
+                if merged {
+                    Circle()
+                        .fill(tint)
+                        .frame(width: LaneMetrics.dot, height: LaneMetrics.dot)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(.white)
+                } else {
+                    Circle()
+                        .fill(CraftColor.canvas)
+                        .frame(width: LaneMetrics.dot, height: LaneMetrics.dot)
+                    Circle()
+                        .stroke(tint, lineWidth: 2)
+                        .frame(width: LaneMetrics.dot, height: LaneMetrics.dot)
+                }
+            }
+            .frame(width: 28, height: 28)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(merged ? "The branch is in" : "Bring the branch in")
+    }
+}
+
+/// The files that conflicted when the branch was last brought in, shown on hover over the signal.
+struct ConflictCard: View {
+    var files: [String]
+    var base: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Conflicts with \(base)")
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(2)
+            ForEach(files.prefix(8), id: \.self) { file in
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color(red: 0.816, green: 0.271, blue: 0.247))
+                        .padding(.top, 2)
+                    Text(file)
+                        .font(.system(size: 12))
+                        .lineLimit(2)
+                        .truncationMode(.head)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if files.count > 8 {
+                Text("and \(files.count - 8) more")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            Text("Click for details")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .padding(.top, 2)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(width: 214, alignment: .leading)
     }
 }
 
@@ -473,12 +599,17 @@ extension View {
     /// Shows what a junction is waiting for in a popover while the mouse is over this view or the card, and runs
     /// `onClick` when this view is clicked. A popover floats above the lanes, so a scrolling lane cannot clip it.
     func junctionCard(_ junction: TrackJunction, onClick: @escaping () -> Void) -> some View {
-        modifier(JunctionHoverCard(junction: junction, onClick: onClick))
+        laneCard(onClick: onClick) { JunctionCard(junction: junction) }
+    }
+
+    /// The same hover popover with any card in it.
+    func laneCard<Card: View>(onClick: @escaping () -> Void, @ViewBuilder card: @escaping () -> Card) -> some View {
+        modifier(LaneHoverCard(card: card, onClick: onClick))
     }
 }
 
-private struct JunctionHoverCard: ViewModifier {
-    var junction: TrackJunction
+private struct LaneHoverCard<Card: View>: ViewModifier {
+    @ViewBuilder var card: () -> Card
     var onClick: () -> Void
 
     @State private var overAnchor = false
@@ -498,7 +629,7 @@ private struct JunctionHoverCard: ViewModifier {
                 settle()
             }
             .popover(isPresented: $shown, arrowEdge: .bottom) {
-                JunctionCard(junction: junction)
+                card()
                     .padding(2)
                     .onHover { over in
                         overCard = over
@@ -596,12 +727,14 @@ struct TrackLanesPage: View {
         .onExitCommand {
             app.selectStop(nil)
             app.selectJunction(nil)
+            app.selectMerge(nil)
         }
         .onAppear { NavTrace.event("tracks.lanes appear count=\(lanes.count)") }
         // The pane belongs to this view. Leaving it takes the pick, and the pane, with it.
         .onDisappear {
             app.selectStop(nil)
             app.selectJunction(nil)
+            app.selectMerge(nil)
         }
     }
 }
@@ -630,8 +763,10 @@ private struct LaneStack: View {
                                 lane: lane,
                                 lineEnd: lineEnd(at: index),
                                 selectedStop: app.selectedStopID,
+                                selectedMerge: app.selectedMergeTrackID == lane.id,
                                 onStop: { app.selectStop($0.id) },
-                                onJunction: { app.selectJunction($0.id) }
+                                onJunction: { app.selectJunction($0.id) },
+                                onMerge: { app.selectMerge(lane.id) }
                             )
                             .overlay(alignment: .bottom) { separator(after: index) }
                         }
@@ -777,6 +912,10 @@ struct CompactTrackLane: View {
                 onJunction: { junction in
                     app.showTracks(in: space, newTab: false)
                     app.selectJunction(junction.id)
+                },
+                onMerge: {
+                    app.showTracks(in: space, newTab: false)
+                    app.selectMerge(track.id)
                 },
                 onTitle: { app.open(track, newTab: false) }
             )

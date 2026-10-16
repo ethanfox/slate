@@ -191,6 +191,8 @@ final class AppModel {
     /// The stop or signal picked on a Space's Tracks view. The inspector shows it.
     var selectedStopID: UUID?
     var selectedJunctionID: UUID?
+    /// The "Into main" stop of a track on a branch, picked on the Tracks view.
+    var selectedMergeTrackID: UUID?
     /// The tracks each Space's Tracks view draws. A Space not listed draws Membrae's pick.
     var shownTracks: [UUID: [UUID]] {
         didSet { AppModel.save(shownTracks, key: Keys.shownTracks) }
@@ -220,14 +222,74 @@ final class AppModel {
 
     func selectStop(_ id: UUID?) {
         selectedStopID = id
-        if id != nil { selectedJunctionID = nil }
+        if id != nil {
+            selectedJunctionID = nil
+            selectedMergeTrackID = nil
+        }
         setInspector(open: id != nil)
     }
 
     func selectJunction(_ id: UUID?) {
         selectedJunctionID = id
-        if id != nil { selectedStopID = nil }
+        if id != nil {
+            selectedStopID = nil
+            selectedMergeTrackID = nil
+        }
         setInspector(open: id != nil)
+    }
+
+    func selectMerge(_ trackID: UUID?) {
+        selectedMergeTrackID = trackID
+        if trackID != nil {
+            selectedStopID = nil
+            selectedJunctionID = nil
+        }
+        setInspector(open: trackID != nil)
+    }
+
+    /// Brings a track's branch into the branch the user had checked out when it began, in the user's own
+    /// folder. Conflicts stay on the track and show as its red signal until a session reconciles them.
+    func bringIntoMain(_ track: ProjectThread) {
+        guard track.hasBranch else { return }
+        let context = container.mainContext
+        let base = track.baseBranch.isEmpty ? "main" : track.baseBranch
+        if let session = RunStore.session(for: track.id, in: context), session.status == .running {
+            flash("The session is still working. Bring the track in when it is your turn.")
+            return
+        }
+        flash("Bringing \(track.branch) into \(base)…")
+        Task {
+            do {
+                guard let repository = await TrackBranches.mainRepository(ofWorktree: track.worktreePath) else {
+                    flash("The checkout for \(track.branch) is gone from \(track.worktreePath).")
+                    return
+                }
+                switch try await TrackBranches.mergeIntoBase(branch: track.branch, base: base, repository: repository) {
+                case .merged:
+                    track.mergeConflicts = []
+                    if track.orderedStops.allSatisfy(\.isDone) { track.status = .completed }
+                    try? context.save()
+                    flash("Brought \(track.branch) into \(base).")
+                case .dirty:
+                    flash("Your checkout of \(base) has uncommitted changes. Commit or stash them, then bring the track in.")
+                case .elsewhere(let current):
+                    flash("Your checkout is on \(current), not \(base). Check out \(base) first.")
+                case .conflicts(let files):
+                    track.mergeConflicts = files
+                    try? context.save()
+                    flash("\(files.count) file\(files.count == 1 ? "" : "s") conflict with \(base). The track's signal lists them.")
+                }
+            } catch {
+                flash(error.localizedDescription)
+            }
+        }
+    }
+
+    /// What a session is told when the track's branch conflicts with the branch it merges into.
+    static func reconcileBrief(for track: ProjectThread) -> String {
+        let base = track.baseBranch.isEmpty ? "main" : track.baseBranch
+        let files = track.mergeConflicts.map { "- \($0)" }.joined(separator: "\n")
+        return "Bringing this branch into \(base) conflicts in these files:\n\(files)\n\nReconcile them on this branch: merge \(base) into it, resolve each conflict keeping both sides' intent, make sure it builds, and commit the merge. Do not switch branches."
     }
 
     private func setInspector(open: Bool) {

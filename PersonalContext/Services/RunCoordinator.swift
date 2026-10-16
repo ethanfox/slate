@@ -412,14 +412,36 @@ final class RunCoordinator {
         if let folder {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
-        let repository = roots.first?.path
+        let attachedRepository = roots.first?.path
         let allowEdits = run.allowEdits
         let tools = policy.allowedNames(from: RunToolPolicy.generalCatalog(for: run))
         let track = run.trackID.flatMap { TitleIndexStore.thread($0, in: context) }
+        // A session on a track in a git repository works on the track's own branch, in its own worktree
+        // beside the repository, so the user's checkout and other tracks are untouched until it merges.
+        var checkout: TrackBranches.Checkout?
+        if run.isSession, allowEdits, let track, let attachedRepository, await TrackBranches.isRepository(attachedRepository) {
+            setWait(id, "Checking out the track's branch")
+            let prepared = try await TrackBranches.prepare(track: track, repository: attachedRepository)
+            if track.branch != prepared.branch || track.worktreePath != prepared.path {
+                track.branch = prepared.branch
+                track.worktreePath = prepared.path
+                track.baseBranch = prepared.base
+                try? context.save()
+                record(id, .step, "Working on branch \(prepared.branch) in \(prepared.path)")
+            }
+            checkout = prepared
+        }
+        let repository = checkout?.path ?? attachedRepository
         let prompt: String
         if let resume {
             prompt = run.isSession
-                ? RunPrompt.sessionTurn(message: resume.message, track: track, extraDirectories: roots.dropFirst().map(\.path))
+                ? RunPrompt.sessionTurn(
+                    message: resume.message,
+                    track: track,
+                    extraDirectories: roots.dropFirst().map(\.path),
+                    directory: checkout?.path,
+                    branch: checkout?.branch
+                )
                 : resume.message
         } else if run.isSession {
             prompt = RunPrompt.session(
@@ -429,7 +451,8 @@ final class RunCoordinator {
                 directory: repository,
                 extraDirectories: roots.dropFirst().map(\.path),
                 allowEdits: allowEdits,
-                hasMembrae: !tools.isEmpty
+                hasMembrae: !tools.isEmpty,
+                branch: checkout?.branch
             )
         } else {
             prompt = RunPrompt.localAgent(
@@ -451,7 +474,9 @@ final class RunCoordinator {
             resumeSessionID: resume?.session,
             extraDirectories: roots.dropFirst().map(\.path)
         )
-        let before = repository.flatMap { try? GitHistory.commits(in: $0, limit: 1) }
+        // The worktree is outside the sandbox, so its history is read through git; an attached folder is read directly.
+        let headBefore: String? = if let checkout { await TrackBranches.head(in: checkout.path) } else { nil }
+        let before = checkout == nil ? repository.flatMap { try? GitHistory.commits(in: $0, limit: 1) } : nil
         let process = LocalAgentProcess()
         if var job = jobs[id] {
             job.local = process
@@ -510,7 +535,17 @@ final class RunCoordinator {
         let closing = summary.isEmpty ? lastText : summary
         // A session's turn ends with the user's turn, never with the Run finishing.
         if let context = liveContext(), let live = resolvedRun(id), live.isSession {
-            if let repository, let before {
+            if let checkout {
+                var commits = await TrackBranches.commits(since: headBefore, in: checkout.path)
+                if !commits.isEmpty {
+                    // The track's branch goes up after every turn with commits, never main and never by force.
+                    if let remote = await TrackBranches.remote(in: checkout.path) {
+                        setWait(id, "Pushing \(checkout.branch)")
+                        commits.append(await TrackBranches.push(branch: checkout.branch, in: checkout.path, remote: remote))
+                    }
+                    live.append(.commits, detail: commits.joined(separator: "\n"))
+                }
+            } else if let repository, let before {
                 let commits = Self.commitLines(in: repository, since: before.first?.sha)
                 if !commits.isEmpty {
                     live.append(.commits, detail: commits.joined(separator: "\n"))

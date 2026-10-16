@@ -8,6 +8,7 @@ struct TrackLaneInspector: View {
     @Environment(AppModel.self) private var app
     @Query private var stops: [TrackStop]
     @Query private var junctions: [TrackJunction]
+    @Query private var tracks: [ProjectThread]
 
     var body: some View {
         Group {
@@ -16,6 +17,9 @@ struct TrackLaneInspector: View {
                     .id(id)
             } else if let id = app.selectedJunctionID, let junction = junctions.first(where: { $0.id == id }) {
                 JunctionDocument(junction: junction, space: space)
+                    .id(id)
+            } else if let id = app.selectedMergeTrackID, let track = tracks.first(where: { $0.id == id }), track.hasBranch {
+                MergeDocument(track: track)
                     .id(id)
             } else {
                 Text("Select a stop or a signal.")
@@ -27,10 +31,15 @@ struct TrackLaneInspector: View {
         .onExitCommand {
             app.selectStop(nil)
             app.selectJunction(nil)
+            app.selectMerge(nil)
         }
         .onChange(of: app.selectedStopID) { _, id in
             guard let id, !stops.contains(where: { $0.id == id }) else { return }
             app.selectedStopID = nil
+        }
+        .onChange(of: app.selectedMergeTrackID) { _, id in
+            guard let id, !tracks.contains(where: { $0.id == id && $0.hasBranch }) else { return }
+            app.selectedMergeTrackID = nil
         }
         .onChange(of: app.selectedJunctionID) { _, id in
             guard let id, !junctions.contains(where: { $0.id == id }) else { return }
@@ -258,6 +267,162 @@ private struct StopDocument: View {
         stop.updatedAt = .now
         track?.updatedAt = .now
         track?.project?.touch()
+    }
+}
+
+/// The last stop of a track on a branch: bringing the branch into the one it came from.
+private struct MergeDocument: View {
+    var track: ProjectThread
+
+    @Environment(AppModel.self) private var app
+    @State private var pullRequest: URL?
+
+    private var base: String { track.baseBranch.isEmpty ? "main" : track.baseBranch }
+    private var conflicts: [String] { track.mergeConflicts }
+    private var merged: Bool { track.status == .completed }
+    private var openStops: Int { track.orderedStops.filter { !$0.isDone }.count }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                    Hairline().padding(.vertical, 14)
+                    standing
+                    if !conflicts.isEmpty {
+                        Hairline().padding(.vertical, 14)
+                        conflictList
+                    }
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollContentBackground(.hidden)
+            actions
+                .padding(18)
+        }
+        .task(id: track.id) {
+            pullRequest = await TrackBranches.pullRequestURL(repository: track.worktreePath, branch: track.branch)
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Circle().fill(track.color.tint).frame(width: 8, height: 8)
+                Text(LaneModel.title(track))
+                    .lineLimit(1)
+                Text("· last stop")
+                    .fixedSize()
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+
+            Text("Into \(base)")
+                .font(.system(size: 17, weight: .semibold))
+                .padding(.top, 4)
+
+            Text("Brings the branch \(track.branch) into \(base) in your own checkout. Membrae pushes the branch after each turn of the session; nothing goes into \(base) until you bring it in.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
+        }
+    }
+
+    private var standing: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Where it stands")
+                .font(CraftFont.section)
+            Text(standingLine)
+                .font(.system(size: 13))
+                .foregroundStyle(conflicts.isEmpty ? Color.primary : Color(red: 0.816, green: 0.271, blue: 0.247))
+                .fixedSize(horizontal: false, vertical: true)
+            Text(track.worktreePath)
+                .font(.system(size: 12))
+                .foregroundStyle(.tertiary)
+                .lineLimit(2)
+                .truncationMode(.head)
+        }
+    }
+
+    private var standingLine: String {
+        if merged { return "In \(base). The track arrived." }
+        if !conflicts.isEmpty {
+            return "\(conflicts.count) file\(conflicts.count == 1 ? "" : "s") conflict with \(base). Hand them to the session to reconcile, then bring the track in again."
+        }
+        if openStops > 0 { return "\(openStops) stop\(openStops == 1 ? "" : "s") still open. The branch can go in now or when they are done." }
+        return "Every stop is done. Ready to bring in."
+    }
+
+    private var conflictList: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Conflicting files")
+                .font(CraftFont.section)
+            ForEach(conflicts, id: \.self) { file in
+                Text(file)
+                    .font(.system(size: 12, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .frame(height: 22)
+            }
+        }
+    }
+
+    private var actions: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                if !conflicts.isEmpty {
+                    Button {
+                        app.workOn(track, saying: AppModel.reconcileBrief(for: track))
+                    } label: {
+                        filled("Reconcile in Session")
+                    }
+                    .buttonStyle(.plain)
+                    Button {
+                        app.bringIntoMain(track)
+                    } label: {
+                        plain("Try Again")
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button {
+                        app.bringIntoMain(track)
+                    } label: {
+                        filled(merged ? "Bring in Again" : "Bring into \(base)")
+                    }
+                    .buttonStyle(.plain)
+                }
+                if let pullRequest {
+                    Button {
+                        NSWorkspace.shared.open(pullRequest)
+                    } label: {
+                        plain("Open Pull Request")
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func filled(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(Color.accentColor, in: Capsule())
+            .contentShape(Capsule())
+    }
+
+    private func plain(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 13, weight: .medium))
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(CraftColor.elevated, in: Capsule())
+            .overlay(Capsule().strokeBorder(CraftColor.hairline))
+            .contentShape(Capsule())
     }
 }
 

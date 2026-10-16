@@ -318,7 +318,8 @@ enum RunPrompt {
         directory: String?,
         extraDirectories: [String] = [],
         allowEdits: Bool,
-        hasMembrae: Bool
+        hasMembrae: Bool,
+        branch: String? = nil
     ) -> String {
         var lines: [String] = []
         if let project {
@@ -336,7 +337,11 @@ enum RunPrompt {
             if !extraDirectories.isEmpty {
                 line += " You may also read and write in: \(extraDirectories.joined(separator: ", "))."
             }
-            lines.append(line + " Make the changes the work asks for. If it is a git repository, commit what you change with a clear message before you say what you did, so the user can relaunch the app and see it. Do not push.")
+            if let branch {
+                lines.append(line + " " + branchRule(branch))
+            } else {
+                lines.append(line + " Make the changes the work asks for. If it is a git repository, commit what you change with a clear message before you say what you did, so the user can relaunch the app and see it. Do not push.")
+            }
         } else if allowEdits {
             lines.append("No code is attached to this session.")
         } else {
@@ -347,8 +352,17 @@ enum RunPrompt {
     }
 
     /// A later turn of a session: the user's message, with the stops as they stand so the worker need not look.
-    static func sessionTurn(message: String, track: ProjectThread?, extraDirectories: [String] = []) -> String {
+    static func sessionTurn(
+        message: String,
+        track: ProjectThread?,
+        extraDirectories: [String] = [],
+        directory: String? = nil,
+        branch: String? = nil
+    ) -> String {
         var message = message
+        if let directory, let branch {
+            message += "\n\nYou are working in \(directory). " + branchRule(branch)
+        }
         if !extraDirectories.isEmpty {
             message += "\n\nFolders you may work in besides the one you started in: \(extraDirectories.joined(separator: ", "))."
         }
@@ -359,6 +373,11 @@ enum RunPrompt {
             "\(index + 1). \(stop.isDone ? "done" : "open") · \(stop.displayTitle) (id \(stop.id.uuidString))"
         }
         return message + "\n\nStops now:\n" + list.joined(separator: "\n")
+    }
+
+    /// How a worker treats the track's branch: its own, pushed by Membrae, merged by the user.
+    static func branchRule(_ branch: String) -> String {
+        "This is the track's own checkout, on branch \(branch). Make the changes the work asks for and commit them with a clear message before you say what you did. Stay on this branch; do not push, merge, rebase, or switch branches. Membrae pushes the branch after each turn, and the user brings it into main from the Tracks view."
     }
 
     /// The task a Run was started from. The prompt may add to it or stand in for it.
