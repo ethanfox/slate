@@ -71,12 +71,26 @@ struct RunEvent: Codable, Identifiable, Hashable {
     var at: Date
     var kind: RunEventKind
     var detail: String
+    /// The files the user attached to a reply, shown the way every chat shows them. The worker gets their paths.
+    var attachments: [ChatAttachmentRef] = []
 
-    init(id: UUID = UUID(), at: Date = .now, kind: RunEventKind, detail: String = "") {
+    init(id: UUID = UUID(), at: Date = .now, kind: RunEventKind, detail: String = "", attachments: [ChatAttachmentRef] = []) {
         self.id = id
         self.at = at
         self.kind = kind
         self.detail = detail
+        self.attachments = attachments
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, at, kind, detail, attachments }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        at = try container.decode(Date.self, forKey: .at)
+        kind = try container.decode(RunEventKind.self, forKey: .kind)
+        detail = try container.decode(String.self, forKey: .detail)
+        attachments = try container.decodeIfPresent([ChatAttachmentRef].self, forKey: .attachments) ?? []
     }
 }
 
@@ -279,9 +293,9 @@ final class AgentRun {
         self.retryOf = retryOf
     }
 
-    func append(_ kind: RunEventKind, detail: String = "", at: Date = .now) {
+    func append(_ kind: RunEventKind, detail: String = "", at: Date = .now, attachments: [ChatAttachmentRef] = []) {
         var events = history
-        events.append(RunEvent(at: at, kind: kind, detail: detail))
+        events.append(RunEvent(at: at, kind: kind, detail: detail, attachments: attachments))
         history = events
         updatedAt = at
     }

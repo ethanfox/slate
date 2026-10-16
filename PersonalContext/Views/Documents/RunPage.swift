@@ -126,17 +126,22 @@ struct RunPage: View {
                     bubbleButton("Clear") { app.runCoordinator.clearQueued(for: run.id) }
                     bubbleButton("Send now", filled: true) { app.runCoordinator.interrupt(run) }
                         .help("Stop the worker's turn and send this")
-                    Text(queued)
-                        .font(.system(size: 13))
-                        .lineSpacing(4)
-                        .foregroundStyle(.primary)
-                        .lineLimit(4)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 420, alignment: .trailing)
-                        .help("Goes when the worker's turn ends")
+                    VStack(alignment: .trailing, spacing: 6) {
+                        if !queued.text.isEmpty {
+                            Text(queued.text)
+                                .font(.system(size: 13))
+                                .lineSpacing(4)
+                                .foregroundStyle(.primary)
+                                .lineLimit(4)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        HistoryAttachmentStrip(attachments: queued.attachments)
+                    }
+                    .frame(maxWidth: 420, alignment: .trailing)
+                    .help("Goes when the worker's turn ends")
                 }
                 .padding(.horizontal, 4)
             }
@@ -173,19 +178,14 @@ struct RunPage: View {
         .buttonStyle(.plain)
     }
 
-    /// Attached files go by path: the worker runs on this Mac and can open them.
+    /// The same submission every chat makes. The coordinator hands the worker each attached file by path.
     private func send(_ submission: ChatSubmission) -> Bool {
-        var text = submission.trimmedText
-        let store = FileStore.default(context: context)
-        let paths = submission.attachments.compactMap { ref in store.asset(id: ref.id).map { store.resolve($0).path } }
-        if !paths.isEmpty {
-            text += (text.isEmpty ? "" : "\n\n") + "Attached files:\n" + paths.map { "- \($0)" }.joined(separator: "\n")
-        }
-        guard !text.isEmpty else { return false }
+        let text = submission.trimmedText
+        guard !text.isEmpty || !submission.attachments.isEmpty else { return false }
         if run.status == .waiting {
-            app.runCoordinator.reply(text, to: run, in: context)
+            app.runCoordinator.reply(text, attachments: submission.attachments, to: run, in: context)
         } else {
-            app.runCoordinator.queue(text, for: run)
+            app.runCoordinator.queue(text, attachments: submission.attachments, for: run)
         }
         attachments = []
         return true
@@ -825,17 +825,7 @@ private struct SessionTranscript: View {
                     AssistantMarkdown(text: event.detail)
                         .textSelection(.enabled)
                 case .reply(let event):
-                    Text(event.detail)
-                        .font(CraftFont.chatBody)
-                        .lineSpacing(7)
-                        .foregroundStyle(.white)
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(app.accent.color, in: RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 480, alignment: .trailing)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    UserMessageBubble(message: ChatEntry.User(id: event.id, text: event.detail, attachments: event.attachments))
                         .padding(.top, 10)
                 case .commits(let event):
                     commits(event.detail)
