@@ -231,17 +231,16 @@ struct SidebarView: View {
     /// the cloud read only.
     private func cloudMenu(for space: Project) -> some View {
         Menu {
-            ForEach(CloudState.allCases) { state in
-                Button {
-                    app.sync.setCloud(state, on: space, in: context)
-                } label: {
-                    if space.cloudState == state {
-                        Label(state.label, systemImage: "checkmark")
-                    } else {
-                        Text(state.label)
-                    }
+            Picker("Cloud", selection: Binding(
+                get: { space.cloudState },
+                set: { app.sync.setCloud($0, on: space, in: context) }
+            )) {
+                ForEach(CloudState.allCases) { state in
+                    Text(state.label).tag(state)
                 }
             }
+            .pickerStyle(.inline)
+            .labelsHidden()
         } label: {
             Label(space.cloudState == .onThisMac ? "Cloud" : space.cloudState.label, systemImage: space.cloudState.symbol)
         }
