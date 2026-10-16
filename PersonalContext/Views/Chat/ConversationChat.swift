@@ -113,23 +113,37 @@ private struct ConversationSessionView: View {
     var body: some View {
         // The input floats over the messages, which scroll underneath it.
         ChatMessages(session: session, compact: compact).safeAreaInset(edge: .bottom, spacing: 0) {
-            ChatInput(
-                text: $runtime.draft,
-                modelID: Bindable(runtime).modelID,
-                providerID: Bindable(runtime).providerID,
-                isGenerating: session.isGenerating,
-                errorMessage: session.error?.localizedDescription,
-                onSend: send,
-                composerOwnerID: runtime.conversationID,
-                composerOwnerKind: .chatDraft,
-                attachments: Bindable(runtime).draftAttachments,
-                onStop: { session.cancel() },
-                onRetryStuck: retryStuck,
-                debugLog: runtime.debugLog,
-                draftKind: "chat",
-                draftObjectID: runtime.conversationID.uuidString,
-                draftRuntime: DraftTrace.runtimeID(runtime)
-            )
+            // Sending while the answer is still writing queues the message; it goes when the turn ends.
+            VStack(alignment: .leading, spacing: 8) {
+                if let queued = runtime.queued {
+                    QueuedMessageBubble(
+                        text: queued.trimmedText,
+                        fileCount: queued.attachments.count,
+                        onSendNow: runtime.sendQueuedNow,
+                        onClear: runtime.clearQueued
+                    )
+                    .padding(.horizontal, 4)
+                }
+                ChatInput(
+                    text: $runtime.draft,
+                    modelID: Bindable(runtime).modelID,
+                    providerID: Bindable(runtime).providerID,
+                    placeholder: session.isGenerating ? "It goes when the answer ends, or stop the answer to send it now." : "Message",
+                    isGenerating: session.isGenerating,
+                    errorMessage: session.error?.localizedDescription,
+                    onSend: send,
+                    composerOwnerID: runtime.conversationID,
+                    composerOwnerKind: .chatDraft,
+                    attachments: Bindable(runtime).draftAttachments,
+                    onStop: runtime.stop,
+                    onRetryStuck: retryStuck,
+                    debugLog: runtime.debugLog,
+                    draftKind: "chat",
+                    draftObjectID: runtime.conversationID.uuidString,
+                    draftRuntime: DraftTrace.runtimeID(runtime),
+                    allowsSendWhileGenerating: true
+                )
+            }
             .frame(maxWidth: compact ? .infinity : 680)
             .padding(.horizontal, compact ? 16 : 32)
             .padding(.vertical, 14)

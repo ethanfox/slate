@@ -579,6 +579,76 @@ final class ChatEngineTests: XCTestCase {
         XCTAssertEqual(runtimeB.draft, "unsent B")
     }
 
+    func testSendWhileGeneratingQueuesAndGoesWhenTheTurnEnds() async throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        container.mainContext.insert(conversation)
+        let provider = GatedChatProvider()
+        let recorder = StreamRecorder()
+        provider.recorder = recorder
+        let runtime = ChatRuntime(conversation: conversation, project: nil, provider: provider)
+
+        XCTAssertTrue(runtime.send("first"))
+        XCTAssertTrue(runtime.session.isGenerating)
+        XCTAssertTrue(runtime.send("second"))
+        XCTAssertTrue(runtime.send("and third"))
+        XCTAssertEqual(runtime.queued?.text, "second\n\nand third")
+        XCTAssertEqual(recorder.turns.count, 1)
+
+        provider.release("answer one")
+        let deadline = Date().addingTimeInterval(2)
+        while recorder.turns.count < 2, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertNil(runtime.queued)
+        XCTAssertEqual(recorder.turns.count, 2)
+        XCTAssertEqual(recorder.turns[1].last?.text, "second\n\nand third")
+        XCTAssertTrue(runtime.session.isGenerating)
+        provider.release("answer two")
+        await waitUntilIdle(runtime.session)
+        XCTAssertEqual(userTexts(in: runtime.session), ["first", "second\n\nand third"])
+    }
+
+    func testSendQueuedNowStopsTheAnswerAndSendsIt() async throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        container.mainContext.insert(conversation)
+        let provider = GatedChatProvider()
+        let recorder = StreamRecorder()
+        provider.recorder = recorder
+        let runtime = ChatRuntime(conversation: conversation, project: nil, provider: provider)
+
+        XCTAssertTrue(runtime.send("first"))
+        XCTAssertTrue(runtime.send("second"))
+        runtime.sendQueuedNow()
+        XCTAssertNil(runtime.queued)
+        XCTAssertEqual(recorder.turns.count, 2)
+        XCTAssertEqual(recorder.turns[1].last?.text, "second")
+        XCTAssertTrue(runtime.session.isGenerating)
+        provider.release("answer")
+        await waitUntilIdle(runtime.session)
+        XCTAssertEqual(userTexts(in: runtime.session), ["second"])
+    }
+
+    func testClearQueuedDropsTheMessage() async throws {
+        let configuration = ModelConfiguration(schema: Store.schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Store.schema, configurations: configuration)
+        let conversation = Conversation(providerID: TalkProvider.chatgpt.rawValue, modelID: "gpt-test")
+        container.mainContext.insert(conversation)
+        let provider = GatedChatProvider()
+        let runtime = ChatRuntime(conversation: conversation, project: nil, provider: provider)
+
+        XCTAssertTrue(runtime.send("first"))
+        XCTAssertTrue(runtime.send("second"))
+        runtime.clearQueued()
+        XCTAssertNil(runtime.queued)
+        provider.release("answer")
+        await waitUntilIdle(runtime.session)
+        XCTAssertEqual(userTexts(in: runtime.session), ["first"])
+    }
+
     private func waitUntilIdle(_ engine: ChatEngine, file: StaticString = #filePath, line: UInt = #line) async {
         let deadline = Date().addingTimeInterval(2)
         while engine.isGenerating, Date() < deadline {
@@ -664,6 +734,7 @@ private final class GatedChatProvider: ChatProvider, @unchecked Sendable {
     var id = "gated"
     var name = "Gated"
     var zeroResponseMessage = "No reply."
+    var recorder: StreamRecorder?
     private var continuation: AsyncThrowingStream<ChatStreamEvent, Error>.Continuation?
 
     func stream(
@@ -671,7 +742,9 @@ private final class GatedChatProvider: ChatProvider, @unchecked Sendable {
         model: String,
         options: ChatTurnOptions
     ) -> AsyncThrowingStream<ChatStreamEvent, Error> {
-        AsyncThrowingStream { continuation in
+        recorder?.turns.append(messages)
+        recorder?.models.append(model)
+        return AsyncThrowingStream { continuation in
             self.continuation = continuation
         }
     }

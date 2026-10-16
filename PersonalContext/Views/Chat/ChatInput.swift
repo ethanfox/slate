@@ -332,6 +332,57 @@ struct ChatInput: View {
     }
 }
 
+/// The message sent while the answer was still writing: a small grey bubble with Send now and Clear beside it.
+struct QueuedMessageBubble: View {
+    var text: String
+    var fileCount = 0
+    var onSendNow: () -> Void
+    var onClear: () -> Void
+    @Environment(AppModel.self) private var app
+
+    private var label: String {
+        if text.isEmpty {
+            return fileCount == 1 ? "1 file" : "\(fileCount) files"
+        }
+        return text
+    }
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 6) {
+            Spacer(minLength: 0)
+            bubbleButton("Clear", action: onClear)
+            bubbleButton("Send now", filled: true, action: onSendNow)
+                .help("Stop the answer and send this")
+            Text(label)
+                .font(.system(size: 13))
+                .lineSpacing(4)
+                .foregroundStyle(.primary)
+                .lineLimit(4)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 420, alignment: .trailing)
+                .help("Goes when the answer ends")
+        }
+    }
+
+    /// A small bubble that acts.
+    private func bubbleButton(_ title: String, filled: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(filled ? Color.white : Color.primary)
+                .padding(.horizontal, 11)
+                .frame(height: 30)
+                .background(filled ? app.accent.color : CraftColor.elevated, in: Capsule())
+                .overlay(Capsule().strokeBorder(CraftColor.hairline, lineWidth: filled ? 0 : 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct ComposerField: NSViewRepresentable {
     @Binding var text: String
     var placeholder: String

@@ -121,23 +121,11 @@ struct RunPage: View {
                 .padding(.horizontal, 4)
             }
             if let queued = app.runCoordinator.queued[run.id] {
-                HStack(alignment: .bottom, spacing: 6) {
-                    Spacer(minLength: 0)
-                    bubbleButton("Clear") { app.runCoordinator.clearQueued(for: run.id) }
-                    bubbleButton("Send now", filled: true) { app.runCoordinator.interrupt(run) }
-                        .help("Stop the worker's turn and send this")
-                    Text(queued)
-                        .font(.system(size: 13))
-                        .lineSpacing(4)
-                        .foregroundStyle(.primary)
-                        .lineLimit(4)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(CraftColor.selection, in: RoundedRectangle(cornerRadius: CraftRadius.bubble, style: .continuous))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 420, alignment: .trailing)
-                        .help("Goes when the worker's turn ends")
-                }
+                QueuedMessageBubble(
+                    text: queued,
+                    onSendNow: { app.runCoordinator.interrupt(run) },
+                    onClear: { app.runCoordinator.clearQueued(for: run.id) }
+                )
                 .padding(.horizontal, 4)
             }
             ChatInput(
@@ -156,21 +144,6 @@ struct RunPage: View {
                 allowsSendWhileGenerating: true
             )
         }
-    }
-
-    /// A small bubble that acts: the queued message's Send now and Clear.
-    private func bubbleButton(_ title: String, filled: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(filled ? Color.white : Color.primary)
-                .padding(.horizontal, 11)
-                .frame(height: 30)
-                .background(filled ? app.accent.color : CraftColor.elevated, in: Capsule())
-                .overlay(Capsule().strokeBorder(CraftColor.hairline, lineWidth: filled ? 0 : 1))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
     }
 
     /// Attached files go by path: the worker runs on this Mac and can open them.

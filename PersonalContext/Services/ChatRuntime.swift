@@ -77,6 +77,8 @@ final class ChatRuntime {
     var modelID: String
     var draft = ""
     var draftAttachments: [ComposerAttachment] = []
+    /// A message the user sent while the answer was still writing. It goes the moment the turn ends.
+    private(set) var queued: ChatSubmission?
     @ObservationIgnored private let store: ConversationStore
     @ObservationIgnored private var persistTask: Task<Void, Never>?
     @ObservationIgnored var onTick: (() -> Void)?
@@ -104,6 +106,7 @@ final class ChatRuntime {
             self?.applyMetadata()
             self?.restoreFailedDraft()
             self?.persist()
+            self?.sendQueued()
         }
         session.traceObjectID = conversation.id.uuidString
         session.traceRuntime = DraftTrace.runtimeID(self)
@@ -162,6 +165,7 @@ final class ChatRuntime {
 
     func applyModel() {
         let changed = session.model != modelID
+        let held = holdQueue()
         if changed, session.isGenerating {
             session.cancel()
         }
@@ -170,17 +174,36 @@ final class ChatRuntime {
         if changed, let cursor = session.provider as? CursorChatProvider {
             cursor.bridge.stop()
         }
+        releaseQueue(held)
     }
 
     func applyProvider() {
         if session.provider.id == providerID { return }
+        let held = holdQueue()
         if session.isGenerating { session.cancel() }
-        guard let conversation = store.applyProvider(providerID) else { return }
+        guard let conversation = store.applyProvider(providerID) else {
+            releaseQueue(held)
+            return
+        }
         session.provider = ChatProviderFactory.make(
             conversation: conversation,
             project: conversation.project,
             debugLog: debugLog
         )
+        releaseQueue(held)
+    }
+
+    /// A queued message waits out a model or provider switch and goes on the new one.
+    private func holdQueue() -> ChatSubmission? {
+        let held = queued
+        queued = nil
+        return held
+    }
+
+    private func releaseQueue(_ held: ChatSubmission?) {
+        guard let held else { return }
+        queued = held
+        sendQueued()
     }
 
     func schedulePersist() {
@@ -203,7 +226,7 @@ final class ChatRuntime {
             ConversationStoreUpdate(
                 upsert: session.entries,
                 deleteIDs: session.takeRemovedIDs(),
-                releaseDraft: !session.isGenerating && lastUser?.isFailed != true && lastUser?.isCancelled != true
+                releaseDraft: !session.isGenerating && queued == nil && lastUser?.isFailed != true && lastUser?.isCancelled != true
             )
         )
     }
@@ -227,7 +250,60 @@ final class ChatRuntime {
         send(ChatSubmission(text: text))
     }
 
+    /// Sending while the answer is still writing queues the message; it goes as the next turn when this one ends.
     func send(_ submission: ChatSubmission) -> Bool {
+        if session.isGenerating {
+            guard submission.hasContent else { return false }
+            queue(submission)
+            return true
+        }
+        return sendNow(submission)
+    }
+
+    /// Ends the answer now; whatever is queued goes next.
+    func stop() {
+        session.cancel()
+    }
+
+    /// Stops the answer and sends the queued message right away.
+    func sendQueuedNow() {
+        guard queued != nil else { return }
+        if session.isGenerating {
+            session.cancel()
+        } else {
+            sendQueued()
+        }
+    }
+
+    func clearQueued() {
+        queued = nil
+    }
+
+    private func queue(_ submission: ChatSubmission) {
+        guard var merged = queued else {
+            queued = submission
+            ChatTrace.event("queued conversation=\(conversationID) chars=\(submission.trimmedText.count) files=\(submission.attachments.count)")
+            return
+        }
+        let text = submission.trimmedText
+        if !text.isEmpty {
+            merged.text = merged.trimmedText.isEmpty ? text : merged.trimmedText + "\n\n" + text
+        }
+        merged.attachments.append(contentsOf: submission.attachments.filter { next in
+            !merged.attachments.contains { $0.id == next.id }
+        })
+        queued = merged
+        ChatTrace.event("queued more conversation=\(conversationID) chars=\(merged.trimmedText.count) files=\(merged.attachments.count)")
+    }
+
+    private func sendQueued() {
+        guard let submission = queued, !session.isGenerating else { return }
+        queued = nil
+        ChatTrace.event("queued send conversation=\(conversationID) chars=\(submission.trimmedText.count)")
+        _ = sendNow(submission)
+    }
+
+    private func sendNow(_ submission: ChatSubmission) -> Bool {
         guard !session.isGenerating else { return false }
         debugLog.pace = StreamPace()
         debugLog.add("SEND model=\(modelID) generating=\(session.isGenerating) \(ChatTrace.clip(submission.trimmedText, 120))")
